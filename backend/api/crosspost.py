@@ -320,7 +320,7 @@ async def bluesky_callback(
             dpop_nonce=pending["dpop_nonce"],
         )
     except ATProtoOAuthError as exc:
-        logger.error("Bluesky token exchange error: %s", exc, exc_info=True)
+        logger.error("Bluesky OAuth callback error: %s", exc, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Bluesky token exchange failed",
@@ -528,7 +528,7 @@ async def mastodon_callback(
             pkce_verifier=pending["pkce_verifier"],
         )
     except MastodonOAuthTokenError as exc:
-        logger.error("Mastodon token exchange error: %s", exc, exc_info=True)
+        logger.error("Mastodon OAuth callback error: %s", exc, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Mastodon token exchange failed",
@@ -691,7 +691,7 @@ async def x_callback(
             pkce_verifier=pending["pkce_verifier"],
         )
     except XOAuthTokenError as exc:
-        logger.error("X token exchange error: %s", exc, exc_info=True)
+        logger.error("X OAuth callback error: %s", exc, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="X token exchange failed",
@@ -851,7 +851,7 @@ async def facebook_callback(
             redirect_uri=pending["redirect_uri"],
         )
     except FacebookOAuthTokenError as exc:
-        logger.error("Facebook token exchange error: %s", exc, exc_info=True)
+        logger.error("Facebook OAuth callback error: %s", exc, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Facebook token exchange failed",

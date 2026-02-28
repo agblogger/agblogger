@@ -587,9 +587,7 @@ class TestCrosspostRaisesPostNotFoundError:
     """crosspost() raises PostNotFoundError when post is missing, not ValueError."""
 
     @pytest.mark.asyncio
-    async def test_crosspost_raises_post_not_found_for_missing_post(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_crosspost_raises_post_not_found_for_missing_post(self, tmp_path: Path) -> None:
         """crosspost() should raise PostNotFoundError when read_post returns None."""
         from backend.exceptions import PostNotFoundError
         from backend.services.crosspost_service import crosspost
@@ -658,9 +656,7 @@ class TestCrosspostErrorMessageLeakage:
     """CrossPostResult.error uses generic message, not str(exc)."""
 
     @pytest.mark.asyncio
-    async def test_platform_failure_uses_generic_error_message(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_platform_failure_uses_generic_error_message(self, tmp_path: Path) -> None:
         """When a platform poster raises an exception, the error field should be generic."""
         from backend.services.crosspost_service import crosspost
 
@@ -699,18 +695,19 @@ class TestCrosspostErrorMessageLeakage:
 
         # Make the poster raise an exception with sensitive details
         mock_poster = AsyncMock()
-        mock_poster.post.side_effect = RuntimeError(
-            "OAuth token expired: secret_token_abc123"
-        )
+        mock_poster.post.side_effect = RuntimeError("OAuth token expired: secret_token_abc123")
         mock_poster.get_updated_credentials = None
 
-        with patch(
-            "backend.services.crosspost_service.get_poster",
-            new_callable=AsyncMock,
-            return_value=mock_poster,
-        ), patch(
-            "backend.services.crosspost_service.decrypt_value",
-            return_value='{"access_token": "tok"}',
+        with (
+            patch(
+                "backend.services.crosspost_service.get_poster",
+                new_callable=AsyncMock,
+                return_value=mock_poster,
+            ),
+            patch(
+                "backend.services.crosspost_service.decrypt_value",
+                return_value='{"access_token": "tok"}',
+            ),
         ):
             results = await crosspost(
                 session=mock_session,

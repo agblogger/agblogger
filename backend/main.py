@@ -410,7 +410,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if isinstance(exc, ConnectionError):
             logger.error(
                 "ConnectionError in %s %s: %s",
-                request.method, request.url.path, exc, exc_info=exc,
+                request.method,
+                request.url.path,
+                exc,
+                exc_info=exc,
             )
             return JSONResponse(
                 status_code=502,
@@ -419,7 +422,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if isinstance(exc, TimeoutError):
             logger.error(
                 "TimeoutError in %s %s: %s",
-                request.method, request.url.path, exc, exc_info=exc,
+                request.method,
+                request.url.path,
+                exc,
+                exc_info=exc,
             )
             return JSONResponse(
                 status_code=504,

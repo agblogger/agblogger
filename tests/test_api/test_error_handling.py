@@ -881,9 +881,7 @@ class TestOAuthErrorLeakage:
         assert "8443" not in detail
 
     @pytest.mark.asyncio
-    async def test_bluesky_callback_token_error_is_generic(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_bluesky_callback_token_error_is_generic(self, client: AsyncClient) -> None:
         """Bluesky callback ATProtoOAuthError must not leak token exchange details."""
         from backend.crosspost.atproto_oauth import ATProtoOAuthError
 
@@ -922,9 +920,7 @@ class TestOAuthErrorLeakage:
         assert "secret-server" not in detail
 
     @pytest.mark.asyncio
-    async def test_mastodon_authorize_http_error_is_generic(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_mastodon_authorize_http_error_is_generic(self, client: AsyncClient) -> None:
         """Mastodon authorize httpx.HTTPError must not leak connection details."""
         import httpx
 
@@ -951,9 +947,7 @@ class TestOAuthErrorLeakage:
         assert "secret-internal" not in detail
 
     @pytest.mark.asyncio
-    async def test_mastodon_callback_token_error_is_generic(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_mastodon_callback_token_error_is_generic(self, client: AsyncClient) -> None:
         """Mastodon callback MastodonOAuthTokenError must not leak details."""
         from backend.crosspost.mastodon import MastodonOAuthTokenError
 
@@ -987,9 +981,7 @@ class TestOAuthErrorLeakage:
         assert "secret" not in detail.lower()
 
     @pytest.mark.asyncio
-    async def test_mastodon_callback_http_error_is_generic(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_mastodon_callback_http_error_is_generic(self, client: AsyncClient) -> None:
         """Mastodon callback httpx.HTTPError must not leak details."""
         import httpx
 
@@ -1090,9 +1082,7 @@ class TestOAuthErrorLeakage:
         assert "x-internal" not in detail
 
     @pytest.mark.asyncio
-    async def test_facebook_callback_token_error_is_generic(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_facebook_callback_token_error_is_generic(self, client: AsyncClient) -> None:
         """Facebook callback FacebookOAuthTokenError must not leak details."""
         from backend.crosspost.facebook import FacebookOAuthTokenError
 
@@ -1124,9 +1114,7 @@ class TestOAuthErrorLeakage:
         assert "s3cr3t" not in detail
 
     @pytest.mark.asyncio
-    async def test_facebook_callback_http_error_is_generic(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_facebook_callback_http_error_is_generic(self, client: AsyncClient) -> None:
         """Facebook callback httpx.HTTPError must not leak details."""
         import httpx
 
