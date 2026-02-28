@@ -581,3 +581,149 @@ class TestTypedExceptions:
 
         exc = ExternalServiceError("OAuth failed")
         assert isinstance(exc, RuntimeError)
+
+
+class TestCrosspostRaisesPostNotFoundError:
+    """crosspost() raises PostNotFoundError when post is missing, not ValueError."""
+
+    @pytest.mark.asyncio
+    async def test_crosspost_raises_post_not_found_for_missing_post(
+        self, tmp_path: Path
+    ) -> None:
+        """crosspost() should raise PostNotFoundError when read_post returns None."""
+        from backend.exceptions import PostNotFoundError
+        from backend.services.crosspost_service import crosspost
+
+        cm = ContentManager(content_dir=tmp_path)
+        (tmp_path / "index.toml").write_text('[site]\ntitle = "Test"')
+        (tmp_path / "labels.toml").write_text("[labels]")
+        (tmp_path / "posts").mkdir(exist_ok=True)
+
+        mock_session = AsyncMock()
+        mock_user = MagicMock()
+        mock_user.id = 1
+        mock_user.is_admin = True
+        mock_user.display_name = "Admin"
+        mock_user.username = "admin"
+
+        with pytest.raises(PostNotFoundError):
+            await crosspost(
+                session=mock_session,
+                content_manager=cm,
+                post_path="posts/nonexistent.md",
+                platforms=["bluesky"],
+                actor=mock_user,
+                site_url="http://localhost",
+                secret_key="test-key",
+            )
+
+    @pytest.mark.asyncio
+    async def test_crosspost_raises_post_not_found_for_draft_by_non_author(
+        self, tmp_path: Path
+    ) -> None:
+        """crosspost() should raise PostNotFoundError for draft posts not visible to non-admin."""
+        from backend.exceptions import PostNotFoundError
+        from backend.services.crosspost_service import crosspost
+
+        cm = ContentManager(content_dir=tmp_path)
+        (tmp_path / "index.toml").write_text('[site]\ntitle = "Test"')
+        (tmp_path / "labels.toml").write_text("[labels]")
+        posts_dir = tmp_path / "posts"
+        posts_dir.mkdir(exist_ok=True)
+        (posts_dir / "draft.md").write_text(
+            "---\ntitle: Draft\ndraft: true\nauthor: OtherUser\n"
+            "created_at: 2026-02-02 22:21:29+00\n---\nDraft content.\n"
+        )
+
+        mock_session = AsyncMock()
+        mock_user = MagicMock()
+        mock_user.id = 2
+        mock_user.is_admin = False
+        mock_user.display_name = "NotTheAuthor"
+        mock_user.username = "notauthor"
+
+        with pytest.raises(PostNotFoundError):
+            await crosspost(
+                session=mock_session,
+                content_manager=cm,
+                post_path="posts/draft.md",
+                platforms=["bluesky"],
+                actor=mock_user,
+                site_url="http://localhost",
+                secret_key="test-key",
+            )
+
+
+class TestCrosspostErrorMessageLeakage:
+    """CrossPostResult.error uses generic message, not str(exc)."""
+
+    @pytest.mark.asyncio
+    async def test_platform_failure_uses_generic_error_message(
+        self, tmp_path: Path
+    ) -> None:
+        """When a platform poster raises an exception, the error field should be generic."""
+        from backend.services.crosspost_service import crosspost
+
+        cm = ContentManager(content_dir=tmp_path)
+        (tmp_path / "index.toml").write_text('[site]\ntitle = "Test"')
+        (tmp_path / "labels.toml").write_text("[labels]")
+        posts_dir = tmp_path / "posts"
+        posts_dir.mkdir(exist_ok=True)
+        (posts_dir / "hello.md").write_text(
+            "---\ntitle: Hello\nauthor: Admin\n"
+            "created_at: 2026-02-02 22:21:29+00\nlabels: []\n---\nHello world.\n"
+        )
+
+        # Build a mock session where execute().scalars().all() works correctly
+        mock_account = MagicMock()
+        mock_account.platform = "bluesky"
+        mock_account.credentials = '{"access_token": "tok"}'
+        mock_account.account_name = "test"
+        mock_account.updated_at = None
+
+        mock_scalars = MagicMock()
+        mock_scalars.all.return_value = [mock_account]
+        mock_execute_result = MagicMock()
+        mock_execute_result.scalars.return_value = mock_scalars
+
+        mock_session = AsyncMock()
+        mock_session.execute.return_value = mock_execute_result
+        # session.add() is synchronous in SQLAlchemy
+        mock_session.add = MagicMock()
+
+        mock_user = MagicMock()
+        mock_user.id = 1
+        mock_user.is_admin = True
+        mock_user.display_name = "Admin"
+        mock_user.username = "admin"
+
+        # Make the poster raise an exception with sensitive details
+        mock_poster = AsyncMock()
+        mock_poster.post.side_effect = RuntimeError(
+            "OAuth token expired: secret_token_abc123"
+        )
+        mock_poster.get_updated_credentials = None
+
+        with patch(
+            "backend.services.crosspost_service.get_poster",
+            new_callable=AsyncMock,
+            return_value=mock_poster,
+        ), patch(
+            "backend.services.crosspost_service.decrypt_value",
+            return_value='{"access_token": "tok"}',
+        ):
+            results = await crosspost(
+                session=mock_session,
+                content_manager=cm,
+                post_path="posts/hello.md",
+                platforms=["bluesky"],
+                actor=mock_user,
+                site_url="http://localhost",
+                secret_key="test-key",
+            )
+
+        assert len(results) == 1
+        assert results[0].success is False
+        # The error should be a generic message, not the internal exception details
+        assert results[0].error == "Cross-posting failed"
+        assert "secret_token_abc123" not in (results[0].error or "")

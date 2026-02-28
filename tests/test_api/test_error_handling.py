@@ -467,6 +467,51 @@ class TestLabelCommitRecovery:
         assert resp.status_code == 500
 
 
+class TestCrosspostPostNotFound:
+    """Crosspost endpoint returns 404 for PostNotFoundError (type-based, not string-based)."""
+
+    @pytest.mark.asyncio
+    async def test_crosspost_missing_post_returns_404(self, client: AsyncClient) -> None:
+        """When crosspost() raises PostNotFoundError, the API should return 404."""
+        token = await login(client)
+        from backend.exceptions import PostNotFoundError
+
+        with patch(
+            "backend.api.crosspost.crosspost",
+            new_callable=AsyncMock,
+            side_effect=PostNotFoundError("Post not found: posts/nonexistent.md"),
+        ):
+            resp = await client.post(
+                "/api/crosspost/post",
+                json={
+                    "post_path": "posts/nonexistent.md",
+                    "platforms": ["bluesky"],
+                },
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert resp.status_code == 404
+        assert resp.json()["detail"] == "Post not found"
+
+    @pytest.mark.asyncio
+    async def test_crosspost_value_error_returns_400(self, client: AsyncClient) -> None:
+        """Plain ValueError (not PostNotFoundError) should still return 400."""
+        token = await login(client)
+        with patch(
+            "backend.api.crosspost.crosspost",
+            new_callable=AsyncMock,
+            side_effect=ValueError("Unknown platform: 'invalid'"),
+        ):
+            resp = await client.post(
+                "/api/crosspost/post",
+                json={
+                    "post_path": "posts/hello.md",
+                    "platforms": ["invalid"],
+                },
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert resp.status_code == 400
+
+
 class TestAdminOSError:
     """H11/M4: admin endpoints handle OSError."""
 

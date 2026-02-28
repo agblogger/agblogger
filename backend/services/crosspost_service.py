@@ -11,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 
 from backend.crosspost.base import CrossPostContent, CrossPostResult
 from backend.crosspost.registry import get_poster, list_platforms
-from backend.exceptions import InternalServerError
+from backend.exceptions import InternalServerError, PostNotFoundError
 from backend.models.crosspost import CrossPost, SocialAccount
 from backend.services.crypto_service import decrypt_value, encrypt_value
 from backend.services.datetime_service import format_datetime, now_utc
@@ -115,12 +115,12 @@ async def crosspost(
     post_data = content_manager.read_post(post_path)
     if post_data is None:
         msg = f"Post not found: {post_path}"
-        raise ValueError(msg)
+        raise PostNotFoundError(msg)
     if post_data.is_draft:
         actor_author = actor.display_name or actor.username
         if not actor.is_admin and post_data.author != actor_author:
             msg = f"Post not found: {post_path}"
-            raise ValueError(msg)
+            raise PostNotFoundError(msg)
 
     # Build the post URL
     # Strip .md extension and leading posts/ for the URL slug
@@ -226,13 +226,13 @@ async def crosspost(
                 if updated_creds is not None:
                     account.credentials = encrypt_value(json.dumps(updated_creds), secret_key)
                     account.updated_at = now
-        except Exception as exc:
+        except Exception:
             logger.exception("Cross-post to %s failed", platform_name)
             post_result = CrossPostResult(
                 platform_id="",
                 url="",
                 success=False,
-                error=str(exc),
+                error="Cross-posting failed",
             )
 
         # Record the result
