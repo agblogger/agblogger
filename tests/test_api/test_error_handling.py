@@ -533,6 +533,42 @@ class TestCrosspostPostNotFound:
         assert resp.status_code == 400
 
 
+class TestConnectionErrorHandler:
+    """ConnectionError and TimeoutError return proper HTTP responses, not crash."""
+
+    @pytest.mark.asyncio
+    async def test_connection_error_returns_502(self, client: AsyncClient) -> None:
+        token = await login(client)
+        with patch(
+            "backend.api.render.render_markdown",
+            new_callable=AsyncMock,
+            side_effect=ConnectionError("Connection refused"),
+        ):
+            resp = await client.post(
+                "/api/render/preview",
+                json={"markdown": "# Hello"},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert resp.status_code == 502
+        assert resp.json()["detail"] == "External service connection failed"
+
+    @pytest.mark.asyncio
+    async def test_timeout_error_returns_504(self, client: AsyncClient) -> None:
+        token = await login(client)
+        with patch(
+            "backend.api.render.render_markdown",
+            new_callable=AsyncMock,
+            side_effect=TimeoutError("timed out"),
+        ):
+            resp = await client.post(
+                "/api/render/preview",
+                json={"markdown": "# Hello"},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert resp.status_code == 504
+        assert resp.json()["detail"] == "Operation timed out"
+
+
 class TestAdminOSError:
     """H11/M4: admin endpoints handle OSError."""
 

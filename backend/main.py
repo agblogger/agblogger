@@ -407,8 +407,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.exception_handler(OSError)
     async def os_error_handler(request: Request, exc: OSError) -> JSONResponse:
-        if isinstance(exc, (ConnectionError, TimeoutError)):
-            raise exc
+        if isinstance(exc, ConnectionError):
+            logger.error(
+                "ConnectionError in %s %s: %s",
+                request.method, request.url.path, exc, exc_info=exc,
+            )
+            return JSONResponse(
+                status_code=502,
+                content={"detail": "External service connection failed"},
+            )
+        if isinstance(exc, TimeoutError):
+            logger.error(
+                "TimeoutError in %s %s: %s",
+                request.method, request.url.path, exc, exc_info=exc,
+            )
+            return JSONResponse(
+                status_code=504,
+                content={"detail": "Operation timed out"},
+            )
         logger.error("OSError in %s %s: %s", request.method, request.url.path, exc, exc_info=exc)
         return JSONResponse(
             status_code=500,
