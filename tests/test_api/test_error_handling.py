@@ -53,6 +53,7 @@ def app_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
         admin_username="admin",
         admin_password="admin123",
         auth_self_registration=True,
+        bluesky_client_url="http://test",
     )
 
 
@@ -616,3 +617,308 @@ class TestDeleteBuiltinPageError:
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 404
+
+
+class TestOAuthErrorLeakage:
+    """OAuth errors must not leak internal details to clients."""
+
+    @pytest.mark.asyncio
+    async def test_bluesky_authorize_error_is_generic(self, client: AsyncClient) -> None:
+        """Bluesky authorize ATProtoOAuthError must not leak PDS details."""
+        from backend.crosspost.atproto_oauth import ATProtoOAuthError
+
+        token = await login(client)
+        with patch(
+            "backend.crosspost.atproto_oauth.resolve_handle_to_did",
+            new_callable=AsyncMock,
+            side_effect=ATProtoOAuthError(
+                "Internal: PDS at https://secret-pds.internal:8443 returned 500"
+            ),
+        ):
+            resp = await client.post(
+                "/api/crosspost/bluesky/authorize",
+                json={"handle": "test.bsky.social"},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert resp.status_code == 502
+        detail = resp.json()["detail"]
+        assert detail == "Bluesky authentication failed"
+        assert "secret-pds" not in detail
+        assert "8443" not in detail
+
+    @pytest.mark.asyncio
+    async def test_bluesky_callback_token_error_is_generic(
+        self, client: AsyncClient
+    ) -> None:
+        """Bluesky callback ATProtoOAuthError must not leak token exchange details."""
+        from backend.crosspost.atproto_oauth import ATProtoOAuthError
+
+        # The callback requires valid state in the store; we mock exchange_code_for_tokens
+        with (
+            patch(
+                "backend.crosspost.atproto_oauth.exchange_code_for_tokens",
+                new_callable=AsyncMock,
+                side_effect=ATProtoOAuthError(
+                    "Token endpoint https://auth.secret-server.com:9443/token returned 401"
+                ),
+            ),
+            patch(
+                "backend.crosspost.bluesky_oauth_state.OAuthStateStore.pop",
+                return_value={
+                    "pkce_verifier": "test",
+                    "dpop_nonce": "test",
+                    "user_id": 1,
+                    "did": "did:plc:test",
+                    "handle": "test.bsky.social",
+                    "auth_server_meta": {
+                        "issuer": "https://bsky.social",
+                        "token_endpoint": "https://bsky.social/oauth/token",
+                        "pds_url": "https://pds.bsky.social",
+                    },
+                },
+            ),
+        ):
+            resp = await client.get(
+                "/api/crosspost/bluesky/callback",
+                params={"code": "test-code", "state": "test-state"},
+            )
+        assert resp.status_code == 502
+        detail = resp.json()["detail"]
+        assert detail == "Bluesky token exchange failed"
+        assert "secret-server" not in detail
+
+    @pytest.mark.asyncio
+    async def test_mastodon_authorize_http_error_is_generic(
+        self, client: AsyncClient
+    ) -> None:
+        """Mastodon authorize httpx.HTTPError must not leak connection details."""
+        import httpx
+
+        token = await login(client)
+        with patch(
+            "backend.crosspost.ssrf.ssrf_safe_client",
+        ) as mock_client_ctx:
+            mock_http = AsyncMock()
+            mock_http.post = AsyncMock(
+                side_effect=httpx.ConnectError(
+                    "Connection refused: https://mastodon.secret-internal.corp:3000"
+                )
+            )
+            mock_client_ctx.return_value.__aenter__ = AsyncMock(return_value=mock_http)
+            mock_client_ctx.return_value.__aexit__ = AsyncMock(return_value=False)
+            resp = await client.post(
+                "/api/crosspost/mastodon/authorize",
+                json={"instance_url": "https://mastodon.social"},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert resp.status_code == 502
+        detail = resp.json()["detail"]
+        assert detail == "Could not connect to Mastodon instance"
+        assert "secret-internal" not in detail
+
+    @pytest.mark.asyncio
+    async def test_mastodon_callback_token_error_is_generic(
+        self, client: AsyncClient
+    ) -> None:
+        """Mastodon callback MastodonOAuthTokenError must not leak details."""
+        from backend.crosspost.mastodon import MastodonOAuthTokenError
+
+        with (
+            patch(
+                "backend.crosspost.mastodon.exchange_mastodon_oauth_token",
+                new_callable=AsyncMock,
+                side_effect=MastodonOAuthTokenError(
+                    "Token error from https://mastodon.secret.internal:4430/oauth/token"
+                ),
+            ),
+            patch(
+                "backend.crosspost.bluesky_oauth_state.OAuthStateStore.pop",
+                return_value={
+                    "instance_url": "https://mastodon.social",
+                    "client_id": "test-client-id",
+                    "client_secret": "test-client-secret",
+                    "pkce_verifier": "test-verifier",
+                    "user_id": 1,
+                    "redirect_uri": "http://test/api/crosspost/mastodon/callback",
+                },
+            ),
+        ):
+            resp = await client.get(
+                "/api/crosspost/mastodon/callback",
+                params={"code": "test-code", "state": "test-state"},
+            )
+        assert resp.status_code == 502
+        detail = resp.json()["detail"]
+        assert detail == "Mastodon token exchange failed"
+        assert "secret" not in detail.lower()
+
+    @pytest.mark.asyncio
+    async def test_mastodon_callback_http_error_is_generic(
+        self, client: AsyncClient
+    ) -> None:
+        """Mastodon callback httpx.HTTPError must not leak details."""
+        import httpx
+
+        with (
+            patch(
+                "backend.crosspost.mastodon.exchange_mastodon_oauth_token",
+                new_callable=AsyncMock,
+                side_effect=httpx.ConnectError(
+                    "Connection refused: https://mastodon.secret.corp:443"
+                ),
+            ),
+            patch(
+                "backend.crosspost.bluesky_oauth_state.OAuthStateStore.pop",
+                return_value={
+                    "instance_url": "https://mastodon.social",
+                    "client_id": "test-client-id",
+                    "client_secret": "test-client-secret",
+                    "pkce_verifier": "test-verifier",
+                    "user_id": 1,
+                    "redirect_uri": "http://test/api/crosspost/mastodon/callback",
+                },
+            ),
+        ):
+            resp = await client.get(
+                "/api/crosspost/mastodon/callback",
+                params={"code": "test-code", "state": "test-state"},
+            )
+        assert resp.status_code == 502
+        detail = resp.json()["detail"]
+        assert detail == "Mastodon authentication failed"
+        assert "secret" not in detail.lower()
+
+    @pytest.mark.asyncio
+    async def test_x_callback_token_error_is_generic(self, client: AsyncClient) -> None:
+        """X callback XOAuthTokenError must not leak details."""
+        from backend.crosspost.x import XOAuthTokenError
+
+        with (
+            patch(
+                "backend.crosspost.x.exchange_x_oauth_token",
+                new_callable=AsyncMock,
+                side_effect=XOAuthTokenError(
+                    "Token error: https://api.x.com/oauth2/token returned "
+                    "invalid_grant for client_id=secret_client_123"
+                ),
+            ),
+            patch(
+                "backend.crosspost.bluesky_oauth_state.OAuthStateStore.pop",
+                return_value={
+                    "pkce_verifier": "test-verifier",
+                    "user_id": 1,
+                    "redirect_uri": "http://test/api/crosspost/x/callback",
+                    "client_id": "test-client-id",
+                    "client_secret": "test-client-secret",
+                },
+            ),
+        ):
+            resp = await client.get(
+                "/api/crosspost/x/callback",
+                params={"code": "test-code", "state": "test-state"},
+            )
+        assert resp.status_code == 502
+        detail = resp.json()["detail"]
+        assert detail == "X token exchange failed"
+        assert "secret_client" not in detail
+
+    @pytest.mark.asyncio
+    async def test_x_callback_http_error_is_generic(self, client: AsyncClient) -> None:
+        """X callback httpx.HTTPError must not leak details."""
+        import httpx
+
+        with (
+            patch(
+                "backend.crosspost.x.exchange_x_oauth_token",
+                new_callable=AsyncMock,
+                side_effect=httpx.ConnectError(
+                    "Connection refused: https://api.x-internal.corp:8443"
+                ),
+            ),
+            patch(
+                "backend.crosspost.bluesky_oauth_state.OAuthStateStore.pop",
+                return_value={
+                    "pkce_verifier": "test-verifier",
+                    "user_id": 1,
+                    "redirect_uri": "http://test/api/crosspost/x/callback",
+                    "client_id": "test-client-id",
+                    "client_secret": "test-client-secret",
+                },
+            ),
+        ):
+            resp = await client.get(
+                "/api/crosspost/x/callback",
+                params={"code": "test-code", "state": "test-state"},
+            )
+        assert resp.status_code == 502
+        detail = resp.json()["detail"]
+        assert detail == "X authentication failed"
+        assert "x-internal" not in detail
+
+    @pytest.mark.asyncio
+    async def test_facebook_callback_token_error_is_generic(
+        self, client: AsyncClient
+    ) -> None:
+        """Facebook callback FacebookOAuthTokenError must not leak details."""
+        from backend.crosspost.facebook import FacebookOAuthTokenError
+
+        with (
+            patch(
+                "backend.crosspost.facebook.exchange_facebook_oauth_token",
+                new_callable=AsyncMock,
+                side_effect=FacebookOAuthTokenError(
+                    "Token error: app_secret=s3cr3t_app_key_12345 was rejected"
+                ),
+            ),
+            patch(
+                "backend.crosspost.bluesky_oauth_state.OAuthStateStore.pop",
+                return_value={
+                    "user_id": 1,
+                    "redirect_uri": "http://test/api/crosspost/facebook/callback",
+                    "app_id": "test-app-id",
+                    "app_secret": "test-app-secret",
+                },
+            ),
+        ):
+            resp = await client.get(
+                "/api/crosspost/facebook/callback",
+                params={"code": "test-code", "state": "test-state"},
+            )
+        assert resp.status_code == 502
+        detail = resp.json()["detail"]
+        assert detail == "Facebook token exchange failed"
+        assert "s3cr3t" not in detail
+
+    @pytest.mark.asyncio
+    async def test_facebook_callback_http_error_is_generic(
+        self, client: AsyncClient
+    ) -> None:
+        """Facebook callback httpx.HTTPError must not leak details."""
+        import httpx
+
+        with (
+            patch(
+                "backend.crosspost.facebook.exchange_facebook_oauth_token",
+                new_callable=AsyncMock,
+                side_effect=httpx.ConnectError(
+                    "Connection refused: https://graph.facebook.internal:8443"
+                ),
+            ),
+            patch(
+                "backend.crosspost.bluesky_oauth_state.OAuthStateStore.pop",
+                return_value={
+                    "user_id": 1,
+                    "redirect_uri": "http://test/api/crosspost/facebook/callback",
+                    "app_id": "test-app-id",
+                    "app_secret": "test-app-secret",
+                },
+            ),
+        ):
+            resp = await client.get(
+                "/api/crosspost/facebook/callback",
+                params={"code": "test-code", "state": "test-state"},
+            )
+        assert resp.status_code == 502
+        detail = resp.json()["detail"]
+        assert detail == "Facebook authentication failed"
+        assert "facebook.internal" not in detail

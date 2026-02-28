@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json as json_mod
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -43,6 +44,8 @@ from backend.services.crosspost_service import (
     get_crosspost_history,
     get_social_accounts,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/crosspost", tags=["crosspost"])
 
@@ -244,7 +247,11 @@ async def bluesky_authorize(
             jwk=request.app.state.atproto_oauth_jwk,
         )
     except ATProtoOAuthError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        logger.error("Bluesky OAuth error during authorize: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Bluesky authentication failed",
+        ) from exc
     state_store = request.app.state.bluesky_oauth_state
     state_store.set(
         par_result["state"],
@@ -313,9 +320,10 @@ async def bluesky_callback(
             dpop_nonce=pending["dpop_nonce"],
         )
     except ATProtoOAuthError as exc:
+        logger.error("Bluesky token exchange error: %s", exc, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Token exchange failed: {exc}",
+            detail="Bluesky token exchange failed",
         ) from exc
     if token_data.get("sub") != pending["did"]:
         raise HTTPException(
@@ -438,9 +446,10 @@ async def mastodon_authorize(
                     detail="Mastodon app registration returned non-JSON response",
                 ) from json_exc
     except httpx.HTTPError as exc:
+        logger.error("Mastodon connection error during authorize: %s", exc, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Could not connect to Mastodon instance: {exc}",
+            detail="Could not connect to Mastodon instance",
         ) from exc
 
     client_id = reg_data.get("client_id")
@@ -519,14 +528,16 @@ async def mastodon_callback(
             pkce_verifier=pending["pkce_verifier"],
         )
     except MastodonOAuthTokenError as exc:
+        logger.error("Mastodon token exchange error: %s", exc, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=str(exc),
+            detail="Mastodon token exchange failed",
         ) from exc
     except httpx.HTTPError as exc:
+        logger.error("Mastodon OAuth HTTP error: %s", exc, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Mastodon OAuth HTTP error: {exc}",
+            detail="Mastodon authentication failed",
         ) from exc
 
     mastodon_access_token = token_result.get("access_token")
@@ -644,14 +655,12 @@ async def x_callback(
     error: Annotated[str | None, Query()] = None,
 ) -> RedirectResponse:
     """Handle X OAuth callback: exchange code for tokens, store account."""
-    import logging
     from urllib.parse import urlencode
 
-    _logger = logging.getLogger(__name__)
     base_url = (settings.bluesky_client_url or "").rstrip("/")
 
     if error is not None:
-        _logger.warning("X OAuth error: %s", error)
+        logger.warning("X OAuth error: %s", error)
         error_params = urlencode({"oauth_error": error})
         return RedirectResponse(url=f"{base_url}/admin?{error_params}", status_code=303)
 
@@ -682,14 +691,16 @@ async def x_callback(
             pkce_verifier=pending["pkce_verifier"],
         )
     except XOAuthTokenError as exc:
+        logger.error("X token exchange error: %s", exc, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=str(exc),
+            detail="X token exchange failed",
         ) from exc
     except httpx.HTTPError as exc:
+        logger.error("X OAuth HTTP error: %s", exc, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"X OAuth HTTP error: {exc}",
+            detail="X authentication failed",
         ) from exc
 
     x_access_token = token_result.get("access_token")
@@ -800,14 +811,12 @@ async def facebook_callback(
     Auto-selects if there is only one page; otherwise stores pages
     for selection via the select-page endpoint.
     """
-    import logging
     from urllib.parse import urlencode as _urlencode
 
-    _logger = logging.getLogger(__name__)
     base_url = (settings.bluesky_client_url or "").rstrip("/")
 
     if error is not None:
-        _logger.warning("Facebook OAuth error: %s", error)
+        logger.warning("Facebook OAuth error: %s", error)
         error_params = _urlencode({"oauth_error": error})
         return RedirectResponse(url=f"{base_url}/admin?{error_params}", status_code=303)
 
@@ -842,14 +851,16 @@ async def facebook_callback(
             redirect_uri=pending["redirect_uri"],
         )
     except FacebookOAuthTokenError as exc:
+        logger.error("Facebook token exchange error: %s", exc, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=str(exc),
+            detail="Facebook token exchange failed",
         ) from exc
     except httpx_client.HTTPError as exc:
+        logger.error("Facebook OAuth HTTP error: %s", exc, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Facebook OAuth HTTP error: {exc}",
+            detail="Facebook authentication failed",
         ) from exc
 
     raw_pages = result["pages"]
