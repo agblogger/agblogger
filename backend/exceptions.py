@@ -20,3 +20,19 @@ class InternalServerError(Exception):
     the full message server-side, and returns HTTP 500 with a generic
     ``"Internal server error"`` detail.
     """
+
+
+class PostNotFoundError(ValueError):
+    """Raised when a post is not found by path or ID."""
+
+
+class BuiltinPageError(ValueError):
+    """Raised when attempting to modify a built-in page (timeline, labels)."""
+
+
+class ExternalServiceError(RuntimeError):
+    """Raised when an external service (OAuth, HTTP API) fails.
+
+    The global handler logs the full message at ERROR and returns a generic
+    "External service error" (502) to the client.
+    """

@@ -559,3 +559,25 @@ class TestConfigSecurityValidation:
         )
         with pytest.raises(InternalServerError, match="Insecure production"):
             settings.validate_runtime_security()
+
+
+class TestTypedExceptions:
+    """Typed exception subclasses exist and have correct hierarchy."""
+
+    def test_post_not_found_error_is_value_error(self) -> None:
+        from backend.exceptions import PostNotFoundError
+
+        exc = PostNotFoundError("Post not found: posts/hello.md")
+        assert isinstance(exc, ValueError)
+
+    def test_builtin_page_error_is_value_error(self) -> None:
+        from backend.exceptions import BuiltinPageError
+
+        exc = BuiltinPageError("Cannot delete built-in page 'timeline'")
+        assert isinstance(exc, ValueError)
+
+    def test_external_service_error_is_runtime_error(self) -> None:
+        from backend.exceptions import ExternalServiceError
+
+        exc = ExternalServiceError("OAuth failed")
+        assert isinstance(exc, RuntimeError)
