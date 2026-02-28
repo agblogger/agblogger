@@ -727,3 +727,31 @@ class TestCrosspostErrorMessageLeakage:
         # The error should be a generic message, not the internal exception details
         assert results[0].error == "Cross-posting failed"
         assert "secret_token_abc123" not in (results[0].error or "")
+
+
+class TestPandocRendererRetryExceptionGap:
+    """Pandoc retry path must catch all exceptions, not just httpx.HTTPError."""
+
+    @pytest.mark.asyncio
+    async def test_retry_catches_non_http_error(self) -> None:
+        import httpx
+
+        from backend.pandoc.renderer import RenderError, _render_markdown, _sanitize_html
+
+        mock_server = AsyncMock()
+        mock_server.base_url = "http://localhost:9999"
+        mock_server.ensure_running = AsyncMock()
+
+        mock_client = AsyncMock()
+        # First call: NetworkError triggers restart
+        # Second call: OSError (not httpx.HTTPError) — must not escape
+        mock_client.post = AsyncMock(
+            side_effect=[httpx.NetworkError("connection reset"), OSError("broken pipe")]
+        )
+
+        with (
+            patch("backend.pandoc.renderer._server", mock_server),
+            patch("backend.pandoc.renderer._http_client", mock_client),
+            pytest.raises(RenderError, match="unreachable after restart"),
+        ):
+            await _render_markdown("# test", from_format="markdown", sanitizer=_sanitize_html)
