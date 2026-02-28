@@ -829,6 +829,30 @@ class TestPostWriteNarrowedExceptions:
         assert resp.json()["detail"] == "Internal server error"
 
 
+class TestExternalServiceErrorHandler:
+    """ExternalServiceError returns 502 with generic message."""
+
+    @pytest.mark.asyncio
+    async def test_external_service_error_returns_502(self, client: AsyncClient) -> None:
+        from backend.exceptions import ExternalServiceError
+
+        token = await login(client)
+        with patch(
+            "backend.api.render.render_markdown",
+            new_callable=AsyncMock,
+            side_effect=ExternalServiceError("secret internal details"),
+        ):
+            resp = await client.post(
+                "/api/render/preview",
+                json={"markdown": "# Hello"},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert resp.status_code == 502
+        detail = resp.json()["detail"]
+        assert detail == "External service error"
+        assert "secret" not in detail
+
+
 class TestOAuthErrorLeakage:
     """OAuth errors must not leak internal details to clients."""
 

@@ -449,7 +449,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             content={"detail": "Data integrity error"},
         )
 
-    from backend.exceptions import InternalServerError
+    from backend.exceptions import ExternalServiceError, InternalServerError
 
     @app.exception_handler(InternalServerError)
     async def internal_server_error_handler(
@@ -465,6 +465,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return JSONResponse(
             status_code=500,
             content={"detail": "Internal server error"},
+        )
+
+    @app.exception_handler(ExternalServiceError)
+    async def external_service_error_handler(
+        request: Request, exc: ExternalServiceError
+    ) -> JSONResponse:
+        logger.error(
+            "ExternalServiceError in %s %s: %s",
+            request.method,
+            request.url.path,
+            exc,
+            exc_info=exc,
+        )
+        return JSONResponse(
+            status_code=502,
+            content={"detail": "External service error"},
         )
 
     @app.exception_handler(ValueError)
