@@ -407,6 +407,26 @@ class TestAssetUploadOSError:
         assert resp.status_code == 500
 
 
+class TestSyncMetadataJsonLeakage:
+    """Sync metadata JSON error must not leak parse details."""
+
+    @pytest.mark.asyncio
+    async def test_invalid_metadata_returns_generic_message(self, client: AsyncClient) -> None:
+        token = await login(client)
+        resp = await client.post(
+            "/api/sync/commit",
+            data={"metadata": "{invalid json here"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 400
+        detail = resp.json()["detail"]
+        assert detail == "Invalid metadata JSON"
+        # Must NOT contain json.JSONDecodeError details like line/column numbers
+        assert "line" not in detail.lower()
+        assert "column" not in detail.lower()
+        assert "expecting" not in detail.lower()
+
+
 class TestSyncCacheRebuildFailure:
     """H10: sync commit handles cache rebuild failure gracefully."""
 

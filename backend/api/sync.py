@@ -207,7 +207,8 @@ async def _sync_commit_inner(
     try:
         meta = json.loads(metadata_json)
     except json.JSONDecodeError as exc:
-        raise HTTPException(status_code=400, detail=f"Invalid metadata JSON: {exc}") from exc
+        logger.warning("Invalid metadata JSON in sync commit: %s", exc)
+        raise HTTPException(status_code=400, detail="Invalid metadata JSON") from exc
 
     raw_deleted = meta.get("deleted_files", [])
     if not isinstance(raw_deleted, list) or not all(isinstance(f, str) for f in raw_deleted):
