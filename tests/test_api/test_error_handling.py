@@ -7,10 +7,12 @@ M3 (asset upload OSError), C1 (render before rename).
 
 from __future__ import annotations
 
+import tomllib
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from sqlalchemy.exc import OperationalError
 
 from backend.config import Settings
 from backend.pandoc.renderer import RenderError
@@ -509,18 +511,46 @@ class TestLabelCommitRecovery:
     """H8: label commit failure recovers by restoring TOML."""
 
     @pytest.mark.asyncio
-    async def test_label_create_commit_failure_returns_500(self, client: AsyncClient) -> None:
+    async def test_label_create_commit_failure_restores_labels_toml(
+        self,
+        client: AsyncClient,
+        tmp_content_dir: Path,
+    ) -> None:
         token = await login(client)
+        headers = {"Authorization": f"Bearer {token}"}
+        labels_path = tmp_content_dir / "labels.toml"
+        original_labels = tomllib.loads(labels_path.read_text())["labels"]
         with patch(
             "backend.api.labels.AsyncSession.commit",
-            side_effect=OSError("db commit failed"),
+            side_effect=OperationalError(
+                "COMMIT",
+                {},
+                Exception("db commit failed"),
+            ),
         ):
             resp = await client.post(
                 "/api/labels",
                 json={"id": "test-broken", "names": ["test broken"], "parents": []},
-                headers={"Authorization": f"Bearer {token}"},
+                headers=headers,
             )
         assert resp.status_code == 500
+
+        restored_labels = tomllib.loads(labels_path.read_text())["labels"]
+        assert restored_labels == original_labels
+
+        missing_resp = await client.get("/api/labels/test-broken")
+        assert missing_resp.status_code == 404
+
+        recovery_resp = await client.post(
+            "/api/labels",
+            json={"id": "restored-ok", "names": ["restored ok"], "parents": []},
+            headers=headers,
+        )
+        assert recovery_resp.status_code == 201
+
+        labels = tomllib.loads(labels_path.read_text())["labels"]
+        assert "restored-ok" in labels
+        assert "test-broken" not in labels
 
 
 class TestCrosspostPostNotFound:
