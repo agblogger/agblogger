@@ -286,7 +286,7 @@ async def upload_post(
 
     try:
         content_manager.write_post(file_path, post_data)
-    except Exception as exc:
+    except OSError as exc:
         logger.error("Failed to write uploaded post %s: %s", file_path, exc)
         for asset in written_assets:
             asset.unlink(missing_ok=True)
@@ -469,7 +469,7 @@ async def create_post_endpoint(
 
     try:
         content_manager.write_post(file_path, post_data)
-    except Exception as exc:
+    except OSError as exc:
         logger.error("Failed to write post %s: %s", file_path, exc)
         await session.rollback()
         raise HTTPException(status_code=500, detail="Failed to write post file") from exc
@@ -611,7 +611,7 @@ async def update_post_endpoint(
 
     try:
         content_manager.write_post(file_path, post_data)
-    except Exception as exc:
+    except OSError as exc:
         logger.error("Failed to write post %s: %s", file_path, exc)
         await session.rollback()
         raise HTTPException(status_code=500, detail="Failed to write post file") from exc

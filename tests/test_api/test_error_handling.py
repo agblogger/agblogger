@@ -710,6 +710,125 @@ class TestDeleteBuiltinPageError:
         assert resp.status_code == 404
 
 
+class TestPostWriteNarrowedExceptions:
+    """Post write catches OSError specifically, not bare Exception."""
+
+    @pytest.mark.asyncio
+    async def test_create_post_write_oserror_returns_500(self, client: AsyncClient) -> None:
+        token = await login(client)
+        with patch(
+            "backend.api.posts.ContentManager.write_post",
+            side_effect=OSError("disk full"),
+        ):
+            resp = await client.post(
+                "/api/posts",
+                json={
+                    "title": "Test Narrowed",
+                    "body": "Content",
+                    "labels": [],
+                    "is_draft": False,
+                },
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert resp.status_code == 500
+        assert resp.json()["detail"] == "Failed to write post file"
+
+    @pytest.mark.asyncio
+    async def test_create_post_type_error_propagates(self, client: AsyncClient) -> None:
+        """TypeError should NOT be caught locally -- goes to global handler."""
+        token = await login(client)
+        with patch(
+            "backend.api.posts.ContentManager.write_post",
+            side_effect=TypeError("bad type"),
+        ):
+            resp = await client.post(
+                "/api/posts",
+                json={
+                    "title": "Test TypeError",
+                    "body": "Content",
+                    "labels": [],
+                    "is_draft": False,
+                },
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert resp.status_code == 500
+        assert resp.json()["detail"] == "Internal server error"
+
+    @pytest.mark.asyncio
+    async def test_update_post_write_oserror_returns_500(self, client: AsyncClient) -> None:
+        token = await login(client)
+        with patch(
+            "backend.api.posts.ContentManager.write_post",
+            side_effect=OSError("disk full"),
+        ):
+            resp = await client.put(
+                "/api/posts/posts/hello.md",
+                json={
+                    "title": "Updated",
+                    "body": "Updated content",
+                    "labels": [],
+                    "is_draft": False,
+                },
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert resp.status_code == 500
+        assert resp.json()["detail"] == "Failed to write post file"
+
+    @pytest.mark.asyncio
+    async def test_update_post_type_error_propagates(self, client: AsyncClient) -> None:
+        """TypeError should NOT be caught locally -- goes to global handler."""
+        token = await login(client)
+        with patch(
+            "backend.api.posts.ContentManager.write_post",
+            side_effect=TypeError("bad type"),
+        ):
+            resp = await client.put(
+                "/api/posts/posts/hello.md",
+                json={
+                    "title": "Updated",
+                    "body": "Updated content",
+                    "labels": [],
+                    "is_draft": False,
+                },
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert resp.status_code == 500
+        assert resp.json()["detail"] == "Internal server error"
+
+    @pytest.mark.asyncio
+    async def test_upload_post_write_oserror_returns_500(self, client: AsyncClient) -> None:
+        token = await login(client)
+        md_content = "---\ntitle: Upload OSError Test\n---\n\nContent.\n"
+        with patch(
+            "backend.api.posts.ContentManager.write_post",
+            side_effect=OSError("disk full"),
+        ):
+            resp = await client.post(
+                "/api/posts/upload",
+                files={"files": ("index.md", md_content.encode(), "text/markdown")},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert resp.status_code == 500
+        assert resp.json()["detail"] == "Failed to write post file"
+
+    @pytest.mark.asyncio
+    async def test_upload_post_type_error_propagates(self, client: AsyncClient) -> None:
+        """TypeError should NOT be caught locally -- goes to global handler."""
+        token = await login(client)
+        md_content = "---\ntitle: Upload TypeError Test\n---\n\nContent.\n"
+        with patch(
+            "backend.api.posts.ContentManager.write_post",
+            side_effect=TypeError("bad type"),
+        ):
+            resp = await client.post(
+                "/api/posts/upload",
+                files={"files": ("index.md", md_content.encode(), "text/markdown")},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert resp.status_code == 500
+        assert resp.json()["detail"] == "Internal server error"
+
+
 class TestOAuthErrorLeakage:
     """OAuth errors must not leak internal details to clients."""
 
