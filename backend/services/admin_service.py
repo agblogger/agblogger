@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from backend.exceptions import BuiltinPageError
 from backend.filesystem.toml_manager import (
     PageConfig,
     SiteConfig,
@@ -137,7 +138,7 @@ def delete_page(cm: ContentManager, page_id: str, *, delete_file: bool) -> None:
     """Remove a page from config and optionally delete the .md file."""
     if page_id in BUILTIN_PAGE_IDS:
         msg = f"Cannot delete built-in page '{page_id}'"
-        raise ValueError(msg)
+        raise BuiltinPageError(msg)
 
     cfg = cm.site_config
     page = next((p for p in cfg.pages if p.id == page_id), None)

@@ -593,3 +593,26 @@ class TestAdminOSError:
                 headers={"Authorization": f"Bearer {token}"},
             )
         assert resp.status_code == 500
+
+
+class TestDeleteBuiltinPageError:
+    """Delete built-in page returns 400 with BuiltinPageError."""
+
+    @pytest.mark.asyncio
+    async def test_delete_builtin_page_returns_400(self, client: AsyncClient) -> None:
+        token = await login(client)
+        resp = await client.delete(
+            "/api/admin/pages/timeline",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 400
+        assert "built-in" in resp.json()["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_delete_nonexistent_page_returns_404(self, client: AsyncClient) -> None:
+        token = await login(client)
+        resp = await client.delete(
+            "/api/admin/pages/nonexistent",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 404

@@ -15,6 +15,7 @@ from backend.api.deps import (
     get_session,
     require_admin,
 )
+from backend.exceptions import BuiltinPageError
 from backend.filesystem.content_manager import ContentManager
 from backend.filesystem.toml_manager import PageConfig
 from backend.models.user import User
@@ -183,9 +184,9 @@ async def delete_page_endpoint(
         raise HTTPException(status_code=400, detail=_PAGE_ID_ERROR)
     try:
         delete_page(content_manager, page_id, delete_file=delete_file)
+    except BuiltinPageError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except ValueError as exc:
-        if "built-in" in str(exc):
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except OSError as exc:
         logger.error("Failed to delete page %s: %s", page_id, exc)
