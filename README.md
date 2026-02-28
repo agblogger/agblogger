@@ -49,6 +49,7 @@ just stop
 `just setup` creates `.env` from `.env.example` only when `.env` is missing.
 
 This starts the backend at http://localhost:8000 and the frontend at http://localhost:5173 (proxying API calls to the backend). API docs are at http://localhost:8000/docs.
+`just start` now waits until both services are actually healthy before reporting success. If startup fails, inspect `.local/backend.log` and `.local/frontend.log`.
 
 Default credentials: `admin` / `admin` (change via `.env`).
 Self-registration is disabled by default; create invite codes from the admin account.
