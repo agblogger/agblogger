@@ -70,6 +70,41 @@ async def login(client: AsyncClient) -> str:
     return resp.json()["access_token"]
 
 
+class TestLabelPersistNarrowedExceptions:
+    """Labels persistence catches OSError specifically, not bare Exception."""
+
+    @pytest.mark.asyncio
+    async def test_label_toml_write_oserror_returns_500(self, client: AsyncClient) -> None:
+        token = await login(client)
+        with patch(
+            "backend.api.labels.write_labels_config",
+            side_effect=OSError("disk full"),
+        ):
+            resp = await client.post(
+                "/api/labels",
+                json={"id": "test-oserror", "names": ["test"], "parents": []},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert resp.status_code == 500
+
+    @pytest.mark.asyncio
+    async def test_label_toml_write_type_error_propagates(self, client: AsyncClient) -> None:
+        """TypeError (programming bug) should NOT be caught by the narrowed handler."""
+        token = await login(client)
+        with patch(
+            "backend.api.labels.write_labels_config",
+            side_effect=TypeError("bad argument"),
+        ):
+            resp = await client.post(
+                "/api/labels",
+                json={"id": "test-typeerror", "names": ["test"], "parents": []},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        # Should hit the global TypeError handler (500 "Internal server error")
+        assert resp.status_code == 500
+        assert resp.json()["detail"] == "Internal server error"
+
+
 class TestRenderEndpointPandocFailure:
     """H1: render endpoint handles pandoc failure."""
 
@@ -478,7 +513,7 @@ class TestLabelCommitRecovery:
         token = await login(client)
         with patch(
             "backend.api.labels.AsyncSession.commit",
-            side_effect=Exception("db commit failed"),
+            side_effect=OSError("db commit failed"),
         ):
             resp = await client.post(
                 "/api/labels",

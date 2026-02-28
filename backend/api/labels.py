@@ -49,7 +49,7 @@ async def _persist_labels_and_commit(
     try:
         write_labels_config(content_manager.content_dir, labels)
         content_manager.reload_config()
-    except Exception as exc:
+    except OSError as exc:
         await session.rollback()
         logger.error("Failed to write labels.toml for %s: %s", error_context, exc)
         raise HTTPException(
@@ -59,14 +59,14 @@ async def _persist_labels_and_commit(
     # Wrap session.commit with recovery -- restore TOML on failure
     try:
         await session.commit()
-    except Exception as exc:
+    except OSError as exc:
         logger.error("DB commit failed for %s: %s", error_context, exc)
         await session.rollback()
         # Restore old labels to TOML since DB commit failed
         try:
             write_labels_config(content_manager.content_dir, old_labels)
             content_manager.reload_config()
-        except Exception as restore_exc:
+        except OSError as restore_exc:
             logger.error("Failed to restore labels.toml after commit failure: %s", restore_exc)
         raise HTTPException(status_code=500, detail="Failed to commit label changes") from exc
 
