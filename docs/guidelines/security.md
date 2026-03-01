@@ -210,6 +210,8 @@ The quality gate (`just check`) includes:
 | npm audit | `just check-frontend-static` | Known CVEs in npm packages |
 | Trivy | `just check-static` | Vulnerabilities, misconfigs, secrets, licenses |
 | CodeQL | `just check-extra` | Semantic code analysis |
+| Snyk OSS | `just check-extra` | Dependency vulnerability scanning across detected projects |
+| Snyk Code | `just check-snyk` | SAST over repository source code |
 
 When adding dependencies:
 - Run `just check-static` to verify no new vulnerabilities are introduced.

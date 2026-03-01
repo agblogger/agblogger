@@ -39,7 +39,18 @@ check-audit-full:
 
 # Run extra checks not covered by `check`
 check-extra: check-audit-full check-codeql
+    @echo "\n── Snyk: open source dependency scan ──"
+    snyk test --all-projects
     @echo "\n✓ Extra checks passed"
+
+# Run Snyk code analysis
+check-snyk:
+    @echo "\n── Snyk: code analysis ──"
+    snyk code test
+
+# Run noisy/offline-unfriendly checks
+check-noisy: check-snyk
+    @echo "\n✓ Noisy checks passed"
 
 # ── Mutation testing ────────────────────────────────────────────────
 

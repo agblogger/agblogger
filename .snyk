@@ -1,0 +1,8 @@
+# Snyk (https://snyk.io) policy file
+---
+exclude:
+  code:
+    - tests/**
+    - frontend/src/**/__tests__/**
+    - "**/*.test.ts"
+    - "**/*.test.tsx"

@@ -15,6 +15,9 @@ just health           # Check if dev server is healthy (backend + frontend)
 just start backend_port=9000 frontend_port=9173  # Custom ports
 just check            # Full gate: static checks first, then tests
 just check-static     # Static-only gate: backend + frontend + Semgrep + Vulture + Trivy
+just check-extra      # Extra dependency/security checks: full npm audit + CodeQL + Snyk OSS
+just check-snyk       # Snyk code analysis
+just check-noisy      # Noisy scans kept outside the default gate
 just test             # Test-only gate: backend + frontend tests
 just check-backend    # Backend static checks + backend tests
 just check-backend-static  # Backend static checks only

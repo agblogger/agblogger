@@ -251,6 +251,8 @@ The quality gate (`just check`) includes multiple security-focused tools:
 | npm audit | JS deps | Known CVEs in npm packages |
 | Trivy | Full repo | Vulnerabilities, misconfigurations, secrets, licenses |
 | CodeQL | Python, JS | Semantic code analysis (in `just check-extra`) |
+| Snyk OSS | Python, JS manifests | Dependency vulnerability scanning (in `just check-extra`) |
+| Snyk Code | Python, JS source | SAST via `just check-snyk` |
 | Vulture | Python | Dead code that may indicate security-relevant remnants |
 | mypy + basedpyright | Python | Strict type checking reduces type-confusion bugs |
 

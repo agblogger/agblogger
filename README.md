@@ -60,8 +60,15 @@ Self-registration is disabled by default; create invite codes from the admin acc
 # Run full quality gate (static checks, then tests)
 just check
 
-# Run extra checks not covered by just check (full npm audit + CodeQL)
+# Run extra checks not covered by just check (full npm audit + CodeQL + Snyk OSS)
 just check-extra
+
+# Run Snyk code analysis
+just check-snyk
+# Test code is excluded via the repo-root .snyk policy
+
+# Run noisy scans kept outside the default gate
+just check-noisy
 
 # Run static checks only (backend + frontend + Semgrep + Vulture + Trivy)
 just check-static
