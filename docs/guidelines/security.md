@@ -200,20 +200,6 @@ Do not bypass these outside explicit debug/test scenarios. Do not weaken the thr
 
 ## Dependency Security
 
-The quality gate (`just check`) includes:
-
-| Tool | Command | Scope |
-|------|---------|-------|
-| ruff (S rules) | `just check-backend-static` | flake8-bandit security checks |
-| Semgrep | `just check-semgrep` | SAST: OWASP, secrets, supply-chain |
-| pip-audit | `just check-backend-static` | Known CVEs in Python packages |
-| npm audit | `just check-frontend-static` | Known CVEs in npm packages |
-| Trivy | `just check-static` | Vulnerabilities, misconfigs, secrets, licenses |
-| Checkov | `just checkov` | Dockerfile and docker-compose IaC misconfiguration scan |
-| CodeQL | `just check-extra` | Semantic code analysis |
-| Snyk OSS | `just check-extra` | Dependency vulnerability scanning across detected projects |
-| Snyk Code | `just check-snyk` | SAST over repository source code |
-
 When adding dependencies:
 - Run `just check-static` to verify no new vulnerabilities are introduced.
 - For Python: `uv add <package>` then `uv run pip-audit`.

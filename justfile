@@ -42,8 +42,23 @@ checkov:
     @echo "\n── Infrastructure: Checkov scan (Dockerfile + docker-compose.yml) ──"
     uv run --with checkov checkov -f Dockerfile -f docker-compose.yml
 
+# Run Gitleaks against the git repository, excluding tests/
+check-gitleaks:
+    @echo "\n── Repository: Gitleaks secret scan (excluding tests/) ──"
+    gitleaks detect --source . --no-banner
+
+# Run full Gitleaks history scan
+check-gitleaks-full:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "\n── Repository: Gitleaks full secret scan ──"
+    cfg_file="$(mktemp)"
+    trap 'rm -f "$cfg_file"' EXIT
+    printf '[extend]\nuseDefault = true\n' > "$cfg_file"
+    gitleaks detect --source . --config "$cfg_file" --no-banner --verbose
+
 # Run extra checks not covered by `check`
-check-extra: check-audit-full checkov check-codeql
+check-extra: check-audit-full checkov check-gitleaks check-codeql
     @echo "\n── Snyk: open source dependency scan ──"
     snyk test frontend
     @echo "\n✓ Extra checks passed"
@@ -54,7 +69,7 @@ check-snyk:
     snyk code test
 
 # Run noisy/offline-unfriendly checks
-check-noisy: check-snyk
+check-noisy: check-snyk check-gitleaks-full
     @echo "\n✓ Noisy checks passed"
 
 # ── Mutation testing ────────────────────────────────────────────────

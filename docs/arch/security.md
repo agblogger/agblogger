@@ -251,6 +251,8 @@ The quality gate (`just check`) includes multiple security-focused tools:
 | npm audit | JS deps | Known CVEs in npm packages |
 | Trivy | Full repo | Vulnerabilities, misconfigurations, secrets, licenses |
 | Checkov | Dockerfile, Compose | IaC misconfiguration analysis for container build/deploy manifests |
+| Gitleaks | Git repo except `tests/` | Secret scanning over repository history with test fixture allowlist |
+| Gitleaks (full) | Full git repo | Repository secret scan using Gitleaks' built-in default rules, bypassing the repo allowlist; kept in `just check-noisy` because fixtures intentionally trigger detections |
 | CodeQL | Python, JS | Semantic code analysis (in `just check-extra`) |
 | Snyk OSS | Python, JS manifests | Dependency vulnerability scanning (in `just check-extra`) |
 | Snyk Code | Python, JS source | SAST via `just check-snyk` |

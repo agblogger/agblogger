@@ -106,12 +106,18 @@ These are intentionally separate from `just check` and `just check-static`:
 - `just checkov`
   - Runs `checkov -f Dockerfile -f docker-compose.yml` via `uv run --with checkov`.
   - Scope: infrastructure-as-code checks for the repository Dockerfile and Compose manifest.
+- `just check-gitleaks`
+  - Runs `gitleaks detect --source .` with repo config that excludes `tests/`.
+  - Scope: repository secret scan over git-tracked content outside backend test fixtures.
+- `just check-gitleaks-full`
+  - Runs `gitleaks detect --source .` with an explicit temporary config that extends Gitleaks' built-in default rules, bypassing the repo `.gitleaks.toml`.
+  - Scope: full repository secret scan, including `tests/`; kept outside the default extra gate because test fixtures intentionally contain fake secrets.
 - `just check-snyk`
   - Runs `snyk code test`.
   - Scope: repository source code SAST via Snyk Code.
   - Test code is excluded via the repo-root `.snyk` policy (`tests/**`, frontend `__tests__`, and `*.test.ts(x)` files).
 - `just check-extra`
-  - Runs only extra checks not covered by `just check`: `check-audit-full` + `checkov` + `check-codeql` + `snyk test --all-projects`.
+  - Runs only extra checks not covered by `just check`: `check-audit-full` + `checkov` + `check-gitleaks` + `check-codeql` + `snyk test --all-projects`.
 - `just check-noisy`
-  - Runs `check-snyk`.
+  - Runs `check-snyk` and `check-gitleaks-full`.
   - Intended for noisier/offline-unfriendly scans kept outside the default quality gate.

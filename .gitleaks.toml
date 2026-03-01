@@ -1,0 +1,5 @@
+title = "AgBlogger Gitleaks configuration"
+
+[[allowlists]]
+description = "Ignore intentionally fake secrets in backend test fixtures"
+paths = ['''^tests/''']
