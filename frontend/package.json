@@ -37,9 +37,9 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
-    "@stryker-mutator/core": "9.5.1",
-    "@stryker-mutator/typescript-checker": "9.5.1",
-    "@stryker-mutator/vitest-runner": "9.5.1",
+    "@stryker-mutator/core": "9.6.0",
+    "@stryker-mutator/typescript-checker": "9.6.0",
+    "@stryker-mutator/vitest-runner": "9.6.0",
     "@tailwindcss/vite": "^4.1.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
@@ -65,7 +65,8 @@
     "vitest": "^4.0.18"
   },
   "overrides": {
-    "minimatch": "^10.2.1",
+    "minimatch": "10.2.4",
+    "rollup": "4.59.0",
     "@stryker-mutator/core": {
       "ajv": "8.18.0"
     }
