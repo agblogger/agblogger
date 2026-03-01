@@ -333,3 +333,78 @@ class TestPostDirectoryDeletion:
         new_dir = (app_settings.content_dir / new_path).parent
         assert not new_dir.exists()
         assert not old_dir.exists()
+
+
+class TestUnicodePostCreation:
+    """Tests for creating posts with unicode/i18n titles."""
+
+    @pytest.mark.asyncio
+    async def test_create_post_with_cjk_title(self, client: AsyncClient) -> None:
+        """CJK characters are stripped by ASCII encoding, resulting in 'untitled' slug."""
+        token = await _login(client)
+        resp = await client.post(
+            "/api/posts",
+            json={
+                "title": "\u65e5\u672c\u8a9e\u30c6\u30b9\u30c8",
+                "body": "CJK content.\n",
+                "labels": [],
+                "is_draft": False,
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 201
+        data = resp.json()
+        file_path = data["file_path"]
+        assert file_path.startswith("posts/")
+        assert file_path.endswith("/index.md")
+        # CJK characters are all non-ASCII, so slug falls back to "untitled"
+        assert "untitled" in file_path
+
+        # Verify the post is accessible
+        get_resp = await client.get(f"/api/posts/{file_path}")
+        assert get_resp.status_code == 200
+        assert get_resp.json()["title"] == "\u65e5\u672c\u8a9e\u30c6\u30b9\u30c8"
+
+    @pytest.mark.asyncio
+    async def test_create_post_with_emoji_title(self, client: AsyncClient) -> None:
+        """Emoji characters are stripped, leaving only ASCII parts in slug."""
+        token = await _login(client)
+        resp = await client.post(
+            "/api/posts",
+            json={
+                "title": "Hello \U0001f30d World",
+                "body": "Emoji content.\n",
+                "labels": [],
+                "is_draft": False,
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 201
+        data = resp.json()
+        file_path = data["file_path"]
+        assert file_path.startswith("posts/")
+        assert file_path.endswith("/index.md")
+        # Emoji stripped, slug should contain "hello-world"
+        assert "hello-world" in file_path
+
+    @pytest.mark.asyncio
+    async def test_create_post_with_accented_title(self, client: AsyncClient) -> None:
+        """Accented characters are normalized to their ASCII equivalents."""
+        token = await _login(client)
+        resp = await client.post(
+            "/api/posts",
+            json={
+                "title": "Caf\u00e9 r\u00e9sum\u00e9",
+                "body": "Accented content.\n",
+                "labels": [],
+                "is_draft": False,
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 201
+        data = resp.json()
+        file_path = data["file_path"]
+        assert file_path.startswith("posts/")
+        assert file_path.endswith("/index.md")
+        # Accented chars normalized to ASCII: "cafe-resume"
+        assert "cafe-resume" in file_path

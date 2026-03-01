@@ -79,7 +79,12 @@ class TestPosts:
         assert resp.status_code == 200
         data = resp.json()
         assert "posts" in data
-        assert data["total"] >= 1
+        assert "page" in data
+        assert "per_page" in data
+        assert "total_pages" in data
+        assert data["total"] == len(data["posts"])
+        titles = [p["title"] for p in data["posts"]]
+        assert "Hello World" in titles
 
     @pytest.mark.asyncio
     async def test_get_post(self, client: AsyncClient) -> None:
@@ -1329,6 +1334,21 @@ class TestSearch:
         file_paths = [result["file_path"] for result in search_resp.json()]
         assert "posts/hello.md" in file_paths
 
+    @pytest.mark.asyncio
+    async def test_search_special_characters(self, client: AsyncClient) -> None:
+        """Search with special characters should not crash."""
+        resp_cpp = await client.get("/api/posts/search", params={"q": "C++"})
+        assert resp_cpp.status_code == 200
+
+        resp_quotes = await client.get("/api/posts/search", params={"q": 'hello "world"'})
+        assert resp_quotes.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_search_empty_query_rejected(self, client: AsyncClient) -> None:
+        """Empty search query should be rejected with 422."""
+        resp = await client.get("/api/posts/search", params={"q": ""})
+        assert resp.status_code == 422
+
 
 class TestRegistration:
     @pytest.mark.asyncio
@@ -1763,3 +1783,225 @@ class TestSearchAfterDelete:
         search_resp = await client.get("/api/posts/search", params={"q": "uniqueftsdeletekey999"})
         assert search_resp.status_code == 200
         assert search_resp.json() == []
+
+
+class TestLabelPosts:
+    @pytest.mark.asyncio
+    async def test_label_posts_returns_matching_posts(self, client: AsyncClient) -> None:
+        """GET /api/labels/{label_id}/posts returns posts with that label."""
+        resp = await client.get("/api/labels/swe/posts")
+        assert resp.status_code == 200
+        data = resp.json()
+        # Verify PostListResponse structure
+        assert "posts" in data
+        assert "total" in data
+        assert "page" in data
+        assert "per_page" in data
+        assert "total_pages" in data
+        # The seed post "Hello World" has label swe
+        assert data["total"] >= 1
+        titles = [p["title"] for p in data["posts"]]
+        assert "Hello World" in titles
+
+    @pytest.mark.asyncio
+    async def test_label_posts_nonexistent_label_returns_empty(self, client: AsyncClient) -> None:
+        """GET /api/labels/nope/posts returns 200 with empty posts list."""
+        resp = await client.get("/api/labels/nope/posts")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["posts"] == []
+        assert data["total"] == 0
+
+    @pytest.mark.asyncio
+    async def test_label_posts_includes_descendant_labels(self, client: AsyncClient) -> None:
+        """Posts tagged with a child label appear in the parent label's posts."""
+        login_resp = await client.post(
+            "/api/auth/login",
+            json={"username": "admin", "password": "admin123"},
+        )
+        token = login_resp.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # Create a child label under swe
+        child_resp = await client.post(
+            "/api/labels",
+            json={"id": "backend-dev", "names": ["backend development"], "parents": ["swe"]},
+            headers=headers,
+        )
+        assert child_resp.status_code == 201
+
+        # Create a post tagged only with the child label
+        create_resp = await client.post(
+            "/api/posts",
+            json={
+                "title": "Backend Dev Post",
+                "body": "A post about backend development.\n",
+                "labels": ["backend-dev"],
+                "is_draft": False,
+            },
+            headers=headers,
+        )
+        assert create_resp.status_code == 201
+
+        # Query posts for the parent label (swe) -- should include the child's post
+        resp = await client.get("/api/labels/swe/posts")
+        assert resp.status_code == 200
+        data = resp.json()
+        titles = [p["title"] for p in data["posts"]]
+        assert "Backend Dev Post" in titles
+
+
+class TestPagination:
+    @pytest.mark.asyncio
+    async def test_pagination_returns_correct_page_metadata(self, client: AsyncClient) -> None:
+        """Create 3 posts, request per_page=2, verify pagination metadata."""
+        login_resp = await client.post(
+            "/api/auth/login",
+            json={"username": "admin", "password": "admin123"},
+        )
+        token = login_resp.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        for i in range(3):
+            resp = await client.post(
+                "/api/posts",
+                json={
+                    "title": f"Pagination Post {i}",
+                    "body": f"Content for pagination test {i}.\n",
+                    "labels": [],
+                    "is_draft": False,
+                },
+                headers=headers,
+            )
+            assert resp.status_code == 201
+
+        resp = await client.get("/api/posts", params={"per_page": 2})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["page"] == 1
+        assert data["per_page"] == 2
+        assert len(data["posts"]) == 2
+        # Total includes the 3 new posts plus the seed "Hello World" post
+        assert data["total"] >= 4
+        assert data["total_pages"] >= 2
+
+    @pytest.mark.asyncio
+    async def test_pagination_page_2(self, client: AsyncClient) -> None:
+        """Page 2 returns different posts than page 1."""
+        login_resp = await client.post(
+            "/api/auth/login",
+            json={"username": "admin", "password": "admin123"},
+        )
+        token = login_resp.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        for i in range(3):
+            resp = await client.post(
+                "/api/posts",
+                json={
+                    "title": f"Page2 Post {i}",
+                    "body": f"Content for page 2 test {i}.\n",
+                    "labels": [],
+                    "is_draft": False,
+                },
+                headers=headers,
+            )
+            assert resp.status_code == 201
+
+        page1_resp = await client.get("/api/posts", params={"per_page": 2, "page": 1})
+        page2_resp = await client.get("/api/posts", params={"per_page": 2, "page": 2})
+        assert page1_resp.status_code == 200
+        assert page2_resp.status_code == 200
+
+        page1_ids = {p["id"] for p in page1_resp.json()["posts"]}
+        page2_ids = {p["id"] for p in page2_resp.json()["posts"]}
+        assert page1_ids.isdisjoint(page2_ids)
+
+    @pytest.mark.asyncio
+    async def test_pagination_beyond_last_page_returns_empty(self, client: AsyncClient) -> None:
+        """Requesting a page beyond the last page returns empty posts list."""
+        resp = await client.get("/api/posts", params={"page": 999, "per_page": 20})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["posts"] == []
+        assert data["page"] == 999
+
+
+class TestSorting:
+    @pytest.mark.asyncio
+    async def test_sort_by_created_at_desc(self, client: AsyncClient) -> None:
+        """Default sort returns newer posts first."""
+        login_resp = await client.post(
+            "/api/auth/login",
+            json={"username": "admin", "password": "admin123"},
+        )
+        token = login_resp.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        resp1 = await client.post(
+            "/api/posts",
+            json={
+                "title": "Older Sort Post",
+                "body": "Older content.\n",
+                "labels": [],
+                "is_draft": False,
+            },
+            headers=headers,
+        )
+        assert resp1.status_code == 201
+
+        resp2 = await client.post(
+            "/api/posts",
+            json={
+                "title": "Newer Sort Post",
+                "body": "Newer content.\n",
+                "labels": [],
+                "is_draft": False,
+            },
+            headers=headers,
+        )
+        assert resp2.status_code == 201
+
+        list_resp = await client.get("/api/posts")
+        assert list_resp.status_code == 200
+        titles = [p["title"] for p in list_resp.json()["posts"]]
+        # Newer post should appear before older post in default desc ordering
+        assert titles.index("Newer Sort Post") < titles.index("Older Sort Post")
+
+    @pytest.mark.asyncio
+    async def test_sort_by_title_asc(self, client: AsyncClient) -> None:
+        """Sort by title ascending returns alphabetical ordering."""
+        login_resp = await client.post(
+            "/api/auth/login",
+            json={"username": "admin", "password": "admin123"},
+        )
+        token = login_resp.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        await client.post(
+            "/api/posts",
+            json={
+                "title": "Zebra Title",
+                "body": "Zebra content.\n",
+                "labels": [],
+                "is_draft": False,
+            },
+            headers=headers,
+        )
+        await client.post(
+            "/api/posts",
+            json={
+                "title": "Apple Title",
+                "body": "Apple content.\n",
+                "labels": [],
+                "is_draft": False,
+            },
+            headers=headers,
+        )
+
+        list_resp = await client.get(
+            "/api/posts", params={"sort": "title", "order": "asc", "per_page": 100}
+        )
+        assert list_resp.status_code == 200
+        titles = [p["title"] for p in list_resp.json()["posts"]]
+        assert titles.index("Apple Title") < titles.index("Zebra Title")

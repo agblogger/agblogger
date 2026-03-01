@@ -190,12 +190,7 @@ describe('PostPage', () => {
     })
     await userEvent.click(screen.getByText('Delete'))
 
-    // Click the Delete button inside the dialog (not the one in the header)
-    const dialogButtons = screen.getAllByRole('button')
-    const confirmButton = dialogButtons.find(
-      (btn) => btn.textContent === 'Delete' && btn.className.includes('bg-red'),
-    )!
-    await userEvent.click(confirmButton)
+    await userEvent.click(screen.getByTestId('confirm-delete'))
 
     await waitFor(() => {
       expect(mockDeletePost).toHaveBeenCalledWith('posts/hello.md', false)
@@ -228,11 +223,7 @@ describe('PostPage', () => {
     })
     await userEvent.click(screen.getByText('Delete'))
 
-    const dialogButtons = screen.getAllByRole('button')
-    const confirmButton = dialogButtons.find(
-      (btn) => btn.textContent === 'Delete' && btn.className.includes('bg-red'),
-    )!
-    await userEvent.click(confirmButton)
+    await userEvent.click(screen.getByTestId('confirm-delete'))
 
     await waitFor(() => {
       expect(screen.getByText('Failed to delete post. Please try again.')).toBeInTheDocument()

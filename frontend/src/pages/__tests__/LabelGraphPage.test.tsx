@@ -148,7 +148,7 @@ describe('LabelGraphPage', () => {
   it('shows spinner while loading', () => {
     mockFetchLabelGraph.mockReturnValue(new Promise(() => {}))
     renderGraph()
-    expect(document.querySelector('.animate-spin')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toBeInTheDocument()
   })
 
   it('shows error message', async () => {

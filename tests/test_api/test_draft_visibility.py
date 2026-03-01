@@ -45,6 +45,14 @@ def draft_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
         "author: Admin\nlabels: []\ndraft: true\n---\nDraft with image.\n"
     )
     (draft_dir / "photo.png").write_bytes(b"fake-png-data")
+    # Add a published post directory with an image asset
+    pub_dir = posts_dir / "published-with-asset"
+    pub_dir.mkdir()
+    (pub_dir / "index.md").write_text(
+        "---\ntitle: Published With Asset\ncreated_at: 2026-02-02 22:21:29+00\n"
+        "author: Admin\nlabels: []\n---\nPublished with image.\n"
+    )
+    (pub_dir / "banner.png").write_bytes(b"fake-banner-png")
 
     db_path = tmp_path / "test.db"
     return Settings(
@@ -217,10 +225,5 @@ class TestDraftContentFileVisibility:
     @pytest.mark.asyncio
     async def test_published_asset_accessible_without_auth(self, client: AsyncClient) -> None:
         """Assets for published posts remain publicly accessible."""
-        # The published.md is a flat file, not a directory, so test with the
-        # assets/ directory instead. Let's just verify the endpoint still works
-        # for non-draft paths.
-        resp = await client.get("/api/content/assets/")
-        # This will 404 since there's no actual file, but NOT 403 —
-        # the point is it doesn't block based on draft logic.
-        assert resp.status_code in (404, 200)
+        resp = await client.get("/api/content/posts/published-with-asset/banner.png")
+        assert resp.status_code == 200

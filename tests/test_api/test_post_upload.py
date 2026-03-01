@@ -155,8 +155,8 @@ class TestPostUpload:
         )
         assert resp.status_code == 201
         data = resp.json()
-        assert "2025-01-15" in data["created_at"]
-        assert "2025-06-20" in data["modified_at"]
+        assert data["created_at"].startswith("2025-01-15T")
+        assert data["modified_at"].startswith("2025-06-20T")
 
     @pytest.mark.asyncio
     async def test_upload_draft_post(self, client: AsyncClient) -> None:

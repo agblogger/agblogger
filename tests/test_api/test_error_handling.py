@@ -1174,3 +1174,39 @@ class TestOAuthErrorLeakage:
         detail = resp.json()["detail"]
         assert detail == "Facebook authentication failed"
         assert "facebook.internal" not in detail
+
+
+class TestDeletePostOSError:
+    """Delete post endpoint handles OSError from filesystem operations."""
+
+    @pytest.mark.asyncio
+    async def test_delete_post_oserror_returns_500(self, client: AsyncClient) -> None:
+        """When content_manager.delete_post raises OSError, return 500."""
+        token = await login(client)
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # Create a post to delete
+        create_resp = await client.post(
+            "/api/posts",
+            json={
+                "title": "Delete OSError Test",
+                "body": "Content for delete error test.\n",
+                "labels": [],
+                "is_draft": False,
+            },
+            headers=headers,
+        )
+        assert create_resp.status_code == 201
+        file_path = create_resp.json()["file_path"]
+
+        # Mock delete_post to raise OSError
+        with patch(
+            "backend.api.posts.ContentManager.delete_post",
+            side_effect=OSError("permission denied"),
+        ):
+            resp = await client.delete(
+                f"/api/posts/{file_path}",
+                headers=headers,
+            )
+        assert resp.status_code == 500
+        assert resp.json()["detail"] == "Failed to delete post file"

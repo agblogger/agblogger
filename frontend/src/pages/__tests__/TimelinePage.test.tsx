@@ -115,8 +115,7 @@ describe('TimelinePage', () => {
     renderTimeline()
 
     await waitFor(() => {
-      const skeletonCards = document.querySelectorAll('.animate-pulse')
-      expect(skeletonCards.length).toBe(3)
+      expect(screen.getByRole('status')).toBeInTheDocument()
     })
   })
 

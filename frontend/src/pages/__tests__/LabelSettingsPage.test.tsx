@@ -93,7 +93,7 @@ describe('LabelSettingsPage', () => {
     mockFetchLabel.mockReturnValue(new Promise(() => {}))
     mockFetchLabels.mockReturnValue(new Promise(() => {}))
     renderSettings()
-    expect(document.querySelector('.animate-spin')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toBeInTheDocument()
   })
 
   it('shows 404 error', async () => {

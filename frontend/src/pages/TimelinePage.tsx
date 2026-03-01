@@ -203,7 +203,7 @@ export default function TimelinePage() {
       )}
 
       {loading ? (
-        <div className="divide-y divide-border/60">
+        <div className="divide-y divide-border/60" role="status" aria-label="Loading posts">
           {[0, 1, 2].map((i) => (
             <div key={i} className="py-6 animate-pulse">
               <div className="flex items-start justify-between gap-4">

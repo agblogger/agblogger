@@ -139,7 +139,7 @@ describe('AdminPage', () => {
     mockFetchAdminSiteSettings.mockReturnValue(new Promise(() => {}))
     mockFetchAdminPages.mockReturnValue(new Promise(() => {}))
     renderAdmin()
-    expect(document.querySelector('.animate-spin')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toBeInTheDocument()
   })
 
   it('shows 401 error as session expired', async () => {

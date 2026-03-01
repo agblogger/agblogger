@@ -87,7 +87,7 @@ describe('LabelPostsPage', () => {
     mockFetchLabel.mockReturnValue(new Promise(() => {}))
     mockFetchLabelPosts.mockReturnValue(new Promise(() => {}))
     renderPage()
-    expect(document.querySelector('.animate-spin')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toBeInTheDocument()
   })
 
   it('shows 404 error', async () => {

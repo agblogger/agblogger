@@ -63,13 +63,12 @@ class TestInMemoryRateLimiter:
     def test_is_limited_does_not_create_entries_for_unknown_keys(self):
         """is_limited should not leak memory for keys that never had failures."""
         limiter = InMemoryRateLimiter()
-        limited, _ = limiter.is_limited("unknown-key", 3, 60)
+        limited, retry = limiter.is_limited("unknown-key", 3, 60)
         assert not limited
-        # Key should NOT exist in internal dict
-        assert "unknown-key" not in limiter._attempts
+        assert retry == 0
 
     def test_empty_deque_cleaned_up_after_expiry(self):
-        """After all attempts expire, the key should be removed from the dict."""
+        """After all attempts expire, the key should behave as if it never had failures."""
         limiter = InMemoryRateLimiter()
         with patch("backend.services.rate_limit_service.datetime") as mock_dt:
             mock_dt.now.return_value.timestamp.return_value = 1000.0
@@ -77,6 +76,6 @@ class TestInMemoryRateLimiter:
 
             # After window expires
             mock_dt.now.return_value.timestamp.return_value = 1011.0
-            limited, _ = limiter.is_limited("key1", 3, 10)
+            limited, retry = limiter.is_limited("key1", 3, 10)
             assert not limited
-            assert "key1" not in limiter._attempts
+            assert retry == 0

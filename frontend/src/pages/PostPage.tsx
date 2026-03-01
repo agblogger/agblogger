@@ -67,7 +67,7 @@ export default function PostPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-24">
+      <div className="flex items-center justify-center py-24" role="status" aria-label="Loading">
         <div className="w-6 h-6 border-2 border-accent/30 border-t-accent rounded-full animate-spin" />
       </div>
     )
@@ -246,6 +246,7 @@ export default function PostPage() {
                 <button
                   onClick={() => void handleDelete(false)}
                   disabled={deleting}
+                  data-testid="confirm-delete"
                   className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700
                            rounded-lg transition-colors disabled:opacity-50"
                 >

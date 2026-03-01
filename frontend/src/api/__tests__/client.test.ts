@@ -63,20 +63,23 @@ describe('client CSRF hooks', () => {
   })
 
   describe('beforeRequest hook', () => {
-    it('sets CSRF header for POST requests when token exists', () => {
-      storage.set('agb_csrf_token', 'test-token')
-      // Reset loaded state by re-importing
-      const headers = new Headers()
+    it('sets CSRF header for POST requests when token exists', async () => {
+      // Simulate a prior response that delivered a CSRF token via afterResponse hook
+      const priorRequest = new Request('https://example.com/api/auth/login', { method: 'POST' })
+      const priorResponse = new Response('', {
+        status: 200,
+        headers: { 'X-CSRF-Token': 'test-token' },
+      })
+      await capturedHooks!.afterResponse[0](priorRequest, {}, priorResponse)
+
+      // Now verify beforeRequest adds the token to subsequent POST requests
       const request = new Request('https://example.com/api/posts', {
         method: 'POST',
-        headers,
       })
 
       capturedHooks!.beforeRequest[0](request)
 
-      // The hook reads from localStorage and sets the header
-      // Due to module caching, we verify the hook was called without error
-      expect(true).toBe(true)
+      expect(request.headers.get('X-CSRF-Token')).toBe('test-token')
     })
 
     it('does not set CSRF header for GET requests', () => {
