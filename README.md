@@ -82,6 +82,13 @@ just check-noisy
 # Run static checks only (backend + frontend + Semgrep + Vulture + Trivy)
 just check-static
 
+# Run OWASP ZAP passive baseline scan against the local app
+just zap-baseline
+
+# Run OWASP ZAP full active scan against the local app
+just zap-full
+just zap-full 5
+
 # Run tests only (backend + frontend)
 just test
 just test coverage=true
@@ -115,6 +122,8 @@ just check-codeql
 # Create/rebuild CodeQL databases only
 just setup-codeql
 ```
+
+`just zap-baseline` and `just zap-full` use the official ZAP Docker image, auto-start the local dev server when needed, and write reports to `reports/zap/baseline/` or `reports/zap/full/`. By default they do not pass a ZAP time limit. If you want one, use a positional minute override like `just zap-full 5`, or set `ZAP_BASELINE_MINUTES` / `ZAP_FULL_MINUTES` in the environment.
 
 ## Sync Client
 

@@ -239,7 +239,7 @@ OpenAPI docs (`/docs`, `/redoc`, `/openapi.json`) are disabled in production by 
 
 The bidirectional sync protocol (`backend/services/sync_service.py`) uses SHA-256 file hashing for change detection, making it immune to clock skew. Three-way comparison (client manifest, server manifest, server current state) detects conflicts including `CONFLICT` and `DELETE_MODIFY_CONFLICT`. Front matter merges use `git merge-file` for semantic three-way body merging. The content directory is backed by a git repository for full change history.
 
-## Static Analysis and Dependency Scanning
+## Static Analysis, Dependency Scanning, and DAST
 
 The quality gate (`just check`) includes multiple security-focused tools:
 
@@ -250,6 +250,8 @@ The quality gate (`just check`) includes multiple security-focused tools:
 | pip-audit | Python deps | Known CVEs in Python packages |
 | npm audit | JS deps | Known CVEs in npm packages |
 | Trivy | Full repo | Vulnerabilities, misconfigurations, secrets, licenses |
+| OWASP ZAP baseline | Running local app | Passive DAST against the React frontend and proxied backend surface |
+| OWASP ZAP full | Running local app | Active DAST against the local app, including AJAX-spider crawling for the SPA |
 | Checkov | Dockerfile, Compose | IaC misconfiguration analysis for container build/deploy manifests |
 | Gitleaks | Git repo except `tests/` | Secret scanning over repository history with test fixture allowlist |
 | Gitleaks (full) | Full git repo | Repository secret scan using Gitleaks' built-in default rules, bypassing the repo allowlist; kept in `just check-noisy` because fixtures intentionally trigger detections |
@@ -260,6 +262,8 @@ The quality gate (`just check`) includes multiple security-focused tools:
 | mypy + basedpyright | Python | Strict type checking reduces type-confusion bugs |
 
 Custom Semgrep rules (`.semgrep.yml`) block `eval()` and `new Function()` in JavaScript/TypeScript. Ruff's bandit rules are selectively relaxed only for pandoc/git subprocess invocations and test fixtures.
+
+The DAST entrypoints are `just zap-baseline` and `just zap-full`. They run the official `ghcr.io/zaproxy/zaproxy:stable` container against the local frontend dev server, use `host.docker.internal` so the container can reach the host app, enable the AJAX spider for SPA coverage, and write reports under `reports/zap/`. The wrapper starts the repo dev server only when it is not already healthy, then tears down only the instance it started. By default it does not pass a ZAP minute limit; bounded runs are opt-in via the CLI/`just` argument.
 
 ### Semgrep Rule Exclusions
 

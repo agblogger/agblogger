@@ -22,7 +22,8 @@ tests/
 ├── test_cli/
 │   ├── test_deploy_production.py           Deployment script tests
 │   ├── test_safe_path.py                   CLI path safety tests
-│   └── test_sync_client.py                 CLI sync client tests
+│   ├── test_sync_client.py                 CLI sync client tests
+│   └── test_zap_scan.py                    OWASP ZAP orchestration tests
 ├── test_labels/
 │   ├── test_label_dag.py                   Label DAG operations
 │   ├── test_label_dag_hypothesis.py        Property-based DAG cycle-breaking
@@ -187,3 +188,28 @@ Mutation testing is implemented in three production phases with dedicated `just`
 
 - PR gate: `just mutation` (backend targeted + frontend targeted)
 - Nightly gate: `just mutation-full` (backend targeted + backend full + frontend full)
+
+## Dynamic Application Security Testing (DAST)
+
+OWASP ZAP packaged scans are wrapped by `cli/zap_scan.py` and exposed as `just zap-baseline` and `just zap-full`.
+
+- Runner model: uses the official `ghcr.io/zaproxy/zaproxy:stable` Docker image, so ZAP is not installed on the host
+- Target: the local frontend dev server (`http://127.0.0.1:<frontend_port>/` from the host, `http://host.docker.internal:<frontend_port>/` from the container)
+- SPA support: both commands enable the AJAX spider (`-j`) so the React app is crawled as a browser-driven target rather than only as static HTML
+- Lifecycle: the wrapper checks whether the repo dev server is already healthy; if not, it starts it, waits for health, runs ZAP, and then stops only the server instance it started
+- Time limits: no `-m` limit is passed by default; operators can opt into a bounded run by providing a minute value
+- Outputs:
+  - `reports/zap/baseline/report.html`
+  - `reports/zap/baseline/report.md`
+  - `reports/zap/baseline/report.json`
+  - `reports/zap/baseline/report.xml`
+  - `reports/zap/full/report.html`
+  - `reports/zap/full/report.md`
+  - `reports/zap/full/report.json`
+  - `reports/zap/full/report.xml`
+- Tunables:
+  - `just zap-baseline <n>` to opt into a minute limit
+  - `just zap-full <n>` to opt into a minute limit
+  - optional env overrides `ZAP_BASELINE_MINUTES` / `ZAP_FULL_MINUTES`
+
+The ZAP scans are kept outside `just check` because baseline/full DAST runs are materially slower than static checks and active scanning intentionally probes the live dev app.

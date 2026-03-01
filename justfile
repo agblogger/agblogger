@@ -17,6 +17,8 @@ setup:
 mutation_max_children := env("MUTATION_MAX_CHILDREN", "")
 mutation_keep_artifacts := env("MUTATION_KEEP_ARTIFACTS", "false")
 mutmut_version := "3.4.0"
+zap_baseline_minutes := env("ZAP_BASELINE_MINUTES", "")
+zap_full_minutes := env("ZAP_FULL_MINUTES", "")
 
 # Run all static analysis checks (no tests)
 check-static: check-backend-static check-frontend-static check-vulture check-semgrep check-trivy
@@ -224,6 +226,34 @@ check-trivy:
         --scanners vuln,misconfig,secret,license \
         --exit-code 1 \
         .
+
+# OWASP ZAP baseline DAST scan against the local frontend dev server.
+zap-baseline minutes="{{ zap_baseline_minutes }}":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "\n── DAST: OWASP ZAP baseline scan ──"
+    args=(
+        --project-dir "{{ justfile_directory() }}"
+        --localdir "{{ localdir }}"
+        --backend-port "{{ backend_port }}"
+        --frontend-port "{{ frontend_port }}"
+    )
+    if [ -n "{{ minutes }}" ]; then args+=(--minutes "{{ minutes }}"); fi
+    python3 -m cli.zap_scan baseline "${args[@]}"
+
+# OWASP ZAP full active DAST scan against the local frontend dev server.
+zap-full minutes="{{ zap_full_minutes }}":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "\n── DAST: OWASP ZAP full scan ──"
+    args=(
+        --project-dir "{{ justfile_directory() }}"
+        --localdir "{{ localdir }}"
+        --backend-port "{{ backend_port }}"
+        --frontend-port "{{ frontend_port }}"
+    )
+    if [ -n "{{ minutes }}" ]; then args+=(--minutes "{{ minutes }}"); fi
+    python3 -m cli.zap_scan full "${args[@]}"
 
 # ── CodeQL ────────────────────────────────────────────────────────
 
