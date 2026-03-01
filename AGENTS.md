@@ -20,7 +20,8 @@ just check-noisy      # Noisy scans kept outside the default gate
 just test             # Test-only gate: backend + frontend tests
 just check-backend    # Backend static checks + backend tests
 just check-backend-static  # Backend static checks only
-just test-backend     # Backend tests only
+just test-backend     # Backend tests only (excludes slow tests)
+just test-backend-slow # Backend slow tests only (marked @pytest.mark.slow)
 just check-frontend   # Frontend static checks + frontend tests
 just check-frontend-static # Frontend static checks only
 just test-frontend    # Frontend tests only

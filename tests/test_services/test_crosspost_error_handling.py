@@ -77,6 +77,7 @@ class TestAsyncDNS:
                 await backend.connect_tcp("nonexistent.invalid", 443)
 
 
+@pytest.mark.slow
 class TestRegisterIntegrityError:
     """L1: concurrent registration returns 409 instead of crashing."""
 

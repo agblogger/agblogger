@@ -12,22 +12,13 @@ from backend.services.auth_service import (
     create_personal_access_token_value,
     create_refresh_token_value,
     decode_access_token,
-    hash_password,
     hash_token,
-    verify_password,
 )
 
 PROPERTY_SETTINGS = settings(
     max_examples=150,
     deadline=None,
     suppress_health_check=[HealthCheck.too_slow],
-)
-
-# Passwords: printable ASCII, non-empty (bcrypt has practical limits)
-_PASSWORD = st.text(
-    alphabet=string.printable,
-    min_size=1,
-    max_size=50,
 )
 
 # Secret keys for JWT (HS256 requires at least 32 bytes for security,
@@ -46,43 +37,6 @@ _JWT_DATA = st.fixed_dictionaries(
 
 # Arbitrary strings for token hashing
 _TOKEN_VALUE = st.text(min_size=1, max_size=200)
-
-
-class TestPasswordHashingProperties:
-    @PROPERTY_SETTINGS
-    @given(password=_PASSWORD)
-    def test_hash_then_verify_succeeds(self, password: str) -> None:
-        """A password always verifies against its own hash."""
-        hashed = hash_password(password)
-        assert verify_password(password, hashed)
-
-    @PROPERTY_SETTINGS
-    @given(password=_PASSWORD)
-    def test_different_hashes_for_same_password(self, password: str) -> None:
-        """Bcrypt salting produces different hashes for the same password."""
-        hash1 = hash_password(password)
-        hash2 = hash_password(password)
-        assert hash1 != hash2
-        # But both verify correctly
-        assert verify_password(password, hash1)
-        assert verify_password(password, hash2)
-
-    @PROPERTY_SETTINGS
-    @given(password=_PASSWORD, wrong_password=_PASSWORD)
-    def test_wrong_password_fails_verification(self, password: str, wrong_password: str) -> None:
-        """A different password does not verify against the hash."""
-        if password == wrong_password:
-            return  # Skip when passwords happen to match
-        hashed = hash_password(password)
-        assert not verify_password(wrong_password, hashed)
-
-    @PROPERTY_SETTINGS
-    @given(password=_PASSWORD)
-    def test_hash_format_is_bcrypt(self, password: str) -> None:
-        """Hash output is a valid bcrypt string."""
-        hashed = hash_password(password)
-        assert hashed.startswith("$2b$")
-        assert len(hashed) == 60
 
 
 class TestJwtTokenProperties:

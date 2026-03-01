@@ -396,6 +396,7 @@ def pandoc_server_available() -> bool:
         loop.close()
 
 
+@pytest.mark.slow
 class TestIntegration:
     """Integration tests that start a real pandoc server process.
 

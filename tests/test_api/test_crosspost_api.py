@@ -5,7 +5,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, patch
 
+import pytest
+
 from tests.conftest import create_test_client
+
+pytestmark = pytest.mark.slow
 
 if TYPE_CHECKING:
     from backend.config import Settings
