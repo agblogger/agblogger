@@ -103,12 +103,15 @@ These are intentionally separate from `just check` and `just check-static`:
   - Includes development dependencies (unlike `npm run audit`, which uses `--omit=dev`).
 - `just check-codeql`
   - Rebuilds CodeQL databases and runs CodeQL analysis for Python and JavaScript.
+- `just checkov`
+  - Runs `checkov -f Dockerfile -f docker-compose.yml` via `uv run --with checkov`.
+  - Scope: infrastructure-as-code checks for the repository Dockerfile and Compose manifest.
 - `just check-snyk`
   - Runs `snyk code test`.
   - Scope: repository source code SAST via Snyk Code.
   - Test code is excluded via the repo-root `.snyk` policy (`tests/**`, frontend `__tests__`, and `*.test.ts(x)` files).
 - `just check-extra`
-  - Runs only extra checks not covered by `just check`: `check-audit-full` + `check-codeql` + `snyk test --all-projects`.
+  - Runs only extra checks not covered by `just check`: `check-audit-full` + `checkov` + `check-codeql` + `snyk test --all-projects`.
 - `just check-noisy`
   - Runs `check-snyk`.
   - Intended for noisier/offline-unfriendly scans kept outside the default quality gate.

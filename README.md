@@ -60,8 +60,11 @@ Self-registration is disabled by default; create invite codes from the admin acc
 # Run full quality gate (static checks, then tests)
 just check
 
-# Run extra checks not covered by just check (full npm audit + CodeQL + Snyk OSS)
+# Run extra checks not covered by just check (full npm audit + Checkov + CodeQL + Snyk OSS)
 just check-extra
+
+# Run Checkov against Dockerfile and docker-compose.yml
+just checkov
 
 # Run Snyk code analysis
 just check-snyk

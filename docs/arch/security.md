@@ -250,6 +250,7 @@ The quality gate (`just check`) includes multiple security-focused tools:
 | pip-audit | Python deps | Known CVEs in Python packages |
 | npm audit | JS deps | Known CVEs in npm packages |
 | Trivy | Full repo | Vulnerabilities, misconfigurations, secrets, licenses |
+| Checkov | Dockerfile, Compose | IaC misconfiguration analysis for container build/deploy manifests |
 | CodeQL | Python, JS | Semantic code analysis (in `just check-extra`) |
 | Snyk OSS | Python, JS manifests | Dependency vulnerability scanning (in `just check-extra`) |
 | Snyk Code | Python, JS source | SAST via `just check-snyk` |

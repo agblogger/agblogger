@@ -209,6 +209,7 @@ The quality gate (`just check`) includes:
 | pip-audit | `just check-backend-static` | Known CVEs in Python packages |
 | npm audit | `just check-frontend-static` | Known CVEs in npm packages |
 | Trivy | `just check-static` | Vulnerabilities, misconfigs, secrets, licenses |
+| Checkov | `just checkov` | Dockerfile and docker-compose IaC misconfiguration scan |
 | CodeQL | `just check-extra` | Semantic code analysis |
 | Snyk OSS | `just check-extra` | Dependency vulnerability scanning across detected projects |
 | Snyk Code | `just check-snyk` | SAST over repository source code |

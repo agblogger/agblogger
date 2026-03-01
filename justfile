@@ -37,8 +37,13 @@ check-audit-full:
     @echo "\n── Frontend: full vulnerability audit (including dev dependencies) ──"
     cd frontend && npm audit --audit-level=high
 
+# Run Checkov against container build/deploy manifests
+checkov:
+    @echo "\n── Infrastructure: Checkov scan (Dockerfile + docker-compose.yml) ──"
+    uv run --with checkov checkov -f Dockerfile -f docker-compose.yml
+
 # Run extra checks not covered by `check`
-check-extra: check-audit-full check-codeql
+check-extra: check-audit-full checkov check-codeql
     @echo "\n── Snyk: open source dependency scan ──"
     snyk test --all-projects
     @echo "\n✓ Extra checks passed"
