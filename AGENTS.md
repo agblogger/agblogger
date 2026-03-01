@@ -55,6 +55,7 @@ Always start a dev server with `just start`. Remember to stop a running dev serv
 - **IMPORTANT**: For every bug found, add a regression test that fails because of the bug, then fix the bug and ensure the test passes.
 - Use property-based testing (Hypothesis, fast-check) for deterministic logic. Abstract high-invariant logic into independent pure functions to enable property-based testing.
 - Avoid brittle tests. Test user workflows, not implementation details.
+- Tests which take more than 1s to run should be marked @pytest.mark.slow.
 - Coverage targets 80%, branches 70%.
 
 ### Backend (pytest)
