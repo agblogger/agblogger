@@ -438,6 +438,47 @@ class TestSyncClientErrorHandling:
         captured = capsys.readouterr()
         assert "path traversal" in captured.out.lower()
 
+    def test_upload_path_traversal_warns_and_skips(
+        self, tmp_path: Path, monkeypatch: Any, capsys: Any
+    ) -> None:
+        content_dir = tmp_path / "content"
+        content_dir.mkdir()
+        outside_file = tmp_path / "secret.txt"
+        outside_file.write_text("secret")
+
+        commit_resp = _DummyResponse(
+            json_data={
+                "status": "ok",
+                "commit_hash": "abc123",
+                "conflicts": [],
+                "to_download": [],
+                "warnings": [],
+            }
+        )
+        client, http_client = _build_sync_client(
+            content_dir, responses={"/api/sync/commit": commit_resp}
+        )
+        client.status = lambda: {
+            "to_upload": ["../secret.txt"],
+            "to_download": [],
+            "to_delete_remote": [],
+            "to_delete_local": [],
+            "conflicts": [],
+        }
+
+        monkeypatch.setattr(sync_client, "scan_local_files", lambda _: {})
+        monkeypatch.setattr(sync_client, "save_manifest", lambda *_: None)
+
+        client.sync()
+
+        captured = capsys.readouterr()
+        assert "path traversal" in captured.out.lower()
+        commit_calls = [
+            kwargs for url, kwargs in http_client.post_calls if url == "/api/sync/commit"
+        ]
+        assert len(commit_calls) == 1
+        assert commit_calls[0]["files"] is None
+
     def test_sync_summary_counts_successful_downloads_only(
         self, tmp_path: Path, monkeypatch: Any, capsys: Any
     ) -> None:

@@ -214,6 +214,25 @@ describe('ShareButton', () => {
     windowOpen.mockRestore()
   })
 
+  it('shows mastodon prompt when saved instance is invalid', async () => {
+    Object.defineProperty(navigator, 'share', {
+      value: undefined,
+      writable: true,
+      configurable: true,
+    })
+    storage.set('agblogger:mastodon-instance', 'evil.com/phishing')
+    const windowOpen = vi.spyOn(window, 'open').mockReturnValue(null)
+    const user = userEvent.setup()
+    render(<ShareButton {...defaultProps} />)
+
+    await user.click(screen.getByLabelText('Share this post'))
+    await user.click(screen.getByLabelText('Share on Mastodon'))
+
+    expect(windowOpen).not.toHaveBeenCalled()
+    expect(screen.getByPlaceholderText('mastodon.social')).toBeInTheDocument()
+    windowOpen.mockRestore()
+  })
+
   it('toggles dropdown open and closed', async () => {
     Object.defineProperty(navigator, 'share', {
       value: undefined,

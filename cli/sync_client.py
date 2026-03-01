@@ -184,7 +184,10 @@ class SyncClient:
 
         files_to_send: list[tuple[str, tuple[str, bytes]]] = []
         for fp in file_paths_to_upload:
-            full_path = self.content_dir / fp
+            full_path = _is_safe_local_path(self.content_dir, fp)
+            if full_path is None:
+                print(f"  Skip (path traversal in upload): {fp}")
+                continue
             if not full_path.exists():
                 print(f"  Skip (missing): {fp}")
                 continue

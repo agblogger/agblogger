@@ -75,6 +75,13 @@ export function getMastodonInstance(): string | null {
   }
 }
 
+export function getValidMastodonInstance(): string | null {
+  const instance = getMastodonInstance()
+  if (instance === null) return null
+  if (!isValidHostname(instance)) return null
+  return stripProtocol(instance)
+}
+
 export function setMastodonInstance(instance: string): void {
   try {
     localStorage.setItem(MASTODON_INSTANCE_KEY, instance)

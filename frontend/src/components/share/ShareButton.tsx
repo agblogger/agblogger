@@ -7,7 +7,7 @@ import MastodonSharePrompt from './MastodonSharePrompt'
 import {
   canNativeShare,
   copyToClipboard,
-  getMastodonInstance,
+  getValidMastodonInstance,
   getShareText,
   getShareUrl,
   nativeShare,
@@ -61,7 +61,7 @@ export default function ShareButton({ title, author, url }: ShareButtonProps) {
 
   function handlePlatformClick(platformId: string) {
     if (platformId === 'mastodon') {
-      const instance = getMastodonInstance()
+      const instance = getValidMastodonInstance()
       if (instance !== null) {
         const shareUrl = getShareUrl('mastodon', shareText, url, title, instance)
         window.open(shareUrl, '_blank', 'noopener,noreferrer')

@@ -79,6 +79,19 @@ describe('ShareBar', () => {
     windowOpen.mockRestore()
   })
 
+  it('shows mastodon prompt when saved instance in localStorage is invalid', async () => {
+    storage.set('agblogger:mastodon-instance', 'evil.com/phishing')
+    const windowOpen = vi.spyOn(window, 'open').mockReturnValue(null)
+    const user = userEvent.setup()
+    render(<ShareBar {...defaultProps} />)
+
+    await user.click(screen.getByLabelText('Share on Mastodon'))
+
+    expect(windowOpen).not.toHaveBeenCalled()
+    expect(screen.getByPlaceholderText('mastodon.social')).toBeInTheDocument()
+    windowOpen.mockRestore()
+  })
+
   it('copies link and shows feedback on copy button click', async () => {
     Object.defineProperty(navigator, 'clipboard', {
       value: { writeText: vi.fn().mockResolvedValue(undefined) },
