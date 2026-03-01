@@ -328,7 +328,9 @@ def stop_services(services: list[RunningService]) -> None:
 
 
 def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[1]
+    from cli import repo_root
+
+    return repo_root()
 
 
 def _default_backend_command(port: int) -> list[str]:

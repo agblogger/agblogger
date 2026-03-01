@@ -10,6 +10,7 @@ import sys
 from pathlib import Path, PurePosixPath
 from typing import Literal
 
+from cli import repo_root
 from cli.dev_server import (
     DevServerState,
     health_dev_server,
@@ -26,10 +27,6 @@ ScanMode = Literal["baseline", "full"]
 
 class ZapScanError(RuntimeError):
     """Raised when the ZAP workflow cannot be started."""
-
-
-def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[1]
 
 
 def _report_paths(scan_mode: ScanMode) -> dict[str, PurePosixPath]:
@@ -156,7 +153,8 @@ def run_zap_scan(
         raise ValueError("minutes must be greater than zero")
 
     check_prerequisites(project_dir)
-    report_dir = project_dir / "reports" / "zap" / scan_mode
+    reports = _report_paths(scan_mode)
+    report_dir = project_dir / reports["dir"]
     report_dir.mkdir(parents=True, exist_ok=True)
 
     healthy, actual_backend_port, actual_frontend_port = health_dev_server(
@@ -194,10 +192,11 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
 
+    root = repo_root()
     for command_name in ("baseline", "full"):
         command_parser = subparsers.add_parser(command_name)
-        command_parser.add_argument("--project-dir", type=Path, default=_repo_root())
-        command_parser.add_argument("--localdir", type=Path, default=_repo_root() / ".local")
+        command_parser.add_argument("--project-dir", type=Path, default=root)
+        command_parser.add_argument("--localdir", type=Path, default=root / ".local")
         command_parser.add_argument("--backend-port", default="8000")
         command_parser.add_argument("--frontend-port", default="5173")
         command_parser.add_argument("--minutes", type=int)

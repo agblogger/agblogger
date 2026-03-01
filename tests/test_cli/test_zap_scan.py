@@ -68,25 +68,32 @@ def test_build_docker_command_for_full_scan_on_linux_adds_host_gateway(
     assert "reports/zap/full/report.xml" in command
 
 
+def _make_dev_server_state(localdir: Path) -> DevServerState:
+    return DevServerState(
+        backend_pid=123,
+        frontend_pid=456,
+        backend_port=8000,
+        frontend_port=5173,
+        backend_log=str(localdir / "backend.log"),
+        frontend_log=str(localdir / "frontend.log"),
+    )
+
+
 class TestRunZapScan:
+    @pytest.fixture(autouse=True)
+    def _stub_prerequisites(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr("cli.zap_scan.check_prerequisites", lambda _project_dir: None)
+
     def test_run_zap_scan_starts_and_stops_dev_server_when_needed(
         self,
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
     ) -> None:
         localdir = tmp_path / ".local"
-        state = DevServerState(
-            backend_pid=123,
-            frontend_pid=456,
-            backend_port=8000,
-            frontend_port=5173,
-            backend_log=str(localdir / "backend.log"),
-            frontend_log=str(localdir / "frontend.log"),
-        )
+        state = _make_dev_server_state(localdir)
         run_calls: list[tuple[list[str], Path]] = []
         lifecycle_calls: list[str] = []
 
-        monkeypatch.setattr("cli.zap_scan.check_prerequisites", lambda _project_dir: None)
         monkeypatch.setattr(
             "cli.zap_scan.health_dev_server",
             lambda _localdir, _backend_port, _frontend_port: (False, 8000, 5173),
@@ -136,7 +143,6 @@ class TestRunZapScan:
         localdir = tmp_path / ".local"
         calls: list[str] = []
 
-        monkeypatch.setattr("cli.zap_scan.check_prerequisites", lambda _project_dir: None)
         monkeypatch.setattr(
             "cli.zap_scan.health_dev_server",
             lambda _localdir, _backend_port, _frontend_port: (True, 8000, 5173),
@@ -176,17 +182,9 @@ class TestRunZapScan:
         tmp_path: Path,
     ) -> None:
         localdir = tmp_path / ".local"
-        first_state = DevServerState(
-            backend_pid=123,
-            frontend_pid=456,
-            backend_port=8000,
-            frontend_port=5173,
-            backend_log=str(localdir / "backend.log"),
-            frontend_log=str(localdir / "frontend.log"),
-        )
+        state = _make_dev_server_state(localdir)
         lifecycle_calls: list[str] = []
 
-        monkeypatch.setattr("cli.zap_scan.check_prerequisites", lambda _project_dir: None)
         monkeypatch.setattr(
             "cli.zap_scan.health_dev_server",
             lambda _localdir, _backend_port, _frontend_port: (False, 8000, 5173),
@@ -205,7 +203,7 @@ class TestRunZapScan:
             if start_attempts == 1:
                 msg = "Dev server is already running (backend PID 123, frontend PID 456)"
                 raise RuntimeError(msg)
-            return first_state
+            return state
 
         def fake_stop_dev_server(_localdir: Path) -> tuple[bool, str]:
             lifecycle_calls.append("stop")
@@ -233,17 +231,9 @@ class TestRunZapScan:
         tmp_path: Path,
     ) -> None:
         localdir = tmp_path / ".local"
-        state = DevServerState(
-            backend_pid=123,
-            frontend_pid=456,
-            backend_port=8000,
-            frontend_port=5173,
-            backend_log=str(localdir / "backend.log"),
-            frontend_log=str(localdir / "frontend.log"),
-        )
+        state = _make_dev_server_state(localdir)
         lifecycle_calls: list[str] = []
 
-        monkeypatch.setattr("cli.zap_scan.check_prerequisites", lambda _project_dir: None)
         monkeypatch.setattr(
             "cli.zap_scan.health_dev_server",
             lambda _localdir, _backend_port, _frontend_port: (False, 8000, 5173),

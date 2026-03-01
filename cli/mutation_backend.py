@@ -14,6 +14,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
+from cli import repo_root
+
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
@@ -553,7 +555,7 @@ def main() -> int:
     profile = PROFILES[args.profile]
     return run_profile(
         profile,
-        repo_root=Path(__file__).resolve().parent.parent,
+        repo_root=repo_root(),
         max_children=args.max_children,
         keep_artifacts=args.keep_artifacts,
     )
