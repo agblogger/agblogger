@@ -71,8 +71,18 @@ check-snyk:
     snyk code test
 
 # Run noisy/offline-unfriendly checks
-check-noisy: check-snyk check-gitleaks-full
-    @echo "\n✓ Noisy checks passed"
+check-noisy:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    status=0
+    just check-snyk || status=1
+    just check-gitleaks-full || status=1
+    if [ "$status" -eq 0 ]; then
+        echo "\n✓ Noisy checks passed"
+    else
+        echo "\n✗ Noisy checks reported issues"
+    fi
+    exit "$status"
 
 # ── Mutation testing ────────────────────────────────────────────────
 
@@ -147,17 +157,22 @@ check-backend-static:
     @echo "\n── Backend: vulnerability audit ──"
     uv run pip-audit --progress-spinner off
 
-# Backend tests (pass coverage=true for coverage report)
+# Backend tests, excluding slow tests (pass coverage=true for coverage report)
 test-backend coverage="false":
     @echo "\n── Backend: tests ──"
     if [ "{{ coverage }}" = "true" ] || [ "{{ coverage }}" = "coverage=true" ]; then \
-        uv run pytest tests/ -v --cov=backend --cov=cli --cov-report=term-missing; \
+        uv run pytest tests/ -v -m "not slow" --cov=backend --cov=cli --cov-report=term-missing; \
     elif [ "{{ coverage }}" = "false" ] || [ "{{ coverage }}" = "coverage=false" ]; then \
-        uv run pytest tests/ -v; \
+        uv run pytest tests/ -v -m "not slow"; \
     else \
         echo "Invalid coverage option '{{ coverage }}' (use coverage=true|false)" >&2; \
         exit 1; \
     fi
+
+# Backend slow tests only (marked @pytest.mark.slow)
+test-backend-slow:
+    @echo "\n── Backend: slow tests ──"
+    uv run pytest tests/ -v -m slow
 
 # Backend full gate (static + tests)
 check-backend: check-backend-static test-backend

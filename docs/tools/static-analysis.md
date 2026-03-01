@@ -119,5 +119,6 @@ These are intentionally separate from `just check` and `just check-static`:
 - `just check-extra`
   - Runs only extra checks not covered by `just check`: `check-audit-full` + `checkov` + `check-gitleaks` + `check-codeql` + `snyk test --all-projects`.
 - `just check-noisy`
-  - Runs `check-snyk` and `check-gitleaks-full`.
+  - Runs `check-snyk` and `check-gitleaks-full` sequentially, even if the first one reports issues.
+  - Returns a failing exit status if either scan reports issues.
   - Intended for noisier/offline-unfriendly scans kept outside the default quality gate.

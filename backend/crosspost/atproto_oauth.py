@@ -432,6 +432,10 @@ async def send_par_request(
     auth_endpoint = auth_server_meta["authorization_endpoint"]
     issuer = auth_server_meta["issuer"]
 
+    if not await _is_safe_url(auth_endpoint):
+        msg = f"Unsafe authorization endpoint: {auth_endpoint}"
+        raise ATProtoOAuthError(msg)
+
     verifier, challenge = create_pkce_challenge()
     state = secrets.token_urlsafe(32)
 

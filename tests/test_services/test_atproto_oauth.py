@@ -332,6 +332,29 @@ class TestPARRequest:
         assert "pkce_verifier" in result
         assert "dpop_nonce" in result
 
+    async def test_rejects_unsafe_authorization_endpoint(self, monkeypatch) -> None:
+        private_key, jwk = generate_es256_keypair()
+
+        async def selective_safe(url: str) -> bool:
+            return url == "https://auth.example.com/oauth/par"
+
+        monkeypatch.setattr("backend.crosspost.atproto_oauth._is_safe_url", selective_safe)
+
+        with pytest.raises(ATProtoOAuthError, match="Unsafe authorization endpoint"):
+            await send_par_request(
+                auth_server_meta={
+                    "issuer": "https://auth.example.com",
+                    "pushed_authorization_request_endpoint": "https://auth.example.com/oauth/par",
+                    "authorization_endpoint": "javascript:alert(1)",
+                },
+                client_id="https://myblog.example.com/api/crosspost/bluesky/client-metadata.json",
+                redirect_uri="https://myblog.example.com/api/crosspost/bluesky/callback",
+                did="did:plc:abc123",
+                scope="atproto transition:generic",
+                private_key=private_key,
+                jwk=jwk,
+            )
+
 
 class TestTokenExchange:
     async def test_exchange_code_for_tokens(self, monkeypatch) -> None:

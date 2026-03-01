@@ -165,6 +165,10 @@ All API request bodies are validated against Pydantic schemas (`backend/schemas/
 
 Cross-post OAuth credentials are encrypted with Fernet symmetric encryption (`backend/services/crypto_service.py`). The encryption key is derived from `SECRET_KEY` with a dedicated HMAC-SHA256 context that is distinct from JWT signing. Plaintext credentials are never stored in the database.
 
+### OAuth Endpoint Validation
+
+Cross-post OAuth flows treat provider metadata as untrusted until validated. In particular, the Bluesky AT Protocol OAuth helper validates the discovered PAR and authorization endpoints with the same HTTPS/non-local URL policy used for outbound SSRF protection before the frontend is told where to redirect the browser. This prevents compromised or malformed provider metadata from driving browser redirects to unsafe schemes or local-network destinations.
+
 ### Token Hashing
 
 Refresh tokens, PATs, and invite codes are hashed with SHA-256 before database storage (`auth_service.hash_token()`). A database dump does not reveal active token values.

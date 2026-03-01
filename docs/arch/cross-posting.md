@@ -35,7 +35,7 @@ The flow:
 
 1. User enters their Bluesky handle → `POST /api/crosspost/bluesky/authorize`
 2. Backend resolves handle → DID → PDS → authorization server metadata
-3. Backend sends a PAR request with PKCE challenge + client assertion (signed with the app's ES256 key)
+3. Backend validates the discovered PAR and authorization endpoints as HTTPS, non-local, SSRF-safe URLs, then sends a PAR request with PKCE challenge + client assertion (signed with the app's ES256 key)
 4. Frontend redirects user to Bluesky's authorization page
 5. Bluesky redirects back to `GET /api/crosspost/bluesky/callback`
 6. Backend exchanges authorization code for DPoP-bound tokens, stores encrypted credentials in `SocialAccount`
