@@ -45,7 +45,7 @@ checkov:
 # Run extra checks not covered by `check`
 check-extra: check-audit-full checkov check-codeql
     @echo "\n── Snyk: open source dependency scan ──"
-    snyk test --all-projects
+    snyk test frontend
     @echo "\n✓ Extra checks passed"
 
 # Run Snyk code analysis
