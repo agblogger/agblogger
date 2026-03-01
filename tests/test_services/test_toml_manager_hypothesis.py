@@ -108,7 +108,7 @@ class TestParentSerializationProperties:
             content = (tmp_path / "labels.toml").read_text(encoding="utf-8")
             # Singular "parent" key, not "parents"
             assert "parent = " in content
-            assert "parents" not in content
+            assert "parents = " not in content
 
     @PROPERTY_SETTINGS
     @given(
@@ -141,7 +141,8 @@ class TestParentSerializationProperties:
             labels = {label_id: LabelDef(id=label_id, names=names, parents=[])}
             write_labels_config(tmp_path, labels)
             content = (tmp_path / "labels.toml").read_text(encoding="utf-8")
-            assert "parent" not in content
+            assert "parent = " not in content
+            assert "parents = " not in content
 
 
 class TestHashPrefixStrippingProperties:
