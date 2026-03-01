@@ -237,7 +237,7 @@ check-semgrep:
 # Trivy security scans.
 check-trivy:
     @echo "\n── Security scan (Trivy: all scanners/configured severities) ──"
-    trivy fs \
+    trivy fs -q \
         --scanners vuln,misconfig,secret,license \
         --exit-code 1 \
         .
