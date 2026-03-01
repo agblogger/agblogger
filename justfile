@@ -261,128 +261,25 @@ deploy:
 backend_port := "8000"
 frontend_port := "5173"
 localdir := justfile_directory() / ".local"
-pidfile := localdir / "dev.pid"
 
 # Start backend and frontend in the background (override ports: just start backend_port=9000 frontend_port=9173)
 start:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    is_port_in_use() {
-        lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1
-    }
-
-    validate_port() {
-        local port="$1"
-        if ! [[ "$port" =~ ^[0-9]+$ ]] || [ "$port" -lt 1 ] || [ "$port" -gt 65535 ]; then
-            echo "Invalid TCP port: $port (must be 1-65535)" >&2
-            exit 1
-        fi
-    }
-
-    find_free_port() {
-        local candidate="$1"
-        local blocked="${2:-}"
-        while [ "$candidate" -le 65535 ]; do
-            if [ -n "$blocked" ] && [ "$candidate" = "$blocked" ]; then
-                candidate=$((candidate + 1))
-                continue
-            fi
-            if ! is_port_in_use "$candidate"; then
-                echo "$candidate"
-                return 0
-            fi
-            candidate=$((candidate + 1))
-        done
-        echo "no free TCP port found in range" >&2
-        exit 1
-    }
-
-    requested_backend_port="{{ backend_port }}"
-    requested_frontend_port="{{ frontend_port }}"
-    validate_port "$requested_backend_port"
-    validate_port "$requested_frontend_port"
-    selected_backend_port="$(find_free_port "$requested_backend_port")"
-    selected_frontend_port="$(find_free_port "$requested_frontend_port" "$selected_backend_port")"
-
-    mkdir -p "{{ localdir }}"
-    if [ -f "{{ pidfile }}" ] && kill -0 "$(cat "{{ pidfile }}")" 2>/dev/null; then
-        echo "Dev server is already running (PID $(cat "{{ pidfile }}"))"
-        exit 1
-    fi
-    if [ "$selected_backend_port" != "$requested_backend_port" ]; then
-        echo "Backend port :$requested_backend_port unavailable, using :$selected_backend_port"
-    fi
-    if [ "$selected_frontend_port" != "$requested_frontend_port" ]; then
-        echo "Frontend port :$requested_frontend_port unavailable, using :$selected_frontend_port"
-    fi
-    (
-        trap 'kill 0' EXIT
-        uv run uvicorn backend.main:app --reload --host 0.0.0.0 --port "$selected_backend_port" &
-        cd frontend && AGBLOGGER_BACKEND_PORT="$selected_backend_port" npm run dev -- --port "$selected_frontend_port" &
-        wait
-    ) &
-    echo "$!" > "{{ pidfile }}"
-    echo "$selected_backend_port" > "{{ localdir }}/backend.port"
-    echo "$selected_frontend_port" > "{{ localdir }}/frontend.port"
-    echo "Dev server started (PID $!) — backend :$selected_backend_port, frontend :$selected_frontend_port"
+    python3 -m cli.dev_server start --localdir "{{ localdir }}" --backend-port "{{ backend_port }}" --frontend-port "{{ frontend_port }}"
 
 # Stop the running dev server
 stop:
-    #!/usr/bin/env bash
-    if [ ! -f "{{ pidfile }}" ]; then
-        echo "No dev server pidfile found"
-        exit 1
-    fi
-    pid=$(cat "{{ pidfile }}")
-    if kill -0 "$pid" 2>/dev/null; then
-        kill -- -"$pid" 2>/dev/null || kill "$pid" 2>/dev/null
-        echo "Dev server stopped (PID $pid)"
-    else
-        echo "Dev server was not running (stale pidfile)"
-    fi
-    rm -f "{{ pidfile }}" "{{ localdir }}/backend.port" "{{ localdir }}/frontend.port"
+    python3 -m cli.dev_server stop --localdir "{{ localdir }}"
 
 # Check if the dev server is healthy (backend API responds, frontend serves pages)
 health:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    # Read actual ports from state files written by `start`, fall back to defaults
-    if [ -f "{{ localdir }}/backend.port" ]; then
-        bp=$(cat "{{ localdir }}/backend.port")
-    else
-        bp="{{ backend_port }}"
-    fi
-    if [ -f "{{ localdir }}/frontend.port" ]; then
-        fp=$(cat "{{ localdir }}/frontend.port")
-    else
-        fp="{{ frontend_port }}"
-    fi
-    ok=true
-    printf "Backend  (:%s): " "$bp"
-    if curl -sf "http://localhost:$bp/api/health" >/dev/null 2>&1; then
-        echo "✓ healthy"
-    else
-        echo "✗ unreachable"
-        ok=false
-    fi
-    printf "Frontend (:%s): " "$fp"
-    if curl -sf "http://localhost:$fp/" >/dev/null 2>&1; then
-        echo "✓ healthy"
-    else
-        echo "✗ unreachable"
-        ok=false
-    fi
-    if [ "$ok" = false ]; then
-        echo "Run 'just start' to start the dev server."
-        exit 1
-    fi
+    python3 -m cli.dev_server health --localdir "{{ localdir }}" --backend-port "{{ backend_port }}" --frontend-port "{{ frontend_port }}"
 
 # Start backend and frontend in the foreground (Ctrl-C to stop). Do not use unless you're human.
 syncrun:
     #!/usr/bin/env bash
     trap 'kill 0' EXIT
-    uv run uvicorn backend.main:app --reload --host 0.0.0.0 --port {{ backend_port }} &
-    cd frontend && npm run dev -- --port {{ frontend_port }} &
+    uv run uvicorn backend.main:app --reload --host 127.0.0.1 --port {{ backend_port }} &
+    cd frontend && AGBLOGGER_BACKEND_PORT="{{ backend_port }}" npm run dev -- --host 127.0.0.1 --port {{ frontend_port }} &
     wait
 
 # ── Developer commands (do not use unless you're human) ──────────────────────────────────────────
