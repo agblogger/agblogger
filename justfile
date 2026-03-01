@@ -228,31 +228,39 @@ check-trivy:
         .
 
 # OWASP ZAP baseline DAST scan against the local frontend dev server.
-zap-baseline minutes="{{ zap_baseline_minutes }}":
+zap-baseline minutes="":
     #!/usr/bin/env bash
     set -euo pipefail
     echo "\n── DAST: OWASP ZAP baseline scan ──"
+    minutes_value="{{ minutes }}"
+    if [ -z "$minutes_value" ] && [ -n "{{ zap_baseline_minutes }}" ]; then
+        minutes_value="{{ zap_baseline_minutes }}"
+    fi
     args=(
         --project-dir "{{ justfile_directory() }}"
         --localdir "{{ localdir }}"
         --backend-port "{{ backend_port }}"
         --frontend-port "{{ frontend_port }}"
     )
-    if [ -n "{{ minutes }}" ]; then args+=(--minutes "{{ minutes }}"); fi
+    if [ -n "$minutes_value" ]; then args+=(--minutes "$minutes_value"); fi
     python3 -m cli.zap_scan baseline "${args[@]}"
 
 # OWASP ZAP full active DAST scan against the local frontend dev server.
-zap-full minutes="{{ zap_full_minutes }}":
+zap-full minutes="":
     #!/usr/bin/env bash
     set -euo pipefail
     echo "\n── DAST: OWASP ZAP full scan ──"
+    minutes_value="{{ minutes }}"
+    if [ -z "$minutes_value" ] && [ -n "{{ zap_full_minutes }}" ]; then
+        minutes_value="{{ zap_full_minutes }}"
+    fi
     args=(
         --project-dir "{{ justfile_directory() }}"
         --localdir "{{ localdir }}"
         --backend-port "{{ backend_port }}"
         --frontend-port "{{ frontend_port }}"
     )
-    if [ -n "{{ minutes }}" ]; then args+=(--minutes "{{ minutes }}"); fi
+    if [ -n "$minutes_value" ]; then args+=(--minutes "$minutes_value"); fi
     python3 -m cli.zap_scan full "${args[@]}"
 
 # ── CodeQL ────────────────────────────────────────────────────────
