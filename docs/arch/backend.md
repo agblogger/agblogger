@@ -68,7 +68,7 @@ On startup, the lifespan handler:
 
 The database serves as a **cache**, not the source of truth:
 
-- **`PostCache`** — Cached post metadata: file path, title, author, timestamps (`DateTime(timezone=True)`, stored as UTC), draft status, content hash (SHA-256), rendered excerpt (Pandoc HTML), rendered HTML.
+- **`PostCache`** — Cached post metadata: file path, title, display author, stable owner username (`author_username`), timestamps (`DateTime(timezone=True)`, stored as UTC), draft status, content hash (SHA-256), rendered excerpt (Pandoc HTML), rendered HTML.
 - **`PostsFTS`** — SQLite FTS5 virtual table for full-text search over title and content. **Limitation:** FTS5's default tokenizer does not segment CJK (Chinese, Japanese, Korean) text, so CJK queries may not return expected results. A custom tokenizer (e.g., `unicode61` with ICU) would be needed for CJK support.
 - **`LabelCache`** — Label with ID, display names (JSON array), and implicit flag.
 - **`LabelParentCache`** — DAG edge table (label_id → parent_id).

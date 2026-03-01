@@ -34,7 +34,7 @@ Two Zustand stores:
 - **`authStore`** — User state (`user`, `isLoading`, `isLoggingOut`, `isInitialized`, `error`), login/logout, session check via `checkAuth()`.
 - **`siteStore`** — Site configuration fetched on app load.
 
-The `ky` HTTP client uses cookie-based authentication (`credentials: 'include'`). CSRF tokens are persisted in localStorage and injected as `X-CSRF-Token` headers on unsafe methods (POST/PUT/PATCH/DELETE). On 401 responses, the client auto-attempts a token refresh via `POST /api/auth/refresh` and retries the original request.
+The `ky` HTTP client uses cookie-based authentication (`credentials: 'include'`). For unsafe methods (POST/PUT/PATCH/DELETE), it ensures an in-memory CSRF token is available, fetching it from `GET /api/auth/csrf` when necessary, then injects it as the `X-CSRF-Token` header. On 401 responses, the client auto-attempts a token refresh via `POST /api/auth/refresh`, updates the cached CSRF token from the refresh response, and retries the original request.
 
 ## Custom Hooks
 

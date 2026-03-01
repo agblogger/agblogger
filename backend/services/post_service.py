@@ -43,19 +43,19 @@ async def list_posts(
     author: str | None = None,
     from_date: str | None = None,
     to_date: str | None = None,
-    draft_author: str | None = None,
+    draft_owner_username: str | None = None,
     sort: str = "created_at",
     order: str = "desc",
 ) -> PostListResponse:
     """List posts with pagination and filtering."""
     stmt = select(PostCache)
 
-    if draft_author:
+    if draft_owner_username:
         # Show published posts + drafts authored by the given user
         stmt = stmt.where(
             or_(
                 PostCache.is_draft.is_(False),
-                PostCache.author == draft_author,
+                PostCache.author_username == draft_owner_username,
             )
         )
     else:

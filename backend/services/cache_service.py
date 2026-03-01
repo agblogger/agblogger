@@ -9,11 +9,13 @@ from typing import TYPE_CHECKING
 from sqlalchemy import delete, text
 
 from backend.filesystem.content_manager import ContentManager, hash_content
+from backend.filesystem.frontmatter import serialize_post
 from backend.models.label import LabelCache, LabelParentCache, PostLabelCache
 from backend.models.post import PostCache
 from backend.pandoc.renderer import render_markdown, render_markdown_excerpt, rewrite_relative_urls
 from backend.services.dag import break_cycles
 from backend.services.label_service import ensure_label_cache_entry
+from backend.services.post_owner_service import build_owner_lookup, resolve_owner_username
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -85,8 +87,25 @@ async def rebuild_cache(
     # Scan and index posts
     posts = content_manager.scan_posts()
     post_count = 0
+    usernames, unique_display_names = await build_owner_lookup(session)
 
     for post_data in posts:
+        owner_username = resolve_owner_username(
+            author_username=post_data.author_username,
+            author=post_data.author,
+            usernames=usernames,
+            unique_display_names=unique_display_names,
+        )
+        if owner_username is not None and post_data.author_username != owner_username:
+            post_data.author_username = owner_username
+            try:
+                content_manager.write_post(post_data.file_path, post_data)
+                post_data.raw_content = serialize_post(post_data)
+            except OSError as exc:
+                msg = f"Failed to persist owner metadata for post {post_data.file_path!r}: {exc}"
+                logger.warning(msg)
+                warnings.append(msg)
+
         content_h = hash_content(post_data.raw_content)
 
         # Render HTML — skip this post if rendering fails
@@ -107,6 +126,7 @@ async def rebuild_cache(
             file_path=post_data.file_path,
             title=post_data.title,
             author=post_data.author,
+            author_username=owner_username,
             created_at=post_data.created_at,
             modified_at=post_data.modified_at,
             is_draft=post_data.is_draft,

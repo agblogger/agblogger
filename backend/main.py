@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-import secrets
 import subprocess
 import sys
 from contextlib import asynccontextmanager
@@ -36,6 +35,7 @@ from backend.config import Settings
 from backend.database import create_engine
 from backend.filesystem.content_manager import ContentManager
 from backend.models.base import Base
+from backend.services.csrf_service import validate_csrf_token
 from backend.services.rate_limit_service import InMemoryRateLimiter
 
 if TYPE_CHECKING:
@@ -297,7 +297,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
-        expose_headers=["X-CSRF-Token"],
     )
 
     trusted_hosts = settings.trusted_hosts or (
@@ -319,11 +318,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             access_cookie = request.cookies.get("access_token")
             if access_cookie and not has_bearer and request.url.path != "/api/auth/login":
                 header_token = request.headers.get("X-CSRF-Token")
-                cookie_token = request.cookies.get("csrf_token")
-                if (
-                    header_token is None
-                    or cookie_token is None
-                    or not secrets.compare_digest(header_token, cookie_token)
+                if header_token is None or not validate_csrf_token(
+                    access_cookie,
+                    header_token,
+                    settings.secret_key,
                 ):
                     return JSONResponse(
                         status_code=403,
@@ -337,9 +335,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         call_next: Callable[[Request], Awaitable[Response]],
     ) -> Response:
         response = await call_next(request)
-        csrf_token = request.cookies.get("csrf_token")
-        if csrf_token:
-            response.headers.setdefault("X-CSRF-Token", csrf_token)
         if settings.security_headers_enabled:
             response.headers.setdefault("X-Content-Type-Options", "nosniff")
             response.headers.setdefault("X-Frame-Options", "DENY")

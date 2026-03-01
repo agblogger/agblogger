@@ -44,9 +44,9 @@ async def exchange_facebook_oauth_token(
     """
     async with httpx.AsyncClient() as http_client:
         # Exchange code for short-lived user token
-        token_resp = await http_client.get(
+        token_resp = await http_client.post(
             f"{FACEBOOK_GRAPH_API}/oauth/access_token",
-            params={
+            data={
                 "client_id": app_id,
                 "client_secret": app_secret,
                 "redirect_uri": redirect_uri,
@@ -65,9 +65,9 @@ async def exchange_facebook_oauth_token(
             raise FacebookOAuthTokenError(msg)
 
         # Exchange for long-lived user token
-        ll_resp = await http_client.get(
+        ll_resp = await http_client.post(
             f"{FACEBOOK_GRAPH_API}/oauth/access_token",
-            params={
+            data={
                 "grant_type": "fb_exchange_token",
                 "client_id": app_id,
                 "client_secret": app_secret,
@@ -88,7 +88,7 @@ async def exchange_facebook_oauth_token(
         # Fetch managed pages
         pages_resp = await http_client.get(
             f"{FACEBOOK_GRAPH_API}/me/accounts",
-            params={"access_token": long_lived_token},
+            headers={"Authorization": f"Bearer {long_lived_token}"},
             timeout=15.0,
         )
         if pages_resp.status_code != 200:

@@ -23,6 +23,7 @@ from backend.services.auth_service import (
     verify_password,
 )
 from backend.services.datetime_service import format_iso, now_utc
+from backend.services.key_derivation import derive_access_token_key
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
@@ -99,11 +100,25 @@ class TestAccessTokens:
             {"sub": "42", "username": "alice", "is_admin": True},
             test_settings.secret_key,
         )
-        payload = jwt.decode(token, test_settings.secret_key, algorithms=[ALGORITHM])
+        payload = jwt.decode(
+            token,
+            derive_access_token_key(test_settings.secret_key),
+            algorithms=[ALGORITHM],
+        )
         assert payload["sub"] == "42"
         assert payload["username"] == "alice"
         assert payload["is_admin"] is True
         assert payload["type"] == "access"
+
+    def test_create_access_token_is_not_signed_with_raw_secret(
+        self, test_settings: Settings
+    ) -> None:
+        token = create_access_token(
+            {"sub": "42", "username": "alice", "is_admin": True},
+            test_settings.secret_key,
+        )
+        with pytest.raises(jwt.InvalidTokenError):
+            jwt.decode(token, test_settings.secret_key, algorithms=[ALGORITHM])
 
     def test_decode_access_token_valid(self, test_settings: Settings) -> None:
         token = create_access_token(

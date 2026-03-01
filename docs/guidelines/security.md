@@ -12,12 +12,12 @@ Development guidelines for maintaining and extending AgBlogger's security postur
 
 ## Authentication
 
-Authentication is a coupled system spanning backend token logic, cookie handling, CSRF middleware, and frontend CSRF header persistence. Do not change one side in isolation.
+Authentication is a coupled system spanning backend token logic, cookie handling, the CSRF endpoint/middleware, and frontend CSRF token caching. Do not change one side in isolation.
 
 ### What to preserve
 
-- **Cookie flags**: `HttpOnly`, `SameSite=Strict`, `Secure` (outside debug). These are set in `backend/api/auth.py:_set_auth_cookies()`. Do not weaken any of these flags.
-- **CSRF double-submit**: Unsafe `/api/*` methods with cookie auth require `X-CSRF-Token` header matching the `csrf_token` cookie. The middleware lives in `backend/main.py`. The frontend persists this header via the `X-CSRF-Token` response header.
+- **Cookie flags**: `access_token` and `refresh_token` must remain `HttpOnly`, `SameSite=Strict`, and `Secure` outside debug. These are set in `backend/api/auth.py:_set_auth_cookies()`. Do not weaken any of these flags.
+- **Stateless CSRF**: Unsafe `/api/*` methods with cookie auth require `X-CSRF-Token` matching the HMAC-derived token for the current access cookie. The middleware lives in `backend/main.py`, the token helpers live in `backend/services/csrf_service.py`, and the frontend fetches/caches the token via `frontend/src/api/`.
 - **Login origin enforcement**: Validates `Origin`/`Referer` against allowed origins. Configured via `auth_enforce_login_origin` in `backend/config.py`.
 - **Rate limiting**: Sliding-window counters on login (`login:{ip}:{username}`) and refresh (`refresh:{ip}`) endpoints. Do not remove or relax the limits.
 - **Refresh token rotation**: On refresh, the old token is deleted before issuing a new pair. This prevents reuse of stolen tokens after legitimate rotation.
@@ -36,7 +36,7 @@ Authentication is a coupled system spanning backend token logic, cookie handling
 Touch all three layers together:
 - **Backend**: token creation, cookie setting, CSRF token generation (`backend/api/auth.py`)
 - **Middleware**: CSRF validation logic (`backend/main.py`)
-- **Frontend**: CSRF header persistence (`frontend/src/api/`)
+- **Frontend**: CSRF token fetch/caching and header injection (`frontend/src/api/`)
 
 Test the full cycle: login sets cookies, authenticated requests include CSRF, refresh rotates tokens, logout clears everything.
 
@@ -62,7 +62,7 @@ Do not inline auth checks like `if not user.is_admin: raise ...` inside handlers
 ### Draft visibility
 
 Draft posts and their co-located assets are visible only to their author. This is enforced in:
-- Post listing: filters drafts by matching authenticated user's display name against the post's `author` field
+- Post listing: filters drafts by matching authenticated user's username against the post's stable `author_username` owner field
 - Content file serving: `backend/api/content.py:_check_draft_access()` returns 404 (not 403) for non-authors to avoid information disclosure
 - Direct post access: same author-matching logic
 

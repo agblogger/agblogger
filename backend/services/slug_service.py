@@ -11,6 +11,8 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 MAX_SLUG_LENGTH = 80
+_UNTITLED_FALLBACK = "untitled"
+_UNTITLED_COLLISION_SLUG = "untitled-post"
 
 
 def generate_post_slug(title: str) -> str:
@@ -23,6 +25,7 @@ def generate_post_slug(title: str) -> str:
     - Strip leading/trailing hyphens
     - Truncate to 80 chars (don't cut mid-word if possible)
     - Return "untitled" for empty/whitespace-only input
+    - Avoid colliding with the reserved fallback slug for real titles
     """
     # Normalize unicode to decomposed form, then drop non-ASCII
     text = unicodedata.normalize("NFKD", title).encode("ascii", "ignore").decode("ascii")
@@ -34,7 +37,10 @@ def generate_post_slug(title: str) -> str:
     text = text.strip("-")
 
     if not text:
-        return "untitled"
+        return _UNTITLED_FALLBACK
+
+    if text == _UNTITLED_FALLBACK:
+        text = _UNTITLED_COLLISION_SLUG
 
     # Truncate to MAX_SLUG_LENGTH without cutting mid-word
     if len(text) > MAX_SLUG_LENGTH:

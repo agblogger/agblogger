@@ -12,7 +12,7 @@ Passwords are hashed with bcrypt and auto-generated salts (`backend/services/aut
 
 ### JWT Access Tokens
 
-Short-lived (15 min default) HS256 JWTs carry `sub` (user ID), `username`, `is_admin`, and `type: "access"`. Created in `auth_service.create_access_token()`, validated in `backend/api/deps.py:get_current_user()` with explicit type check.
+Short-lived (15 min default) HS256 JWTs carry `sub` (user ID), `username`, `is_admin`, and `type: "access"`. They are signed with a context-separated key derived from `SECRET_KEY` via HMAC-SHA256 (`backend/services/key_derivation.py`), not the raw application secret. Created in `auth_service.create_access_token()`, validated in `backend/api/deps.py:get_current_user()` with explicit type check.
 
 ### Refresh Token Rotation
 
@@ -28,9 +28,9 @@ Single-use registration tokens with format `aginvite_{secrets.token_urlsafe(24)}
 
 ### Cookie Security
 
-All auth cookies (`access_token`, `refresh_token`, `csrf_token`) are set with:
+Auth cookies are set with:
 
-- `HttpOnly=True` — prevents JavaScript access (XSS protection)
+- `access_token`, `refresh_token`: `HttpOnly=True` — prevents JavaScript access
 - `SameSite=Strict` — prevents cross-site request attachment
 - `Secure=True` in production (keyed to `debug=False`)
 - Scoped `max_age` matching token lifetimes
@@ -39,7 +39,7 @@ Set in `backend/api/auth.py:_set_auth_cookies()`, cleared on logout via `_clear_
 
 ### CSRF Protection
 
-Double-submit cookie pattern implemented as HTTP middleware (`backend/main.py`). For unsafe methods (POST/PUT/PATCH/DELETE) on `/api/*` paths with cookie-based auth, the `X-CSRF-Token` request header must match the `csrf_token` cookie. Comparison uses `secrets.compare_digest()` for timing-safe equality. Login and Bearer-authenticated requests are exempt.
+Stateless CSRF protection is implemented as HTTP middleware (`backend/main.py`). For unsafe methods (POST/PUT/PATCH/DELETE) on `/api/*` paths with cookie-based auth, the `X-CSRF-Token` request header must match the expected HMAC-derived token for the current `access_token` cookie. The frontend fetches the token from `GET /api/auth/csrf`, caches it in memory, and refreshes that cache from login/refresh responses. Comparison uses `secrets.compare_digest()` for timing-safe equality. Login and Bearer-authenticated requests are exempt.
 
 ### Login Origin Enforcement
 
@@ -82,7 +82,7 @@ Protected endpoints use FastAPI dependency injection (`backend/api/deps.py`):
 
 ### Draft Visibility
 
-Draft posts and their co-located assets are visible only to their author. The content endpoint (`backend/api/content.py:_check_draft_access()`) queries the post cache to verify draft status and author match. Non-authors receive 404 (not 403) to avoid information disclosure.
+Draft posts and their co-located assets are visible only to their author. Ownership is enforced with the stable `author_username` field in post front matter and `PostCache`, with limited legacy fallback only while rebuilding older content that lacks the field. The content endpoint (`backend/api/content.py:_check_draft_access()`) queries the post cache to verify draft status and owner match. Non-authors receive 404 (not 403) to avoid information disclosure.
 
 ## Content Security Policy (CSP)
 
@@ -117,7 +117,7 @@ Applied by the `security_headers` middleware (`backend/main.py`) when `security_
 Applied in `backend/main.py:create_app()`:
 
 1. **GZipMiddleware** — response compression (min 500 bytes)
-2. **CORSMiddleware** — empty origins by default (no cross-origin access); `allow_credentials=True` for cookie auth; exposes `X-CSRF-Token` header
+2. **CORSMiddleware** — empty origins by default (no cross-origin access); `allow_credentials=True` for cookie auth
 3. **TrustedHostMiddleware** — rejects requests with invalid Host headers; required in production via `trusted_hosts` setting
 4. **CSRF middleware** — double-submit cookie validation
 5. **Security headers middleware** — CSP and hardening headers
@@ -163,7 +163,7 @@ All API request bodies are validated against Pydantic schemas (`backend/schemas/
 
 ### Credential Encryption at Rest
 
-Cross-post OAuth credentials are encrypted with Fernet symmetric encryption (`backend/services/crypto_service.py`). The key is derived from the application `SECRET_KEY` via SHA-256. Plaintext credentials are never stored in the database.
+Cross-post OAuth credentials are encrypted with Fernet symmetric encryption (`backend/services/crypto_service.py`). The encryption key is derived from `SECRET_KEY` with a dedicated HMAC-SHA256 context that is distinct from JWT signing. Plaintext credentials are never stored in the database.
 
 ### Token Hashing
 

@@ -1250,7 +1250,7 @@ class TestFacebookOAuthTokenExchange:
             async def __aexit__(self, exc_type, exc, tb) -> bool:
                 return False
 
-            async def get(self, url: str, **kwargs) -> DummyResponse:
+            async def post(self, url: str, **kwargs) -> DummyResponse:
                 return DummyResponse()
 
         monkeypatch.setattr("backend.crosspost.facebook.httpx.AsyncClient", DummyAsyncClient)
@@ -1300,13 +1300,14 @@ class TestFacebookOAuthTokenExchange:
             async def __aexit__(self, exc_type, exc, tb) -> bool:
                 return False
 
-            async def get(self, url: str, **kwargs) -> object:
+            async def post(self, url: str, **kwargs) -> object:
                 nonlocal call_count
                 call_count += 1
                 if call_count == 1:
                     return DummyShortTokenResp()
-                if call_count == 2:
-                    return DummyLongLivedResp()
+                return DummyLongLivedResp()
+
+            async def get(self, url: str, **kwargs) -> object:
                 return DummyPagesResp()
 
         monkeypatch.setattr("backend.crosspost.facebook.httpx.AsyncClient", DummyAsyncClient)
@@ -1322,6 +1323,7 @@ class TestFacebookOAuthTokenExchange:
     async def test_happy_path_returns_pages(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Happy path: returns user token and pages."""
         call_count = 0
+        captured_calls: list[tuple[str, str, dict[str, object]]] = []
 
         class DummyShortTokenResp:
             status_code = 200
@@ -1354,13 +1356,16 @@ class TestFacebookOAuthTokenExchange:
             async def __aexit__(self, exc_type, exc, tb) -> bool:
                 return False
 
-            async def get(self, url: str, **kwargs) -> object:
+            async def post(self, url: str, **kwargs) -> object:
                 nonlocal call_count
                 call_count += 1
+                captured_calls.append(("post", url, kwargs))
                 if call_count == 1:
                     return DummyShortTokenResp()
-                if call_count == 2:
-                    return DummyLongLivedResp()
+                return DummyLongLivedResp()
+
+            async def get(self, url: str, **kwargs) -> object:
+                captured_calls.append(("get", url, kwargs))
                 return DummyPagesResp()
 
         monkeypatch.setattr("backend.crosspost.facebook.httpx.AsyncClient", DummyAsyncClient)
@@ -1375,6 +1380,12 @@ class TestFacebookOAuthTokenExchange:
         pages = result["pages"]
         assert isinstance(pages, list)
         assert len(pages) == 1
+        assert captured_calls[0][0] == "post"
+        assert captured_calls[1][0] == "post"
+        assert "params" not in captured_calls[0][2]
+        assert "params" not in captured_calls[1][2]
+        assert captured_calls[2][2].get("headers") == {"Authorization": "Bearer long_lived_token"}
+        assert "params" not in captured_calls[2][2]
 
 
 class TestFacebookValidateCredentials:

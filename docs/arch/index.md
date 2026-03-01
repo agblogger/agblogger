@@ -73,6 +73,7 @@ title: Post Title
 created_at: 2026-02-02 22:21:29.975359+00
 modified_at: 2026-02-02 22:21:35.000000+00
 author: Admin
+author_username: admin
 labels: ["#swe"]
 ---
 
@@ -80,6 +81,7 @@ Content here...
 ```
 
 - **Title** is stored as a `title` field in YAML front matter. For backward compatibility, if `title` is absent, it is extracted from the first `# Heading` in the body, falling back to filename derivation. During sync, missing titles are backfilled from the first heading (or filename), and any matching leading heading is stripped from the body.
+- **Ownership** uses `author_username` as the stable draft owner identifier. The human-readable `author` field remains for display.
 - **Labels** are referenced as `#label-id` strings.
 - **Timestamps** use strict ISO output format; lax input is accepted via pendulum.
 - **Post-per-directory**: New posts created via the web UI are stored as `posts/<date>-<slug>/index.md` with co-located assets. The slug is generated from the title via NFKD unicode normalization → ASCII → lowercase → hyphenated (max 80 chars). Existing flat posts (`posts/hello.md`) continue to work.

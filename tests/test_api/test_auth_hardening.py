@@ -78,8 +78,7 @@ class TestRegistrationPolicy:
         )
         assert invite_resp.status_code == 201
         invite_code = invite_resp.json()["invite_code"]
-        csrf_token = client.cookies.get("csrf_token")
-        assert csrf_token is not None
+        csrf_token = login_resp.json()["csrf_token"]
 
         register_resp = await client.post(
             "/api/auth/register",
@@ -96,7 +95,7 @@ class TestRegistrationPolicy:
 
 class TestCsrf:
     @pytest.mark.asyncio
-    async def test_login_sets_httponly_csrf_cookie_and_response_header(
+    async def test_login_returns_csrf_token_without_csrf_cookie_or_response_header(
         self, client: AsyncClient
     ) -> None:
         login_resp = await client.post(
@@ -105,20 +104,16 @@ class TestCsrf:
         )
         assert login_resp.status_code == 200
 
-        csrf_header = login_resp.headers.get("X-CSRF-Token")
-        assert csrf_header is not None
-        assert csrf_header != ""
+        assert login_resp.json()["csrf_token"]
+        assert login_resp.headers.get("X-CSRF-Token") is None
 
         set_cookie_values = login_resp.headers.get_list("set-cookie")
-        csrf_cookie_header = next(
-            (value for value in set_cookie_values if value.startswith("csrf_token=")),
-            None,
-        )
-        assert csrf_cookie_header is not None
-        assert "HttpOnly" in csrf_cookie_header
+        assert all(not value.startswith("csrf_token=") for value in set_cookie_values)
 
     @pytest.mark.asyncio
-    async def test_authenticated_get_echoes_csrf_token_header(self, client: AsyncClient) -> None:
+    async def test_authenticated_get_does_not_echo_csrf_token_header(
+        self, client: AsyncClient
+    ) -> None:
         login_resp = await client.post(
             "/api/auth/login",
             json={"username": "admin", "password": "admin123"},
@@ -127,7 +122,26 @@ class TestCsrf:
 
         me_resp = await client.get("/api/auth/me")
         assert me_resp.status_code == 200
-        assert me_resp.headers.get("X-CSRF-Token") == client.cookies.get("csrf_token")
+        assert me_resp.headers.get("X-CSRF-Token") is None
+
+    @pytest.mark.asyncio
+    async def test_csrf_endpoint_returns_token_for_cookie_session(
+        self, client: AsyncClient
+    ) -> None:
+        login_resp = await client.post(
+            "/api/auth/login",
+            json={"username": "admin", "password": "admin123"},
+        )
+        assert login_resp.status_code == 200
+
+        csrf_resp = await client.get("/api/auth/csrf")
+        assert csrf_resp.status_code == 200
+        assert csrf_resp.json()["csrf_token"] == login_resp.json()["csrf_token"]
+        assert csrf_resp.headers.get("X-CSRF-Token") is None
+        assert all(
+            not value.startswith("csrf_token=")
+            for value in csrf_resp.headers.get_list("set-cookie")
+        )
 
     @pytest.mark.asyncio
     async def test_cookie_authenticated_post_requires_csrf(self, client: AsyncClient) -> None:
@@ -143,8 +157,7 @@ class TestCsrf:
         )
         assert without_csrf.status_code == 403
 
-        csrf_token = client.cookies.get("csrf_token")
-        assert csrf_token is not None
+        csrf_token = login_resp.json()["csrf_token"]
 
         with_csrf = await client.post(
             "/api/render/preview",
@@ -324,8 +337,7 @@ class TestInviteCodeReuse:
         )
         assert invite_resp.status_code == 201
         invite_code = invite_resp.json()["invite_code"]
-        csrf_token = client.cookies.get("csrf_token")
-        assert csrf_token is not None
+        csrf_token = login_resp.json()["csrf_token"]
 
         # Register first user with the invite
         reg1 = await client.post(

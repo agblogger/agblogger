@@ -238,6 +238,44 @@ class TestCrosspostDraftIsolation:
         assert resp.status_code == 404
 
 
+class TestDraftDisplayNameImpersonation:
+    @pytest.mark.asyncio
+    async def test_matching_authors_display_name_does_not_grant_draft_access(
+        self, client: AsyncClient
+    ) -> None:
+        register_resp = await client.post(
+            "/api/auth/register",
+            json={
+                "username": "imposter",
+                "email": "imposter@test.com",
+                "password": "imposter-password",
+                "display_name": "Admin",
+            },
+        )
+        assert register_resp.status_code == 201
+
+        imposter_token = await _login(client, "imposter", "imposter-password")
+        headers = {"Authorization": f"Bearer {imposter_token}"}
+
+        listing_resp = await client.get("/api/posts", headers=headers)
+        assert listing_resp.status_code == 200
+        titles = [post["title"] for post in listing_resp.json()["posts"]]
+        assert "Admin Flat Draft" not in titles
+
+        detail_resp = await client.get("/api/posts/posts/admin-flat-draft.md", headers=headers)
+        assert detail_resp.status_code == 404
+
+        content_resp = await client.get("/api/content/posts/admin-flat-draft.md", headers=headers)
+        assert content_resp.status_code == 404
+
+        crosspost_resp = await client.post(
+            "/api/crosspost/post",
+            json={"post_path": "posts/admin-flat-draft.md", "platforms": ["bluesky"]},
+            headers=headers,
+        )
+        assert crosspost_resp.status_code == 404
+
+
 class TestPostMutationAuthorization:
     @pytest.mark.asyncio
     async def test_non_admin_cannot_create_update_delete_posts(self, client: AsyncClient) -> None:

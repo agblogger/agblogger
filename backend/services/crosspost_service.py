@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING
+from inspect import isawaitable
+from typing import TYPE_CHECKING, TypeVar, cast
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -13,6 +14,7 @@ from backend.crosspost.base import CrossPostContent, CrossPostResult
 from backend.crosspost.registry import get_poster, list_platforms
 from backend.exceptions import InternalServerError, PostNotFoundError
 from backend.models.crosspost import CrossPost, SocialAccount
+from backend.models.post import PostCache
 from backend.services.crypto_service import decrypt_value, encrypt_value
 from backend.services.datetime_service import format_datetime, now_utc
 
@@ -24,10 +26,18 @@ if TYPE_CHECKING:
     from backend.schemas.crosspost import SocialAccountCreate
 
 logger = logging.getLogger(__name__)
+T = TypeVar("T")
 
 
 class DuplicateAccountError(Exception):
     """Raised when a social account with the same user/platform/name already exists."""
+
+
+async def _resolve_maybe_awaitable[T](value: T) -> T:
+    """Resolve values returned by sync SQLAlchemy APIs or async test doubles."""
+    if isawaitable(value):
+        return cast("T", await value)
+    return value
 
 
 async def create_social_account(
@@ -116,11 +126,18 @@ async def crosspost(
     if post_data is None:
         msg = f"Post not found: {post_path}"
         raise PostNotFoundError(msg)
-    if post_data.is_draft:
-        actor_author = actor.display_name or actor.username
-        if not actor.is_admin and post_data.author != actor_author:
-            msg = f"Post not found: {post_path}"
-            raise PostNotFoundError(msg)
+
+    post_stmt = select(PostCache).where(PostCache.file_path == post_path)
+    post_query_result = await session.execute(post_stmt)
+    cached_post = await _resolve_maybe_awaitable(post_query_result.scalar_one_or_none())
+
+    is_draft = cached_post.is_draft if cached_post is not None else post_data.is_draft
+    owner_username = (
+        cached_post.author_username if cached_post is not None else post_data.author_username
+    )
+    if is_draft and not actor.is_admin and owner_username != actor.username:
+        msg = f"Post not found: {post_path}"
+        raise PostNotFoundError(msg)
 
     # Build the post URL
     # Strip .md extension and leading posts/ for the URL slug
@@ -146,7 +163,8 @@ async def crosspost(
         SocialAccount.platform.in_(platforms),
     )
     result = await session.execute(stmt)
-    accounts = {acct.platform: acct for acct in result.scalars().all()}
+    account_rows = await _resolve_maybe_awaitable(result.scalars().all())
+    accounts = {acct.platform: acct for acct in account_rows}
 
     results: list[CrossPostResult] = []
     now = format_datetime(now_utc())
@@ -217,7 +235,7 @@ async def crosspost(
                 continue
         try:
             poster = await get_poster(platform_name, credentials)
-            post_result = await poster.post(content)
+            publish_result = await poster.post(content)
 
             # Persist refreshed credentials if tokens were updated during posting
             get_updated = getattr(poster, "get_updated_credentials", None)
@@ -228,7 +246,7 @@ async def crosspost(
                     account.updated_at = now
         except Exception:
             logger.exception("Cross-post to %s failed", platform_name)
-            post_result = CrossPostResult(
+            publish_result = CrossPostResult(
                 platform_id="",
                 url="",
                 success=False,
@@ -240,14 +258,14 @@ async def crosspost(
             user_id=actor.id,
             post_path=post_path,
             platform=platform_name,
-            platform_id=post_result.platform_id or None,
-            status="posted" if post_result.success else "failed",
-            posted_at=now if post_result.success else None,
-            error=post_result.error,
+            platform_id=publish_result.platform_id or None,
+            status="posted" if publish_result.success else "failed",
+            posted_at=now if publish_result.success else None,
+            error=publish_result.error,
             created_at=now,
         )
         session.add(cp)
-        results.append(post_result)
+        results.append(publish_result)
 
     await session.commit()
     return results

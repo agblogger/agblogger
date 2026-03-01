@@ -47,6 +47,9 @@ class TestGeneratePostSlug:
     def test_special_chars_only_returns_untitled(self) -> None:
         assert generate_post_slug("!!!@@@###") == "untitled"
 
+    def test_literal_untitled_title_does_not_use_fallback_slug(self) -> None:
+        assert generate_post_slug("Untitled") == "untitled-post"
+
     def test_long_title_truncated_to_80_chars(self) -> None:
         title = "this is a very long title " * 10
         slug = generate_post_slug(title)

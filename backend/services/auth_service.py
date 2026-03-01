@@ -15,6 +15,7 @@ from sqlalchemy import select
 
 from backend.models.user import InviteCode, PersonalAccessToken, RefreshToken, User
 from backend.services.datetime_service import format_iso, now_utc
+from backend.services.key_derivation import derive_access_token_key
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -46,7 +47,8 @@ def create_access_token(data: dict[str, Any], secret_key: str, expires_minutes: 
     to_encode = data.copy()
     expire = datetime.now(UTC) + timedelta(minutes=expires_minutes)
     to_encode.update({"exp": expire, "type": "access"})
-    return str(jwt.encode(to_encode, secret_key, algorithm=ALGORITHM))
+    signing_key = derive_access_token_key(secret_key)
+    return str(jwt.encode(to_encode, signing_key, algorithm=ALGORITHM))
 
 
 def create_refresh_token_value() -> str:
@@ -62,7 +64,8 @@ def hash_token(token: str) -> str:
 def decode_access_token(token: str, secret_key: str) -> dict[str, Any] | None:
     """Decode and validate a JWT access token."""
     try:
-        payload: dict[str, Any] = jwt.decode(token, secret_key, algorithms=[ALGORITHM])
+        signing_key = derive_access_token_key(secret_key)
+        payload: dict[str, Any] = jwt.decode(token, signing_key, algorithms=[ALGORITHM])
         if payload.get("type") != "access":
             return None
         return payload

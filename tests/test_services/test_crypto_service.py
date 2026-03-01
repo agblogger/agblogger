@@ -6,6 +6,7 @@ import pytest
 
 from backend.exceptions import InternalServerError
 from backend.services.crypto_service import decrypt_value, encrypt_value
+from backend.services.key_derivation import derive_access_token_key, derive_encryption_key
 
 
 class TestCryptoService:
@@ -50,3 +51,7 @@ class TestCryptoService:
         assert ct1 != ct2  # random IV
         assert decrypt_value(ct1, "same-key") == "test"
         assert decrypt_value(ct2, "same-key") == "test"
+
+    def test_encryption_key_is_separate_from_token_signing_key(self) -> None:
+        secret = "same-key"
+        assert derive_encryption_key(secret).decode("ascii") != derive_access_token_key(secret)

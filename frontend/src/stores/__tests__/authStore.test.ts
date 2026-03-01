@@ -68,7 +68,12 @@ describe('authStore', () => {
 
   describe('login', () => {
     it('success sets user', async () => {
-      mockApiLogin.mockResolvedValue({ access_token: 'tok', refresh_token: 'ref', token_type: 'bearer' })
+      mockApiLogin.mockResolvedValue({
+        access_token: 'tok',
+        refresh_token: 'ref',
+        token_type: 'bearer',
+        csrf_token: 'csrf',
+      })
       mockFetchMe.mockResolvedValue(testUser)
 
       await useAuthStore.getState().login('admin', 'password')

@@ -216,7 +216,9 @@ class TestAssetUploadAuthorization:
         file_path = resp.json()["file_path"]
 
         # Register another user (need CSRF token since admin login set cookies)
-        csrf_token: str = client.cookies.get("csrf_token") or ""
+        csrf_resp = await client.get("/api/auth/csrf")
+        assert csrf_resp.status_code == 200
+        csrf_token = csrf_resp.json()["csrf_token"]
         resp = await client.post(
             "/api/auth/register",
             json={"username": "other", "email": "other@test.com", "password": "password1234"},

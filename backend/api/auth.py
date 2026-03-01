@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import secrets
 from typing import Annotated
 from urllib.parse import urlparse
 
@@ -21,6 +20,7 @@ from backend.api.deps import (
 from backend.config import Settings
 from backend.models.user import User
 from backend.schemas.auth import (
+    CsrfTokenResponse,
     InviteCreateRequest,
     InviteCreateResponse,
     LoginRequest,
@@ -45,6 +45,7 @@ from backend.services.auth_service import (
     revoke_personal_access_token,
     revoke_refresh_token,
 )
+from backend.services.csrf_service import create_csrf_token
 from backend.services.datetime_service import format_iso, now_utc
 from backend.services.rate_limit_service import InMemoryRateLimiter
 
@@ -56,9 +57,8 @@ def _set_auth_cookies(
     settings: Settings,
     access_token: str,
     refresh_token: str,
-) -> None:
+) -> str:
     secure = not settings.debug
-    csrf_token = secrets.token_urlsafe(32)
     response.set_cookie(
         key="access_token",
         value=access_token,
@@ -77,23 +77,13 @@ def _set_auth_cookies(
         path="/",
         max_age=settings.refresh_token_expire_days * 24 * 60 * 60,
     )
-    response.set_cookie(
-        key="csrf_token",
-        value=csrf_token,
-        httponly=True,
-        secure=secure,
-        samesite="strict",
-        path="/",
-        max_age=settings.refresh_token_expire_days * 24 * 60 * 60,
-    )
-    response.headers["X-CSRF-Token"] = csrf_token
+    return create_csrf_token(access_token, settings.secret_key)
 
 
 def _clear_auth_cookies(response: Response) -> None:
     response.delete_cookie("access_token", path="/")
     response.delete_cookie("refresh_token", path="/")
     response.delete_cookie("csrf_token", path="/")
-    response.headers["X-CSRF-Token"] = ""
 
 
 def _get_client_ip(request: Request) -> str:
@@ -199,8 +189,12 @@ async def login(
 
     limiter.clear(client_key)
     access_token, refresh_token = await create_tokens(session, user, settings)
-    _set_auth_cookies(response, settings, access_token, refresh_token)
-    return TokenResponse(access_token=access_token, refresh_token=refresh_token)
+    csrf_token = _set_auth_cookies(response, settings, access_token, refresh_token)
+    return TokenResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        csrf_token=csrf_token,
+    )
 
 
 @router.post("/register", response_model=UserResponse, status_code=201)
@@ -317,8 +311,12 @@ async def refresh(
         )
     limiter.clear(client_key)
     access_token, refresh_token = tokens
-    _set_auth_cookies(response, settings, access_token, refresh_token)
-    return TokenResponse(access_token=access_token, refresh_token=refresh_token)
+    csrf_token = _set_auth_cookies(response, settings, access_token, refresh_token)
+    return TokenResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        csrf_token=csrf_token,
+    )
 
 
 @router.post("/logout", status_code=204)
@@ -337,6 +335,21 @@ async def logout(
     _clear_auth_cookies(response)
     response.status_code = status.HTTP_204_NO_CONTENT
     return response
+
+
+@router.get("/csrf", response_model=CsrfTokenResponse)
+async def get_csrf_token(
+    request: Request,
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> CsrfTokenResponse:
+    """Return the stateless CSRF token for the current cookie-authenticated session."""
+    access_token = request.cookies.get("access_token")
+    if access_token is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+        )
+    return CsrfTokenResponse(csrf_token=create_csrf_token(access_token, settings.secret_key))
 
 
 @router.get("/me", response_model=UserResponse)

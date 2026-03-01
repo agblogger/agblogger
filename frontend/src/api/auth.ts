@@ -1,8 +1,10 @@
-import api from './client'
+import api, { clearCsrfToken, primeCsrfToken } from './client'
 import type { TokenResponse, UserResponse } from './client'
 
 export async function login(username: string, password: string): Promise<TokenResponse> {
-  return api.post('auth/login', { json: { username, password } }).json<TokenResponse>()
+  const response = await api.post('auth/login', { json: { username, password } }).json<TokenResponse>()
+  primeCsrfToken(response.csrf_token)
+  return response
 }
 
 export async function register(
@@ -23,5 +25,9 @@ export async function fetchMe(): Promise<UserResponse> {
 }
 
 export async function logout(): Promise<void> {
-  await api.post('auth/logout', { json: {} })
+  try {
+    await api.post('auth/logout', { json: {} })
+  } finally {
+    clearCsrfToken()
+  }
 }

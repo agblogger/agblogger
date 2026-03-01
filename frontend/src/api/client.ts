@@ -2,98 +2,77 @@ import ky, { HTTPError } from 'ky'
 
 const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
 const CSRF_HEADER_NAME = 'X-CSRF-Token'
-const CSRF_STORAGE_KEY = 'agb_csrf_token'
-
-function hasBrowserDom(): boolean {
-  if (typeof window === 'undefined' || typeof document === 'undefined') {
-    return false
-  }
-  return document.defaultView === window
-}
-
-function readPersistedCsrfToken(): string | null {
-  if (!hasBrowserDom()) {
-    return null
-  }
-  try {
-    return window.localStorage.getItem(CSRF_STORAGE_KEY)
-  } catch {
-    return null
-  }
-}
-
-function persistCsrfToken(token: string): void {
-  if (!hasBrowserDom()) {
-    return
-  }
-  try {
-    window.localStorage.setItem(CSRF_STORAGE_KEY, token)
-  } catch {
-    // Ignore storage failures; keep in-memory token only.
-  }
-}
-
-function clearPersistedCsrfToken(): void {
-  if (!hasBrowserDom()) {
-    return
-  }
-  try {
-    window.localStorage.removeItem(CSRF_STORAGE_KEY)
-  } catch {
-    // Ignore storage failures.
-  }
-}
 
 let csrfToken: string | null = null
-let csrfTokenLoaded = false
+let csrfTokenRequest: Promise<string | null> | null = null
 
-function ensureCsrfTokenLoaded(): void {
-  if (csrfTokenLoaded) {
-    return
-  }
-  csrfToken = readPersistedCsrfToken()
-  csrfTokenLoaded = true
+function setCachedCsrfToken(nextToken: string | null): void {
+  csrfToken = nextToken !== null && nextToken.trim() !== '' ? nextToken : null
 }
 
-function setCsrfHeader(headers: Headers): void {
-  ensureCsrfTokenLoaded()
+export function primeCsrfToken(nextToken: string): void {
+  setCachedCsrfToken(nextToken)
+}
+
+export function clearCsrfToken(): void {
+  csrfToken = null
+  csrfTokenRequest = null
+}
+
+async function fetchCsrfToken(): Promise<string | null> {
+  try {
+    const response = await ky
+      .get('auth/csrf', {
+        prefixUrl: '/api',
+        credentials: 'include',
+      })
+      .json<{ csrf_token: string }>()
+    setCachedCsrfToken(response.csrf_token)
+    return csrfToken
+  } catch {
+    clearCsrfToken()
+    return null
+  } finally {
+    csrfTokenRequest = null
+  }
+}
+
+async function getCsrfToken(): Promise<string | null> {
   if (csrfToken !== null) {
-    headers.set(CSRF_HEADER_NAME, csrfToken)
+    return csrfToken
   }
+  if (csrfTokenRequest !== null) {
+    return csrfTokenRequest
+  }
+  csrfTokenRequest = fetchCsrfToken()
+  return csrfTokenRequest
 }
 
-function updateCsrfTokenFromResponse(response: Response): void {
-  const token = response.headers.get(CSRF_HEADER_NAME)
-  if (token === null) {
-    return
+async function setCsrfHeader(headers: Headers): Promise<void> {
+  const nextToken = await getCsrfToken()
+  if (nextToken !== null) {
+    headers.set(CSRF_HEADER_NAME, nextToken)
   }
-  const normalizedToken = token.trim()
-  if (normalizedToken === '') {
-    csrfToken = null
-    csrfTokenLoaded = true
-    clearPersistedCsrfToken()
-    return
-  }
-  csrfToken = normalizedToken
-  csrfTokenLoaded = true
-  persistCsrfToken(normalizedToken)
 }
 
 async function refreshAccessToken(): Promise<boolean> {
   const headers = new Headers()
-  setCsrfHeader(headers)
+  await setCsrfHeader(headers)
 
   try {
-    const response = await ky.post('auth/refresh', {
-      prefixUrl: '/api',
-      credentials: 'include',
-      headers,
-      json: {},
-    })
-    updateCsrfTokenFromResponse(response)
+    const response = await ky
+      .post('auth/refresh', {
+        prefixUrl: '/api',
+        credentials: 'include',
+        headers,
+        json: {},
+      })
+      .json<TokenResponse>()
+    primeCsrfToken(response.csrf_token)
     return true
   } catch (err) {
     console.error('Token refresh failed:', err)
+    clearCsrfToken()
     return false
   }
 }
@@ -103,15 +82,14 @@ const api = ky.create({
   credentials: 'include',
   hooks: {
     beforeRequest: [
-      (request) => {
+      async (request) => {
         if (UNSAFE_METHODS.has(request.method)) {
-          setCsrfHeader(request.headers)
+          await setCsrfHeader(request.headers)
         }
       },
     ],
     afterResponse: [
       async (request, _options, response) => {
-        updateCsrfTokenFromResponse(response)
         const alreadyRetried = request.headers.get('X-Auth-Retry') === '1'
         if (response.status === 401 && !request.url.includes('/auth/refresh') && !alreadyRetried) {
           const refreshed = await refreshAccessToken()
@@ -123,7 +101,7 @@ const api = ky.create({
             const headers = new Headers(request.headers)
             headers.set('X-Auth-Retry', '1')
             if (UNSAFE_METHODS.has(request.method)) {
-              setCsrfHeader(headers)
+              await setCsrfHeader(headers)
             }
             const retryRequest = new Request(request, { headers })
             return await ky(retryRequest, {
@@ -233,6 +211,7 @@ export interface PageResponse {
 export interface TokenResponse {
   access_token: string
   refresh_token: string
+  csrf_token: string
   token_type: string
 }
 

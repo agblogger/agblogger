@@ -80,8 +80,8 @@ Facebook uses OAuth 2.0 for Pages:
 3. OAuth state is stored in the in-memory `OAuthStateStore` with 10-minute TTL
 4. Frontend redirects user to Facebook's authorization page
 5. Facebook redirects back to `GET /api/crosspost/facebook/callback`
-6. Backend exchanges the authorization code for a short-lived user token, then exchanges it for a long-lived token
-7. Backend fetches managed Pages via `GET /me/accounts`, presenting a page selection step if multiple pages are available
+6. Backend exchanges the authorization code for a short-lived user token, then exchanges it for a long-lived token using server-side `POST` bodies rather than URL query parameters
+7. Backend fetches managed Pages via `GET /me/accounts` with `Authorization: Bearer <token>`, presenting a page selection step if multiple pages are available
 8. Page Access Tokens (non-expiring for long-lived user tokens) and selected page info are stored encrypted in `SocialAccount`
 
 ## Cross-Posting UI

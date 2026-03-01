@@ -33,7 +33,14 @@ class TokenResponse(BaseModel):
 
     access_token: str
     refresh_token: str
+    csrf_token: str
     token_type: Literal["bearer"] = Field(default_factory=_default_token_type)
+
+
+class CsrfTokenResponse(BaseModel):
+    """Stateless CSRF token response for cookie-authenticated sessions."""
+
+    csrf_token: str
 
 
 class RefreshRequest(BaseModel):

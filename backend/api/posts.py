@@ -132,7 +132,7 @@ async def list_posts_endpoint(
 ) -> PostListResponse:
     """List posts with pagination and filtering."""
     label_list = labels.split(",") if labels else None
-    draft_author = (user.display_name or user.username) if user else None
+    draft_owner_username = user.username if user else None
     try:
         return await list_posts(
             session,
@@ -144,7 +144,7 @@ async def list_posts_endpoint(
             author=author,
             from_date=from_date,
             to_date=to_date,
-            draft_author=draft_author,
+            draft_owner_username=draft_owner_username,
             sort=sort,
             order=order,
         )
@@ -230,6 +230,7 @@ async def upload_post(
 
     if not post_data.author:
         post_data.author = user.display_name or user.username
+    post_data.author_username = user.username
 
     posts_dir = content_manager.content_dir / "posts"
     post_path = generate_post_path(post_data.title, posts_dir)
@@ -267,6 +268,7 @@ async def upload_post(
         file_path=file_path,
         title=post_data.title,
         author=post_data.author,
+        author_username=post_data.author_username,
         created_at=post_data.created_at,
         modified_at=post_data.modified_at,
         is_draft=post_data.is_draft,
@@ -390,14 +392,19 @@ async def get_post_endpoint(
     user: Annotated[User | None, Depends(get_current_user)],
 ) -> PostDetail:
     """Get a single post by file path."""
+    stmt = select(PostCache).where(PostCache.file_path == file_path)
+    result = await session.execute(stmt)
+    cached_post = result.scalar_one_or_none()
+    if cached_post is None:
+        raise HTTPException(status_code=404, detail="Post not found")
+
     post = await get_post(session, file_path)
     if post is None:
         raise HTTPException(status_code=404, detail="Post not found")
-    if post.is_draft:
+    if cached_post.is_draft:
         if user is None:
             raise HTTPException(status_code=404, detail="Post not found")
-        user_author = user.display_name or user.username
-        if post.author != user_author:
+        if cached_post.author_username != user.username:
             raise HTTPException(status_code=404, detail="Post not found")
     return post
 
@@ -429,6 +436,7 @@ async def create_post_endpoint(
         created_at=now,
         modified_at=now,
         author=author,
+        author_username=user.username,
         labels=body.labels,
         is_draft=body.is_draft,
         file_path=file_path,
@@ -450,6 +458,7 @@ async def create_post_endpoint(
         file_path=file_path,
         title=post_data.title,
         author=post_data.author,
+        author_username=post_data.author_username,
         created_at=post_data.created_at,
         modified_at=post_data.modified_at,
         is_draft=post_data.is_draft,
@@ -514,12 +523,14 @@ async def update_post_endpoint(
     if existing_post_data:
         created_at = existing_post_data.created_at
         author = existing_post_data.author
+        author_username = existing_post_data.author_username or existing.author_username
     else:
         logger.warning(
             "Post %s exists in DB cache but not on filesystem; using cached metadata", file_path
         )
         created_at = existing.created_at
         author = existing.author or user.display_name or user.username
+        author_username = existing.author_username
 
     now = now_utc()
     title = body.title
@@ -531,6 +542,7 @@ async def update_post_endpoint(
         created_at=created_at,
         modified_at=now,
         author=author,
+        author_username=author_username,
         labels=body.labels,
         is_draft=body.is_draft,
         file_path=file_path,
@@ -594,6 +606,7 @@ async def update_post_endpoint(
 
     existing.title = title
     existing.author = author
+    existing.author_username = author_username
     existing.modified_at = now
     existing.is_draft = body.is_draft
     existing.content_hash = hash_content(serialized)
