@@ -4,15 +4,8 @@ import { Check, Link, Mail, Share2, X as XIcon } from 'lucide-react'
 import PlatformIcon from '@/components/crosspost/PlatformIcon'
 
 import MastodonSharePrompt from './MastodonSharePrompt'
-import {
-  canNativeShare,
-  copyToClipboard,
-  getValidMastodonInstance,
-  getShareText,
-  getShareUrl,
-  nativeShare,
-  SHARE_PLATFORMS,
-} from './shareUtils'
+import { canNativeShare, SHARE_PLATFORMS } from './shareUtils'
+import { useShareHandlers } from './useShareHandlers'
 
 interface ShareButtonProps {
   title: string
@@ -22,12 +15,19 @@ interface ShareButtonProps {
 
 export default function ShareButton({ title, author, url }: ShareButtonProps) {
   const [showDropdown, setShowDropdown] = useState(false)
-  const [showMastodonPrompt, setShowMastodonPrompt] = useState(false)
-  const [copied, setCopied] = useState(false)
-  const [copyFailed, setCopyFailed] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
-  const shareText = getShareText(title, author, url)
+  const {
+    shareText,
+    copied,
+    copyFailed,
+    showMastodonPrompt,
+    setShowMastodonPrompt,
+    handlePlatformClick,
+    handleEmailClick,
+    handleCopy,
+    handleNativeShare,
+  } = useShareHandlers(title, author, url, () => setShowDropdown(false))
 
   useEffect(() => {
     if (!showDropdown) return
@@ -41,62 +41,17 @@ export default function ShareButton({ title, author, url }: ShareButtonProps) {
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)
     }
-  }, [showDropdown])
+  }, [showDropdown, setShowMastodonPrompt])
 
   async function handleClick() {
     if (canNativeShare()) {
       try {
-        await nativeShare(title, shareText, url)
-      } catch (err) {
-        if (err instanceof DOMException && err.name === 'AbortError') {
-          return
-        }
-        // Non-cancellation share failure — fall back to dropdown
+        await handleNativeShare()
+      } catch {
         setShowDropdown(true)
       }
     } else {
       setShowDropdown((prev) => !prev)
-    }
-  }
-
-  function handlePlatformClick(platformId: string) {
-    if (platformId === 'mastodon') {
-      const instance = getValidMastodonInstance()
-      if (instance !== null) {
-        const shareUrl = getShareUrl('mastodon', shareText, url, title, instance)
-        window.open(shareUrl, '_blank', 'noopener,noreferrer')
-        setShowDropdown(false)
-      } else {
-        setShowMastodonPrompt(true)
-      }
-      return
-    }
-    const shareUrl = getShareUrl(platformId, shareText, url, title)
-    if (shareUrl !== '') {
-      window.open(shareUrl, '_blank', 'noopener,noreferrer')
-      setShowDropdown(false)
-    }
-  }
-
-  function handleEmailClick() {
-    const emailUrl = getShareUrl('email', shareText, url, title)
-    window.open(emailUrl, '_self')
-    setShowDropdown(false)
-  }
-
-  async function handleCopy() {
-    const success = await copyToClipboard(url)
-    if (success) {
-      setCopied(true)
-      setTimeout(() => {
-        setCopied(false)
-        setShowDropdown(false)
-      }, 1500)
-    } else {
-      setCopyFailed(true)
-      setTimeout(() => {
-        setCopyFailed(false)
-      }, 2000)
     }
   }
 

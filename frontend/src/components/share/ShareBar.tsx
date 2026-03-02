@@ -1,18 +1,10 @@
-import { useState } from 'react'
 import { Check, Link, Mail, Share2, X as XIcon } from 'lucide-react'
 
 import PlatformIcon from '@/components/crosspost/PlatformIcon'
 
 import MastodonSharePrompt from './MastodonSharePrompt'
-import {
-  canNativeShare,
-  copyToClipboard,
-  getValidMastodonInstance,
-  getShareText,
-  getShareUrl,
-  nativeShare,
-  SHARE_PLATFORMS,
-} from './shareUtils'
+import { canNativeShare, SHARE_PLATFORMS } from './shareUtils'
+import { useShareHandlers } from './useShareHandlers'
 
 interface ShareBarProps {
   title: string
@@ -21,60 +13,17 @@ interface ShareBarProps {
 }
 
 export default function ShareBar({ title, author, url }: ShareBarProps) {
-  const [showMastodonPrompt, setShowMastodonPrompt] = useState(false)
-  const [copied, setCopied] = useState(false)
-  const [copyFailed, setCopyFailed] = useState(false)
-
-  const shareText = getShareText(title, author, url)
-
-  function handlePlatformClick(platformId: string) {
-    if (platformId === 'mastodon') {
-      const instance = getValidMastodonInstance()
-      if (instance !== null) {
-        const shareUrl = getShareUrl('mastodon', shareText, url, title, instance)
-        window.open(shareUrl, '_blank', 'noopener,noreferrer')
-      } else {
-        setShowMastodonPrompt(true)
-      }
-      return
-    }
-
-    const shareUrl = getShareUrl(platformId, shareText, url, title)
-    if (shareUrl !== '') {
-      window.open(shareUrl, '_blank', 'noopener,noreferrer')
-    }
-  }
-
-  function handleEmailClick() {
-    const emailUrl = getShareUrl('email', shareText, url, title)
-    window.open(emailUrl, '_self')
-  }
-
-  async function handleCopy() {
-    const success = await copyToClipboard(url)
-    if (success) {
-      setCopied(true)
-      setTimeout(() => {
-        setCopied(false)
-      }, 2000)
-    } else {
-      setCopyFailed(true)
-      setTimeout(() => {
-        setCopyFailed(false)
-      }, 2000)
-    }
-  }
-
-  async function handleNativeShare() {
-    try {
-      await nativeShare(title, shareText, url)
-    } catch (err) {
-      if (err instanceof DOMException && err.name === 'AbortError') {
-        return
-      }
-      // Non-cancellation share failure — no action needed
-    }
-  }
+  const {
+    shareText,
+    copied,
+    copyFailed,
+    showMastodonPrompt,
+    setShowMastodonPrompt,
+    handlePlatformClick,
+    handleEmailClick,
+    handleCopy,
+    handleNativeShare,
+  } = useShareHandlers(title, author, url)
 
   return (
     <div className="mt-10 border-t border-border pt-6">
