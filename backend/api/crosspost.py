@@ -213,7 +213,7 @@ async def history_endpoint(
                 post_path=cp.post_path,
                 platform=cp.platform,
                 platform_id=cp.platform_id,
-                status=cp.status,
+                status=CrossPostStatus(cp.status),
                 posted_at=cp.posted_at,
                 error=cp.error,
             )

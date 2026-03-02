@@ -58,7 +58,7 @@ const mockHistory: CrossPostResult[] = [
     post_path: 'posts/test.md',
     platform: 'bluesky',
     platform_id: '123',
-    status: 'success',
+    status: 'posted',
     posted_at: '2026-01-01T00:00:00Z',
     error: null,
   },
