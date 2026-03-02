@@ -30,6 +30,7 @@ from backend.schemas.crosspost import (
     CrossPostHistoryResponse,
     CrossPostRequest,
     CrossPostResponse,
+    CrossPostStatus,
     FacebookAuthorizeResponse,
     FacebookPagesResponse,
     FacebookSelectPageRequest,
@@ -189,7 +190,7 @@ async def crosspost_endpoint(
             post_path=body.post_path,
             platform=body.platforms[i],
             platform_id=r.platform_id or None,
-            status="posted" if r.success else "failed",
+            status=CrossPostStatus.POSTED if r.success else CrossPostStatus.FAILED,
             posted_at=None,
             error=r.error,
         )

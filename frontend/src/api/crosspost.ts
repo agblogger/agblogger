@@ -7,12 +7,14 @@ export interface SocialAccount {
   created_at: string
 }
 
+export type CrossPostStatus = 'pending' | 'posted' | 'failed'
+
 export interface CrossPostResult {
   id: number
   post_path: string
   platform: string
   platform_id: string | null
-  status: string
+  status: CrossPostStatus
   posted_at: string | null
   error: string | null
 }

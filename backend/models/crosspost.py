@@ -8,6 +8,7 @@ from sqlalchemy import ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.models.base import Base
+from backend.schemas.crosspost import CrossPostStatus
 
 if TYPE_CHECKING:
     from backend.models.user import User
@@ -45,7 +46,7 @@ class CrossPost(Base):
     post_path: Mapped[str] = mapped_column(Text, nullable=False)
     platform: Mapped[str] = mapped_column(String, nullable=False)
     platform_id: Mapped[str | None] = mapped_column(String, nullable=True)
-    status: Mapped[str] = mapped_column(String, nullable=False, default="pending")
+    status: Mapped[str] = mapped_column(String, nullable=False, default=CrossPostStatus.PENDING)
     posted_at: Mapped[str | None] = mapped_column(Text, nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[str] = mapped_column(Text, nullable=False)

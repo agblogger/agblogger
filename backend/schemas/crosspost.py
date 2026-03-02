@@ -2,7 +2,15 @@
 
 from __future__ import annotations
 
+from enum import StrEnum
+
 from pydantic import BaseModel, Field
+
+
+class CrossPostStatus(StrEnum):
+    PENDING = "pending"
+    POSTED = "posted"
+    FAILED = "failed"
 
 
 class SocialAccountCreate(BaseModel):
@@ -45,7 +53,7 @@ class CrossPostResponse(BaseModel):
     post_path: str
     platform: str
     platform_id: str | None = None
-    status: str
+    status: CrossPostStatus
     posted_at: str | None = None
     error: str | None = None
 

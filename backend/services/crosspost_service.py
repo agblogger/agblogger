@@ -15,6 +15,7 @@ from backend.crosspost.registry import get_poster, list_platforms
 from backend.exceptions import InternalServerError, PostNotFoundError
 from backend.models.crosspost import CrossPost, SocialAccount
 from backend.models.post import PostCache
+from backend.schemas.crosspost import CrossPostStatus
 from backend.services.crypto_service import decrypt_value, encrypt_value
 from backend.services.datetime_service import format_datetime, now_utc
 
@@ -178,7 +179,7 @@ async def crosspost(
                 user_id=actor.id,
                 post_path=post_path,
                 platform=platform_name,
-                status="failed",
+                status=CrossPostStatus.FAILED,
                 error=error_msg,
                 created_at=now,
             )
@@ -219,7 +220,7 @@ async def crosspost(
                     user_id=actor.id,
                     post_path=post_path,
                     platform=platform_name,
-                    status="failed",
+                    status=CrossPostStatus.FAILED,
                     error=error_msg,
                     created_at=now,
                 )
@@ -259,7 +260,7 @@ async def crosspost(
             post_path=post_path,
             platform=platform_name,
             platform_id=publish_result.platform_id or None,
-            status="posted" if publish_result.success else "failed",
+            status=CrossPostStatus.POSTED if publish_result.success else CrossPostStatus.FAILED,
             posted_at=now if publish_result.success else None,
             error=publish_result.error,
             created_at=now,
