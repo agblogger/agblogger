@@ -75,7 +75,7 @@ async def _persist_labels_and_commit(
             )
         raise HTTPException(status_code=500, detail="Failed to commit label changes") from exc
 
-    git_service.try_commit(commit_message)
+    await git_service.try_commit(commit_message)
 
 
 router = APIRouter(prefix="/api/labels", tags=["labels"])

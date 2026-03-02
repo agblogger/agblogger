@@ -192,7 +192,7 @@ async def create_test_client(settings: Settings) -> AsyncGenerator[AsyncClient]:
     app.state.content_manager = content_manager
 
     git_service = GitService(content_dir=settings.content_dir)
-    git_service.init_repo()
+    await git_service.init_repo()
     app.state.git_service = git_service
 
     # mutmut stats/test runs can perturb cryptography internals in instrumented modules.
@@ -302,10 +302,10 @@ def test_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
 
 
 @pytest.fixture
-def git_service(tmp_content_dir: Path) -> GitService:
+async def git_service(tmp_content_dir: Path) -> GitService:
     """Create a git service for the temporary content directory."""
     gs = GitService(tmp_content_dir)
-    gs.init_repo()
+    await gs.init_repo()
     return gs
 
 

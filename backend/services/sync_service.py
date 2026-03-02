@@ -344,7 +344,7 @@ class PostMergeResult:
     field_conflicts: list[str]
 
 
-def merge_post_file(
+async def merge_post_file(
     base: str | None,
     server: str,
     client: str,
@@ -399,7 +399,7 @@ def merge_post_file(
         merged_body = server_body
         body_conflicted = False
     else:
-        merged_body, body_conflicted = git_service.merge_file_content(
+        merged_body, body_conflicted = await git_service.merge_file_content(
             base_body, server_body, client_body
         )
         if body_conflicted:

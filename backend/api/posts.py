@@ -338,7 +338,7 @@ async def upload_post(
 
     await session.commit()
     await session.refresh(post)
-    git_service.try_commit(f"Upload post: {file_path}")
+    await git_service.try_commit(f"Upload post: {file_path}")
 
     return _build_post_detail(post, labels=post_data.labels, rendered_html=rendered_html)
 
@@ -408,7 +408,7 @@ async def upload_assets(
         uploaded.append(filename)
 
     if uploaded:
-        git_service.try_commit(f"Upload assets to {file_path}: {', '.join(uploaded)}")
+        await git_service.try_commit(f"Upload assets to {file_path}: {', '.join(uploaded)}")
 
     return {"uploaded": uploaded}
 
@@ -507,7 +507,7 @@ async def create_post_endpoint(
 
     await session.commit()
     await session.refresh(post)
-    git_service.try_commit(f"Create post: {file_path}")
+    await git_service.try_commit(f"Create post: {file_path}")
 
     return _build_post_detail(post, labels=body.labels, rendered_html=rendered_html)
 
@@ -685,7 +685,7 @@ async def update_post_endpoint(
 
     await session.commit()
     await session.refresh(existing)
-    git_service.try_commit(f"Update post: {existing.file_path}")
+    await git_service.try_commit(f"Update post: {existing.file_path}")
 
     return _build_post_detail(
         existing,
@@ -729,4 +729,4 @@ async def delete_post_endpoint(
     )
     await session.delete(existing)
     await session.commit()
-    git_service.try_commit(f"Delete post: {file_path}")
+    await git_service.try_commit(f"Delete post: {file_path}")

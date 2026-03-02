@@ -107,10 +107,10 @@ async def test_startup_backfilled_files_are_committed_and_cache_rebuilt(tmp_path
             assert (content_dir / "labels.toml").is_file()
 
             git_service = app.state.git_service
-            head = git_service.head_commit()
+            head = await git_service.head_commit()
             assert head is not None
-            assert git_service.show_file_at_commit(head, "index.toml") is not None
-            assert git_service.show_file_at_commit(head, "labels.toml") is not None
+            assert await git_service.show_file_at_commit(head, "index.toml") is not None
+            assert await git_service.show_file_at_commit(head, "labels.toml") is not None
 
             async with app.state.session_factory() as session:
                 result = await session.execute(select(func.count(PostCache.id)))

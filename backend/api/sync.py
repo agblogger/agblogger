@@ -147,7 +147,7 @@ async def sync_status(
         to_delete_local=plan.to_delete_local,
         to_delete_remote=plan.to_delete_remote,
         conflicts=conflicts,
-        server_commit=git_service.head_commit(),
+        server_commit=await git_service.head_commit(),
     )
 
 
@@ -282,9 +282,9 @@ async def _sync_commit_inner(
 
         if server_content is not None and server_content != client_text and is_post_md:
             # Get base version from git for three-way merge
-            base_content = _get_base_content(git_service, last_sync_commit, target_path)
+            base_content = await _get_base_content(git_service, last_sync_commit, target_path)
             try:
-                merge_result = merge_post_file(
+                merge_result = await merge_post_file(
                     base_content, server_content, client_text, git_service
                 )
             except (subprocess.CalledProcessError, OSError) as exc:
@@ -349,7 +349,7 @@ async def _sync_commit_inner(
     git_failed = False
     username = user.display_name or user.username
     try:
-        git_service.commit_all(f"Sync commit by {username}")
+        await git_service.commit_all(f"Sync commit by {username}")
     except subprocess.CalledProcessError as exc:
         logger.error(
             "Git commit failed during sync by %s (exit %d): %s",
@@ -398,13 +398,13 @@ async def _sync_commit_inner(
         status="error" if git_failed else "ok",
         files_synced=files_changed,
         warnings=all_warnings,
-        commit_hash=None if git_failed else git_service.head_commit(),
+        commit_hash=None if git_failed else await git_service.head_commit(),
         conflicts=conflicts,
         to_download=to_download,
     )
 
 
-def _get_base_content(
+async def _get_base_content(
     git_service: GitService,
     last_sync_commit: str | None,
     file_path: str,
@@ -415,10 +415,10 @@ def _get_base_content(
     """
     if last_sync_commit is None:
         return None
-    if not git_service.commit_exists(last_sync_commit):
+    if not await git_service.commit_exists(last_sync_commit):
         return None
     try:
-        return git_service.show_file_at_commit(last_sync_commit, file_path)
+        return await git_service.show_file_at_commit(last_sync_commit, file_path)
     except subprocess.CalledProcessError as exc:
         logger.error(
             "Git error retrieving base for %s at %s (exit %d): %s",

@@ -86,7 +86,7 @@ async def update_settings(
     except OSError as exc:
         logger.error("Failed to update site settings: %s", exc)
         raise HTTPException(status_code=500, detail="Failed to write site settings") from exc
-    git_service.try_commit("Update site settings")
+    await git_service.try_commit("Update site settings")
     return SiteSettingsResponse(
         title=cfg.title,
         description=cfg.description,
@@ -120,7 +120,7 @@ async def create_page_endpoint(
     except OSError as exc:
         logger.error("Failed to create page %s: %s", body.id, exc)
         raise HTTPException(status_code=500, detail="Failed to create page") from exc
-    git_service.try_commit(f"Create page: {body.id}")
+    await git_service.try_commit(f"Create page: {body.id}")
     return AdminPageConfig(
         id=page.id,
         title=page.title,
@@ -144,7 +144,7 @@ async def update_order(
     except OSError as exc:
         logger.error("Failed to update page order: %s", exc)
         raise HTTPException(status_code=500, detail="Failed to update page order") from exc
-    git_service.try_commit("Update page order")
+    await git_service.try_commit("Update page order")
     admin_pages = get_admin_pages(content_manager)
     return AdminPagesResponse(pages=[AdminPageConfig(**p) for p in admin_pages])
 
@@ -167,7 +167,7 @@ async def update_page_endpoint(
     except OSError as exc:
         logger.error("Failed to update page %s: %s", page_id, exc)
         raise HTTPException(status_code=500, detail="Failed to update page") from exc
-    git_service.try_commit(f"Update page: {page_id}")
+    await git_service.try_commit(f"Update page: {page_id}")
     return {"status": "ok"}
 
 
@@ -191,7 +191,7 @@ async def delete_page_endpoint(
     except OSError as exc:
         logger.error("Failed to delete page %s: %s", page_id, exc)
         raise HTTPException(status_code=500, detail="Failed to delete page") from exc
-    git_service.try_commit(f"Delete page: {page_id}")
+    await git_service.try_commit(f"Delete page: {page_id}")
 
 
 @router.put("/password")

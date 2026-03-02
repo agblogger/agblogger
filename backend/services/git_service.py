@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 import subprocess
@@ -20,14 +21,15 @@ class GitService:
     def __init__(self, content_dir: Path) -> None:
         self.content_dir = content_dir
 
-    def _run(
+    async def _run(
         self,
         *args: str,
         check: bool = True,
         capture_output: bool = True,
     ) -> subprocess.CompletedProcess[str]:
         """Run a git command in the content directory."""
-        return subprocess.run(
+        return await asyncio.to_thread(
+            subprocess.run,
             ["git", *args],
             cwd=self.content_dir,
             check=check,
@@ -36,20 +38,20 @@ class GitService:
             timeout=GIT_TIMEOUT_SECONDS,
         )
 
-    def init_repo(self) -> None:
+    async def init_repo(self) -> None:
         """Initialize a git repo if one doesn't exist, then commit any existing files."""
         try:
             if not (self.content_dir / ".git").exists():
-                self._run("init")
-                self._run("config", "user.email", "agblogger@localhost")
-                self._run("config", "user.name", "AgBlogger")
+                await self._run("init")
+                await self._run("config", "user.email", "agblogger@localhost")
+                await self._run("config", "user.name", "AgBlogger")
                 logger.info("Initialized git repo in %s", self.content_dir)
 
             # Commit any existing files so HEAD is valid
-            self._run("add", "-A")
-            result = self._run("diff", "--cached", "--quiet", check=False)
+            await self._run("add", "-A")
+            result = await self._run("diff", "--cached", "--quiet", check=False)
             if result.returncode != 0:
-                self._run("commit", "-m", "Initial commit")
+                await self._run("commit", "-m", "Initial commit")
                 logger.info("Created initial commit for existing content")
         except (subprocess.CalledProcessError, FileNotFoundError) as exc:
             logger.error(
@@ -60,23 +62,23 @@ class GitService:
             )
             raise
 
-    def commit_all(self, message: str) -> str | None:
+    async def commit_all(self, message: str) -> str | None:
         """Stage all changes and commit. Returns commit hash or None if nothing to commit."""
-        self._run("add", "-A")
-        result = self._run("diff", "--cached", "--quiet", check=False)
+        await self._run("add", "-A")
+        result = await self._run("diff", "--cached", "--quiet", check=False)
         if result.returncode == 0:
             return None
-        self._run("commit", "-m", message)
-        return self.head_commit()
+        await self._run("commit", "-m", message)
+        return await self.head_commit()
 
-    def try_commit(self, message: str) -> str | None:
+    async def try_commit(self, message: str) -> str | None:
         """Stage and commit, logging an error on failure instead of raising.
 
         Convenience wrapper around commit_all() for API endpoints where a git
         failure should not abort the request.
         """
         try:
-            return self.commit_all(message)
+            return await self.commit_all(message)
         except subprocess.CalledProcessError as exc:
             logger.error(
                 "Git commit failed (exit %d): %s — %s",
@@ -86,21 +88,21 @@ class GitService:
             )
             return None
 
-    def head_commit(self) -> str | None:
+    async def head_commit(self) -> str | None:
         """Return the current HEAD commit hash, or None if the repo has no commits."""
-        result = self._run("rev-parse", "HEAD", check=False)
+        result = await self._run("rev-parse", "HEAD", check=False)
         if result.returncode != 0:
             return None
         return result.stdout.strip()
 
-    def commit_exists(self, commit_hash: str) -> bool:
+    async def commit_exists(self, commit_hash: str) -> bool:
         """Check if a commit hash exists in the repo."""
         if not _COMMIT_RE.match(commit_hash):
             return False
-        result = self._run("cat-file", "-t", commit_hash, check=False)
+        result = await self._run("cat-file", "-t", commit_hash, check=False)
         return result.returncode == 0 and result.stdout.strip() == "commit"
 
-    def show_file_at_commit(self, commit_hash: str, file_path: str) -> str | None:
+    async def show_file_at_commit(self, commit_hash: str, file_path: str) -> str | None:
         """Return file content at a specific commit, or None if file doesn't exist there.
 
         Raises subprocess.CalledProcessError on unexpected git errors (corrupt repo,
@@ -109,7 +111,7 @@ class GitService:
         if not _COMMIT_RE.match(commit_hash):
             logger.warning("Rejected invalid commit hash %r for file %s", commit_hash, file_path)
             return None
-        result = self._run("show", f"{commit_hash}:{file_path}", check=False)
+        result = await self._run("show", f"{commit_hash}:{file_path}", check=False)
         if result.returncode == 0:
             return result.stdout
         stderr = result.stderr
@@ -122,7 +124,7 @@ class GitService:
             stderr=result.stderr,
         )
 
-    def merge_file_content(self, base: str, ours: str, theirs: str) -> tuple[str, bool]:
+    async def merge_file_content(self, base: str, ours: str, theirs: str) -> tuple[str, bool]:
         """Three-way merge of text content using git merge-file.
 
         Writes base/ours/theirs to temp files, runs git merge-file with -p flag
@@ -130,6 +132,9 @@ class GitService:
 
         Returns (merged_text, has_conflicts).
         """
+        return await asyncio.to_thread(self._merge_file_content_sync, base, ours, theirs)
+
+    def _merge_file_content_sync(self, base: str, ours: str, theirs: str) -> tuple[str, bool]:
         with tempfile.TemporaryDirectory() as td:
             tmp = Path(td)
             base_f = tmp / "base"

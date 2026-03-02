@@ -185,7 +185,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
     try:
         git_service = GitService(content_dir=settings.content_dir)
-        git_service.init_repo()
+        await git_service.init_repo()
         app.state.git_service = git_service
     except Exception as exc:
         logger.critical(
