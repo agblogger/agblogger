@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
+import LoadingSpinner from '@/components/LoadingSpinner'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Calendar, User, PenLine, Trash2 } from 'lucide-react'
-import { format, parseISO } from 'date-fns'
 import { fetchPost, deletePost } from '@/api/posts'
 import { useAuthStore } from '@/stores/authStore'
 import { HTTPError } from '@/api/client'
@@ -12,6 +12,7 @@ import ShareBar from '@/components/share/ShareBar'
 import { useRenderedHtml } from '@/hooks/useKatex'
 import TableOfContents from '@/components/posts/TableOfContents'
 import type { PostDetail } from '@/api/client'
+import { formatDate } from '@/utils/date'
 
 export default function PostPage() {
   const { '*': filePath } = useParams()
@@ -66,11 +67,7 @@ export default function PostPage() {
   }, [filePath])
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-24" role="status" aria-label="Loading">
-        <div className="w-6 h-6 border-2 border-accent/30 border-t-accent rounded-full animate-spin" />
-      </div>
-    )
+    return <LoadingSpinner />
   }
 
   if (loadError !== null || post === null) {
@@ -87,13 +84,7 @@ export default function PostPage() {
     )
   }
 
-  let dateStr = ''
-  try {
-    const parsed = parseISO(post.created_at.replace(' ', 'T').replace(/\+(\d{2})$/, '+$1:00'))
-    dateStr = format(parsed, 'MMMM d, yyyy')
-  } catch {
-    dateStr = post.created_at.split(' ')[0] ?? ''
-  }
+  const dateStr = formatDate(post.created_at, 'MMMM d, yyyy')
 
   return (
     <article className="animate-fade-in">

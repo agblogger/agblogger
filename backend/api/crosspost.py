@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import json as json_mod
 import logging
+import secrets
 from typing import Annotated
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import RedirectResponse
@@ -46,6 +50,43 @@ from backend.services.crosspost_service import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _generate_pkce_pair() -> tuple[str, str]:
+    """Generate a PKCE code verifier and S256 code challenge."""
+    unreserved = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"
+    code_verifier = "".join(secrets.choice(unreserved) for _ in range(64))
+    digest = hashlib.sha256(code_verifier.encode("ascii")).digest()
+    code_challenge = base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
+    return code_verifier, code_challenge
+
+
+async def _upsert_social_account(
+    session: AsyncSession,
+    user_id: int,
+    account_data: SocialAccountCreate,
+    secret_key: str,
+    platform: str,
+    account_name: str,
+) -> None:
+    """Create a social account, replacing an existing one with the same platform+name."""
+    try:
+        await create_social_account(session, user_id, account_data, secret_key)
+    except DuplicateAccountError:
+        existing = await get_social_accounts(session, user_id)
+        replaced = False
+        for acct in existing:
+            if acct.platform == platform and acct.account_name == account_name:
+                await delete_social_account(session, acct.id, user_id)
+                replaced = True
+                break
+        if not replaced:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"{platform.capitalize()} account already exists",
+            ) from None
+        await create_social_account(session, user_id, account_data, secret_key)
+
 
 router = APIRouter(prefix="/api/crosspost", tags=["crosspost"])
 
@@ -358,22 +399,14 @@ async def bluesky_callback(
         account_name=pending["handle"],
         credentials=credentials,
     )
-    try:
-        await create_social_account(session, pending["user_id"], account_data, settings.secret_key)
-    except DuplicateAccountError:
-        existing = await get_social_accounts(session, pending["user_id"])
-        replaced = False
-        for acct in existing:
-            if acct.platform == "bluesky" and acct.account_name == pending["handle"]:
-                await delete_social_account(session, acct.id, pending["user_id"])
-                replaced = True
-                break
-        if not replaced:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Bluesky account already exists",
-            ) from None
-        await create_social_account(session, pending["user_id"], account_data, settings.secret_key)
+    await _upsert_social_account(
+        session,
+        pending["user_id"],
+        account_data,
+        settings.secret_key,
+        "bluesky",
+        pending["handle"],
+    )
     return RedirectResponse(url=f"{base_url}/admin", status_code=303)
 
 
@@ -399,24 +432,12 @@ async def mastodon_authorize(
             detail="Invalid instance URL",
         )
 
-    import hashlib
-    import secrets
-
     base_url = settings.bluesky_client_url.rstrip("/")
     redirect_uri = f"{base_url}/api/crosspost/mastodon/callback"
 
-    # PKCE: generate code_verifier and code_challenge (S256)
-    unreserved = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"
-    code_verifier = "".join(secrets.choice(unreserved) for _ in range(64))
-    code_challenge_bytes = hashlib.sha256(code_verifier.encode("ascii")).digest()
-    import base64
-
-    code_challenge = base64.urlsafe_b64encode(code_challenge_bytes).rstrip(b"=").decode("ascii")
-
-    # Random state parameter
+    code_verifier, code_challenge = _generate_pkce_pair()
     oauth_state = secrets.token_hex(32)
 
-    # Dynamically register the app with the Mastodon instance
     import httpx
 
     from backend.crosspost.ssrf import ssrf_safe_client
@@ -473,9 +494,6 @@ async def mastodon_authorize(
             "redirect_uri": redirect_uri,
         },
     )
-
-    # Build authorization URL
-    from urllib.parse import urlencode
 
     auth_params = urlencode(
         {
@@ -563,22 +581,14 @@ async def mastodon_callback(
         account_name=account_name,
         credentials=credentials,
     )
-    try:
-        await create_social_account(session, pending["user_id"], account_data, settings.secret_key)
-    except DuplicateAccountError:
-        existing = await get_social_accounts(session, pending["user_id"])
-        replaced = False
-        for acct_record in existing:
-            if acct_record.platform == "mastodon" and acct_record.account_name == account_name:
-                await delete_social_account(session, acct_record.id, pending["user_id"])
-                replaced = True
-                break
-        if not replaced:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Mastodon account already exists",
-            ) from None
-        await create_social_account(session, pending["user_id"], account_data, settings.secret_key)
+    await _upsert_social_account(
+        session,
+        pending["user_id"],
+        account_data,
+        settings.secret_key,
+        "mastodon",
+        account_name,
+    )
 
     base_url = settings.bluesky_client_url.rstrip("/")
     return RedirectResponse(url=f"{base_url}/admin", status_code=303)
@@ -602,20 +612,10 @@ async def x_authorize(
             detail="OAuth not configured: BLUESKY_CLIENT_URL not set",
         )
 
-    import base64
-    import hashlib
-    import secrets
-    from urllib.parse import urlencode
-
     base_url = settings.bluesky_client_url.rstrip("/")
     redirect_uri = f"{base_url}/api/crosspost/x/callback"
 
-    # PKCE
-    unreserved = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"
-    code_verifier = "".join(secrets.choice(unreserved) for _ in range(64))
-    code_challenge_bytes = hashlib.sha256(code_verifier.encode("ascii")).digest()
-    code_challenge = base64.urlsafe_b64encode(code_challenge_bytes).rstrip(b"=").decode("ascii")
-
+    code_verifier, code_challenge = _generate_pkce_pair()
     oauth_state = secrets.token_hex(32)
 
     state_store = request.app.state.x_oauth_state
@@ -655,8 +655,6 @@ async def x_callback(
     error: Annotated[str | None, Query()] = None,
 ) -> RedirectResponse:
     """Handle X OAuth callback: exchange code for tokens, store account."""
-    from urllib.parse import urlencode
-
     base_url = (settings.bluesky_client_url or "").rstrip("/")
 
     if error is not None:
@@ -725,22 +723,14 @@ async def x_callback(
         account_name=account_name,
         credentials=credentials,
     )
-    try:
-        await create_social_account(session, pending["user_id"], account_data, settings.secret_key)
-    except DuplicateAccountError:
-        existing = await get_social_accounts(session, pending["user_id"])
-        replaced = False
-        for acct in existing:
-            if acct.platform == "x" and acct.account_name == account_name:
-                await delete_social_account(session, acct.id, pending["user_id"])
-                replaced = True
-                break
-        if not replaced:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="X account already exists",
-            ) from None
-        await create_social_account(session, pending["user_id"], account_data, settings.secret_key)
+    await _upsert_social_account(
+        session,
+        pending["user_id"],
+        account_data,
+        settings.secret_key,
+        "x",
+        account_name,
+    )
 
     return RedirectResponse(url=f"{base_url}/admin", status_code=303)
 
@@ -764,9 +754,6 @@ async def facebook_authorize(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="OAuth not configured: BLUESKY_CLIENT_URL not set",
         )
-
-    import secrets
-    from urllib.parse import urlencode
 
     base_url = settings.bluesky_client_url.rstrip("/")
     redirect_uri = f"{base_url}/api/crosspost/facebook/callback"
@@ -811,13 +798,11 @@ async def facebook_callback(
     Auto-selects if there is only one page; otherwise stores pages
     for selection via the select-page endpoint.
     """
-    from urllib.parse import urlencode as _urlencode
-
     base_url = (settings.bluesky_client_url or "").rstrip("/")
 
     if error is not None:
         logger.warning("Facebook OAuth error: %s", error)
-        error_params = _urlencode({"oauth_error": error})
+        error_params = urlencode({"oauth_error": error})
         return RedirectResponse(url=f"{base_url}/admin?{error_params}", status_code=303)
 
     if code is None:
@@ -833,8 +818,6 @@ async def facebook_callback(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or expired OAuth state",
         )
-
-    import secrets
 
     import httpx as httpx_client
 
@@ -892,32 +875,14 @@ async def facebook_callback(
             account_name=account_name,
             credentials=credentials,
         )
-        try:
-            await create_social_account(
-                session,
-                pending["user_id"],
-                account_data,
-                settings.secret_key,
-            )
-        except DuplicateAccountError:
-            existing = await get_social_accounts(session, pending["user_id"])
-            replaced = False
-            for acct in existing:
-                if acct.platform == "facebook" and acct.account_name == account_name:
-                    await delete_social_account(session, acct.id, pending["user_id"])
-                    replaced = True
-                    break
-            if not replaced:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail="Facebook account already exists",
-                ) from None
-            await create_social_account(
-                session,
-                pending["user_id"],
-                account_data,
-                settings.secret_key,
-            )
+        await _upsert_social_account(
+            session,
+            pending["user_id"],
+            account_data,
+            settings.secret_key,
+            "facebook",
+            account_name,
+        )
         return RedirectResponse(url=f"{base_url}/admin", status_code=303)
 
     # Multiple pages: store in temp state for page selection
@@ -930,7 +895,7 @@ async def facebook_callback(
         },
     )
 
-    page_params = _urlencode({"fb_pages": page_selection_state})
+    page_params = urlencode({"fb_pages": page_selection_state})
     return RedirectResponse(url=f"{base_url}/admin?{page_params}", status_code=303)
 
 
@@ -978,22 +943,14 @@ async def facebook_select_page(
         account_name=account_name,
         credentials=credentials,
     )
-    try:
-        await create_social_account(session, user.id, account_data, settings.secret_key)
-    except DuplicateAccountError:
-        existing = await get_social_accounts(session, user.id)
-        replaced = False
-        for acct in existing:
-            if acct.platform == "facebook" and acct.account_name == account_name:
-                await delete_social_account(session, acct.id, user.id)
-                replaced = True
-                break
-        if not replaced:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Facebook account already exists",
-            ) from None
-        await create_social_account(session, user.id, account_data, settings.secret_key)
+    await _upsert_social_account(
+        session,
+        user.id,
+        account_data,
+        settings.secret_key,
+        "facebook",
+        account_name,
+    )
     return FacebookSelectPageResponse(account_name=account_name)
 
 

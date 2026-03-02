@@ -13,17 +13,13 @@ import {
 } from '@/api/crosspost'
 import type { SocialAccount, FacebookPage } from '@/api/crosspost'
 import { HTTPError } from '@/api/client'
+import { parseErrorDetail } from '@/api/parseError'
 import PlatformIcon from '@/components/crosspost/PlatformIcon'
 
 async function extractErrorDetail(err: unknown, fallback: string): Promise<string> {
   if (err instanceof HTTPError) {
     if (err.response.status === 401) return 'Session expired. Please log in again.'
-    try {
-      const body: { detail?: string } = await err.response.json()
-      if (body.detail !== undefined && body.detail !== '') return body.detail
-    } catch {
-      // Response body not JSON - use fallback
-    }
+    return parseErrorDetail(err.response, fallback)
   }
   return fallback
 }

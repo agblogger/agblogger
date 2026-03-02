@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import LoadingSpinner from '@/components/LoadingSpinner'
 import { Link } from 'react-router-dom'
 import { Tag, Settings } from 'lucide-react'
 
@@ -78,11 +79,7 @@ function LabelListView() {
   }, [])
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-24" role="status" aria-label="Loading">
-        <div className="w-6 h-6 border-2 border-accent/30 border-t-accent rounded-full animate-spin" />
-      </div>
-    )
+    return <LoadingSpinner />
   }
 
   if (error !== null) {

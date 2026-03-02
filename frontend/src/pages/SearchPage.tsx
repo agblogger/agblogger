@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import { Search } from 'lucide-react'
-import { format, parseISO } from 'date-fns'
 import { searchPosts } from '@/api/posts'
 import type { SearchResult } from '@/api/client'
 import { useRenderedHtml } from '@/hooks/useKatex'
+import { formatDate } from '@/utils/date'
+import LoadingSpinner from '@/components/LoadingSpinner'
 
 export default function SearchPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -79,9 +80,7 @@ export default function SearchPage() {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-16" role="status" aria-label="Loading">
-          <div className="w-6 h-6 border-2 border-accent/30 border-t-accent rounded-full animate-spin" />
-        </div>
+        <LoadingSpinner />
       ) : error !== null ? (
         <p className="text-red-600 text-center py-16">{error}</p>
       ) : results.length === 0 ? (
@@ -97,15 +96,6 @@ export default function SearchPage() {
       )}
     </div>
   )
-}
-
-function formatDate(dateStr: string): string {
-  try {
-    const parsed = parseISO(dateStr.replace(' ', 'T').replace(/([+-])(\d{2})$/, '$1$2:00'))
-    return format(parsed, 'MMM d, yyyy')
-  } catch {
-    return dateStr.split(' ')[0] ?? ''
-  }
 }
 
 function SearchResultItem({ result, index }: { result: SearchResult; index: number }) {

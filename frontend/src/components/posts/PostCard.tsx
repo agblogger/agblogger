@@ -1,9 +1,9 @@
 import DOMPurify from 'dompurify'
 import { Link } from 'react-router-dom'
-import { format, parseISO } from 'date-fns'
 import type { PostSummary } from '@/api/client'
 import LabelChip from '@/components/labels/LabelChip'
 import { useRenderedHtml } from '@/hooks/useKatex'
+import { formatDate } from '@/utils/date'
 
 interface PostCardProps {
   post: PostSummary
@@ -16,13 +16,7 @@ export default function PostCard({ post, index = 0 }: PostCardProps) {
   const rawExcerpt = useRenderedHtml(post.rendered_excerpt)
   const sanitizedExcerpt = rawExcerpt !== '' ? DOMPurify.sanitize(rawExcerpt) : ''
 
-  let dateStr = ''
-  try {
-    const parsed = parseISO(post.created_at.replace(' ', 'T').replace(/\+(\d{2})$/, '+$1:00'))
-    dateStr = format(parsed, 'MMM d, yyyy')
-  } catch {
-    dateStr = post.created_at.split(' ')[0] ?? ''
-  }
+  const dateStr = formatDate(post.created_at)
 
   return (
     <article

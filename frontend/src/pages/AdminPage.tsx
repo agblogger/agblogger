@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 
 import { useAuthStore } from '@/stores/authStore'
+import LoadingSpinner from '@/components/LoadingSpinner'
 import { useSiteStore } from '@/stores/siteStore'
 import { HTTPError } from '@/api/client'
 import api from '@/api/client'
@@ -439,11 +440,7 @@ export default function AdminPage() {
   }
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-24" role="status" aria-label="Loading">
-        <div className="w-6 h-6 border-2 border-accent/30 border-t-accent rounded-full animate-spin" />
-      </div>
-    )
+    return <LoadingSpinner />
   }
 
   if (loadError !== null) {

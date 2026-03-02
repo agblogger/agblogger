@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import re
@@ -113,6 +114,48 @@ async def _delete_post_fts(
             post_id,
             exc,
         )
+
+
+async def _render_post(content: str, file_path: str) -> tuple[str, str]:
+    """Render excerpt and full HTML for a post in parallel, with URL rewriting."""
+    md_excerpt = generate_markdown_excerpt(content)
+
+    async def _render_excerpt() -> str:
+        if not md_excerpt:
+            return ""
+        raw = await render_markdown_excerpt(md_excerpt)
+        return rewrite_relative_urls(raw, file_path)
+
+    async def _render_html() -> str:
+        raw = await render_markdown(content)
+        return rewrite_relative_urls(raw, file_path)
+
+    rendered_excerpt, rendered_html = await asyncio.gather(
+        _render_excerpt(),
+        _render_html(),
+    )
+    return rendered_excerpt, rendered_html
+
+
+def _build_post_detail(
+    post: PostCache,
+    *,
+    labels: list[str],
+    rendered_html: str,
+) -> PostDetail:
+    """Build a PostDetail response from a cache row."""
+    return PostDetail(
+        id=post.id,
+        file_path=post.file_path,
+        title=post.title,
+        author=post.author,
+        created_at=format_iso(post.created_at),
+        modified_at=format_iso(post.modified_at),
+        is_draft=post.is_draft,
+        rendered_excerpt=post.rendered_excerpt,
+        labels=labels,
+        rendered_html=rendered_html,
+    )
 
 
 @router.get("", response_model=PostListResponse)
@@ -250,9 +293,7 @@ async def upload_post(
 
     # Catch pandoc rendering failures and clean up assets
     try:
-        md_excerpt = generate_markdown_excerpt(post_data.content)
-        rendered_excerpt = await render_markdown_excerpt(md_excerpt) if md_excerpt else ""
-        rendered_html = await render_markdown(post_data.content)
+        rendered_excerpt, rendered_html = await _render_post(post_data.content, file_path)
     except RuntimeError as exc:
         logger.error("Pandoc rendering failed during upload of %s: %s", file_path, exc)
         for asset in written_assets:
@@ -260,8 +301,6 @@ async def upload_post(
         if post_dir.exists() and not any(post_dir.iterdir()):
             post_dir.rmdir()
         raise HTTPException(status_code=502, detail="Markdown rendering failed") from exc
-    rendered_excerpt = rewrite_relative_urls(rendered_excerpt, file_path)
-    rendered_html = rewrite_relative_urls(rendered_html, file_path)
 
     serialized = serialize_post(post_data)
     post = PostCache(
@@ -301,18 +340,7 @@ async def upload_post(
     await session.refresh(post)
     git_service.try_commit(f"Upload post: {file_path}")
 
-    return PostDetail(
-        id=post.id,
-        file_path=post.file_path,
-        title=post.title,
-        author=post.author,
-        created_at=format_iso(post.created_at),
-        modified_at=format_iso(post.modified_at),
-        is_draft=post.is_draft,
-        rendered_excerpt=post.rendered_excerpt,
-        labels=post_data.labels,
-        rendered_html=rendered_html,
-    )
+    return _build_post_detail(post, labels=post_data.labels, rendered_html=rendered_html)
 
 
 @router.get("/{file_path:path}/edit", response_model=PostEditResponse)
@@ -392,19 +420,17 @@ async def get_post_endpoint(
     user: Annotated[User | None, Depends(get_current_user)],
 ) -> PostDetail:
     """Get a single post by file path."""
-    stmt = select(PostCache).where(PostCache.file_path == file_path)
-    result = await session.execute(stmt)
-    cached_post = result.scalar_one_or_none()
-    if cached_post is None:
-        raise HTTPException(status_code=404, detail="Post not found")
-
     post = await get_post(session, file_path)
     if post is None:
         raise HTTPException(status_code=404, detail="Post not found")
-    if cached_post.is_draft:
+    if post.is_draft:
         if user is None:
             raise HTTPException(status_code=404, detail="Post not found")
-        if cached_post.author_username != user.username:
+        # Check ownership via a lightweight query on the cache row
+        stmt = select(PostCache.author_username).where(PostCache.file_path == file_path)
+        result = await session.execute(stmt)
+        author_username = result.scalar_one_or_none()
+        if author_username != user.username:
             raise HTTPException(status_code=404, detail="Post not found")
     return post
 
@@ -444,14 +470,10 @@ async def create_post_endpoint(
 
     # Catch pandoc rendering failures
     try:
-        md_excerpt = generate_markdown_excerpt(post_data.content)
-        rendered_excerpt = await render_markdown_excerpt(md_excerpt) if md_excerpt else ""
-        rendered_html = await render_markdown(post_data.content)
+        rendered_excerpt, rendered_html = await _render_post(post_data.content, file_path)
     except RuntimeError as exc:
         logger.error("Pandoc rendering failed for new post %s: %s", file_path, exc)
         raise HTTPException(status_code=502, detail="Markdown rendering failed") from exc
-    rendered_excerpt = rewrite_relative_urls(rendered_excerpt, file_path)
-    rendered_html = rewrite_relative_urls(rendered_html, file_path)
 
     serialized = serialize_post(post_data)
     post = PostCache(
@@ -487,18 +509,7 @@ async def create_post_endpoint(
     await session.refresh(post)
     git_service.try_commit(f"Create post: {file_path}")
 
-    return PostDetail(
-        id=post.id,
-        file_path=post.file_path,
-        title=post.title,
-        author=post.author,
-        created_at=format_iso(post.created_at),
-        modified_at=format_iso(post.modified_at),
-        is_draft=post.is_draft,
-        rendered_excerpt=post.rendered_excerpt,
-        labels=body.labels,
-        rendered_html=rendered_html,
-    )
+    return _build_post_detail(post, labels=body.labels, rendered_html=rendered_html)
 
 
 @router.put("/{file_path:path}", response_model=PostDetail)
@@ -551,10 +562,12 @@ async def update_post_endpoint(
     serialized = serialize_post(post_data)
     md_excerpt = generate_markdown_excerpt(post_data.content)
 
-    # Catch pandoc rendering failures — render once, reuse for URL rewriting
+    # Render excerpt and full HTML in parallel; catch pandoc failures
     try:
-        raw_rendered_excerpt = await render_markdown_excerpt(md_excerpt) if md_excerpt else ""
-        raw_rendered_html = await render_markdown(post_data.content)
+        raw_rendered_excerpt, raw_rendered_html = await asyncio.gather(
+            render_markdown_excerpt(md_excerpt) if md_excerpt else asyncio.sleep(0, result=""),
+            render_markdown(post_data.content),
+        )
     except RuntimeError as exc:
         logger.error("Pandoc rendering failed for post %s: %s", file_path, exc)
         raise HTTPException(status_code=502, detail="Markdown rendering failed") from exc
@@ -674,15 +687,8 @@ async def update_post_endpoint(
     await session.refresh(existing)
     git_service.try_commit(f"Update post: {existing.file_path}")
 
-    return PostDetail(
-        id=existing.id,
-        file_path=existing.file_path,
-        title=existing.title,
-        author=existing.author,
-        created_at=format_iso(existing.created_at),
-        modified_at=format_iso(existing.modified_at),
-        is_draft=existing.is_draft,
-        rendered_excerpt=existing.rendered_excerpt,
+    return _build_post_detail(
+        existing,
         labels=body.labels,
         rendered_html=existing.rendered_html or "",
     )

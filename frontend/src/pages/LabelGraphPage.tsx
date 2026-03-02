@@ -20,6 +20,7 @@ import {
 import '@xyflow/react/dist/style.css'
 import Dagre from '@dagrejs/dagre'
 import { Search, GitFork } from 'lucide-react'
+import LoadingSpinner from '@/components/LoadingSpinner'
 import { useAuthStore } from '@/stores/authStore'
 import { fetchLabel, fetchLabelGraph, updateLabel } from '@/api/labels'
 import { HTTPError } from '@/api/client'
@@ -270,11 +271,7 @@ export default function LabelGraphPage({ viewToggle }: { viewToggle: React.React
     : { edgesReconnectable: false }
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-24" role="status" aria-label="Loading">
-        <div className="w-6 h-6 border-2 border-accent/30 border-t-accent rounded-full animate-spin" />
-      </div>
-    )
+    return <LoadingSpinner />
   }
 
   if (error !== null) {
