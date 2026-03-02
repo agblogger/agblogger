@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING
 from unittest.mock import patch
+
+import pytest
 
 from backend.services.git_service import GIT_TIMEOUT_SECONDS, GitService
 
 if TYPE_CHECKING:
+    import subprocess
     from pathlib import Path
 
 
@@ -75,6 +79,70 @@ class TestGitServiceCommit:
         assert new_hash is not None
         assert await gs.show_file_at_commit(old_hash, "to_delete.txt") == "will be deleted"
         assert await gs.show_file_at_commit(new_hash, "to_delete.txt") is None
+
+    async def test_commit_serializes_concurrent_writers(self, tmp_path: Path) -> None:
+        class ControlledGitService(GitService):
+            def __init__(self, content_dir: Path) -> None:
+                super().__init__(content_dir)
+                self.first_add_released = asyncio.Event()
+                self.first_add_paused = asyncio.Event()
+                self.second_writer_reached_git = asyncio.Event()
+                self.first_writer_task: asyncio.Task[str | None] | None = None
+                self.pause_commit_add = False
+
+            async def _run(
+                self,
+                *args: str,
+                check: bool = True,
+                capture_output: bool = True,
+            ) -> subprocess.CompletedProcess[str]:
+                result = await super()._run(
+                    *args,
+                    check=check,
+                    capture_output=capture_output,
+                )
+                current_task = asyncio.current_task()
+                if (
+                    self.pause_commit_add
+                    and args == ("add", "-A")
+                    and not self.first_add_paused.is_set()
+                ):
+                    if current_task is not None:
+                        self.first_writer_task = current_task
+                    self.first_add_paused.set()
+                    await self.first_add_released.wait()
+                elif (
+                    self.pause_commit_add
+                    and self.first_add_paused.is_set()
+                    and current_task is not self.first_writer_task
+                    and not self.first_add_released.is_set()
+                ):
+                    self.second_writer_reached_git.set()
+                return result
+
+        gs = ControlledGitService(tmp_path)
+        (tmp_path / "init.txt").write_text("init")
+        await gs.init_repo()
+        gs.pause_commit_add = True
+
+        (tmp_path / "first.txt").write_text("first")
+        first_writer_task = asyncio.create_task(gs.commit_all("first commit"))
+        await asyncio.wait_for(gs.first_add_paused.wait(), timeout=1)
+
+        (tmp_path / "second.txt").write_text("second")
+        second_writer_task = asyncio.create_task(gs.commit_all("second commit"))
+
+        with pytest.raises(asyncio.TimeoutError):
+            await asyncio.wait_for(gs.second_writer_reached_git.wait(), timeout=0.1)
+
+        gs.first_add_released.set()
+        first_hash, second_hash = await asyncio.gather(first_writer_task, second_writer_task)
+
+        assert first_hash is not None
+        assert second_hash is not None
+        assert await gs.show_file_at_commit(first_hash, "first.txt") == "first"
+        assert await gs.show_file_at_commit(first_hash, "second.txt") is None
+        assert await gs.show_file_at_commit(second_hash, "second.txt") == "second"
 
 
 class TestGitServiceShow:

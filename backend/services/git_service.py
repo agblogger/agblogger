@@ -20,6 +20,7 @@ class GitService:
 
     def __init__(self, content_dir: Path) -> None:
         self.content_dir = content_dir
+        self._write_lock = asyncio.Lock()
 
     async def _run(
         self,
@@ -41,18 +42,19 @@ class GitService:
     async def init_repo(self) -> None:
         """Initialize a git repo if one doesn't exist, then commit any existing files."""
         try:
-            if not (self.content_dir / ".git").exists():
-                await self._run("init")
-                await self._run("config", "user.email", "agblogger@localhost")
-                await self._run("config", "user.name", "AgBlogger")
-                logger.info("Initialized git repo in %s", self.content_dir)
+            async with self._write_lock:
+                if not (self.content_dir / ".git").exists():
+                    await self._run("init")
+                    await self._run("config", "user.email", "agblogger@localhost")
+                    await self._run("config", "user.name", "AgBlogger")
+                    logger.info("Initialized git repo in %s", self.content_dir)
 
-            # Commit any existing files so HEAD is valid
-            await self._run("add", "-A")
-            result = await self._run("diff", "--cached", "--quiet", check=False)
-            if result.returncode != 0:
-                await self._run("commit", "-m", "Initial commit")
-                logger.info("Created initial commit for existing content")
+                # Commit any existing files so HEAD is valid
+                await self._run("add", "-A")
+                result = await self._run("diff", "--cached", "--quiet", check=False)
+                if result.returncode != 0:
+                    await self._run("commit", "-m", "Initial commit")
+                    logger.info("Created initial commit for existing content")
         except (subprocess.CalledProcessError, FileNotFoundError) as exc:
             logger.error(
                 "Failed to initialize git repo in %s: %s. "
@@ -64,12 +66,13 @@ class GitService:
 
     async def commit_all(self, message: str) -> str | None:
         """Stage all changes and commit. Returns commit hash or None if nothing to commit."""
-        await self._run("add", "-A")
-        result = await self._run("diff", "--cached", "--quiet", check=False)
-        if result.returncode == 0:
-            return None
-        await self._run("commit", "-m", message)
-        return await self.head_commit()
+        async with self._write_lock:
+            await self._run("add", "-A")
+            result = await self._run("diff", "--cached", "--quiet", check=False)
+            if result.returncode == 0:
+                return None
+            await self._run("commit", "-m", message)
+            return await self.head_commit()
 
     async def try_commit(self, message: str) -> str | None:
         """Stage and commit, logging an error on failure instead of raising.

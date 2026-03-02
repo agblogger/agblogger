@@ -62,7 +62,7 @@ The server's `content/` directory is a git repository. Every file-modifying oper
 - The merge base for three-way conflict resolution during sync
 - The `server_commit` hash returned in sync status, used by clients to track their last sync point
 
-`GitService` (`backend/services/git_service.py`) wraps the git CLI via `subprocess.run`. It is synchronous (git operations are fast for small repos). The repo is initialized on application startup with `git init` if `.git/` doesn't exist.
+`GitService` (`backend/services/git_service.py`) wraps the git CLI with async calls delegated through `asyncio.to_thread(subprocess.run, ...)`. Repository write operations (`init_repo()`, `commit_all()`) are serialized with a per-repository async lock so concurrent content mutations cannot interleave `git add`, `git diff --cached`, and `git commit`. The repo is initialized on application startup with `git init` if `.git/` doesn't exist.
 
 ## Hybrid Merge
 
