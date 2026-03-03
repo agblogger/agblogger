@@ -108,7 +108,7 @@ class SyncClient:
     def login(self, username: str, password: str) -> str:
         """Login and return access token."""
         resp = self.client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": username, "password": password},
         )
         resp.raise_for_status()
@@ -359,7 +359,7 @@ def main() -> None:
         # Create client and login
         temp_client = httpx.Client(base_url=server_url, timeout=30.0)
         login_resp = temp_client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": username, "password": password},
         )
         if login_resp.status_code != 200:

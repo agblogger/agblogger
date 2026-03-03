@@ -32,7 +32,7 @@ class TestMastodonAuthorize:
         test_settings.admin_password = "admin"
         async with create_test_client(test_settings) as client:
             login_resp = await client.post(
-                "/api/auth/login",
+                "/api/auth/token-login",
                 json={"username": "admin", "password": "admin"},
             )
             token = login_resp.json()["access_token"]
@@ -52,7 +52,7 @@ class TestMastodonAuthorize:
         test_settings.admin_password = "admin"
         async with create_test_client(test_settings) as client:
             login_resp = await client.post(
-                "/api/auth/login",
+                "/api/auth/token-login",
                 json={"username": "admin", "password": "admin"},
             )
             token = login_resp.json()["access_token"]
@@ -228,7 +228,7 @@ class TestXAuthorize:
         test_settings.admin_password = "admin"
         async with create_test_client(test_settings) as client:
             login_resp = await client.post(
-                "/api/auth/login",
+                "/api/auth/token-login",
                 json={"username": "admin", "password": "admin"},
             )
             token = login_resp.json()["access_token"]
@@ -245,7 +245,7 @@ class TestXAuthorize:
         test_settings.admin_password = "admin"
         async with create_test_client(test_settings) as client:
             login_resp = await client.post(
-                "/api/auth/login",
+                "/api/auth/token-login",
                 json={"username": "admin", "password": "admin"},
             )
             token = login_resp.json()["access_token"]
@@ -272,7 +272,7 @@ class TestXAuthorize:
         test_settings.admin_password = "admin"
         async with create_test_client(test_settings) as client:
             login_resp = await client.post(
-                "/api/auth/login",
+                "/api/auth/token-login",
                 json={"username": "admin", "password": "admin"},
             )
             token = login_resp.json()["access_token"]
@@ -379,7 +379,7 @@ class TestFacebookAuthorize:
         test_settings.admin_password = "admin"
         async with create_test_client(test_settings) as client:
             login_resp = await client.post(
-                "/api/auth/login",
+                "/api/auth/token-login",
                 json={"username": "admin", "password": "admin"},
             )
             token = login_resp.json()["access_token"]
@@ -398,7 +398,7 @@ class TestFacebookAuthorize:
         test_settings.admin_password = "admin"
         async with create_test_client(test_settings) as client:
             login_resp = await client.post(
-                "/api/auth/login",
+                "/api/auth/token-login",
                 json={"username": "admin", "password": "admin"},
             )
             token = login_resp.json()["access_token"]
@@ -417,7 +417,7 @@ class TestFacebookAuthorize:
         test_settings.admin_password = "admin"
         async with create_test_client(test_settings) as client:
             login_resp = await client.post(
-                "/api/auth/login",
+                "/api/auth/token-login",
                 json={"username": "admin", "password": "admin"},
             )
             token = login_resp.json()["access_token"]
@@ -494,7 +494,7 @@ class TestFacebookPages:
         test_settings.admin_password = "admin"
         async with create_test_client(test_settings) as client:
             login_resp = await client.post(
-                "/api/auth/login",
+                "/api/auth/token-login",
                 json={"username": "admin", "password": "admin"},
             )
             token = login_resp.json()["access_token"]
@@ -527,7 +527,7 @@ class TestFacebookSelectPage:
         test_settings.admin_password = "admin"
         async with create_test_client(test_settings) as client:
             login_resp = await client.post(
-                "/api/auth/login",
+                "/api/auth/token-login",
                 json={"username": "admin", "password": "admin"},
             )
             token = login_resp.json()["access_token"]

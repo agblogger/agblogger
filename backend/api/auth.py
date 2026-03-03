@@ -30,11 +30,13 @@ from backend.schemas.auth import (
     PersonalAccessTokenResponse,
     RefreshRequest,
     RegisterRequest,
+    SessionAuthResponse,
     TokenResponse,
     UserResponse,
 )
 from backend.services.auth_service import (
     authenticate_user,
+    create_access_token,
     create_invite_code,
     create_personal_access_token,
     create_tokens,
@@ -122,6 +124,15 @@ def _enforce_login_origin(request: Request, settings: Settings) -> None:
         )
 
 
+def _reject_browser_originated_token_login(request: Request) -> None:
+    """Bearer token login is reserved for non-browser clients."""
+    if request.headers.get("Origin") is not None or request.headers.get("Referer") is not None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Browser-originated requests must use session login",
+        )
+
+
 def _check_rate_limit(
     limiter: InMemoryRateLimiter,
     key: str,
@@ -151,18 +162,13 @@ def _record_failure_and_check(
     _check_rate_limit(limiter, key, max_failures, window_seconds, detail)
 
 
-@router.post("/login", response_model=TokenResponse)
-async def login(
+async def _authenticate_login_request(
     body: LoginRequest,
     request: Request,
-    response: Response,
     session: Annotated[AsyncSession, Depends(get_session)],
     settings: Annotated[Settings, Depends(get_settings)],
-) -> TokenResponse:
-    """Login with username and password."""
-    if settings.auth_enforce_login_origin:
-        _enforce_login_origin(request, settings)
-
+) -> User:
+    """Authenticate a login request with shared rate-limiting."""
     limiter: InMemoryRateLimiter = request.app.state.rate_limiter
     client_key = f"login:{_get_client_ip(request)}:{body.username.lower()}"
     _check_rate_limit(
@@ -188,12 +194,43 @@ async def login(
         )
 
     limiter.clear(client_key)
+    return user
+
+
+@router.post("/login", response_model=SessionAuthResponse)
+async def login(
+    body: LoginRequest,
+    request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> SessionAuthResponse:
+    """Create a cookie-authenticated browser session."""
+    if settings.auth_enforce_login_origin:
+        _enforce_login_origin(request, settings)
+
+    user = await _authenticate_login_request(body, request, session, settings)
     access_token, refresh_token = await create_tokens(session, user, settings)
     csrf_token = _set_auth_cookies(response, settings, access_token, refresh_token)
+    return SessionAuthResponse(csrf_token=csrf_token)
+
+
+@router.post("/token-login", response_model=TokenResponse)
+async def token_login(
+    body: LoginRequest,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> TokenResponse:
+    """Issue a bearer access token for non-browser clients."""
+    _reject_browser_originated_token_login(request)
+    user = await _authenticate_login_request(body, request, session, settings)
     return TokenResponse(
-        access_token=access_token,
-        refresh_token=refresh_token,
-        csrf_token=csrf_token,
+        access_token=create_access_token(
+            {"sub": str(user.id), "username": user.username, "is_admin": user.is_admin},
+            settings.secret_key,
+            settings.access_token_expire_minutes,
+        )
     )
 
 
@@ -268,14 +305,14 @@ async def register(
     )
 
 
-@router.post("/refresh", response_model=TokenResponse)
+@router.post("/refresh", response_model=SessionAuthResponse)
 async def refresh(
     request: Request,
     response: Response,
     session: Annotated[AsyncSession, Depends(get_session)],
     settings: Annotated[Settings, Depends(get_settings)],
     body: RefreshRequest | None = None,
-) -> TokenResponse:
+) -> SessionAuthResponse:
     """Refresh access token using refresh token."""
     limiter: InMemoryRateLimiter = request.app.state.rate_limiter
     client_key = f"refresh:{_get_client_ip(request)}"
@@ -312,11 +349,7 @@ async def refresh(
     limiter.clear(client_key)
     access_token, refresh_token = tokens
     csrf_token = _set_auth_cookies(response, settings, access_token, refresh_token)
-    return TokenResponse(
-        access_token=access_token,
-        refresh_token=refresh_token,
-        csrf_token=csrf_token,
-    )
+    return SessionAuthResponse(csrf_token=csrf_token)
 
 
 @router.post("/logout", status_code=204)

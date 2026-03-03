@@ -68,7 +68,10 @@ async def client(app_settings: Settings) -> AsyncGenerator[AsyncClient]:
 
 async def login(client: AsyncClient) -> str:
     """Login as admin and return access token."""
-    resp = await client.post("/api/auth/login", json={"username": "admin", "password": "admin123"})
+    resp = await client.post(
+        "/api/auth/token-login",
+        json={"username": "admin", "password": "admin123"},
+    )
     return resp.json()["access_token"]
 
 

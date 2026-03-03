@@ -104,7 +104,7 @@ class TestCrosspostHistoryAuth:
     @pytest.mark.asyncio
     async def test_history_with_auth_works(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -154,13 +154,14 @@ class TestAuthLogout:
             json={"username": "admin", "password": "admin123"},
         )
         assert login_resp.status_code == 200
-        access_token = login_resp.json()["access_token"]
-        refresh_token = login_resp.json()["refresh_token"]
+        csrf_token = login_resp.json()["csrf_token"]
+        refresh_token = client.cookies.get("refresh_token")
+        assert refresh_token is not None
 
         logout_resp = await client.post(
             "/api/auth/logout",
             json={"refresh_token": refresh_token},
-            headers={"Authorization": f"Bearer {access_token}"},
+            headers={"X-CSRF-Token": csrf_token},
         )
         assert logout_resp.status_code == 204
 
@@ -185,7 +186,7 @@ class TestLabelCreateEmptyNames:
     @pytest.mark.asyncio
     async def test_create_label_empty_names_rejected(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -200,7 +201,7 @@ class TestLabelCreateEmptyNames:
     @pytest.mark.asyncio
     async def test_create_label_whitespace_names_rejected(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]

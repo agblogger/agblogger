@@ -67,7 +67,7 @@ async function refreshAccessToken(): Promise<boolean> {
         headers,
         json: {},
       })
-      .json<TokenResponse>()
+      .json<SessionAuthResponse>()
     primeCsrfToken(response.csrf_token)
     return true
   } catch (err) {
@@ -208,10 +208,12 @@ export interface PageResponse {
   rendered_html: string
 }
 
+export interface SessionAuthResponse {
+  csrf_token: string
+}
+
 export interface TokenResponse {
   access_token: string
-  refresh_token: string
-  csrf_token: string
   token_type: string
 }
 

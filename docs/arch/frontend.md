@@ -13,7 +13,7 @@ Uses `createBrowserRouter` (data router) with `RouterProvider` for full react-ro
 | `/login` | LoginPage | Login form |
 | `/labels` | LabelsPage | Label list/graph with segmented control toggle (auth: graph edge create/delete) |
 | `/labels/:labelId` | LabelPostsPage | Posts filtered by label |
-| `/labels/:labelId/settings` | LabelSettingsPage | Label names, parents, delete (auth required) |
+| `/labels/:labelId/settings` | LabelSettingsPage | Label names, parents, delete (admin-only mutations) |
 | `/editor/*` | EditorPage | Structured metadata bar + split-pane markdown editor |
 | `/admin` | AdminPage | Admin panel: site settings, pages, password (admin required) |
 
@@ -34,7 +34,7 @@ Two Zustand stores:
 - **`authStore`** — User state (`user`, `isLoading`, `isLoggingOut`, `isInitialized`, `error`), login/logout, session check via `checkAuth()`.
 - **`siteStore`** — Site configuration fetched on app load.
 
-The `ky` HTTP client uses cookie-based authentication (`credentials: 'include'`). For unsafe methods (POST/PUT/PATCH/DELETE), it ensures an in-memory CSRF token is available, fetching it from `GET /api/auth/csrf` when necessary, then injects it as the `X-CSRF-Token` header. On 401 responses, the client auto-attempts a token refresh via `POST /api/auth/refresh`, updates the cached CSRF token from the refresh response, and retries the original request.
+The `ky` HTTP client uses cookie-based authentication (`credentials: 'include'`). Browser login relies on `HttpOnly` cookies and keeps only the returned `csrf_token` in memory; it does not store bearer tokens from JSON. For unsafe methods (POST/PUT/PATCH/DELETE), it ensures an in-memory CSRF token is available, fetching it from `GET /api/auth/csrf` when necessary, then injects it as the `X-CSRF-Token` header. On 401 responses, the client auto-attempts a token refresh via `POST /api/auth/refresh`, updates the cached CSRF token from the refresh response, and retries the original request.
 
 ## Custom Hooks
 

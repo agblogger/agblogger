@@ -69,7 +69,7 @@ class TestCrossPostHistoryCorruptStatus:
     async def test_history_with_unknown_status_returns_200(self, client: AsyncClient) -> None:
         """A cross_posts row with an invalid status value should not crash the endpoint."""
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -121,7 +121,7 @@ class TestUpsertSocialAccountRaceCondition:
         from backend.schemas.crosspost import SocialAccountCreate
 
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         assert login_resp.status_code == 200

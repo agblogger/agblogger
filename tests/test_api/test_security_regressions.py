@@ -88,7 +88,10 @@ async def client(app_settings: Settings) -> AsyncGenerator[AsyncClient]:
 
 async def _login(client: AsyncClient, username: str, password: str) -> str:
     """Login helper returning the access token."""
-    resp = await client.post("/api/auth/login", json={"username": username, "password": password})
+    resp = await client.post(
+        "/api/auth/token-login",
+        json={"username": username, "password": password},
+    )
     assert resp.status_code == 200
     return resp.json()["access_token"]
 
@@ -311,6 +314,23 @@ class TestPostMutationAuthorization:
         assert delete_resp.status_code == 403
 
     @pytest.mark.asyncio
+    async def test_non_admin_cannot_mutate_labels(self, client: AsyncClient) -> None:
+        await _register(client, "writer4", "writer4@test.com", "writer4-password")
+        token_resp = await client.post(
+            "/api/auth/token-login",
+            json={"username": "writer4", "password": "writer4-password"},
+        )
+        token = token_resp.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        create_resp = await client.post(
+            "/api/labels",
+            json={"id": "locked-down", "names": ["Locked Down"]},
+            headers=headers,
+        )
+        assert create_resp.status_code == 403
+
+    @pytest.mark.asyncio
     async def test_non_admin_cannot_upload_posts_or_assets_or_edit_payload(
         self, client: AsyncClient
     ) -> None:
@@ -360,6 +380,29 @@ class TestRegistrationPasswordPolicy:
             },
         )
         assert resp.status_code == 201
+
+
+class TestAdminPasswordPolicy:
+    @pytest.mark.asyncio
+    async def test_admin_password_change_rejects_password_shorter_than_12(
+        self, client: AsyncClient
+    ) -> None:
+        token_resp = await client.post(
+            "/api/auth/token-login",
+            json={"username": "admin", "password": "admin123"},
+        )
+        token = token_resp.json()["access_token"]
+
+        resp = await client.put(
+            "/api/admin/password",
+            json={
+                "current_password": "admin123",
+                "new_password": "shortpass11",
+                "confirm_password": "shortpass11",
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 422
 
 
 class TestPageTraversalGuard:

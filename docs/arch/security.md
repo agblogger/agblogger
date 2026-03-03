@@ -37,13 +37,19 @@ Auth cookies are set with:
 
 Set in `backend/api/auth.py:_set_auth_cookies()`, cleared on logout via `_clear_auth_cookies()`.
 
+Browser session endpoints do not return bearer credentials in JSON. `POST /api/auth/login` and `POST /api/auth/refresh` return only a `csrf_token`, while `POST /api/auth/token-login` returns a bearer access token without setting cookies.
+
 ### CSRF Protection
 
-Stateless CSRF protection is implemented as HTTP middleware (`backend/main.py`). For unsafe methods (POST/PUT/PATCH/DELETE) on `/api/*` paths with cookie-based auth, the `X-CSRF-Token` request header must match the expected HMAC-derived token for the current `access_token` cookie. The frontend fetches the token from `GET /api/auth/csrf`, caches it in memory, and refreshes that cache from login/refresh responses. Comparison uses `secrets.compare_digest()` for timing-safe equality. Login and Bearer-authenticated requests are exempt.
+Stateless CSRF protection is implemented as HTTP middleware (`backend/main.py`). For unsafe methods (POST/PUT/PATCH/DELETE) on `/api/*` paths with cookie-based auth, the `X-CSRF-Token` request header must match the expected HMAC-derived token for the current `access_token` cookie. The frontend fetches the token from `GET /api/auth/csrf`, caches it in memory, and refreshes that cache from login/refresh responses. Comparison uses `secrets.compare_digest()` for timing-safe equality. Session login, token login, and Bearer-authenticated requests are exempt.
 
 ### Login Origin Enforcement
 
 Login requests with an `Origin` or `Referer` header are validated against the app's own URL and configured CORS origins (`backend/api/auth.py:_enforce_login_origin()`). Requests from unknown origins receive 403. Configurable via `auth_enforce_login_origin` (default True).
+
+### Token-Login Browser Rejection
+
+`POST /api/auth/token-login` rejects any request carrying `Origin` or `Referer`. This prevents browser contexts from bypassing the cookie-only session model and receiving bearer credentials directly in JSON.
 
 ### Rate Limiting
 
@@ -78,11 +84,15 @@ Protected endpoints use FastAPI dependency injection (`backend/api/deps.py`):
 |------|--------|
 | Unauthenticated | Read published posts, labels, pages, search |
 | Authenticated | Above + cross-post, user-scoped actions |
-| Admin | Above + post CRUD, sync, admin panel |
+| Admin | Above + post CRUD, label mutations, sync, admin panel |
 
 ### Draft Visibility
 
-Draft posts and their co-located assets are visible only to their author. Ownership is enforced with the stable `author_username` field in post front matter and `PostCache`, with limited legacy fallback only while rebuilding older content that lacks the field. The content endpoint (`backend/api/content.py:_check_draft_access()`) queries the post cache to verify draft status and owner match. Non-authors receive 404 (not 403) to avoid information disclosure.
+Draft posts and their co-located assets are visible only to their author. Ownership is enforced with the stable `author_username` field in post front matter and `PostCache`, with limited legacy fallback only while rebuilding older content that lacks the field. The content endpoint (`backend/api/content.py:_check_draft_access()`) authorizes against the resolved canonical path, not just the requested path, so renamed-directory symlinks cannot expose draft assets. Deleting a directory-backed draft removes its co-located assets even when `delete_assets=false`, preventing orphaned draft assets from becoming public after deletion. Non-authors receive 404 (not 403) to avoid information disclosure.
+
+### Password Rotation
+
+Admin password changes require a minimum length of 12 characters and revoke all stored refresh tokens and personal access tokens for that user. This ensures password rotation invalidates long-lived credentials instead of only changing the bcrypt hash.
 
 ## Content Security Policy (CSP)
 

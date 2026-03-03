@@ -81,7 +81,10 @@ async def _check_draft_access(
     result = await session.execute(stmt)
     post = result.scalar_one_or_none()
 
-    if post is None or not post.is_draft:
+    if post is None:
+        return
+
+    if not post.is_draft:
         return
 
     # Draft post — require author match
@@ -111,6 +114,7 @@ async def serve_content_file(
     to the post's author. All other content is publicly accessible.
     """
     resolved = _validate_path(file_path, settings.content_dir)
+    resolved_relative_path = resolved.relative_to(settings.content_dir.resolve()).as_posix()
 
     if not resolved.is_file():
         raise HTTPException(
@@ -119,7 +123,7 @@ async def serve_content_file(
         )
 
     # Check draft access for files under posts/ directories
-    await _check_draft_access(file_path, session, user)
+    await _check_draft_access(resolved_relative_path, session, user)
 
     # Determine content type
     content_type, _ = mimetypes.guess_type(str(resolved))

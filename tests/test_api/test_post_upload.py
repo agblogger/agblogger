@@ -38,7 +38,10 @@ async def client(upload_settings: Settings) -> AsyncGenerator[AsyncClient]:
 
 
 async def login(client: AsyncClient) -> str:
-    resp = await client.post("/api/auth/login", json={"username": "admin", "password": "admin123"})
+    resp = await client.post(
+        "/api/auth/token-login",
+        json={"username": "admin", "password": "admin123"},
+    )
     return resp.json()["access_token"]
 
 
@@ -215,21 +218,17 @@ class TestAssetUploadAuthorization:
         assert resp.status_code == 201
         file_path = resp.json()["file_path"]
 
-        # Register another user (need CSRF token since admin login set cookies)
-        csrf_resp = await client.get("/api/auth/csrf")
-        assert csrf_resp.status_code == 200
-        csrf_token = csrf_resp.json()["csrf_token"]
+        # Register another user. The admin used bearer auth, so no CSRF session is present.
         resp = await client.post(
             "/api/auth/register",
             json={"username": "other", "email": "other@test.com", "password": "password1234"},
-            headers={"X-CSRF-Token": csrf_token},
         )
         assert resp.status_code == 201
         resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "other", "password": "password1234"},
-            headers={"X-CSRF-Token": csrf_token},
         )
+        assert resp.status_code == 200
         other_token = resp.json()["access_token"]
 
         # Other user tries to upload assets to admin's post

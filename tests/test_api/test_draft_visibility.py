@@ -22,6 +22,8 @@ if TYPE_CHECKING:
 
     from httpx import AsyncClient
 
+from pathlib import Path
+
 
 @pytest.fixture
 def draft_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
@@ -77,7 +79,7 @@ async def client(draft_settings: Settings) -> AsyncGenerator[AsyncClient]:
 async def _login(client: AsyncClient, username: str, password: str) -> str:
     """Login and return access token."""
     resp = await client.post(
-        "/api/auth/login",
+        "/api/auth/token-login",
         json={"username": username, "password": password},
     )
     assert resp.status_code == 200
@@ -227,3 +229,82 @@ class TestDraftContentFileVisibility:
         """Assets for published posts remain publicly accessible."""
         resp = await client.get("/api/content/posts/published-with-asset/banner.png")
         assert resp.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_renamed_draft_asset_old_symlink_path_returns_404_when_unauthenticated(
+        self, client: AsyncClient
+    ) -> None:
+        """Old symlink paths for renamed drafts must not bypass draft asset checks."""
+        token = await _login(client, "admin", "admin123")
+        headers = _auth_headers(token)
+
+        create_resp = await client.post(
+            "/api/posts",
+            json={
+                "title": "Private Rename",
+                "body": "Secret draft",
+                "labels": [],
+                "is_draft": True,
+            },
+            headers=headers,
+        )
+        assert create_resp.status_code == 201
+        original_path = create_resp.json()["file_path"]
+
+        asset_resp = await client.post(
+            f"/api/posts/{original_path}/assets",
+            files={"files": ("secret.txt", b"draft-secret", "text/plain")},
+            headers=headers,
+        )
+        assert asset_resp.status_code == 200
+
+        rename_resp = await client.put(
+            f"/api/posts/{original_path}",
+            json={
+                "title": "Private Rename Updated",
+                "body": "Secret draft",
+                "labels": [],
+                "is_draft": True,
+            },
+            headers=headers,
+        )
+        assert rename_resp.status_code == 200
+
+        old_asset_path = f"{Path(original_path).parent}/secret.txt"
+        leaked_resp = await client.get(f"/api/content/{old_asset_path}")
+        assert leaked_resp.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_orphaned_draft_asset_returns_404_after_default_delete(
+        self, client: AsyncClient
+    ) -> None:
+        """Deleting only a draft index must not leave its assets publicly readable."""
+        token = await _login(client, "admin", "admin123")
+        headers = _auth_headers(token)
+
+        create_resp = await client.post(
+            "/api/posts",
+            json={
+                "title": "Private Delete",
+                "body": "Secret draft",
+                "labels": [],
+                "is_draft": True,
+            },
+            headers=headers,
+        )
+        assert create_resp.status_code == 201
+        file_path = create_resp.json()["file_path"]
+
+        asset_resp = await client.post(
+            f"/api/posts/{file_path}/assets",
+            files={"files": ("secret.txt", b"draft-secret", "text/plain")},
+            headers=headers,
+        )
+        assert asset_resp.status_code == 200
+
+        delete_resp = await client.delete(f"/api/posts/{file_path}", headers=headers)
+        assert delete_resp.status_code == 204
+
+        asset_path = f"{Path(file_path).parent}/secret.txt"
+        leaked_resp = await client.get(f"/api/content/{asset_path}")
+        assert leaked_resp.status_code == 404

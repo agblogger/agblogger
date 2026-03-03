@@ -725,8 +725,13 @@ async def delete_post_endpoint(
     existing_post_data = content_manager.read_post(file_path)
     old_content = existing_post_data.content if existing_post_data else ""
 
+    delete_draft_directory_assets = existing.is_draft and file_path.endswith("/index.md")
+
     try:
-        content_manager.delete_post(file_path, delete_assets=delete_assets)
+        content_manager.delete_post(
+            file_path,
+            delete_assets=delete_assets or delete_draft_directory_assets,
+        )
     except OSError as exc:
         logger.error("Failed to delete post file %s: %s", file_path, exc)
         raise HTTPException(status_code=500, detail="Failed to delete post file") from exc

@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any
 import bcrypt
 import jwt
 from jwt import InvalidTokenError
-from sqlalchemy import select
+from sqlalchemy import delete, select, update
 
 from backend.models.user import InviteCode, PersonalAccessToken, RefreshToken, User
 from backend.services.datetime_service import format_iso, now_utc
@@ -158,6 +158,19 @@ async def revoke_refresh_token(session: AsyncSession, refresh_token_value: str) 
     await session.delete(token)
     await session.commit()
     return True
+
+
+async def revoke_user_credentials(session: AsyncSession, user_id: int) -> None:
+    """Revoke all refresh tokens and personal access tokens for a user."""
+    await session.execute(delete(RefreshToken).where(RefreshToken.user_id == user_id))
+    await session.execute(
+        update(PersonalAccessToken)
+        .where(
+            PersonalAccessToken.user_id == user_id,
+            PersonalAccessToken.revoked_at.is_(None),
+        )
+        .values(revoked_at=format_iso(now_utc()))
+    )
 
 
 def _parse_iso_datetime(value: str) -> datetime | None:

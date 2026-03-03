@@ -89,3 +89,27 @@ class TestSyncDeleteCounting:
         # The total should be 1 (0 uploads + 0 downloads + 1 delete), not 2.
         assert "1 file(s) synced" in captured.out
         assert "0 conflict(s)" in captured.out
+
+
+class TestSyncClientLogin:
+    def test_login_uses_token_login_endpoint(self, tmp_path: Path) -> None:
+        content_dir = tmp_path / "content"
+        content_dir.mkdir()
+
+        response = MagicMock()
+        response.raise_for_status = MagicMock()
+        response.json.return_value = {"access_token": "cli-token", "token_type": "bearer"}
+
+        client = SyncClient.__new__(SyncClient)
+        client.content_dir = content_dir
+        client.server_url = "http://localhost:8000"
+        client.client = MagicMock()
+        client.client.post.return_value = response
+
+        token = client.login("admin", "admin123")
+
+        assert token == "cli-token"
+        client.client.post.assert_called_once_with(
+            "/api/auth/token-login",
+            json={"username": "admin", "password": "admin123"},
+        )

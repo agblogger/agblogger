@@ -534,7 +534,7 @@ describe('AdminPage', () => {
     expect(screen.getByText('New passwords do not match.')).toBeInTheDocument()
   })
 
-  it('validates minimum 8 characters', async () => {
+  it('validates minimum 12 characters', async () => {
     setupLoadSuccess()
     const user = userEvent.setup()
     renderAdmin()
@@ -548,7 +548,7 @@ describe('AdminPage', () => {
     await user.type(screen.getByLabelText(/Confirm New Password/), 'short')
     await user.click(screen.getByRole('button', { name: /change password/i }))
 
-    expect(screen.getByText('New password must be at least 8 characters.')).toBeInTheDocument()
+    expect(screen.getByText('New password must be at least 12 characters.')).toBeInTheDocument()
   })
 
   it('changes password successfully and clears fields', async () => {
@@ -562,8 +562,8 @@ describe('AdminPage', () => {
     })
 
     await user.type(screen.getByLabelText(/Current Password/), 'oldpassword')
-    await user.type(screen.getByLabelText(/^New Password/), 'newpassword123')
-    await user.type(screen.getByLabelText(/Confirm New Password/), 'newpassword123')
+    await user.type(screen.getByLabelText(/^New Password/), 'newpassword1234')
+    await user.type(screen.getByLabelText(/Confirm New Password/), 'newpassword1234')
     await user.click(screen.getByRole('button', { name: /change password/i }))
 
     await waitFor(() => {
@@ -590,8 +590,8 @@ describe('AdminPage', () => {
     })
 
     await user.type(screen.getByLabelText(/Current Password/), 'wrongpass')
-    await user.type(screen.getByLabelText(/^New Password/), 'newpassword123')
-    await user.type(screen.getByLabelText(/Confirm New Password/), 'newpassword123')
+    await user.type(screen.getByLabelText(/^New Password/), 'newpassword1234')
+    await user.type(screen.getByLabelText(/Confirm New Password/), 'newpassword1234')
     await user.click(screen.getByRole('button', { name: /change password/i }))
 
     await waitFor(() => {
@@ -612,8 +612,8 @@ describe('AdminPage', () => {
     })
 
     await user.type(screen.getByLabelText(/Current Password/), 'oldpassword')
-    await user.type(screen.getByLabelText(/^New Password/), 'newpassword123')
-    await user.type(screen.getByLabelText(/Confirm New Password/), 'newpassword123')
+    await user.type(screen.getByLabelText(/^New Password/), 'newpassword1234')
+    await user.type(screen.getByLabelText(/Confirm New Password/), 'newpassword1234')
     await user.click(screen.getByRole('button', { name: /change password/i }))
 
     await waitFor(() => {
@@ -702,7 +702,7 @@ describe('AdminPage', () => {
     renderAdmin()
 
     await waitFor(() => {
-      expect(screen.getByText(/at least 8 characters/i)).toBeInTheDocument()
+      expect(screen.getByText(/at least 12 characters/i)).toBeInTheDocument()
     })
   })
 })

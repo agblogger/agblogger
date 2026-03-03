@@ -64,12 +64,12 @@ class TestRegistrationPolicy:
 
     @pytest.mark.asyncio
     async def test_invite_code_allows_registration(self, client: AsyncClient) -> None:
-        login_resp = await client.post(
-            "/api/auth/login",
+        token_login_resp = await client.post(
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
-        assert login_resp.status_code == 200
-        access_token = login_resp.json()["access_token"]
+        assert token_login_resp.status_code == 200
+        access_token = token_login_resp.json()["access_token"]
 
         invite_resp = await client.post(
             "/api/auth/invites",
@@ -78,7 +78,12 @@ class TestRegistrationPolicy:
         )
         assert invite_resp.status_code == 201
         invite_code = invite_resp.json()["invite_code"]
-        csrf_token = login_resp.json()["csrf_token"]
+        session_login_resp = await client.post(
+            "/api/auth/login",
+            json={"username": "admin", "password": "admin123"},
+        )
+        assert session_login_resp.status_code == 200
+        csrf_token = session_login_resp.json()["csrf_token"]
 
         register_resp = await client.post(
             "/api/auth/register",
@@ -144,6 +149,64 @@ class TestCsrf:
         )
 
     @pytest.mark.asyncio
+    async def test_session_login_response_omits_bearer_tokens(self, client: AsyncClient) -> None:
+        login_resp = await client.post(
+            "/api/auth/login",
+            json={"username": "admin", "password": "admin123"},
+        )
+        assert login_resp.status_code == 200
+        data = login_resp.json()
+        assert "access_token" not in data
+        assert "refresh_token" not in data
+        assert data["csrf_token"]
+
+    @pytest.mark.asyncio
+    async def test_token_login_returns_access_token_without_setting_cookies(
+        self, client: AsyncClient
+    ) -> None:
+        token_resp = await client.post(
+            "/api/auth/token-login",
+            json={"username": "admin", "password": "admin123"},
+        )
+        assert token_resp.status_code == 200
+        data = token_resp.json()
+        assert data["access_token"]
+        assert data["token_type"] == "bearer"
+        set_cookie_values = token_resp.headers.get_list("set-cookie")
+        assert set_cookie_values == []
+
+    @pytest.mark.asyncio
+    async def test_token_login_rejects_browser_originated_requests(
+        self, client: AsyncClient
+    ) -> None:
+        token_resp = await client.post(
+            "/api/auth/token-login",
+            json={"username": "admin", "password": "admin123"},
+            headers={"Origin": "http://testserver"},
+        )
+        assert token_resp.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_session_refresh_response_omits_bearer_tokens(self, client: AsyncClient) -> None:
+        login_resp = await client.post(
+            "/api/auth/login",
+            json={"username": "admin", "password": "admin123"},
+        )
+        assert login_resp.status_code == 200
+        csrf_token = login_resp.json()["csrf_token"]
+
+        refresh_resp = await client.post(
+            "/api/auth/refresh",
+            json={},
+            headers={"X-CSRF-Token": csrf_token},
+        )
+        assert refresh_resp.status_code == 200
+        data = refresh_resp.json()
+        assert "access_token" not in data
+        assert "refresh_token" not in data
+        assert data["csrf_token"]
+
+    @pytest.mark.asyncio
     async def test_cookie_authenticated_post_requires_csrf(self, client: AsyncClient) -> None:
         login_resp = await client.post(
             "/api/auth/login",
@@ -171,7 +234,7 @@ class TestPersonalAccessTokens:
     @pytest.mark.asyncio
     async def test_pat_can_authenticate(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         access_token = login_resp.json()["access_token"]
@@ -225,7 +288,7 @@ class TestPATManagement:
     async def test_list_pats_returns_created_tokens(self, client: AsyncClient) -> None:
         """Create 2 PATs, list them, verify both appear with correct names."""
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         access_token = login_resp.json()["access_token"]
@@ -262,7 +325,7 @@ class TestPATManagement:
     async def test_revoke_pat_succeeds(self, client: AsyncClient) -> None:
         """Create PAT, revoke it, verify it no longer works for authentication."""
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         access_token = login_resp.json()["access_token"]
@@ -302,7 +365,7 @@ class TestPATManagement:
     async def test_revoke_nonexistent_pat_returns_404(self, client: AsyncClient) -> None:
         """DELETE /api/auth/pats/99999 returns 404."""
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         access_token = login_resp.json()["access_token"]
@@ -323,11 +386,16 @@ class TestInviteCodeReuse:
     async def test_invite_code_reuse_rejected(self, client: AsyncClient) -> None:
         """Using the same invite code twice should be rejected."""
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         access_token = login_resp.json()["access_token"]
         headers = {"Authorization": f"Bearer {access_token}"}
+        session_login_resp = await client.post(
+            "/api/auth/login",
+            json={"username": "admin", "password": "admin123"},
+        )
+        csrf_token = session_login_resp.json()["csrf_token"]
 
         # Create an invite
         invite_resp = await client.post(
@@ -337,7 +405,6 @@ class TestInviteCodeReuse:
         )
         assert invite_resp.status_code == 201
         invite_code = invite_resp.json()["invite_code"]
-        csrf_token = login_resp.json()["csrf_token"]
 
         # Register first user with the invite
         reg1 = await client.post(
@@ -366,13 +433,66 @@ class TestInviteCodeReuse:
         assert reg2.status_code == 403
 
 
+class TestPasswordRotation:
+    @pytest.mark.asyncio
+    async def test_password_change_revokes_refresh_tokens_and_pats(
+        self, client: AsyncClient
+    ) -> None:
+        session_login_resp = await client.post(
+            "/api/auth/login",
+            json={"username": "admin", "password": "admin123"},
+        )
+        assert session_login_resp.status_code == 200
+        csrf_token = session_login_resp.json()["csrf_token"]
+
+        token_login_resp = await client.post(
+            "/api/auth/token-login",
+            json={"username": "admin", "password": "admin123"},
+        )
+        assert token_login_resp.status_code == 200
+        access_token = token_login_resp.json()["access_token"]
+        headers = {"Authorization": f"Bearer {access_token}"}
+
+        pat_resp = await client.post(
+            "/api/auth/pats",
+            json={"name": "rotation-test", "expires_days": 30},
+            headers=headers,
+        )
+        assert pat_resp.status_code == 201
+        pat_token = pat_resp.json()["token"]
+
+        change_resp = await client.put(
+            "/api/admin/password",
+            json={
+                "current_password": "admin123",
+                "new_password": "admin-password-456",
+                "confirm_password": "admin-password-456",
+            },
+            headers=headers,
+        )
+        assert change_resp.status_code == 200
+
+        refresh_resp = await client.post(
+            "/api/auth/refresh",
+            json={},
+            headers={"X-CSRF-Token": csrf_token},
+        )
+        assert refresh_resp.status_code == 401
+
+        pat_me_resp = await client.get(
+            "/api/auth/me",
+            headers={"Authorization": f"Bearer {pat_token}"},
+        )
+        assert pat_me_resp.status_code == 401
+
+
 class TestOldPasswordAfterChange:
     @pytest.mark.asyncio
     async def test_old_password_stops_working_after_change(self, client: AsyncClient) -> None:
         """After changing password, the old password should no longer work."""
         # Login with original password
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         assert login_resp.status_code == 200

@@ -29,12 +29,16 @@ class RegisterRequest(BaseModel):
 
 
 class TokenResponse(BaseModel):
-    """JWT token pair response."""
+    """Bearer access token response for non-browser clients."""
 
     access_token: str
-    refresh_token: str
-    csrf_token: str
     token_type: Literal["bearer"] = Field(default_factory=_default_token_type)
+
+
+class SessionAuthResponse(BaseModel):
+    """Cookie-authenticated session response."""
+
+    csrf_token: str
 
 
 class CsrfTokenResponse(BaseModel):

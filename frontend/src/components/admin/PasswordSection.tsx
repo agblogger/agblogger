@@ -35,8 +35,8 @@ export default function PasswordSection({ busy, onSaving }: PasswordSectionProps
       setPasswordError('New passwords do not match.')
       return
     }
-    if (newPassword.length < 8) {
-      setPasswordError('New password must be at least 8 characters.')
+    if (newPassword.length < 12) {
+      setPasswordError('New password must be at least 12 characters.')
       return
     }
     setSavingPassword(true)
@@ -140,7 +140,7 @@ export default function PasswordSection({ busy, onSaving }: PasswordSectionProps
                      focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/20
                      disabled:opacity-50"
           />
-          <p className="text-xs text-muted mt-1">At least 8 characters.</p>
+          <p className="text-xs text-muted mt-1">At least 12 characters.</p>
         </div>
 
         <div>

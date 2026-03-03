@@ -126,8 +126,9 @@ class TestAuth:
         )
         assert resp.status_code == 200
         data = resp.json()
-        assert "access_token" in data
-        assert "refresh_token" in data
+        assert data["csrf_token"]
+        assert "access_token" not in data
+        assert "refresh_token" not in data
 
     @pytest.mark.asyncio
     async def test_login_bad_password(self, client: AsyncClient) -> None:
@@ -141,7 +142,7 @@ class TestAuth:
     async def test_me_authenticated(self, client: AsyncClient) -> None:
         # Login first
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -210,7 +211,7 @@ class TestSync:
     @pytest.mark.asyncio
     async def test_sync_status(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -238,7 +239,7 @@ class TestSync:
     @pytest.mark.asyncio
     async def test_sync_download(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -253,7 +254,7 @@ class TestSync:
     @pytest.mark.asyncio
     async def test_sync_download_nonexistent(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -267,7 +268,7 @@ class TestSync:
     @pytest.mark.asyncio
     async def test_sync_commit(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -286,7 +287,7 @@ class TestSync:
     @pytest.mark.asyncio
     async def test_sync_commit_normalizes_frontmatter(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -316,7 +317,7 @@ class TestSync:
     @pytest.mark.asyncio
     async def test_sync_commit_warns_on_unrecognized_fields(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -340,7 +341,7 @@ class TestSync:
     @pytest.mark.asyncio
     async def test_sync_commit_no_files(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -357,7 +358,7 @@ class TestSync:
     @pytest.mark.asyncio
     async def test_sync_commit_deletes_remote_files(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -387,7 +388,7 @@ class TestCrosspost:
     @pytest.mark.asyncio
     async def test_list_accounts_empty(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -402,7 +403,7 @@ class TestCrosspost:
     @pytest.mark.asyncio
     async def test_create_account(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -424,7 +425,7 @@ class TestCrosspost:
     @pytest.mark.asyncio
     async def test_crosspost_history_empty(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -441,7 +442,7 @@ class TestRender:
     @pytest.mark.asyncio
     async def test_render_preview(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -459,7 +460,7 @@ class TestRender:
     @pytest.mark.asyncio
     async def test_render_preview_with_file_path(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -481,7 +482,7 @@ class TestRender:
         self, client: AsyncClient
     ) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -509,7 +510,7 @@ class TestPostCRUD:
     @pytest.mark.asyncio
     async def test_create_post_authenticated(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -543,7 +544,7 @@ class TestPostCRUD:
     @pytest.mark.asyncio
     async def test_update_post_authenticated(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -564,7 +565,7 @@ class TestPostCRUD:
     @pytest.mark.asyncio
     async def test_update_nonexistent_post_returns_404(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -584,7 +585,7 @@ class TestPostCRUD:
     @pytest.mark.asyncio
     async def test_delete_post_authenticated(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -611,7 +612,7 @@ class TestPostCRUD:
     @pytest.mark.asyncio
     async def test_delete_nonexistent_post_returns_404(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -625,7 +626,7 @@ class TestPostCRUD:
     @pytest.mark.asyncio
     async def test_get_post_for_edit(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -652,7 +653,7 @@ class TestPostCRUD:
     @pytest.mark.asyncio
     async def test_get_post_for_edit_not_found(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -666,7 +667,7 @@ class TestPostCRUD:
     @pytest.mark.asyncio
     async def test_create_post_with_title_field(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -686,7 +687,7 @@ class TestPostCRUD:
     @pytest.mark.asyncio
     async def test_create_post_title_required(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -704,7 +705,7 @@ class TestPostCRUD:
     @pytest.mark.asyncio
     async def test_create_post_whitespace_title_rejected(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -723,7 +724,7 @@ class TestPostCRUD:
     @pytest.mark.asyncio
     async def test_create_post_title_too_long_rejected(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -742,7 +743,7 @@ class TestPostCRUD:
     @pytest.mark.asyncio
     async def test_get_post_for_edit_returns_title(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -757,7 +758,7 @@ class TestPostCRUD:
     @pytest.mark.asyncio
     async def test_update_post_with_title_field(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -777,7 +778,7 @@ class TestPostCRUD:
     @pytest.mark.asyncio
     async def test_create_post_structured(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -802,7 +803,7 @@ class TestPostCRUD:
     @pytest.mark.asyncio
     async def test_update_post_structured(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -825,7 +826,7 @@ class TestPostCRUD:
     @pytest.mark.asyncio
     async def test_create_and_edit_roundtrip(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -863,7 +864,7 @@ class TestPostCRUD:
     @pytest.mark.asyncio
     async def test_create_draft_post(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -894,7 +895,7 @@ class TestPostCRUD:
     @pytest.mark.asyncio
     async def test_create_post_updates_label_filter_cache(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -926,7 +927,7 @@ class TestPostCRUD:
     @pytest.mark.asyncio
     async def test_update_post_updates_label_filter_cache(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -960,7 +961,7 @@ class TestLabelCRUD:
     @pytest.mark.asyncio
     async def test_create_label(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -978,7 +979,7 @@ class TestLabelCRUD:
     @pytest.mark.asyncio
     async def test_create_label_duplicate_returns_409(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -994,7 +995,7 @@ class TestLabelCRUD:
     @pytest.mark.asyncio
     async def test_create_label_invalid_id_returns_422(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -1034,7 +1035,7 @@ class TestLabelCRUD:
     @pytest.mark.asyncio
     async def test_create_label_with_parents(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -1053,7 +1054,7 @@ class TestLabelCRUD:
     @pytest.mark.asyncio
     async def test_create_label_nonexistent_parent_returns_404(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -1069,7 +1070,7 @@ class TestLabelCRUD:
     @pytest.mark.asyncio
     async def test_update_label_parents(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -1100,7 +1101,7 @@ class TestLabelCRUD:
     @pytest.mark.asyncio
     async def test_update_label_cycle_returns_409(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -1124,7 +1125,7 @@ class TestLabelCRUD:
     @pytest.mark.asyncio
     async def test_update_label_nonexistent_parent_returns_404(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -1141,7 +1142,7 @@ class TestLabelCRUD:
     @pytest.mark.asyncio
     async def test_update_label_not_found_returns_404(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -1165,7 +1166,7 @@ class TestLabelCRUD:
     @pytest.mark.asyncio
     async def test_delete_label(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -1182,7 +1183,7 @@ class TestLabelCRUD:
     @pytest.mark.asyncio
     async def test_delete_label_with_edges_cleans_up(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -1224,7 +1225,7 @@ class TestLabelCRUD:
     @pytest.mark.asyncio
     async def test_create_label_cycle_returns_409(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -1258,7 +1259,7 @@ class TestLabelCRUD:
     @pytest.mark.asyncio
     async def test_delete_nonexistent_label_returns_404(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -1286,7 +1287,7 @@ class TestSearch:
     @pytest.mark.asyncio
     async def test_search_reflects_post_create(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -1312,7 +1313,7 @@ class TestSearch:
     @pytest.mark.asyncio
     async def test_search_reflects_post_update(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -1409,7 +1410,7 @@ class TestSyncCycleWarnings:
     @pytest.mark.asyncio
     async def test_sync_commit_returns_cycle_warnings(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -1440,7 +1441,7 @@ class TestSyncCycleWarnings:
     @pytest.mark.asyncio
     async def test_sync_commit_no_warnings_without_cycles(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -1460,7 +1461,7 @@ class TestSyncSecurity:
     @pytest.mark.asyncio
     async def test_sync_commit_upload_path_traversal_rejected(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -1492,7 +1493,7 @@ class TestSyncSecurity:
         self, client: AsyncClient
     ) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -1515,7 +1516,7 @@ class TestAdmin:
     @pytest.mark.asyncio
     async def test_get_site_settings(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -1532,7 +1533,7 @@ class TestAdmin:
     @pytest.mark.asyncio
     async def test_update_site_settings(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -1556,7 +1557,7 @@ class TestAdmin:
     @pytest.mark.asyncio
     async def test_get_admin_pages(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -1573,7 +1574,7 @@ class TestAdmin:
     @pytest.mark.asyncio
     async def test_create_page(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -1589,7 +1590,7 @@ class TestAdmin:
     @pytest.mark.asyncio
     async def test_create_duplicate_page_returns_409(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -1610,7 +1611,7 @@ class TestAdmin:
     @pytest.mark.asyncio
     async def test_update_page(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -1632,7 +1633,7 @@ class TestAdmin:
     @pytest.mark.asyncio
     async def test_delete_page(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -1652,7 +1653,7 @@ class TestAdmin:
     @pytest.mark.asyncio
     async def test_delete_builtin_page_returns_400(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -1666,7 +1667,7 @@ class TestAdmin:
     @pytest.mark.asyncio
     async def test_update_page_order(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -1685,7 +1686,7 @@ class TestAdmin:
     @pytest.mark.asyncio
     async def test_change_password(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -1702,7 +1703,7 @@ class TestAdmin:
         assert resp.status_code == 200
 
         login2 = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "newpassword123"},
         )
         assert login2.status_code == 200
@@ -1710,7 +1711,7 @@ class TestAdmin:
     @pytest.mark.asyncio
     async def test_change_password_wrong_current(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -1729,7 +1730,7 @@ class TestAdmin:
     @pytest.mark.asyncio
     async def test_change_password_mismatch(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -1750,7 +1751,7 @@ class TestSearchAfterDelete:
     @pytest.mark.asyncio
     async def test_search_does_not_find_deleted_post(self, client: AsyncClient) -> None:
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -1816,7 +1817,7 @@ class TestLabelPosts:
     async def test_label_posts_includes_descendant_labels(self, client: AsyncClient) -> None:
         """Posts tagged with a child label appear in the parent label's posts."""
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -1856,7 +1857,7 @@ class TestPagination:
     async def test_pagination_returns_correct_page_metadata(self, client: AsyncClient) -> None:
         """Create 3 posts, request per_page=2, verify pagination metadata."""
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -1889,7 +1890,7 @@ class TestPagination:
     async def test_pagination_page_2(self, client: AsyncClient) -> None:
         """Page 2 returns different posts than page 1."""
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -1932,7 +1933,7 @@ class TestSorting:
     async def test_sort_by_created_at_desc(self, client: AsyncClient) -> None:
         """Default sort returns newer posts first."""
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]
@@ -1972,7 +1973,7 @@ class TestSorting:
     async def test_sort_by_title_asc(self, client: AsyncClient) -> None:
         """Sort by title ascending returns alphabetical ordering."""
         login_resp = await client.post(
-            "/api/auth/login",
+            "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
         )
         token = login_resp.json()["access_token"]

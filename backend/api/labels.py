@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.deps import get_content_manager, get_git_service, get_session, require_auth
+from backend.api.deps import get_content_manager, get_git_service, get_session, require_admin
 from backend.filesystem.content_manager import ContentManager
 from backend.filesystem.toml_manager import LabelDef, write_labels_config
 from backend.models.user import User
@@ -103,7 +103,7 @@ async def create_label_endpoint(
     session: Annotated[AsyncSession, Depends(get_session)],
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
     git_service: Annotated[GitService, Depends(get_git_service)],
-    user: Annotated[User, Depends(require_auth)],
+    _user: Annotated[User, Depends(require_admin)],
 ) -> LabelResponse:
     """Create a new label."""
     # Validate parents exist
@@ -145,7 +145,7 @@ async def update_label_endpoint(
     session: Annotated[AsyncSession, Depends(get_session)],
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
     git_service: Annotated[GitService, Depends(get_git_service)],
-    user: Annotated[User, Depends(require_auth)],
+    _user: Annotated[User, Depends(require_admin)],
 ) -> LabelResponse:
     """Update a label's names and parents."""
     existing = await get_label(session, label_id)
@@ -191,7 +191,7 @@ async def delete_label_endpoint(
     session: Annotated[AsyncSession, Depends(get_session)],
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
     git_service: Annotated[GitService, Depends(get_git_service)],
-    user: Annotated[User, Depends(require_auth)],
+    _user: Annotated[User, Depends(require_admin)],
 ) -> LabelDeleteResponse:
     """Delete a label."""
     deleted = await delete_label(session, label_id)

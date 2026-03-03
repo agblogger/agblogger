@@ -38,7 +38,8 @@ from backend.services.admin_service import (
     update_page_order,
     update_site_settings,
 )
-from backend.services.auth_service import hash_password, verify_password
+from backend.services.auth_service import hash_password, revoke_user_credentials, verify_password
+from backend.services.datetime_service import format_iso, now_utc
 from backend.services.git_service import GitService
 
 logger = logging.getLogger(__name__)
@@ -208,6 +209,8 @@ async def change_password(
         raise HTTPException(status_code=400, detail="Current password is incorrect")
 
     user.password_hash = hash_password(body.new_password)
+    user.updated_at = format_iso(now_utc())
+    await revoke_user_credentials(session, user.id)
     session.add(user)
     await session.commit()
     return {"status": "ok"}

@@ -102,9 +102,6 @@ describe('client CSRF hooks', () => {
       mockKyGet.mockReturnValue(mockJsonResponse({ csrf_token: 'old-csrf-token' }))
       mockKyPost.mockReturnValue(
         mockJsonResponse({
-          access_token: 'new-access-token',
-          refresh_token: 'new-refresh-token',
-          token_type: 'bearer',
           csrf_token: 'new-csrf-token',
         }),
       )

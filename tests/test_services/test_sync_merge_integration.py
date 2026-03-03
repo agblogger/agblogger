@@ -47,7 +47,7 @@ async def merge_client(merge_settings: Settings) -> AsyncGenerator[AsyncClient]:
 
 async def _login(client: AsyncClient) -> str:
     resp = await client.post(
-        "/api/auth/login",
+        "/api/auth/token-login",
         json={"username": "admin", "password": "admin123"},
     )
     return resp.json()["access_token"]

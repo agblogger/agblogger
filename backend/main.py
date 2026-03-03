@@ -316,7 +316,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             auth_header = request.headers.get("Authorization", "")
             has_bearer = auth_header.lower().startswith("bearer ")
             access_cookie = request.cookies.get("access_token")
-            if access_cookie and not has_bearer and request.url.path != "/api/auth/login":
+            if (
+                access_cookie
+                and not has_bearer
+                and request.url.path
+                not in {
+                    "/api/auth/login",
+                    "/api/auth/token-login",
+                }
+            ):
                 header_token = request.headers.get("X-CSRF-Token")
                 if header_token is None or not validate_csrf_token(
                     access_cookie,

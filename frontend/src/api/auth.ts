@@ -1,8 +1,10 @@
 import api, { clearCsrfToken, primeCsrfToken } from './client'
-import type { TokenResponse, UserResponse } from './client'
+import type { SessionAuthResponse, UserResponse } from './client'
 
-export async function login(username: string, password: string): Promise<TokenResponse> {
-  const response = await api.post('auth/login', { json: { username, password } }).json<TokenResponse>()
+export async function login(username: string, password: string): Promise<SessionAuthResponse> {
+  const response = await api
+    .post('auth/login', { json: { username, password } })
+    .json<SessionAuthResponse>()
   primeCsrfToken(response.csrf_token)
   return response
 }
