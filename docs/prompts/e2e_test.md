@@ -14,5 +14,6 @@ Make sure to test user workflows involving:
 - post search and filtering,
 - sharing posts on social media platforms,
 - cross-posting,
+- dark mode,
 - user authentication and authorization,
 - admin panel operations.
