@@ -28,6 +28,11 @@ vi.mock('@/stores/authStore', () => ({
   useAuthStore: (selector: (s: typeof authState) => unknown) => selector(authState),
 }))
 
+vi.mock('@/stores/themeStore', () => ({
+  useThemeStore: (selector: (s: { mode: string; resolvedTheme: string; toggleMode: () => void; init: () => void }) => unknown) =>
+    selector({ mode: 'system', resolvedTheme: 'light', toggleMode: vi.fn(), init: vi.fn() }),
+}))
+
 vi.mock('@/api/posts', () => ({
   fetchPosts: vi.fn().mockResolvedValue({ posts: [], total: 0, page: 1, per_page: 20, total_pages: 1 }),
 }))

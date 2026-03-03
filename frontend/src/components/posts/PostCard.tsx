@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import type { PostSummary } from '@/api/client'
 import LabelChip from '@/components/labels/LabelChip'
 import { useRenderedHtml } from '@/hooks/useKatex'
-import { formatDate } from '@/utils/date'
+import { formatRelativeDate } from '@/utils/date'
 
 interface PostCardProps {
   post: PostSummary
@@ -16,13 +16,13 @@ export default function PostCard({ post, index = 0 }: PostCardProps) {
   const rawExcerpt = useRenderedHtml(post.rendered_excerpt)
   const sanitizedExcerpt = rawExcerpt !== '' ? DOMPurify.sanitize(rawExcerpt) : ''
 
-  const dateStr = formatDate(post.created_at)
+  const dateStr = formatRelativeDate(post.created_at)
 
   return (
     <article
       className={`group opacity-0 animate-slide-up ${staggerClass}`}
     >
-      <Link to={postUrl} className="block py-6 -mx-4 px-4 rounded-xl border-l-2 border-l-transparent transition-all duration-200 hover:bg-paper-warm/60 hover:-translate-y-0.5 hover:shadow-md hover:border-l-accent">
+      <Link to={postUrl} className="block py-6 -mx-4 px-4 rounded-xl border-l-2 border-l-transparent transition-all duration-200 hover:bg-paper-warm/60 hover:-translate-y-1 hover:shadow-lg hover:scale-[1.005] hover:border-l-accent">
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
             <h2 className="font-display text-xl text-ink group-hover:text-accent transition-colors leading-snug">
@@ -60,7 +60,7 @@ export default function PostCard({ post, index = 0 }: PostCardProps) {
               )}
 
               {post.is_draft && (
-                <span className="text-xs px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full font-medium">
+                <span className="text-xs px-2 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 rounded-full font-medium">
                   Draft
                 </span>
               )}

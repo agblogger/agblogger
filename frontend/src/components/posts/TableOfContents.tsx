@@ -23,9 +23,10 @@ function extractHeadings(container: HTMLElement): HeadingEntry[] {
 
 interface TableOfContentsProps {
   contentRef: RefObject<HTMLElement | null>
+  variant?: 'dropdown' | 'sidebar'
 }
 
-export default function TableOfContents({ contentRef }: TableOfContentsProps) {
+export default function TableOfContents({ contentRef, variant = 'dropdown' }: TableOfContentsProps) {
   const [headings, setHeadings] = useState<HeadingEntry[]>([])
   const [isOpen, setIsOpen] = useState(false)
   const panelRef = useRef<HTMLDivElement>(null)
@@ -75,6 +76,35 @@ export default function TableOfContents({ contentRef }: TableOfContentsProps) {
   }, [isOpen])
 
   if (headings.length < 3) return null
+
+  if (variant === 'sidebar') {
+    return (
+      <nav className="sticky top-24" aria-label="Table of contents">
+        <h3 className="font-display text-sm text-ink mb-3">On this page</h3>
+        <ul className="space-y-1 border-l border-border pl-3">
+          {headings.map((heading, index) => {
+            const isActive = activeId === heading.id
+            return (
+              <li key={`${heading.id}-${index}`} className={heading.level === 3 ? 'pl-3' : ''}>
+                <button
+                  onClick={() =>
+                    document.getElementById(heading.id)?.scrollIntoView({ behavior: 'smooth' })
+                  }
+                  className={`block w-full text-left py-1 text-sm transition-colors ${
+                    isActive
+                      ? 'text-accent font-medium border-l-2 border-accent -ml-[calc(0.75rem+1px)] pl-[calc(0.75rem-1px)]'
+                      : 'text-muted hover:text-ink'
+                  }`}
+                >
+                  {heading.text}
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      </nav>
+    )
+  }
 
   function handleLinkClick(id: string) {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })

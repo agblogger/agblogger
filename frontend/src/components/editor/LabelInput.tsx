@@ -191,13 +191,13 @@ export default function LabelInput({ value, onChange, disabled }: LabelInputProp
       </div>
 
       {loadError && (
-        <p className="mt-1 text-xs text-red-600">
+        <p className="mt-1 text-xs text-red-600 dark:text-red-400">
           Failed to load labels. Type to create new ones.
         </p>
       )}
 
       {createError !== null && (
-        <p className="mt-1 text-xs text-red-600">
+        <p className="mt-1 text-xs text-red-600 dark:text-red-400">
           {createError}
         </p>
       )}

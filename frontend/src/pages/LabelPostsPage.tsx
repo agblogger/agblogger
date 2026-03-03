@@ -47,7 +47,7 @@ export default function LabelPostsPage() {
   if (error !== null) {
     return (
       <div className="text-center py-24">
-        <p className="text-red-600">{error}</p>
+        <p className="text-red-600 dark:text-red-400">{error}</p>
         <Link to="/labels" className="text-accent text-sm hover:underline mt-4 inline-block">
           Back to labels
         </Link>

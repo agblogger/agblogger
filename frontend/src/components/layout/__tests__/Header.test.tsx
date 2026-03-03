@@ -17,6 +17,8 @@ const siteConfig: SiteConfigResponse = {
 let mockUser: UserResponse | null = null
 let mockIsLoggingOut = false
 const mockLogout = vi.fn()
+let mockMode: 'light' | 'dark' | 'system' = 'system'
+const mockToggleMode = vi.fn()
 
 vi.mock('@/stores/siteStore', () => ({
   useSiteStore: (selector: (s: { config: SiteConfigResponse | null }) => unknown) =>
@@ -30,6 +32,14 @@ vi.mock('@/stores/authStore', () => ({
     isLoggingOut: boolean
   }) => unknown) =>
     selector({ user: mockUser, logout: mockLogout, isLoggingOut: mockIsLoggingOut }),
+}))
+
+vi.mock('@/stores/themeStore', () => ({
+  useThemeStore: (selector: (s: {
+    mode: 'light' | 'dark' | 'system'
+    toggleMode: () => void
+  }) => unknown) =>
+    selector({ mode: mockMode, toggleMode: mockToggleMode }),
 }))
 
 import Header from '../Header'
@@ -46,6 +56,7 @@ describe('Header', () => {
   beforeEach(() => {
     mockUser = null
     mockIsLoggingOut = false
+    mockMode = 'system'
     vi.clearAllMocks()
   })
 
@@ -176,6 +187,12 @@ describe('Header', () => {
     expect(screen.queryByPlaceholderText('Search posts...')).not.toBeInTheDocument()
   })
 
+  it('opens search on / key press', async () => {
+    renderHeader()
+    await userEvent.keyboard('/')
+    expect(screen.getByPlaceholderText('Search posts...')).toBeInTheDocument()
+  })
+
   it('does not submit empty search', async () => {
     renderHeader()
     await userEvent.click(screen.getByLabelText('Search'))
@@ -186,5 +203,23 @@ describe('Header', () => {
 
     // Search should still be open since query was empty
     expect(input).toBeInTheDocument()
+  })
+
+  it('toggles theme on theme button click', async () => {
+    renderHeader()
+
+    const themeButtons = screen.getAllByLabelText('Toggle theme')
+    expect(themeButtons.length).toBeGreaterThanOrEqual(1)
+
+    await userEvent.click(themeButtons[0]!)
+    expect(mockToggleMode).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows correct theme tooltip', () => {
+    mockMode = 'dark'
+    renderHeader()
+
+    const themeButtons = screen.getAllByLabelText('Toggle theme')
+    expect(themeButtons.some((btn) => btn.getAttribute('title') === 'Theme: dark')).toBe(true)
   })
 })

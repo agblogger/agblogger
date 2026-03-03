@@ -785,6 +785,14 @@ describe('EditorPage', () => {
     })
   })
 
+  it('renders mobile tab buttons for edit and preview', async () => {
+    renderEditor('/editor/new')
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument()
+    })
+    expect(screen.getByRole('button', { name: 'Preview' })).toBeInTheDocument()
+  })
+
   it('logs warning when fetchSocialAccounts fails', async () => {
     const { fetchSocialAccounts } = await import('@/api/crosspost')
     vi.mocked(fetchSocialAccounts).mockRejectedValueOnce(new Error('Network error'))

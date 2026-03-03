@@ -225,12 +225,12 @@ export default function SocialAccountsPanel({ busy, onBusyChange }: SocialAccoun
       </div>
 
       {error !== null && (
-        <div className="mb-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+        <div className="mb-4 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/40 rounded-lg px-4 py-3">
           {error}
         </div>
       )}
       {success !== null && (
-        <div className="mb-4 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
+        <div className="mb-4 text-sm text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800/40 rounded-lg px-4 py-3">
           {success}
         </div>
       )}
@@ -260,7 +260,7 @@ export default function SocialAccountsPanel({ busy, onBusyChange }: SocialAccoun
                   </div>
                   {deleteConfirmId === account.id ? (
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-red-600">Confirm disconnect?</span>
+                      <span className="text-xs text-red-600 dark:text-red-400">Confirm disconnect?</span>
                       <button
                         onClick={() => void handleDisconnect(account.id)}
                         disabled={allBusy}
@@ -286,7 +286,7 @@ export default function SocialAccountsPanel({ busy, onBusyChange }: SocialAccoun
                       }}
                       disabled={allBusy}
                       aria-label={`Disconnect ${account.account_name ?? account.platform}`}
-                      className="p-1.5 text-muted hover:text-red-600 disabled:opacity-50 transition-colors"
+                      className="p-1.5 text-muted hover:text-red-600 dark:hover:text-red-400 disabled:opacity-50 transition-colors"
                     >
                       <Trash2 size={14} />
                     </button>

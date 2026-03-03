@@ -27,11 +27,11 @@ export default function CrossPostHistory({ items, loading }: CrossPostHistoryPro
           <PlatformIcon platform={item.platform} size={16} className="text-muted" />
           <span className="font-medium text-ink">{capitalize(item.platform)}</span>
           {item.status === 'posted' ? (
-            <span className="bg-green-100 text-green-700 rounded-full px-2 py-0.5 text-xs font-medium">
+            <span className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full px-2 py-0.5 text-xs font-medium">
               Posted
             </span>
           ) : (
-            <span className="bg-red-100 text-red-600 rounded-full px-2 py-0.5 text-xs font-medium">
+            <span className="bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-full px-2 py-0.5 text-xs font-medium">
               Failed
             </span>
           )}
@@ -41,7 +41,7 @@ export default function CrossPostHistory({ items, loading }: CrossPostHistoryPro
             </span>
           )}
           {item.status === 'failed' && item.error !== null && (
-            <span className="text-xs text-red-600">{item.error}</span>
+            <span className="text-xs text-red-600 dark:text-red-400">{item.error}</span>
           )}
         </div>
       ))}

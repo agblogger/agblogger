@@ -106,7 +106,7 @@ describe('PostPage', () => {
     await waitFor(() => {
       expect(screen.getByText('Hello World')).toBeInTheDocument()
     })
-    expect(screen.getByTestId('toc')).toBeInTheDocument()
+    expect(screen.getAllByTestId('toc').length).toBeGreaterThanOrEqual(1)
   })
 
   it('renders post content', async () => {

@@ -42,10 +42,10 @@ function LabelNode({ data }: NodeProps) {
   const d = data as unknown as LabelNodeData
   const depthColors = [
     'border-accent bg-accent/8 text-accent',
-    'border-amber-600 bg-amber-50 text-amber-800',
-    'border-emerald-600 bg-emerald-50 text-emerald-800',
-    'border-sky-600 bg-sky-50 text-sky-800',
-    'border-violet-600 bg-violet-50 text-violet-800',
+    'border-amber-600 dark:border-amber-500 bg-amber-50 dark:bg-amber-900/30 text-amber-800 dark:text-amber-400',
+    'border-emerald-600 dark:border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-400',
+    'border-sky-600 dark:border-sky-500 bg-sky-50 dark:bg-sky-950/30 text-sky-800 dark:text-sky-300',
+    'border-violet-600 dark:border-violet-500 bg-violet-50 dark:bg-violet-900/30 text-violet-800 dark:text-violet-400',
   ]
   const style = depthColors[d.depth % depthColors.length]
 
@@ -277,7 +277,7 @@ export default function LabelGraphPage({ viewToggle }: { viewToggle: React.React
   if (error !== null) {
     return (
       <div className="text-center py-24 animate-fade-in">
-        <p className="text-red-600">{error}</p>
+        <p className="text-red-600 dark:text-red-400">{error}</p>
       </div>
     )
   }
@@ -305,7 +305,7 @@ export default function LabelGraphPage({ viewToggle }: { viewToggle: React.React
             <div className="w-4 h-4 border-2 border-accent/30 border-t-accent rounded-full animate-spin" />
           )}
           {editError !== null && (
-            <div className="text-sm text-red-600 bg-red-50 px-3 py-1.5 rounded-lg">
+            <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 px-3 py-1.5 rounded-lg">
               {editError}
             </div>
           )}

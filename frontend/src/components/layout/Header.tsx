@@ -1,8 +1,9 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { Search, LogIn, LogOut, PenLine, Settings, Menu, X } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { Search, LogIn, LogOut, PenLine, Settings, Menu, X, Sun, Moon, Monitor } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 import { useSiteStore } from '@/stores/siteStore'
 import { useAuthStore } from '@/stores/authStore'
+import { useThemeStore } from '@/stores/themeStore'
 
 export default function Header() {
   const location = useLocation()
@@ -11,10 +12,26 @@ export default function Header() {
   const user = useAuthStore((s) => s.user)
   const logout = useAuthStore((s) => s.logout)
   const isLoggingOut = useAuthStore((s) => s.isLoggingOut)
+  const mode = useThemeStore((s) => s.mode)
+  const toggleMode = useThemeStore((s) => s.toggleMode)
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const closeSearchRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      const target = e.target as HTMLElement
+      const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable
+
+      if ((e.key === '/' && !isInput) || ((e.metaKey || e.ctrlKey) && e.key === 'k')) {
+        e.preventDefault()
+        setSearchOpen(true)
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [])
 
   function closeMobileMenu() {
     setMobileMenuOpen(false)
@@ -22,6 +39,7 @@ export default function Header() {
 
   const pages = config?.pages ?? []
   const siteTitle = config?.title ?? 'AgBlogger'
+  const ThemeIcon = mode === 'dark' ? Moon : mode === 'light' ? Sun : Monitor
 
   function handleSearch(e: React.FormEvent) {
     e.preventDefault()
@@ -85,8 +103,18 @@ export default function Header() {
                 aria-label="Search"
               >
                 <Search size={18} />
+                <kbd className="hidden sm:inline-flex ml-1.5 items-center px-1.5 py-0.5 text-[10px] font-mono text-muted/60 bg-paper-warm border border-border/60 rounded">/</kbd>
               </button>
             )}
+
+            <button
+              onClick={toggleMode}
+              className="p-2 text-muted hover:text-ink transition-colors rounded-lg hover:bg-paper-warm"
+              title={`Theme: ${mode}`}
+              aria-label="Toggle theme"
+            >
+              <ThemeIcon size={18} />
+            </button>
 
             <div className="hidden md:flex items-center gap-3">
               {user ? (
@@ -211,6 +239,14 @@ export default function Header() {
           </nav>
 
           <div className="flex items-center gap-3 pt-2 border-t border-border/50">
+            <button
+              onClick={toggleMode}
+              className="p-2 text-muted hover:text-ink transition-colors rounded-lg hover:bg-paper-warm"
+              title={`Theme: ${mode}`}
+              aria-label="Toggle theme"
+            >
+              <ThemeIcon size={18} />
+            </button>
             {user ? (
               <>
                 <Link

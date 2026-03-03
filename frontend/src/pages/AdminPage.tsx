@@ -21,6 +21,9 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
 
+  // === Tab navigation ===
+  const [activeTab, setActiveTab] = useState<'settings' | 'pages' | 'password' | 'social'>('settings')
+
   // === Initial data ===
   const [siteSettings, setSiteSettings] = useState<AdminSiteSettings>({
     title: '',
@@ -87,7 +90,7 @@ export default function AdminPage() {
   if (loadError !== null) {
     return (
       <div className="text-center py-24">
-        <p className="text-red-600">{loadError}</p>
+        <p className="text-red-600 dark:text-red-400">{loadError}</p>
         <Link to="/" className="text-accent text-sm hover:underline mt-4 inline-block">
           Back to home
         </Link>
@@ -110,10 +113,39 @@ export default function AdminPage() {
         <h1 className="font-display text-3xl text-ink">Admin Panel</h1>
       </div>
 
-      <SiteSettingsSection initialSettings={siteSettings} busy={busy} onSaving={setSiteSaving} />
-      <PagesSection initialPages={pages} busy={busy} onSaving={setPagesSaving} />
-      <PasswordSection busy={busy} onSaving={setPasswordSaving} />
-      <SocialAccountsPanel busy={busy} onBusyChange={setSocialBusy} />
+      <div className="flex border-b border-border mb-8">
+        {([
+          { key: 'settings', label: 'Settings' },
+          { key: 'pages', label: 'Pages' },
+          { key: 'password', label: 'Password' },
+          { key: 'social', label: 'Social' },
+        ] as const).map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === tab.key
+                ? 'border-accent text-accent'
+                : 'border-transparent text-muted hover:text-ink hover:border-border-dark'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'settings' && (
+        <SiteSettingsSection initialSettings={siteSettings} busy={busy} onSaving={setSiteSaving} />
+      )}
+      {activeTab === 'pages' && (
+        <PagesSection initialPages={pages} busy={busy} onSaving={setPagesSaving} />
+      )}
+      {activeTab === 'password' && (
+        <PasswordSection busy={busy} onSaving={setPasswordSaving} />
+      )}
+      {activeTab === 'social' && (
+        <SocialAccountsPanel busy={busy} onBusyChange={setSocialBusy} />
+      )}
     </div>
   )
 }

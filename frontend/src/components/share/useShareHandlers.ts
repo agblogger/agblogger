@@ -64,12 +64,12 @@ export function useShareHandlers(
       setTimeout(() => {
         setCopied(false)
         onAction?.()
-      }, 2000)
+      }, 3000)
     } else {
       setCopyFailed(true)
       setTimeout(() => {
         setCopyFailed(false)
-      }, 2000)
+      }, 3000)
     }
   }
 

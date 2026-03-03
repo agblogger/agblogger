@@ -68,7 +68,7 @@ export default function MastodonSharePrompt({ shareText, onClose }: MastodonShar
           Cancel
         </button>
       </div>
-      {error !== null && <p className="text-xs text-red-600">{error}</p>}
+      {error !== null && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
     </div>
   )
 }

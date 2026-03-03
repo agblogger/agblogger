@@ -7,7 +7,7 @@ interface LabelChipProps {
 
 export default function LabelChip({ labelId, clickable = true }: LabelChipProps) {
   const className =
-    'inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-md ' +
+    'inline-flex items-center px-2.5 py-1 text-xs font-semibold rounded-lg border border-border/60 ' +
     'bg-tag-bg text-tag-text transition-colors hover:bg-border hover:text-ink'
 
   if (clickable) {

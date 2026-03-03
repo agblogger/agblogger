@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import LoadingSpinner from '@/components/LoadingSpinner'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Calendar, User, PenLine, Trash2 } from 'lucide-react'
 import { fetchPost, deletePost } from '@/api/posts'
@@ -10,6 +9,7 @@ import CrossPostSection from '@/components/crosspost/CrossPostSection'
 import ShareButton from '@/components/share/ShareButton'
 import ShareBar from '@/components/share/ShareBar'
 import { useRenderedHtml } from '@/hooks/useKatex'
+import { useCodeBlockEnhance } from '@/hooks/useCodeBlockEnhance'
 import TableOfContents from '@/components/posts/TableOfContents'
 import type { PostDetail } from '@/api/client'
 import { formatDate } from '@/utils/date'
@@ -26,6 +26,7 @@ export default function PostPage() {
   const user = useAuthStore((s) => s.user)
   const contentRef = useRef<HTMLDivElement>(null)
   const renderedHtml = useRenderedHtml(post?.rendered_html)
+  useCodeBlockEnhance(contentRef)
 
   async function handleDelete(withAssets: boolean) {
     if (filePath === undefined) return
@@ -67,7 +68,29 @@ export default function PostPage() {
   }, [filePath])
 
   if (loading) {
-    return <LoadingSpinner />
+    return (
+      <div className="animate-fade-in" role="status" aria-label="Loading post">
+        <div className="flex items-center justify-between mb-8">
+          <div className="h-4 bg-border/40 rounded w-24 animate-pulse" />
+        </div>
+        <div className="mb-10 space-y-4">
+          <div className="h-10 bg-border/50 rounded w-4/5 animate-pulse" />
+          <div className="flex items-center gap-4">
+            <div className="h-3.5 bg-border/30 rounded w-28 animate-pulse" />
+            <div className="h-3.5 bg-border/30 rounded w-20 animate-pulse" />
+          </div>
+          <div className="h-px bg-border/40" />
+        </div>
+        <div className="space-y-4">
+          <div className="h-4 bg-border/40 rounded w-full animate-pulse" />
+          <div className="h-4 bg-border/40 rounded w-full animate-pulse" />
+          <div className="h-4 bg-border/40 rounded w-3/4 animate-pulse" />
+          <div className="h-4 bg-border/40 rounded w-full animate-pulse" />
+          <div className="h-4 bg-border/40 rounded w-5/6 animate-pulse" />
+          <div className="h-4 bg-border/40 rounded w-2/3 animate-pulse" />
+        </div>
+      </div>
+    )
   }
 
   if (loadError !== null || post === null) {
@@ -87,7 +110,8 @@ export default function PostPage() {
   const dateStr = formatDate(post.created_at, 'MMMM d, yyyy')
 
   return (
-    <article className="animate-fade-in">
+    <article className="animate-fade-in xl:flex xl:gap-8">
+      <div className="flex-1 min-w-0">
       <div className="flex items-center justify-between mb-8">
         <Link
           to="/"
@@ -96,7 +120,9 @@ export default function PostPage() {
           <ArrowLeft size={14} />
           Back to posts
         </Link>
-        <TableOfContents contentRef={contentRef} />
+        <div className="xl:hidden">
+          <TableOfContents contentRef={contentRef} />
+        </div>
       </div>
 
       <header className="mb-10">
@@ -141,7 +167,7 @@ export default function PostPage() {
               <button
                 onClick={() => setDeleteMode('post')}
                 disabled={deleting}
-                className="flex items-center gap-1 text-muted hover:text-red-600 transition-colors disabled:opacity-50"
+                className="flex items-center gap-1 text-muted hover:text-red-600 dark:hover:text-red-400 transition-colors disabled:opacity-50"
               >
                 <Trash2 size={14} />
                 Delete
@@ -154,7 +180,7 @@ export default function PostPage() {
       </header>
 
       {deleteError !== null && (
-        <div className="mb-6 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+        <div className="mb-6 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/40 rounded-lg px-4 py-3">
           {deleteError}
         </div>
       )}
@@ -182,6 +208,11 @@ export default function PostPage() {
           Back to posts
         </Link>
       </footer>
+      </div>
+
+      <aside className="hidden xl:block xl:w-56 xl:shrink-0">
+        <TableOfContents contentRef={contentRef} variant="sidebar" />
+      </aside>
 
       {deleteMode && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
@@ -208,8 +239,8 @@ export default function PostPage() {
                   <button
                     onClick={() => void handleDelete(true)}
                     disabled={deleting}
-                    className="w-full px-4 py-2 text-sm font-medium text-red-600
-                             border border-red-200 rounded-lg hover:bg-red-50
+                    className="w-full px-4 py-2 text-sm font-medium text-red-600 dark:text-red-400
+                             border border-red-200 dark:border-red-800/40 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30
                              transition-colors disabled:opacity-50 text-left"
                   >
                     Delete with all files
