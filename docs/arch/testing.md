@@ -12,7 +12,11 @@ tests/
 │   ├── test_bluesky_oauth_endpoints.py     Bluesky OAuth endpoint tests
 │   ├── test_content_api.py                 Content serving API tests
 │   ├── test_crosspost_api.py               Cross-post API tests
+│   ├── test_crosspost_helpers.py           Cross-post helper function tests
+│   ├── test_crosspost_robustness.py        Cross-post error handling/resilience
 │   ├── test_draft_visibility.py            Draft access control tests
+│   ├── test_error_handling.py              API error response tests
+│   ├── test_input_validation.py            Request validation tests
 │   ├── test_path_safety_hypothesis.py      Property-based path safety checks
 │   ├── test_post_assets_upload.py          Post asset upload tests
 │   ├── test_post_directory.py              Post-per-directory tests
@@ -21,6 +25,8 @@ tests/
 │   └── test_security_regressions.py        Security regression tests
 ├── test_cli/
 │   ├── test_deploy_production.py           Deployment script tests
+│   ├── test_dev_server.py                  Dev server manager tests
+│   ├── test_mutation_backend.py            Mutation testing orchestration tests
 │   ├── test_safe_path.py                   CLI path safety tests
 │   ├── test_sync_client.py                 CLI sync client tests
 │   └── test_zap_scan.py                    OWASP ZAP orchestration tests
@@ -30,25 +36,36 @@ tests/
 │   └── test_label_service.py              Label service tests
 ├── test_rendering/
 │   ├── test_frontmatter.py                 Frontmatter parsing tests
+│   ├── test_frontmatter_parsing_hypothesis.py  Property-based frontmatter parsing
+│   ├── test_pandoc_server.py               Pandoc server integration tests
 │   ├── test_renderer_no_dead_code.py       Renderer dead-code checks
+│   ├── test_sanitizer.py                   HTML sanitizer tests
 │   └── test_url_rewriting.py              Relative URL rewriting tests
 ├── test_services/
+│   ├── _ssrf_helpers.py                    SSRF testing utilities
 │   ├── test_admin_service.py               Admin service operations
 │   ├── test_atproto_oauth.py               AT Protocol OAuth tests
 │   ├── test_auth_edge_cases.py             Auth edge case tests
 │   ├── test_auth_service.py                Auth service operations
+│   ├── test_auth_service_hypothesis.py     Property-based auth tests
 │   ├── test_bluesky_oauth_state.py         OAuth state store tests
+│   ├── test_cache_rebuild_resilience.py    Cache rebuild robustness
 │   ├── test_config.py                      Settings loading
 │   ├── test_content_manager.py             ContentManager operations
 │   ├── test_crosspost_decrypt_fallback.py  Credential decryption fallback
+│   ├── test_crosspost_error_handling.py    Cross-post error handling
 │   ├── test_crosspost_formatting.py        Cross-post text formatting
 │   ├── test_crosspost.py                   Cross-posting platforms
-│   ├── test_crypto_service.py              AES-256-GCM encryption
+│   ├── test_crypto_service.py              Fernet encryption
+│   ├── test_crypto_service_hypothesis.py   Property-based crypto tests
 │   ├── test_database.py                    DB engine creation
 │   ├── test_datetime_service.py            Date/time parsing
+│   ├── test_datetime_service_hypothesis.py Property-based datetime tests
 │   ├── test_ensure_content_dir.py          Content directory scaffolding
+│   ├── test_error_handling.py              Service-level error handling
 │   ├── test_frontmatter_hypothesis.py      Property-based frontmatter tests
 │   ├── test_frontmatter_merge.py           Semantic front matter merge
+│   ├── test_frontmatter_parsing_hypothesis.py  Property-based frontmatter parsing
 │   ├── test_git_merge_file.py              git merge-file wrapper tests
 │   ├── test_git_service.py                 Git service operations
 │   ├── test_hybrid_merge.py                Hybrid merge (front matter + body)
@@ -58,12 +75,15 @@ tests/
 │   ├── test_rate_limiter.py                Rate limiter tests
 │   ├── test_scan_posts_exception.py        Post scanning error handling
 │   ├── test_slug_service.py                Slug generation tests
+│   ├── test_slug_service_hypothesis.py     Property-based slug tests
 │   ├── test_ssrf.py                        SSRF protection tests
+│   ├── test_startup_hardening.py           Startup security validation tests
 │   ├── test_sync_merge_integration.py      Full sync merge API flow
 │   ├── test_sync_normalization.py          Sync frontmatter normalization
 │   ├── test_sync_service_hypothesis.py     Property-based sync invariants
 │   ├── test_sync_service.py                Sync plan computation
 │   ├── test_toml_manager.py                TOML config parsing
+│   ├── test_toml_manager_hypothesis.py     Property-based TOML tests
 │   └── test_toml_validation.py             TOML input validation
 └── test_sync/
     ├── test_normalize_frontmatter.py       Frontmatter normalization in sync
@@ -74,9 +94,14 @@ Configuration in `pyproject.toml`: `asyncio_mode = "auto"`, coverage via `pytest
 
 Property-based testing is implemented with Hypothesis for high-invariant backend logic:
 - sync plan classification and symmetry invariants
-- front matter merge and normalization invariants
+- front matter merge, normalization, and parsing invariants
 - label DAG cycle-breaking invariants
 - URL/path safety invariants across rendering, sync, content serving, and CLI path resolution
+- auth service token/password invariants
+- crypto service encrypt/decrypt round-trip invariants
+- datetime service parsing invariants
+- slug generation invariants
+- TOML manager round-trip invariants
 
 ## Frontend (Vitest)
 
@@ -89,6 +114,7 @@ src/
 │   ├── crosspost/__tests__/
 │   │   ├── CrossPostDialog.test.tsx
 │   │   ├── CrossPostHistory.test.tsx
+│   │   ├── CrossPostSection.test.tsx
 │   │   ├── PlatformIcon.test.tsx
 │   │   ├── SocialAccountsPanel.test.tsx
 │   │   └── crosspostText.property.test.ts    Property-based (fast-check)
@@ -100,6 +126,7 @@ src/
 │   │   └── FilterPanel.test.tsx
 │   ├── labels/__tests__/
 │   │   ├── LabelChip.test.tsx
+│   │   ├── graphUtils.test.ts
 │   │   └── graphUtils.property.test.ts       Property-based (fast-check)
 │   ├── layout/__tests__/
 │   │   └── Header.test.tsx
@@ -110,7 +137,15 @@ src/
 │       ├── MastodonSharePrompt.test.tsx
 │       ├── ShareBar.test.tsx
 │       ├── ShareButton.test.tsx
-│       └── shareUtils.property.test.ts       Property-based (fast-check)
+│       ├── shareUtils.test.ts
+│       ├── shareUtils.property.test.ts       Property-based (fast-check)
+│       ├── testUtils.ts                      Share test helpers
+│       └── testUtils.test.ts
+├── hooks/__tests__/
+│   ├── useActiveHeading.test.ts
+│   ├── useCodeBlockEnhance.test.ts
+│   ├── useEditorAutoSave.test.ts
+│   └── useKatex.test.ts
 ├── pages/__tests__/
 │   ├── AdminPage.test.tsx
 │   ├── EditorPage.test.tsx
@@ -124,7 +159,9 @@ src/
 │   ├── SearchPage.test.tsx
 │   └── TimelinePage.test.tsx
 └── stores/__tests__/
-    └── authStore.test.ts
+    ├── authStore.test.ts
+    ├── siteStore.test.ts
+    └── themeStore.test.ts
 ```
 
 Coverage thresholds: statements 80%, branches 70%, functions 80%, lines 80%.

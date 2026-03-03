@@ -2,7 +2,7 @@
 
 ## Plugin Architecture
 
-A `CrossPoster` protocol defines the interface:
+A `CrossPoster` protocol (`backend/crosspost/base.py`) defines the interface:
 
 ```python
 class CrossPoster(Protocol):
@@ -10,6 +10,30 @@ class CrossPoster(Protocol):
     async def authenticate(self, credentials: dict[str, str]) -> bool: ...
     async def post(self, content: CrossPostContent) -> CrossPostResult: ...
     async def validate_credentials(self) -> bool: ...
+```
+
+The `CrossPostContent` dataclass carries the data for each cross-post:
+
+```python
+@dataclass
+class CrossPostContent:
+    title: str
+    excerpt: str
+    url: str
+    image_url: str | None = None
+    labels: list[str] = field(default_factory=list)
+    custom_text: str | None = None
+```
+
+The `CrossPostResult` dataclass reports the outcome:
+
+```python
+@dataclass
+class CrossPostResult:
+    platform_id: str
+    url: str
+    success: bool
+    error: str | None = None
 ```
 
 ## Platforms

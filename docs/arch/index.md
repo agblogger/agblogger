@@ -17,15 +17,16 @@ agblogger/
 │   ├── services/       Business logic layer
 │   ├── config.py       Pydantic settings (from .env)
 │   ├── database.py     Async SQLAlchemy engine
+│   ├── exceptions.py   Application-level exception types
 │   └── main.py         Application factory, middleware, lifespan
 ├── frontend/           React 19 + TypeScript SPA
 │   └── src/
 │       ├── api/        HTTP client (ky) + API functions
-│       ├── hooks/      Custom React hooks (auto-save, KaTeX)
+│       ├── hooks/      Custom React hooks (auto-save, KaTeX, code blocks, heading tracking)
 │       ├── stores/     Zustand state management
 │       ├── pages/      Route-level page components
 │       └── components/ Reusable UI components
-├── cli/                Sync and deployment CLIs
+├── cli/                CLIs: sync, deployment, dev server, mutation testing, DAST
 ├── tests/              pytest test suite
 ├── docs/               Project documentation
 ├── Dockerfile          Multi-stage Docker build

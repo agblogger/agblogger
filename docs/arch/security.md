@@ -192,6 +192,7 @@ Exception handlers in `backend/main.py` catch unhandled errors at the framework 
 | Exception | HTTP Status | Client Message |
 |-----------|-------------|----------------|
 | `InternalServerError` | 500 | "Internal server error" |
+| `ExternalServiceError` | 502 | "External service error" |
 | `RenderError` | 502 | "Rendering service unavailable" |
 | `RuntimeError` | 500 | "Internal processing error" |
 | `OSError` | 500 | "Storage operation failed" |
@@ -209,8 +210,9 @@ All handlers log the full exception with traceback server-side while returning o
 ### Exception Type Conventions
 
 - **`InternalServerError`** (`backend/exceptions.py`): Raise for internal errors (decryption, config, infrastructure) whose messages contain sensitive details.
+- **`ExternalServiceError`** (`backend/exceptions.py`): Raise for external service failures (OAuth, HTTP APIs) where details should be logged but not exposed.
 - **`ValueError`**: Raise for business logic validation (invalid dates, bad formats) where the message is safe for client display.
-- **Service layer rule**: Services must not import `HTTPException`. Raise `ValueError` or `InternalServerError`; the API layer translates to HTTP responses.
+- **Service layer rule**: Services must not import `HTTPException`. Raise `ValueError`, `InternalServerError`, or `ExternalServiceError`; the API layer translates to HTTP responses.
 
 ### Pandoc Resilience
 

@@ -101,9 +101,12 @@ Lua filter files exist in `backend/pandoc/filters/` as placeholders for future u
 
 ## Exception Conventions
 
-The service layer uses two exception types to separate internal errors from business logic errors:
+The service layer uses exception types defined in `backend/exceptions.py` to separate internal errors from business logic errors:
 
-- **`InternalServerError`** (`backend/exceptions.py`): For errors whose details must never reach clients — decryption failures, config validation, infrastructure port conflicts. The global handler in `main.py` logs the full message and returns a generic `"Internal server error"` (500).
+- **`InternalServerError`**: For errors whose details must never reach clients — decryption failures, config validation, infrastructure port conflicts. The global handler in `main.py` logs the full message and returns a generic `"Internal server error"` (500).
+- **`ExternalServiceError`** (extends `RuntimeError`): For external service failures (OAuth, HTTP APIs). The global handler logs the full message and returns `"External service error"` (502).
+- **`PostNotFoundError`** (extends `ValueError`): For post-not-found lookups by path or ID.
+- **`BuiltinPageError`** (extends `ValueError`): For attempts to modify built-in pages (timeline, labels).
 - **`ValueError`**: For business logic validation errors that are safe for clients — invalid dates, bad input formats. The global handler returns `str(exc)` as the 422 detail.
 
-Services must not import `HTTPException` from FastAPI. They raise `ValueError` or `InternalServerError`, and the API layer (`backend/api/`) translates to HTTP responses where needed. Global exception handlers in `main.py` serve as a safety net for unhandled exceptions.
+Services must not import `HTTPException` from FastAPI. They raise `ValueError`, `InternalServerError`, or `ExternalServiceError`, and the API layer (`backend/api/`) translates to HTTP responses where needed. Global exception handlers in `main.py` serve as a safety net for unhandled exceptions.

@@ -15,7 +15,7 @@ Uses `createBrowserRouter` (data router) with `RouterProvider` for full react-ro
 | `/labels/:labelId` | LabelPostsPage | Posts filtered by label |
 | `/labels/:labelId/settings` | LabelSettingsPage | Label names, parents, delete (admin-only mutations) |
 | `/editor/*` | EditorPage | Structured metadata bar + split-pane markdown editor |
-| `/admin` | AdminPage | Admin panel: site settings, pages, password (admin required) |
+| `/admin` | AdminPage | Admin panel: site settings, pages, password, social accounts (admin required) |
 
 ## Editor Auto-Save
 
@@ -29,10 +29,11 @@ The `useEditorAutoSave` hook (`hooks/useEditorAutoSave.ts`) provides crash recov
 
 ## State Management
 
-Two Zustand stores:
+Three Zustand stores:
 
 - **`authStore`** — User state (`user`, `isLoading`, `isLoggingOut`, `isInitialized`, `error`), login/logout, session check via `checkAuth()`.
 - **`siteStore`** — Site configuration fetched on app load.
+- **`themeStore`** — Theme preference (`mode`: light/dark/system, `resolvedTheme`: light/dark). Persists to `localStorage` (key: `agblogger:theme`), listens to system preference changes, and provides `toggleMode()` to cycle through modes.
 
 The `ky` HTTP client uses cookie-based authentication (`credentials: 'include'`). Browser login relies on `HttpOnly` cookies and keeps only the returned `csrf_token` in memory; it does not store bearer tokens from JSON. For unsafe methods (POST/PUT/PATCH/DELETE), it ensures an in-memory CSRF token is available, fetching it from `GET /api/auth/csrf` when necessary, then injects it as the `X-CSRF-Token` header. On 401 responses, the client auto-attempts a token refresh via `POST /api/auth/refresh`, updates the cached CSRF token from the refresh response, and retries the original request.
 
@@ -41,6 +42,7 @@ The `ky` HTTP client uses cookie-based authentication (`credentials: 'include'`)
 - **`useEditorAutoSave`** — Crash recovery and unsaved-changes protection (described above).
 - **`useActiveHeading`** — Monitors H2/H3 headings via `IntersectionObserver` for table-of-contents tracking, returning the currently active heading ID.
 - **`useRenderedHtml`** (exported from `useKatex.ts`) — Processes KaTeX math spans (`math inline`, `math display`) in rendered HTML strings, replacing them with KaTeX-rendered output.
+- **`useCodeBlockEnhance`** — Adds copy-to-clipboard buttons and language labels to fenced code blocks. Detects language from `class="language-*"` or Pandoc format classes, uses `MutationObserver` for dynamic content.
 
 ## Frontend Logic Utilities
 
@@ -48,5 +50,7 @@ To keep route/components thin and directly testable, pure logic helpers are extr
 
 - `components/labels/graphUtils.ts` centralizes label graph algorithms used by label pages (`computeDepths`, `wouldCreateCycle`, `computeDescendants`)
 - `components/crosspost/crosspostText.ts` centralizes public post URL and default cross-post text generation (`buildPostUrl`, `buildDefaultText`)
+
+Additionally, `components/share/useShareHandlers.ts` encapsulates share logic (share text generation, platform-specific handlers, clipboard copy, Mastodon instance prompt) used by `ShareButton` and `ShareBar`.
 
 These modules are covered by property-based tests (`fast-check`) in addition to example-based Vitest tests.
