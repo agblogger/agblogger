@@ -69,9 +69,15 @@ interface PagesSectionProps {
   initialPages: AdminPageConfig[]
   busy: boolean
   onSaving: (saving: boolean) => void
+  onPagesChange: (pages: AdminPageConfig[]) => void
 }
 
-export default function PagesSection({ initialPages, busy, onSaving }: PagesSectionProps) {
+export default function PagesSection({
+  initialPages,
+  busy,
+  onSaving,
+  onPagesChange,
+}: PagesSectionProps) {
   const [pages, setPages] = useState<AdminPageConfig[]>(initialPages)
   const [pagesError, setPagesError] = useState<string | null>(null)
   const [pagesSuccess, setPagesSuccess] = useState<string | null>(null)
@@ -95,6 +101,9 @@ export default function PagesSection({ initialPages, busy, onSaving }: PagesSect
   useEffect(() => {
     onSaving(savingOrder || creatingPage || savingPage || deletingPage)
   }, [savingOrder, creatingPage, savingPage, deletingPage, onSaving])
+  useEffect(() => {
+    setPages(initialPages)
+  }, [initialPages])
 
   function handleMoveUp(index: number) {
     if (index <= 0) return
@@ -130,6 +139,7 @@ export default function PagesSection({ initialPages, busy, onSaving }: PagesSect
       const orderPayload = pages.map((p) => ({ id: p.id, title: p.title, file: p.file }))
       const resp = await updateAdminPageOrder(orderPayload)
       setPages(resp.pages)
+      onPagesChange(resp.pages)
       setOrderDirty(false)
       setPagesSuccess('Page order saved.')
       useSiteStore.getState().fetchConfig().catch((err: unknown) => { console.warn('Failed to refresh site config', err) })
@@ -156,7 +166,9 @@ export default function PagesSection({ initialPages, busy, onSaving }: PagesSect
     setPagesSuccess(null)
     try {
       const page = await createAdminPage({ id: trimmedId, title: trimmedTitle })
-      setPages((prev) => [...prev, page])
+      const nextPages = [...pages, page]
+      setPages(nextPages)
+      onPagesChange(nextPages)
       setNewPageId('')
       setNewPageTitle('')
       setShowAddForm(false)
@@ -213,17 +225,17 @@ export default function PagesSection({ initialPages, busy, onSaving }: PagesSect
       }
       if (Object.keys(data).length > 0) {
         await updateAdminPage(page.id, data)
-        setPages((prev) =>
-          prev.map((p) =>
-            p.id === expandedPageId
-              ? {
-                  ...p,
-                  title: editTitle,
-                  content: BUILTIN_PAGE_IDS.has(p.id) ? p.content : editContent,
-                }
-              : p,
-          ),
+        const nextPages = pages.map((p) =>
+          p.id === expandedPageId
+            ? {
+                ...p,
+                title: editTitle,
+                content: BUILTIN_PAGE_IDS.has(p.id) ? p.content : editContent,
+              }
+            : p,
         )
+        setPages(nextPages)
+        onPagesChange(nextPages)
         setPageEditSuccess('Page saved.')
         useSiteStore.getState().fetchConfig().catch((err: unknown) => { console.warn('Failed to refresh site config', err) })
       } else {
@@ -253,7 +265,9 @@ export default function PagesSection({ initialPages, busy, onSaving }: PagesSect
     setPageEditSuccess(null)
     try {
       await deleteAdminPage(deleteConfirmId)
-      setPages((prev) => prev.filter((p) => p.id !== deleteConfirmId))
+      const nextPages = pages.filter((p) => p.id !== deleteConfirmId)
+      setPages(nextPages)
+      onPagesChange(nextPages)
       setExpandedPageId(null)
       setDeleteConfirmId(null)
       setPagesSuccess(`Page deleted.`)

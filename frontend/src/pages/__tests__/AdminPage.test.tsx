@@ -213,6 +213,35 @@ describe('AdminPage', () => {
     })
   })
 
+  it('keeps saved site settings after switching tabs', async () => {
+    setupLoadSuccess()
+    mockUpdateAdminSiteSettings.mockResolvedValue({ ...defaultSettings, title: 'New Title' })
+    const user = userEvent.setup()
+    renderAdmin()
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Title *')).toHaveValue('My Blog')
+    })
+
+    await user.clear(screen.getByLabelText('Title *'))
+    await user.type(screen.getByLabelText('Title *'), 'New Title')
+    await user.click(screen.getByRole('button', { name: /save settings/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Site settings saved.')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Pages' }))
+    await waitFor(() => {
+      expect(screen.getByText('Timeline')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Settings' }))
+    await waitFor(() => {
+      expect(screen.getByLabelText('Title *')).toHaveValue('New Title')
+    })
+  })
+
   it('shows error when save site settings fails', async () => {
     setupLoadSuccess()
     mockUpdateAdminSiteSettings.mockRejectedValue(new Error('fail'))
@@ -455,6 +484,49 @@ describe('AdminPage', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Page "Contact" created.')).toBeInTheDocument()
+    })
+  })
+
+  it('keeps created pages after switching tabs', async () => {
+    setupLoadSuccess()
+    const newPage: AdminPageConfig = {
+      id: 'contact',
+      title: 'Contact',
+      file: 'contact.md',
+      is_builtin: false,
+      content: '',
+    }
+    mockCreateAdminPage.mockResolvedValue(newPage)
+    const user = userEvent.setup()
+    renderAdmin()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Pages' })).toBeInTheDocument()
+    })
+    await user.click(screen.getByRole('button', { name: 'Pages' }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /add page/i })).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: /add page/i }))
+    await user.type(screen.getByLabelText(/Page ID/), 'contact')
+    await user.type(screen.getByPlaceholderText('e.g. About'), 'Contact')
+    await user.click(screen.getByRole('button', { name: /create page/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Page "Contact" created.')).toBeInTheDocument()
+    })
+    expect(screen.getByText('Contact')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Settings' }))
+    await waitFor(() => {
+      expect(screen.getByLabelText('Title *')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Pages' }))
+    await waitFor(() => {
+      expect(screen.getByText('Contact')).toBeInTheDocument()
     })
   })
 
@@ -766,6 +838,41 @@ describe('AdminPage', () => {
     await waitFor(() => {
       expect(screen.getByLabelText('Title *')).toBeInTheDocument()
     })
+  })
+
+  it('blocks tab changes while a mutation is pending', async () => {
+    setupLoadSuccess()
+    let resolveSave: ((value: AdminSiteSettings) => void) | undefined
+    mockUpdateAdminSiteSettings.mockReturnValue(
+      new Promise<AdminSiteSettings>((resolve) => {
+        resolveSave = resolve
+      }),
+    )
+    const user = userEvent.setup()
+    renderAdmin()
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Title *')).toHaveValue('My Blog')
+    })
+
+    await user.clear(screen.getByLabelText('Title *'))
+    await user.type(screen.getByLabelText('Title *'), 'New Title')
+    await user.click(screen.getByRole('button', { name: /save settings/i }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Pages' })).toBeDisabled()
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Pages' }))
+    expect(screen.getByLabelText('Title *')).toBeInTheDocument()
+    expect(screen.queryByText('Timeline')).not.toBeInTheDocument()
+
+    resolveSave?.({ ...defaultSettings, title: 'New Title' })
+
+    await waitFor(() => {
+      expect(screen.getByText('Site settings saved.')).toBeInTheDocument()
+    })
+    expect(screen.getByRole('button', { name: 'Pages' })).toBeEnabled()
   })
 
   it('renders social accounts panel', async () => {

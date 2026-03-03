@@ -10,12 +10,14 @@ interface SiteSettingsSectionProps {
   initialSettings: AdminSiteSettings
   busy: boolean
   onSaving: (saving: boolean) => void
+  onSavedSettings: (settings: AdminSiteSettings) => void
 }
 
 export default function SiteSettingsSection({
   initialSettings,
   busy,
   onSaving,
+  onSavedSettings,
 }: SiteSettingsSectionProps) {
   const [siteSettings, setSiteSettings] = useState<AdminSiteSettings>(initialSettings)
   const [siteError, setSiteError] = useState<string | null>(null)
@@ -23,6 +25,9 @@ export default function SiteSettingsSection({
   const [savingSite, setSavingSite] = useState(false)
 
   useEffect(() => { onSaving(savingSite) }, [savingSite, onSaving])
+  useEffect(() => {
+    setSiteSettings(initialSettings)
+  }, [initialSettings])
 
   async function handleSaveSiteSettings() {
     if (!siteSettings.title.trim()) {
@@ -35,6 +40,7 @@ export default function SiteSettingsSection({
     try {
       const updated = await updateAdminSiteSettings(siteSettings)
       setSiteSettings(updated)
+      onSavedSettings(updated)
       setSiteSuccess('Site settings saved.')
       useSiteStore.getState().fetchConfig().catch((err: unknown) => { console.warn('Failed to refresh site config', err) })
     } catch (err) {

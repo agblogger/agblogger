@@ -123,11 +123,12 @@ export default function AdminPage() {
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
+            disabled={busy}
             className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
               activeTab === tab.key
                 ? 'border-accent text-accent'
                 : 'border-transparent text-muted hover:text-ink hover:border-border-dark'
-            }`}
+            } disabled:opacity-50 disabled:cursor-not-allowed`}
           >
             {tab.label}
           </button>
@@ -135,10 +136,20 @@ export default function AdminPage() {
       </div>
 
       {activeTab === 'settings' && (
-        <SiteSettingsSection initialSettings={siteSettings} busy={busy} onSaving={setSiteSaving} />
+        <SiteSettingsSection
+          initialSettings={siteSettings}
+          busy={busy}
+          onSaving={setSiteSaving}
+          onSavedSettings={setSiteSettings}
+        />
       )}
       {activeTab === 'pages' && (
-        <PagesSection initialPages={pages} busy={busy} onSaving={setPagesSaving} />
+        <PagesSection
+          initialPages={pages}
+          busy={busy}
+          onSaving={setPagesSaving}
+          onPagesChange={setPages}
+        />
       )}
       {activeTab === 'password' && (
         <PasswordSection busy={busy} onSaving={setPasswordSaving} />
