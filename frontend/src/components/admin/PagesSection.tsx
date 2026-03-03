@@ -42,7 +42,8 @@ function PagePreview({ markdown }: { markdown: string }) {
           setHtml(resp.html)
           setPreviewError(false)
         }
-      } catch {
+      } catch (err) {
+        console.warn('Page preview render failed:', err)
         if (requestRef.current === requestId) {
           setPreviewError(true)
         }
@@ -131,7 +132,7 @@ export default function PagesSection({ initialPages, busy, onSaving }: PagesSect
       setPages(resp.pages)
       setOrderDirty(false)
       setPagesSuccess('Page order saved.')
-      useSiteStore.getState().fetchConfig().catch(() => {})
+      useSiteStore.getState().fetchConfig().catch((err: unknown) => { console.warn('Failed to refresh site config', err) })
     } catch (err) {
       if (err instanceof HTTPError && err.response.status === 401) {
         setPagesError('Session expired. Please log in again.')
@@ -160,7 +161,7 @@ export default function PagesSection({ initialPages, busy, onSaving }: PagesSect
       setNewPageTitle('')
       setShowAddForm(false)
       setPagesSuccess(`Page "${trimmedTitle}" created.`)
-      useSiteStore.getState().fetchConfig().catch(() => {})
+      useSiteStore.getState().fetchConfig().catch((err: unknown) => { console.warn('Failed to refresh site config', err) })
     } catch (err) {
       if (err instanceof HTTPError) {
         if (err.response.status === 409) {
@@ -224,7 +225,7 @@ export default function PagesSection({ initialPages, busy, onSaving }: PagesSect
           ),
         )
         setPageEditSuccess('Page saved.')
-        useSiteStore.getState().fetchConfig().catch(() => {})
+        useSiteStore.getState().fetchConfig().catch((err: unknown) => { console.warn('Failed to refresh site config', err) })
       } else {
         setPageEditSuccess('No changes to save.')
       }
@@ -256,7 +257,7 @@ export default function PagesSection({ initialPages, busy, onSaving }: PagesSect
       setExpandedPageId(null)
       setDeleteConfirmId(null)
       setPagesSuccess(`Page deleted.`)
-      useSiteStore.getState().fetchConfig().catch(() => {})
+      useSiteStore.getState().fetchConfig().catch((err: unknown) => { console.warn('Failed to refresh site config', err) })
     } catch (err) {
       if (err instanceof HTTPError) {
         if (err.response.status === 400) {

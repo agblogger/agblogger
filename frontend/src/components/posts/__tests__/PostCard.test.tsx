@@ -77,6 +77,7 @@ describe('PostCard', () => {
   })
 
   it('handles malformed date', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
     renderCard(makePost({ created_at: 'not-a-date' }))
     // Falls back to the part before space, which is 'not-a-date'
     expect(screen.getByText('not-a-date')).toBeInTheDocument()

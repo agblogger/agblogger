@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Lock } from 'lucide-react'
 
 import { HTTPError } from '@/api/client'
@@ -17,6 +17,8 @@ export default function PasswordSection({ busy, onSaving }: PasswordSectionProps
   const [passwordError, setPasswordError] = useState<string | null>(null)
   const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null)
   const [savingPassword, setSavingPassword] = useState(false)
+
+  useEffect(() => { onSaving(savingPassword) }, [savingPassword, onSaving])
 
   async function handleChangePassword() {
     setPasswordError(null)
@@ -38,7 +40,6 @@ export default function PasswordSection({ busy, onSaving }: PasswordSectionProps
       return
     }
     setSavingPassword(true)
-    onSaving(true)
     try {
       await changeAdminPassword({
         current_password: currentPassword,
@@ -64,7 +65,6 @@ export default function PasswordSection({ busy, onSaving }: PasswordSectionProps
       }
     } finally {
       setSavingPassword(false)
-      onSaving(false)
     }
   }
 

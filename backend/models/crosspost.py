@@ -46,7 +46,9 @@ class CrossPost(Base):
     post_path: Mapped[str] = mapped_column(Text, nullable=False)
     platform: Mapped[str] = mapped_column(String, nullable=False)
     platform_id: Mapped[str | None] = mapped_column(String, nullable=True)
-    status: Mapped[str] = mapped_column(String, nullable=False, default=CrossPostStatus.PENDING)
+    status: Mapped[CrossPostStatus] = mapped_column(
+        String, nullable=False, default=CrossPostStatus.PENDING
+    )
     posted_at: Mapped[str | None] = mapped_column(Text, nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[str] = mapped_column(Text, nullable=False)

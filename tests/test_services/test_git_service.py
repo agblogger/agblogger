@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 import asyncio
+import subprocess
 from typing import TYPE_CHECKING
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from backend.services.git_service import GIT_TIMEOUT_SECONDS, GitService
 
 if TYPE_CHECKING:
-    import subprocess
     from pathlib import Path
 
 
@@ -257,3 +257,18 @@ class TestGitTimeout:
 
     def test_timeout_constant_is_positive(self) -> None:
         assert GIT_TIMEOUT_SECONDS > 0
+
+
+class TestTryCommitTimeout:
+    """Issue 2: try_commit should catch TimeoutExpired in addition to CalledProcessError."""
+
+    async def test_try_commit_catches_timeout(self, tmp_path: Path) -> None:
+        gs = GitService(tmp_path)
+        (tmp_path / "file.txt").write_text("hello")
+        await gs.init_repo()
+
+        timeout_exc = subprocess.TimeoutExpired(cmd=["git", "commit"], timeout=30)
+        with patch.object(gs, "commit_all", new_callable=AsyncMock, side_effect=timeout_exc):
+            result = await gs.try_commit("test commit")
+
+        assert result is None

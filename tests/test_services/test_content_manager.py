@@ -93,6 +93,28 @@ class TestGenerateMarkdownExcerpt:
         assert len(excerpt) <= 53  # 50 + "..."
         assert excerpt.endswith("...")
 
+    def test_strips_display_math(self) -> None:
+        content = "Before.\n\n$$\n\\int_0^1 x dx\n$$\n\nAfter."
+        excerpt = generate_markdown_excerpt(content)
+        assert "\\int" not in excerpt
+        assert "$$" not in excerpt
+        assert "Before." in excerpt
+        assert "After." in excerpt
+
+    def test_strips_table_lines(self) -> None:
+        content = "Before.\n\n| A | B |\n|---|---|\n| 1 | 2 |\n\nAfter."
+        excerpt = generate_markdown_excerpt(content)
+        assert "|" not in excerpt
+        assert "Before." in excerpt
+        assert "After." in excerpt
+
+    def test_preserves_inline_math_with_display_math_stripped(self) -> None:
+        content = "Inline $x^2$ here.\n\n$$\ny = mx + b\n$$\n\nMore text."
+        excerpt = generate_markdown_excerpt(content)
+        assert "$x^2$" in excerpt
+        assert "y = mx" not in excerpt
+        assert "More text." in excerpt
+
 
 class TestParsePost:
     def test_basic_post(self) -> None:

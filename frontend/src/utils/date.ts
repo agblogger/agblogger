@@ -11,7 +11,8 @@ export function formatDate(dateStr: string, pattern = 'MMM d, yyyy'): string {
   try {
     const normalised = dateStr.replace(' ', 'T').replace(/([+-])(\d{2})$/, '$1$2:00')
     return format(parseISO(normalised), pattern)
-  } catch {
+  } catch (err) {
+    console.warn(`Failed to parse date "${dateStr}":`, err)
     return dateStr.split(' ')[0] ?? ''
   }
 }

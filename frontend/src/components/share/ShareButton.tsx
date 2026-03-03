@@ -47,7 +47,8 @@ export default function ShareButton({ title, author, url }: ShareButtonProps) {
     if (canNativeShare()) {
       try {
         await handleNativeShare()
-      } catch {
+      } catch (err) {
+        console.warn('Native share failed, falling back to dropdown:', err)
         setShowDropdown(true)
       }
     } else {

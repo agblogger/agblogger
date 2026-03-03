@@ -82,13 +82,16 @@ class GitService:
         """
         try:
             return await self.commit_all(message)
-        except subprocess.CalledProcessError as exc:
-            logger.error(
-                "Git commit failed (exit %d): %s — %s",
-                exc.returncode,
-                exc.stderr.strip() if exc.stderr else "no stderr",
-                message,
-            )
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+            if isinstance(exc, subprocess.CalledProcessError):
+                logger.error(
+                    "Git commit failed (exit %d): %s — %s",
+                    exc.returncode,
+                    exc.stderr.strip() if exc.stderr else "no stderr",
+                    message,
+                )
+            else:
+                logger.error("Git commit timed out: %s", message)
             return None
 
     async def head_commit(self) -> str | None:
@@ -138,6 +141,7 @@ class GitService:
         return await asyncio.to_thread(self._merge_file_content_sync, base, ours, theirs)
 
     def _merge_file_content_sync(self, base: str, ours: str, theirs: str) -> tuple[str, bool]:
+        """Synchronous three-way merge implementation for use with asyncio.to_thread."""
         with tempfile.TemporaryDirectory() as td:
             tmp = Path(td)
             base_f = tmp / "base"

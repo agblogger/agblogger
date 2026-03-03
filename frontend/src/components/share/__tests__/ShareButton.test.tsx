@@ -68,6 +68,7 @@ describe('ShareButton', () => {
 
   // Issue #7: native share non-AbortError should fall back to dropdown
   it('falls back to dropdown when native share fails with non-AbortError', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
     Object.defineProperty(navigator, 'share', {
       value: vi.fn().mockRejectedValue(new TypeError('Invalid share data')),
       writable: true,

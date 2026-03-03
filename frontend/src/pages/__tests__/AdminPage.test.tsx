@@ -676,6 +676,7 @@ describe('AdminPage', () => {
   })
 
   it('shows preview error when preview API fails', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
     setupLoadSuccess()
     const user = userEvent.setup()
     const mockApi = (await import('@/api/client')).default

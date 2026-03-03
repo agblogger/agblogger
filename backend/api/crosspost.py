@@ -53,6 +53,15 @@ from backend.services.crosspost_service import (
 logger = logging.getLogger(__name__)
 
 
+def _safe_status(raw: str) -> CrossPostStatus:
+    """Convert a raw status string to CrossPostStatus, falling back to FAILED for unknown values."""
+    try:
+        return CrossPostStatus(raw)
+    except ValueError:
+        logger.warning("Unknown cross-post status %r, defaulting to FAILED", raw)
+        return CrossPostStatus.FAILED
+
+
 def _generate_pkce_pair() -> tuple[str, str]:
     """Generate a PKCE code verifier and S256 code challenge."""
     unreserved = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"
@@ -86,7 +95,18 @@ async def _upsert_social_account(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"{platform.capitalize()} account already exists",
             ) from None
-        await create_social_account(session, user_id, account_data, secret_key)
+        try:
+            await create_social_account(session, user_id, account_data, secret_key)
+        except DuplicateAccountError:
+            logger.error(
+                "Race condition: failed to re-create %s account %s after deletion",
+                platform,
+                account_name,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Could not connect {platform} account due to a conflict. Please try again.",
+            ) from None
 
 
 router = APIRouter(prefix="/api/crosspost", tags=["crosspost"])
@@ -213,7 +233,7 @@ async def history_endpoint(
                 post_path=cp.post_path,
                 platform=cp.platform,
                 platform_id=cp.platform_id,
-                status=CrossPostStatus(cp.status),
+                status=_safe_status(cp.status),
                 posted_at=cp.posted_at,
                 error=cp.error,
             )

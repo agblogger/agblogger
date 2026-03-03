@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Settings, Save } from 'lucide-react'
 
 import { HTTPError } from '@/api/client'
@@ -22,20 +22,21 @@ export default function SiteSettingsSection({
   const [siteSuccess, setSiteSuccess] = useState<string | null>(null)
   const [savingSite, setSavingSite] = useState(false)
 
+  useEffect(() => { onSaving(savingSite) }, [savingSite, onSaving])
+
   async function handleSaveSiteSettings() {
     if (!siteSettings.title.trim()) {
       setSiteError('Title is required.')
       return
     }
     setSavingSite(true)
-    onSaving(true)
     setSiteError(null)
     setSiteSuccess(null)
     try {
       const updated = await updateAdminSiteSettings(siteSettings)
       setSiteSettings(updated)
       setSiteSuccess('Site settings saved.')
-      useSiteStore.getState().fetchConfig().catch(() => {})
+      useSiteStore.getState().fetchConfig().catch((err: unknown) => { console.warn('Failed to refresh site config', err) })
     } catch (err) {
       if (err instanceof HTTPError) {
         if (err.response.status === 401) {
@@ -48,7 +49,6 @@ export default function SiteSettingsSection({
       }
     } finally {
       setSavingSite(false)
-      onSaving(false)
     }
   }
 

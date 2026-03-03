@@ -214,26 +214,37 @@ def serialize_post(post_data: PostData) -> str:
 def generate_markdown_excerpt(content: str, max_length: int = 300) -> str:
     """Generate a markdown excerpt preserving inline formatting.
 
-    Strips headings, code blocks, and images but preserves bold, italic,
-    links, math expressions, and inline code so the excerpt can be rendered
-    to HTML via Pandoc.  Visual truncation is handled by CSS line-clamp on
-    the frontend; the backend provides enough rendered content.
+    Strips headings, code blocks, display math blocks, table lines, and
+    images but preserves bold, italic, links, inline math expressions, and
+    inline code so the excerpt can be rendered to HTML via Pandoc.  Visual
+    truncation is handled by CSS line-clamp on the frontend; the backend
+    provides enough rendered content.
     """
     lines: list[str] = []
     in_code_block = False
+    in_display_math = False
     for line in content.split("\n"):
-        if line.strip().startswith("```"):
+        trimmed = line.strip()
+        if trimmed.startswith("```"):
             in_code_block = not in_code_block
             continue
         if in_code_block:
             continue
-        if line.strip().startswith("#"):
+        # Track display math blocks (lines that are just "$$")
+        if trimmed == "$$":
+            in_display_math = not in_display_math
             continue
-        if line.strip().startswith("!["):
+        if in_display_math:
             continue
-        stripped = line.strip()
-        if stripped:
-            lines.append(stripped)
+        if trimmed.startswith("#"):
+            continue
+        if trimmed.startswith("!["):
+            continue
+        # Skip table lines (rows and separator lines)
+        if trimmed.startswith("|"):
+            continue
+        if trimmed:
+            lines.append(trimmed)
 
     text = " ".join(lines)
     if len(text) > max_length:

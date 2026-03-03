@@ -49,6 +49,12 @@ from backend.services.slug_service import generate_post_path, generate_post_slug
 
 logger = logging.getLogger(__name__)
 
+
+async def _empty_string() -> str:
+    """No-op coroutine returning empty string, for use as asyncio.gather placeholder."""
+    return ""
+
+
 router = APIRouter(prefix="/api/posts", tags=["posts"])
 
 _FTS_DELETE_SQL = text(
@@ -117,7 +123,10 @@ async def _delete_post_fts(
 
 
 async def _render_post(content: str, file_path: str) -> tuple[str, str]:
-    """Render excerpt and full HTML for a post in parallel, with URL rewriting."""
+    """Render excerpt and full HTML for a post in parallel, with URL rewriting.
+
+    Returns (rendered_excerpt, rendered_html).
+    """
     md_excerpt = generate_markdown_excerpt(content)
 
     async def _render_excerpt() -> str:
@@ -426,7 +435,7 @@ async def get_post_endpoint(
     if post.is_draft:
         if user is None:
             raise HTTPException(status_code=404, detail="Post not found")
-        # Check ownership via a lightweight query on the cache row
+        # PostDetail doesn't expose author_username; query the cache directly
         stmt = select(PostCache.author_username).where(PostCache.file_path == file_path)
         result = await session.execute(stmt)
         author_username = result.scalar_one_or_none()
@@ -562,10 +571,12 @@ async def update_post_endpoint(
     serialized = serialize_post(post_data)
     md_excerpt = generate_markdown_excerpt(post_data.content)
 
-    # Render excerpt and full HTML in parallel; catch pandoc failures
+    # Render excerpt and full HTML in parallel; catch pandoc failures.
+    # Unlike create/upload, we keep the raw HTML before URL rewriting
+    # because a title-change rename may require re-rewriting with the new path.
     try:
         raw_rendered_excerpt, raw_rendered_html = await asyncio.gather(
-            render_markdown_excerpt(md_excerpt) if md_excerpt else asyncio.sleep(0, result=""),
+            render_markdown_excerpt(md_excerpt) if md_excerpt else _empty_string(),
             render_markdown(post_data.content),
         )
     except RuntimeError as exc:
