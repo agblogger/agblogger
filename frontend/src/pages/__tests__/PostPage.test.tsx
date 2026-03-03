@@ -7,23 +7,18 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import { fetchPost, deletePost } from '@/api/posts'
 import type { UserResponse, PostDetail } from '@/api/client'
+import { MockHTTPError } from '@/test/MockHTTPError'
 
 vi.mock('@/api/posts', () => ({
   fetchPost: vi.fn(),
   deletePost: vi.fn(),
 }))
 
-vi.mock('@/api/client', () => {
-  class HTTPError extends Error {
-    response: { status: number }
-    constructor(status: number) {
-      super(`HTTP ${status}`)
-      this.response = { status }
-    }
-  }
+vi.mock('@/api/client', async () => {
+  const { MockHTTPError } = await import('@/test/MockHTTPError')
   return {
     default: {},
-    HTTPError,
+    HTTPError: MockHTTPError,
   }
 })
 
@@ -52,7 +47,6 @@ import PostPage from '../PostPage'
 
 const mockFetchPost = vi.mocked(fetchPost)
 const mockDeletePost = vi.mocked(deletePost)
-const { HTTPError: MockHTTPError } = await import('@/api/client')
 
 const postDetail: PostDetail = {
   id: 1,

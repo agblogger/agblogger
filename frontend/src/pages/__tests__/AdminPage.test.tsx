@@ -4,29 +4,13 @@ import { MemoryRouter } from 'react-router-dom'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import type { UserResponse, AdminSiteSettings, AdminPageConfig } from '@/api/client'
+import { MockHTTPError } from '@/test/MockHTTPError'
 
-vi.mock('@/api/client', () => {
-  class HTTPError extends Error {
-    response: { status: number; text: () => Promise<string>; json: () => Promise<unknown> }
-    constructor(status: number, body?: string) {
-      super(`HTTP ${status}`)
-      const bodyStr = body ?? ''
-      this.response = {
-        status,
-        text: () => Promise.resolve(bodyStr),
-        json: () => {
-          try {
-            return Promise.resolve(JSON.parse(bodyStr || '{}'))
-          } catch {
-            return Promise.reject(new SyntaxError('Failed to parse response body as JSON'))
-          }
-        },
-      }
-    }
-  }
+vi.mock('@/api/client', async () => {
+  const { MockHTTPError } = await import('@/test/MockHTTPError')
   return {
     default: { post: vi.fn() },
-    HTTPError,
+    HTTPError: MockHTTPError,
   }
 })
 
@@ -77,8 +61,6 @@ vi.mock('react-router-dom', async () => {
 })
 
 import AdminPage from '../AdminPage'
-
-const { HTTPError: MockHTTPError } = await import('@/api/client')
 
 const defaultSettings: AdminSiteSettings = {
   title: 'My Blog',
@@ -872,7 +854,9 @@ describe('AdminPage', () => {
     await waitFor(() => {
       expect(screen.getByText('Site settings saved.')).toBeInTheDocument()
     })
-    expect(screen.getByRole('button', { name: 'Pages' })).toBeEnabled()
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Pages' })).toBeEnabled()
+    })
   })
 
   it('renders social accounts panel', async () => {

@@ -25,6 +25,8 @@ Object.defineProperty(window, 'localStorage', {
   writable: true,
 })
 
+import { MockHTTPError } from '@/test/MockHTTPError'
+
 vi.mock('@/api/posts', () => ({
   fetchPostForEdit: vi.fn(),
   createPost: vi.fn(),
@@ -32,22 +34,11 @@ vi.mock('@/api/posts', () => ({
   uploadAssets: vi.fn(),
 }))
 
-vi.mock('@/api/client', () => {
-  class HTTPError extends Error {
-    response: { status: number; text: () => Promise<string>; json: () => Promise<unknown> }
-    constructor(status: number, body?: string) {
-      super(`HTTP ${status}`)
-      const bodyStr = body ?? ''
-      this.response = {
-        status,
-        text: () => Promise.resolve(bodyStr),
-        json: () => Promise.resolve(bodyStr ? JSON.parse(bodyStr) : {}),
-      }
-    }
-  }
+vi.mock('@/api/client', async () => {
+  const { MockHTTPError } = await import('@/test/MockHTTPError')
   return {
     default: { post: vi.fn() },
-    HTTPError,
+    HTTPError: MockHTTPError,
   }
 })
 
@@ -74,9 +65,6 @@ vi.mock('@/hooks/useKatex', () => ({
 import EditorPage from '../EditorPage'
 
 const mockFetchPostForEdit = vi.mocked(fetchPostForEdit)
-
-// Get the mock HTTPError class for creating test errors
-const { HTTPError: MockHTTPError } = await import('@/api/client')
 
 function renderEditor(path = '/editor/new') {
   const router = createMemoryRouter(

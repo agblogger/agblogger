@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { MockHTTPError } from '@/test/MockHTTPError'
 
 const mockFetchMe = vi.fn()
 const mockApiLogin = vi.fn()
@@ -10,17 +11,12 @@ vi.mock('@/api/auth', () => ({
   logout: (...args: unknown[]) => mockApiLogout(...args) as unknown,
 }))
 
-class MockHTTPError extends Error {
-  response: { status: number }
-  constructor(status: number) {
-    super(`HTTP ${status}`)
-    this.response = { status }
+vi.mock('@/api/client', async () => {
+  const { MockHTTPError } = await import('@/test/MockHTTPError')
+  return {
+    HTTPError: MockHTTPError,
   }
-}
-
-vi.mock('@/api/client', () => ({
-  HTTPError: MockHTTPError,
-}))
+})
 
 // Import after mocks are set up
 const { useAuthStore } = await import('@/stores/authStore')

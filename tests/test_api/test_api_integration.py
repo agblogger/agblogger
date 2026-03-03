@@ -99,6 +99,91 @@ class TestPosts:
         resp = await client.get("/api/posts/posts/nope.md")
         assert resp.status_code == 404
 
+    @pytest.mark.asyncio
+    async def test_create_post_with_empty_body(self, client: AsyncClient) -> None:
+        login_resp = await client.post(
+            "/api/auth/token-login",
+            json={"username": "admin", "password": "admin123"},
+        )
+        token = login_resp.json()["access_token"]
+
+        resp = await client.post(
+            "/api/posts",
+            json={
+                "title": "Empty Body Post",
+                "body": "",
+                "labels": [],
+                "is_draft": False,
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_create_post_with_minimal_body(self, client: AsyncClient) -> None:
+        login_resp = await client.post(
+            "/api/auth/token-login",
+            json={"username": "admin", "password": "admin123"},
+        )
+        token = login_resp.json()["access_token"]
+
+        resp = await client.post(
+            "/api/posts",
+            json={
+                "title": "Minimal Body Post",
+                "body": " ",
+                "labels": [],
+                "is_draft": False,
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 201
+        file_path = resp.json()["file_path"]
+
+        get_resp = await client.get(f"/api/posts/{file_path}")
+        assert get_resp.status_code == 200
+        assert get_resp.json()["title"] == "Minimal Body Post"
+
+    @pytest.mark.asyncio
+    async def test_pagination_with_many_posts(self, client: AsyncClient) -> None:
+        login_resp = await client.post(
+            "/api/auth/token-login",
+            json={"username": "admin", "password": "admin123"},
+        )
+        token = login_resp.json()["access_token"]
+
+        # Create 12 published posts (there's already 1 from fixture = 13 total)
+        for i in range(12):
+            resp = await client.post(
+                "/api/posts",
+                json={
+                    "title": f"Pagination Post {i:02d}",
+                    "body": f"Content for post {i}.\n",
+                    "labels": [],
+                    "is_draft": False,
+                },
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            assert resp.status_code == 201
+
+        # Request page 1 with per_page=5
+        page1_resp = await client.get("/api/posts", params={"page": 1, "per_page": 5})
+        assert page1_resp.status_code == 200
+        page1_data = page1_resp.json()
+        assert page1_data["total"] == 13
+        assert len(page1_data["posts"]) == 5
+
+        # Request page 2 with per_page=5
+        page2_resp = await client.get("/api/posts", params={"page": 2, "per_page": 5})
+        assert page2_resp.status_code == 200
+        page2_data = page2_resp.json()
+        assert len(page2_data["posts"]) == 5
+
+        # Verify no overlap between pages
+        page1_paths = {p["file_path"] for p in page1_data["posts"]}
+        page2_paths = {p["file_path"] for p in page2_data["posts"]}
+        assert page1_paths.isdisjoint(page2_paths)
+
 
 class TestLabels:
     @pytest.mark.asyncio
@@ -115,6 +200,11 @@ class TestLabels:
         data = resp.json()
         assert "nodes" in data
         assert "edges" in data
+
+    @pytest.mark.asyncio
+    async def test_get_nonexistent_label_returns_404(self, client: AsyncClient) -> None:
+        resp = await client.get("/api/labels/nonexistent-label-id")
+        assert resp.status_code == 404
 
 
 class TestAuth:
@@ -1340,9 +1430,11 @@ class TestSearch:
         """Search with special characters should not crash."""
         resp_cpp = await client.get("/api/posts/search", params={"q": "C++"})
         assert resp_cpp.status_code == 200
+        assert isinstance(resp_cpp.json(), list)
 
         resp_quotes = await client.get("/api/posts/search", params={"q": 'hello "world"'})
         assert resp_quotes.status_code == 200
+        assert isinstance(resp_quotes.json(), list)
 
     @pytest.mark.asyncio
     async def test_search_empty_query_rejected(self, client: AsyncClient) -> None:
@@ -1629,6 +1721,13 @@ class TestAdmin:
             headers=headers,
         )
         assert resp.status_code == 200
+        assert resp.json()["status"] == "ok"
+
+        get_resp = await client.get("/api/pages/editable")
+        assert get_resp.status_code == 200
+        page_data = get_resp.json()
+        assert page_data["title"] == "Updated Title"
+        assert "New content" in page_data["rendered_html"]
 
     @pytest.mark.asyncio
     async def test_delete_page(self, client: AsyncClient) -> None:
@@ -1682,6 +1781,12 @@ class TestAdmin:
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 200
+
+        config_resp = await client.get("/api/pages")
+        assert config_resp.status_code == 200
+        pages = config_resp.json()["pages"]
+        page_ids = [p["id"] for p in pages]
+        assert "timeline" in page_ids
 
     @pytest.mark.asyncio
     async def test_change_password(self, client: AsyncClient) -> None:

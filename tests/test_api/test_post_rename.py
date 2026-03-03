@@ -315,3 +315,57 @@ class TestPostRename:
         # Both files should exist
         assert (app_settings.content_dir / new_path1).exists()
         assert (app_settings.content_dir / new_path2).exists()
+
+    @pytest.mark.asyncio
+    async def test_rename_collision_counter_increments(
+        self, client: AsyncClient, app_settings: Settings
+    ) -> None:
+        """When multiple renames collide, suffixes should increment: -2, -3, etc."""
+        token = await _login(client)
+
+        data_a = await _create_post(client, token, "Alpha")
+        data_b = await _create_post(client, token, "Beta")
+        data_c = await _create_post(client, token, "Gamma")
+
+        path_a = data_a["file_path"]
+        path_b = data_b["file_path"]
+        path_c = data_c["file_path"]
+
+        # Rename B to "Alpha" → directory should get a -2 suffix
+        resp_b = await client.put(
+            f"/api/posts/{path_b}",
+            json={
+                "title": "Alpha",
+                "body": "Some content here.\n",
+                "labels": [],
+                "is_draft": False,
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp_b.status_code == 200
+        new_path_b = resp_b.json()["file_path"]
+        assert "-2" in new_path_b
+
+        # Rename C to "Alpha" → directory should get a -3 suffix
+        resp_c = await client.put(
+            f"/api/posts/{path_c}",
+            json={
+                "title": "Alpha",
+                "body": "Some content here.\n",
+                "labels": [],
+                "is_draft": False,
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp_c.status_code == 200
+        new_path_c = resp_c.json()["file_path"]
+        assert "-3" in new_path_c
+
+        # All three should have distinct paths
+        all_paths = {path_a, new_path_b, new_path_c}
+        assert len(all_paths) == 3
+
+        # All three files should exist on disk
+        assert (app_settings.content_dir / path_a).exists()
+        assert (app_settings.content_dir / new_path_b).exists()
+        assert (app_settings.content_dir / new_path_c).exists()

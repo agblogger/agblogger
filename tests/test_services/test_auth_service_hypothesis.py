@@ -113,25 +113,23 @@ class TestTokenHashingProperties:
 
 
 class TestTokenGeneratorProperties:
-    @PROPERTY_SETTINGS
-    @given(st.just(None))
-    def test_refresh_token_is_nonempty_url_safe(self, _: None) -> None:
+    def test_refresh_token_is_nonempty_url_safe(self) -> None:
         """Refresh tokens are non-empty URL-safe strings."""
-        token = create_refresh_token_value()
-        assert len(token) > 0
-        assert all(c in string.ascii_letters + string.digits + "-_" for c in token)
+        url_safe_chars = string.ascii_letters + string.digits + "-_"
+        for _ in range(10):
+            token = create_refresh_token_value()
+            assert len(token) > 0
+            assert all(c in url_safe_chars for c in token)
 
-    @PROPERTY_SETTINGS
-    @given(st.just(None))
-    def test_personal_access_token_has_prefix(self, _: None) -> None:
+    def test_personal_access_token_has_prefix(self) -> None:
         """Personal access tokens start with 'agpat_'."""
-        token = create_personal_access_token_value()
-        assert token.startswith("agpat_")
-        assert len(token) > len("agpat_")
+        for _ in range(10):
+            token = create_personal_access_token_value()
+            assert token.startswith("agpat_")
+            assert len(token) > len("agpat_")
 
-    @PROPERTY_SETTINGS
-    @given(st.just(None))
-    def test_token_generators_produce_unique_values(self, _: None) -> None:
+    def test_token_generators_produce_unique_values(self) -> None:
         """Each call produces a unique token (cryptographic randomness)."""
-        tokens = {create_refresh_token_value() for _ in range(10)}
-        assert len(tokens) == 10
+        for _ in range(10):
+            tokens = {create_refresh_token_value() for _ in range(10)}
+            assert len(tokens) == 10

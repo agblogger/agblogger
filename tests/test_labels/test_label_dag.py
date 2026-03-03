@@ -135,6 +135,46 @@ class TestCacheCycleEnforcement:
         assert ("swe", "cs") in edges
 
 
+class TestDeeplyNestedHierarchy:
+    async def test_deeply_nested_hierarchy(
+        self,
+        db_session: AsyncSession,
+        tmp_content_dir: Path,
+    ) -> None:
+        """A chain of 12 labels A→B→C→...→L should return all descendants of root."""
+        # Build a chain: label_a ← label_b ← label_c ← ... ← label_l
+        label_ids = [chr(ord("a") + i) for i in range(12)]  # a..l
+        lines = ["[labels]\n"]
+        for i, lid in enumerate(label_ids):
+            lines.append(f'[labels.{lid}]\nnames = ["{lid.upper()}"]\n')
+            if i > 0:
+                lines.append(f'parent = "#{label_ids[i - 1]}"\n')
+        (tmp_content_dir / "labels.toml").write_text("".join(lines))
+
+        await ensure_tables(db_session)
+        cm = ContentManager(tmp_content_dir)
+        await rebuild_cache(db_session, cm)
+
+        from sqlalchemy import text
+
+        # Query descendants of root label "a"
+        stmt = text("""
+            WITH RECURSIVE descendants(id) AS (
+                SELECT :label_id
+                UNION ALL
+                SELECT lp.label_id
+                FROM label_parents_cache lp
+                JOIN descendants d ON lp.parent_id = d.id
+            )
+            SELECT DISTINCT id FROM descendants
+        """)
+        result = await db_session.execute(stmt, {"label_id": "a"})
+        descendant_ids = {r[0] for r in result.all()}
+
+        # All 12 labels should be descendants (including root itself)
+        assert descendant_ids == set(label_ids)
+
+
 def _is_dag(edges: list[tuple[str, str]]) -> bool:
     """Verify edges form a DAG using Kahn's algorithm."""
     children: dict[str, list[str]] = defaultdict(list)

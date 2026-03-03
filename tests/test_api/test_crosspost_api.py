@@ -538,3 +538,61 @@ class TestFacebookSelectPage:
             )
             assert resp.status_code == 400
             assert resp.json()["detail"] == "Invalid or expired page selection state"
+
+
+class TestDeleteSocialAccount:
+    async def test_delete_requires_auth(self, test_settings: Settings) -> None:
+        async with create_test_client(test_settings) as client:
+            resp = await client.delete("/api/crosspost/accounts/999")
+            assert resp.status_code == 401
+
+    async def test_delete_nonexistent_returns_404(self, test_settings: Settings) -> None:
+        test_settings.admin_password = "admin"
+        async with create_test_client(test_settings) as client:
+            login_resp = await client.post(
+                "/api/auth/token-login",
+                json={"username": "admin", "password": "admin"},
+            )
+            token = login_resp.json()["access_token"]
+
+            resp = await client.delete(
+                "/api/crosspost/accounts/99999",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            assert resp.status_code == 404
+
+    async def test_delete_succeeds(self, test_settings: Settings) -> None:
+        test_settings.admin_password = "admin"
+        async with create_test_client(test_settings) as client:
+            login_resp = await client.post(
+                "/api/auth/token-login",
+                json={"username": "admin", "password": "admin"},
+            )
+            token = login_resp.json()["access_token"]
+            headers = {"Authorization": f"Bearer {token}"}
+
+            # Create a social account via the API
+            create_resp = await client.post(
+                "/api/crosspost/accounts",
+                json={
+                    "platform": "mastodon",
+                    "account_name": "@testuser@mastodon.social",
+                    "credentials": {"access_token": "fake-token"},
+                },
+                headers=headers,
+            )
+            assert create_resp.status_code == 201
+            account_id = create_resp.json()["id"]
+
+            # Delete the account
+            delete_resp = await client.delete(
+                f"/api/crosspost/accounts/{account_id}",
+                headers=headers,
+            )
+            assert delete_resp.status_code == 204
+
+            # Verify it's gone
+            list_resp = await client.get("/api/crosspost/accounts", headers=headers)
+            assert list_resp.status_code == 200
+            account_ids = [a["id"] for a in list_resp.json()]
+            assert account_id not in account_ids

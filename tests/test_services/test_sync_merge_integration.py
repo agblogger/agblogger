@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import subprocess
@@ -219,6 +220,7 @@ class TestSyncCommit:
             "/api/sync/download/posts/2026-02-22-new/index.md", headers=headers
         )
         assert dl_resp.status_code == 200
+        assert b"Brand new" in dl_resp.content
 
     async def test_delete_file(self, merge_client: AsyncClient, merge_settings: Settings) -> None:
         token = await _login(merge_client)
@@ -469,3 +471,110 @@ class TestSyncCommit:
             "uploaded_files", mock_norm.call_args.args[0] if mock_norm.call_args.args else []
         )
         assert "posts/shared.md" not in uploaded_files_arg
+
+
+def _sha256(data: bytes) -> str:
+    """Compute SHA-256 hex digest of raw bytes."""
+    return hashlib.sha256(data).hexdigest()
+
+
+class TestSyncRoundTrip:
+    async def test_full_bidirectional_sync_round_trip(
+        self, merge_client: AsyncClient, merge_settings: Settings
+    ) -> None:
+        """Full round trip: client uploads -> status clean -> server edits -> client downloads."""
+        token = await _login(merge_client)
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # Step 1: Client uploads a new file via sync commit
+        # Directory name must match the slug of the title ("round-trip-post")
+        # to avoid rename when the server processes the file via PUT.
+        new_content = b"---\ntitle: Round Trip Post\nauthor: Admin\n---\n\nOriginal content.\n"
+        new_file_path = "posts/2026-03-01-round-trip-post/index.md"
+        metadata = json.dumps({"deleted_files": []})
+        commit_resp = await merge_client.post(
+            "/api/sync/commit",
+            data={"metadata": metadata},
+            files=[
+                ("files", (new_file_path, io.BytesIO(new_content), "text/plain")),
+            ],
+            headers=headers,
+        )
+        assert commit_resp.status_code == 200
+        commit_data = commit_resp.json()
+        assert commit_data["commit_hash"] is not None
+        assert len(commit_data["conflicts"]) == 0
+
+        # Step 2: Verify sync status shows no pending actions
+        # The client provides a manifest entry matching what it just uploaded.
+        # After sync commit the server normalizes frontmatter, so download the
+        # actual file content and compute the hash from it.
+        dl_after_upload = await merge_client.get(
+            f"/api/sync/download/{new_file_path}", headers=headers
+        )
+        assert dl_after_upload.status_code == 200
+        uploaded_bytes = dl_after_upload.content
+        uploaded_hash = _sha256(uploaded_bytes)
+
+        status_resp = await merge_client.post(
+            "/api/sync/status",
+            json={
+                "client_manifest": [
+                    {
+                        "file_path": new_file_path,
+                        "content_hash": uploaded_hash,
+                        "file_size": len(uploaded_bytes),
+                        "file_mtime": "0",
+                    }
+                ]
+            },
+            headers=headers,
+        )
+        assert status_resp.status_code == 200
+        status_data = status_resp.json()
+        # The uploaded file should NOT appear in to_download or to_upload
+        assert new_file_path not in status_data["to_download"]
+        assert new_file_path not in status_data["to_upload"]
+
+        # Step 3: Server-side modification via PUT /api/posts/
+        edit_resp = await merge_client.put(
+            f"/api/posts/{new_file_path}",
+            json={
+                "title": "Round Trip Post",
+                "body": "Server-modified content.\n\nNew paragraph added by server.\n",
+                "labels": [],
+                "is_draft": False,
+            },
+            headers=headers,
+        )
+        assert edit_resp.status_code == 200
+
+        # Step 4: Client checks sync status -> sees download needed
+        # Client still has the old hash, so the server-modified file should
+        # appear in to_download.
+        status_resp2 = await merge_client.post(
+            "/api/sync/status",
+            json={
+                "client_manifest": [
+                    {
+                        "file_path": new_file_path,
+                        "content_hash": uploaded_hash,
+                        "file_size": len(uploaded_bytes),
+                        "file_mtime": "0",
+                    }
+                ]
+            },
+            headers=headers,
+        )
+        assert status_resp2.status_code == 200
+        status_data2 = status_resp2.json()
+        assert new_file_path in status_data2["to_download"]
+
+        # Step 5: Client downloads the modified file
+        dl_resp = await merge_client.get(f"/api/sync/download/{new_file_path}", headers=headers)
+        assert dl_resp.status_code == 200
+        modified_content = dl_resp.content.decode()
+
+        # Step 6: Verify content matches server version
+        assert "Server-modified content" in modified_content
+        assert "New paragraph added by server" in modified_content

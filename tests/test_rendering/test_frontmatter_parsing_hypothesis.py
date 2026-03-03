@@ -123,6 +123,13 @@ class TestExtractTitleProperties:
         assert len(result) >= 1
 
     @PROPERTY_SETTINGS
+    @given(data=_markdown_with_heading())
+    def test_extract_title_equals_heading_text(self, data: tuple[str, str]) -> None:
+        """extract_title returns the exact text of the first # heading."""
+        body, expected_title = data
+        assert extract_title(body) == expected_title
+
+    @PROPERTY_SETTINGS
     @given(title=_SAFE_TITLE)
     def test_h2_headings_are_not_extracted(self, title: str) -> None:
         """## headings are not treated as titles."""

@@ -207,6 +207,13 @@ class TestCsrf:
         assert data["csrf_token"]
 
     @pytest.mark.asyncio
+    async def test_csrf_endpoint_returns_401_when_unauthenticated(
+        self, client: AsyncClient
+    ) -> None:
+        resp = await client.get("/api/auth/csrf")
+        assert resp.status_code == 401
+
+    @pytest.mark.asyncio
     async def test_cookie_authenticated_post_requires_csrf(self, client: AsyncClient) -> None:
         login_resp = await client.post(
             "/api/auth/login",
@@ -484,6 +491,41 @@ class TestPasswordRotation:
             headers={"Authorization": f"Bearer {pat_token}"},
         )
         assert pat_me_resp.status_code == 401
+
+
+class TestTokenLoginRateLimiting:
+    @pytest.mark.asyncio
+    async def test_token_login_rate_limited_after_max_failures(self, client: AsyncClient) -> None:
+        first = await client.post(
+            "/api/auth/token-login",
+            json={"username": "admin", "password": "wrong"},
+        )
+        second = await client.post(
+            "/api/auth/token-login",
+            json={"username": "admin", "password": "wrong"},
+        )
+        assert first.status_code == 401
+        assert second.status_code == 429
+
+
+class TestCsrfTamperedToken:
+    @pytest.mark.asyncio
+    async def test_tampered_csrf_token_rejected(self, client: AsyncClient) -> None:
+        login_resp = await client.post(
+            "/api/auth/login",
+            json={"username": "admin", "password": "admin123"},
+        )
+        assert login_resp.status_code == 200
+        csrf_token = login_resp.json()["csrf_token"]
+
+        # Tamper with the CSRF token
+        tampered = csrf_token[:-1] + ("A" if csrf_token[-1] != "A" else "B")
+        resp = await client.post(
+            "/api/render/preview",
+            json={"markdown": "# Test"},
+            headers={"X-CSRF-Token": tampered},
+        )
+        assert resp.status_code == 403
 
 
 class TestOldPasswordAfterChange:

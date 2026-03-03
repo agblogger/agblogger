@@ -26,16 +26,6 @@ logger = logging.getLogger(__name__)
 _MAX_POST_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 
 
-@dataclass
-class ContentIndex:
-    """Complete index of all content in the content directory."""
-
-    site_config: SiteConfig
-    labels: dict[str, LabelDef]
-    posts: list[PostData]
-    pages: dict[str, str]  # page_id -> rendered content (raw md for now)
-
-
 def hash_content(content: str | bytes) -> str:
     """Compute SHA-256 hash of content."""
     if isinstance(content, str):
@@ -226,22 +216,6 @@ class ContentManager:
                         logger.warning("Failed to read page %s: %s", page_id, exc)
                         return None
         return None
-
-    def build_index(self) -> ContentIndex:
-        """Build a complete content index from the filesystem."""
-        posts = self.scan_posts()
-        pages: dict[str, str] = {}
-        for page_cfg in self.site_config.pages:
-            if page_cfg.file:
-                page_content = self.read_page(page_cfg.id)
-                if page_content:
-                    pages[page_cfg.id] = page_content
-        return ContentIndex(
-            site_config=self.site_config,
-            labels=self.labels,
-            posts=posts,
-            pages=pages,
-        )
 
     def get_markdown_excerpt(self, post_data: PostData) -> str:
         """Generate a markdown excerpt for a post (to be rendered via Pandoc)."""

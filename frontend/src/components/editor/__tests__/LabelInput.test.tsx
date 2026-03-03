@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import { fetchLabels, createLabel } from '@/api/labels'
-import { HTTPError } from '@/api/client'
+import { HTTPError } from '@/test/MockHTTPError'
 import type { LabelResponse } from '@/api/client'
 
 vi.mock('@/api/labels', () => ({
@@ -11,19 +11,9 @@ vi.mock('@/api/labels', () => ({
   createLabel: vi.fn(),
 }))
 
-vi.mock('@/api/client', () => {
-  class MockHTTPError extends Error {
-    response: { status: number; text: () => Promise<string> }
-    constructor(status: number, body?: string) {
-      super(`HTTP ${status}`)
-      const bodyStr = body ?? ''
-      this.response = {
-        status,
-        text: () => Promise.resolve(bodyStr),
-      }
-    }
-  }
-  return { default: {}, HTTPError: MockHTTPError }
+vi.mock('@/api/client', async () => {
+  const { HTTPError } = await import('@/test/MockHTTPError')
+  return { default: {}, HTTPError }
 })
 
 import LabelInput from '../LabelInput'

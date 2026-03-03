@@ -4,16 +4,11 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import type { UserResponse, LabelResponse, PostListResponse } from '@/api/client'
+import { MockHTTPError } from '@/test/MockHTTPError'
 
-vi.mock('@/api/client', () => {
-  class HTTPError extends Error {
-    response: { status: number }
-    constructor(status: number) {
-      super(`HTTP ${status}`)
-      this.response = { status }
-    }
-  }
-  return { default: {}, HTTPError }
+vi.mock('@/api/client', async () => {
+  const { MockHTTPError } = await import('@/test/MockHTTPError')
+  return { default: {}, HTTPError: MockHTTPError }
 })
 
 const mockFetchLabel = vi.fn()
@@ -38,8 +33,6 @@ vi.mock('@/stores/authStore', () => ({
 }))
 
 import LabelPostsPage from '../LabelPostsPage'
-
-const { HTTPError: MockHTTPError } = await import('@/api/client')
 
 const testLabel: LabelResponse = {
   id: 'swe',

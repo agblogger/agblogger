@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import { fetchPosts, uploadPost } from '@/api/posts'
 import type { PostListResponse, UserResponse } from '@/api/client'
+import { MockHTTPError } from '@/test/MockHTTPError'
 
 vi.mock('@/api/posts', () => ({
   fetchPosts: vi.fn(),
@@ -16,15 +17,9 @@ vi.mock('@/api/labels', () => ({
   fetchLabels: vi.fn().mockResolvedValue([]),
 }))
 
-vi.mock('@/api/client', () => {
-  class HTTPError extends Error {
-    response: { status: number; json: () => Promise<unknown> }
-    constructor(status: number, body?: unknown) {
-      super(`HTTP ${status}`)
-      this.response = { status, json: () => Promise.resolve(body ?? {}) }
-    }
-  }
-  return { default: {}, HTTPError }
+vi.mock('@/api/client', async () => {
+  const { MockHTTPError } = await import('@/test/MockHTTPError')
+  return { default: {}, HTTPError: MockHTTPError }
 })
 
 let mockUser: UserResponse | null = null
@@ -44,8 +39,6 @@ import TimelinePage from '../TimelinePage'
 
 const mockFetchPosts = vi.mocked(fetchPosts)
 const mockUploadPost = vi.mocked(uploadPost)
-
-const { HTTPError: MockHTTPError } = await import('@/api/client')
 
 const postsResponse: PostListResponse = {
   posts: [
@@ -316,8 +309,8 @@ describe('TimelinePage', () => {
     mockUser = { id: 1, username: 'admin', email: 'a@t.com', display_name: null, is_admin: true }
     mockFetchPosts.mockResolvedValue(postsResponse)
     mockUploadPost.mockRejectedValue(
-      new (MockHTTPError as unknown as new (s: number, body?: unknown) => Error)(
-        422, { detail: 'no_title' },
+      new (MockHTTPError as unknown as new (s: number, body?: string) => Error)(
+        422, JSON.stringify({ detail: 'no_title' }),
       ),
     )
     renderTimeline()
@@ -339,8 +332,8 @@ describe('TimelinePage', () => {
     mockFetchPosts.mockResolvedValue(postsResponse)
     mockUploadPost
       .mockRejectedValueOnce(
-        new (MockHTTPError as unknown as new (s: number, body?: unknown) => Error)(
-          422, { detail: 'no_title' },
+        new (MockHTTPError as unknown as new (s: number, body?: string) => Error)(
+          422, JSON.stringify({ detail: 'no_title' }),
         ),
       )
       .mockResolvedValueOnce({
@@ -374,8 +367,8 @@ describe('TimelinePage', () => {
     mockUser = { id: 1, username: 'admin', email: 'a@t.com', display_name: null, is_admin: true }
     mockFetchPosts.mockResolvedValue(postsResponse)
     mockUploadPost.mockRejectedValue(
-      new (MockHTTPError as unknown as new (s: number, body?: unknown) => Error)(
-        422, { detail: 'no_title' },
+      new (MockHTTPError as unknown as new (s: number, body?: string) => Error)(
+        422, JSON.stringify({ detail: 'no_title' }),
       ),
     )
     const user = userEvent.setup()

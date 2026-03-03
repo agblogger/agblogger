@@ -224,6 +224,7 @@ class TestFlatDraftContentVisibility:
             headers={"Authorization": f"Bearer {admin_token}"},
         )
         assert resp.status_code == 200
+        assert b"Top secret legacy draft" in resp.content
 
 
 class TestCrosspostDraftIsolation:
@@ -517,6 +518,124 @@ class TestProductionHardeningDefaults:
 
             bad_host_resp = await local_client.get("/api/health", headers={"Host": "evil.example"})
             assert bad_host_resp.status_code == 400
+
+
+class TestRefererOriginEnforcement:
+    @pytest.mark.asyncio
+    async def test_login_rejects_untrusted_referer_when_origin_absent(
+        self, client: AsyncClient
+    ) -> None:
+        resp = await client.post(
+            "/api/auth/login",
+            json={"username": "admin", "password": "admin123"},
+            headers={"Referer": "http://evil.example/page"},
+        )
+        assert resp.status_code == 403
+
+
+class TestRegistrationDisabled:
+    @pytest.fixture
+    def disabled_settings(self, tmp_content_dir: Path, tmp_path: Path) -> Settings:
+        posts_dir = tmp_content_dir / "posts"
+        (posts_dir / "hello.md").write_text("# Hello\n", encoding="utf-8")
+        (tmp_content_dir / "labels.toml").write_text("[labels]\n", encoding="utf-8")
+        db_path = tmp_path / "test_disabled.db"
+        return Settings(
+            secret_key="test-secret-key-very-long-for-security",
+            debug=True,
+            database_url=f"sqlite+aiosqlite:///{db_path}",
+            content_dir=tmp_content_dir,
+            frontend_dir=tmp_path / "frontend",
+            admin_username="admin",
+            admin_password="admin123",
+            auth_self_registration=False,
+            auth_invites_enabled=False,
+        )
+
+    @pytest.mark.asyncio
+    async def test_register_returns_403_when_registration_fully_disabled(
+        self, disabled_settings: Settings
+    ) -> None:
+        async with create_test_client(disabled_settings) as local_client:
+            resp = await local_client.post(
+                "/api/auth/register",
+                json={
+                    "username": "newuser",
+                    "email": "new@test.com",
+                    "password": "password1234",
+                },
+            )
+            assert resp.status_code == 403
+            assert "Registration is disabled" in resp.json()["detail"]
+
+
+class TestTrustedProxyForwarding:
+    @pytest.fixture
+    def trusted_proxy_settings(self, tmp_content_dir: Path, tmp_path: Path) -> Settings:
+        """Settings with 127.0.0.1 as a trusted proxy."""
+        posts_dir = tmp_content_dir / "posts"
+        (posts_dir / "hello.md").write_text(
+            "---\n"
+            "title: Hello World\n"
+            "created_at: 2026-02-02 22:21:29.975359+00\n"
+            "author: Admin\n"
+            "labels: []\n"
+            "---\nHello.\n",
+            encoding="utf-8",
+        )
+        (tmp_content_dir / "labels.toml").write_text("[labels]\n", encoding="utf-8")
+        db_path = tmp_path / "test_proxy.db"
+        return Settings(
+            secret_key="test-secret-key-very-long-for-security",
+            debug=True,
+            database_url=f"sqlite+aiosqlite:///{db_path}",
+            content_dir=tmp_content_dir,
+            frontend_dir=tmp_path / "frontend",
+            admin_username="admin",
+            admin_password="admin123",
+            auth_login_max_failures=2,
+            auth_rate_limit_window_seconds=300,
+            trusted_proxy_ips=["127.0.0.1"],
+        )
+
+    @pytest.mark.asyncio
+    async def test_trusted_proxy_separates_forwarded_ips(
+        self, trusted_proxy_settings: Settings
+    ) -> None:
+        """With a trusted proxy, different X-Forwarded-For IPs are treated as separate clients."""
+        async with create_test_client(trusted_proxy_settings) as proxy_client:
+            first = await proxy_client.post(
+                "/api/auth/login",
+                json={"username": "admin", "password": "wrong"},
+                headers={"X-Forwarded-For": "203.0.113.10"},
+            )
+            second = await proxy_client.post(
+                "/api/auth/login",
+                json={"username": "admin", "password": "wrong"},
+                headers={"X-Forwarded-For": "198.51.100.42"},
+            )
+
+            # Both should get 401 (not 429) because they are different clients
+            assert first.status_code == 401
+            assert second.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_untrusted_proxy_shares_rate_limit(self, client: AsyncClient) -> None:
+        """Without trusted proxy, different X-Forwarded-For headers share the same rate limit."""
+        first = await client.post(
+            "/api/auth/login",
+            json={"username": "admin", "password": "wrong"},
+            headers={"X-Forwarded-For": "203.0.113.10"},
+        )
+        second = await client.post(
+            "/api/auth/login",
+            json={"username": "admin", "password": "wrong"},
+            headers={"X-Forwarded-For": "198.51.100.42"},
+        )
+
+        # Both use the actual client IP → shared rate limit → second is 429
+        assert first.status_code == 401
+        assert second.status_code == 429
 
 
 class TestProductionStartupValidation:

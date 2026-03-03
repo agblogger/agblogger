@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+from unittest.mock import patch
 
 import pytest
 
@@ -133,6 +134,34 @@ class TestDeletePage:
     def test_delete_nonexistent_raises(self, cm: ContentManager) -> None:
         with pytest.raises(ValueError, match="not found"):
             delete_page(cm, page_id="nope", delete_file=False)
+
+
+class TestUpdateSiteSettingsWriteError:
+    def test_write_error_propagates(self, cm: ContentManager) -> None:
+        with (
+            patch(
+                "backend.filesystem.toml_manager.tempfile.mkstemp",
+                side_effect=OSError("disk full"),
+            ),
+            pytest.raises(OSError, match="disk full"),
+        ):
+            update_site_settings(
+                cm,
+                title="New Title",
+                description="desc",
+                default_author="Author",
+                timezone="UTC",
+            )
+
+
+class TestDeletePageUnlinkError:
+    def test_unlink_error_propagates(self, cm: ContentManager) -> None:
+        about_path = cm.content_dir / "about.md"
+        with (
+            patch.object(type(about_path), "unlink", side_effect=OSError("permission denied")),
+            pytest.raises(OSError, match="permission denied"),
+        ):
+            delete_page(cm, page_id="about", delete_file=True)
 
 
 class TestUpdatePageOrder:
