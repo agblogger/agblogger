@@ -1,16 +1,7 @@
 import { Bold, Italic, Heading2, Link, Code, FileCode } from 'lucide-react'
 import type { RefObject } from 'react'
+import { actions } from './toolbarActions'
 import { wrapSelection } from './wrapSelection'
-import type { WrapAction } from './wrapSelection'
-
-const actions: Record<string, WrapAction> = {
-  bold: { before: '**', after: '**', placeholder: 'bold text' },
-  italic: { before: '_', after: '_', placeholder: 'italic text' },
-  heading: { before: '## ', after: '', placeholder: 'Heading', block: true },
-  link: { before: '[', after: '](url)', placeholder: 'link text' },
-  code: { before: '`', after: '`', placeholder: 'code' },
-  codeblock: { before: '```\n', after: '\n```', placeholder: 'code', block: true },
-}
 
 interface MarkdownToolbarProps {
   textareaRef: RefObject<HTMLTextAreaElement | null>
@@ -19,13 +10,16 @@ interface MarkdownToolbarProps {
   disabled?: boolean
 }
 
+const isMac = typeof navigator !== 'undefined' && navigator.platform.toUpperCase().includes('MAC')
+const mod = isMac ? 'Cmd' : 'Ctrl'
+
 const buttons = [
-  { key: 'bold', label: 'Bold', Icon: Bold },
-  { key: 'italic', label: 'Italic', Icon: Italic },
-  { key: 'heading', label: 'Heading', Icon: Heading2 },
-  { key: 'link', label: 'Link', Icon: Link },
-  { key: 'code', label: 'Code', Icon: Code },
-  { key: 'codeblock', label: 'Code Block', Icon: FileCode },
+  { key: 'bold', label: 'Bold', Icon: Bold, shortcut: `${mod}+B` },
+  { key: 'italic', label: 'Italic', Icon: Italic, shortcut: `${mod}+I` },
+  { key: 'heading', label: 'Heading', Icon: Heading2, shortcut: `${mod}+H` },
+  { key: 'link', label: 'Link', Icon: Link, shortcut: `${mod}+K` },
+  { key: 'code', label: 'Code', Icon: Code, shortcut: `${mod}+E` },
+  { key: 'codeblock', label: 'Code Block', Icon: FileCode, shortcut: `${mod}+Shift+E` },
 ] as const
 
 export default function MarkdownToolbar({ textareaRef, value, onChange, disabled }: MarkdownToolbarProps) {
@@ -52,7 +46,7 @@ export default function MarkdownToolbar({ textareaRef, value, onChange, disabled
 
   return (
     <div className="flex items-center gap-1 mb-2">
-      {buttons.map(({ key, label, Icon }) => (
+      {buttons.map(({ key, label, Icon, shortcut }) => (
         <button
           key={key}
           type="button"
@@ -60,8 +54,8 @@ export default function MarkdownToolbar({ textareaRef, value, onChange, disabled
           disabled={disabled}
           className="p-1.5 text-muted hover:text-ink hover:bg-paper-warm rounded transition-colors
                    disabled:opacity-50 disabled:cursor-not-allowed"
-          title={label}
-          aria-label={label}
+          title={`${label} (${shortcut})`}
+          aria-label={`${label} (${shortcut})`}
         >
           <Icon size={16} />
         </button>

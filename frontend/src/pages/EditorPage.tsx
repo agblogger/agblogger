@@ -17,6 +17,8 @@ import CrossPostDialog from '@/components/crosspost/CrossPostDialog'
 import PlatformIcon from '@/components/crosspost/PlatformIcon'
 import LabelInput from '@/components/editor/LabelInput'
 import MarkdownToolbar from '@/components/editor/MarkdownToolbar'
+import { actions as toolbarActions } from '@/components/editor/toolbarActions'
+import { wrapSelection } from '@/components/editor/wrapSelection'
 
 export default function EditorPage() {
   const { '*': filePath } = useParams()
@@ -45,6 +47,7 @@ export default function EditorPage() {
   const [accounts, setAccounts] = useState<SocialAccount[]>([])
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([])
   const [showCrossPostDialog, setShowCrossPostDialog] = useState(false)
+  const [mobileTab, setMobileTab] = useState<'edit' | 'preview'>('edit')
   const [savedFilePath, setSavedFilePath] = useState<string | null>(null)
 
   const autoSaveKey = isNew ? 'agblogger:draft:new' : `agblogger:draft:${filePath}`
@@ -247,6 +250,45 @@ export default function EditorPage() {
     }
   }
 
+  function handleEditorKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    const isMod = e.metaKey || e.ctrlKey
+    if (!isMod) return
+
+    const keyMap: Record<string, string> = {
+      b: 'bold',
+      i: 'italic',
+      h: 'heading',
+      k: 'link',
+    }
+
+    let actionKey: string | undefined
+    if (e.key === 'e' || e.key === 'E') {
+      actionKey = e.shiftKey ? 'codeblock' : 'code'
+    } else {
+      actionKey = keyMap[e.key.toLowerCase()]
+    }
+
+    if (actionKey === undefined) return
+    const action = toolbarActions[actionKey]
+    if (action === undefined) return
+
+    e.preventDefault()
+    const textarea = textareaRef.current
+    if (!textarea) return
+
+    const { newValue, cursorStart, cursorEnd } = wrapSelection(
+      body,
+      textarea.selectionStart,
+      textarea.selectionEnd,
+      action,
+    )
+    setBody(newValue)
+    requestAnimationFrame(() => {
+      textarea.focus()
+      textarea.setSelectionRange(cursorStart, cursorEnd)
+    })
+  }
+
   if (!isInitialized || !user) {
     return null
   }
@@ -302,27 +344,27 @@ export default function EditorPage() {
       </div>
 
       {error !== null && (
-        <div className="mb-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+        <div className="mb-4 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/40 rounded-lg px-4 py-3">
           {error}
         </div>
       )}
 
       {draftAvailable && draftSavedAt !== null && (
-        <div className="mb-4 flex items-center justify-between text-sm bg-sky-50 border border-sky-200 rounded-lg px-4 py-3">
-          <span className="text-sky-800">
+        <div className="mb-4 flex items-center justify-between text-sm bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800/40 rounded-lg px-4 py-3">
+          <span className="text-sky-800 dark:text-sky-300">
             You have unsaved changes from{' '}
             {format(parseISO(draftSavedAt), 'MMM d, h:mm a')}
           </span>
           <span className="flex gap-2">
             <button
               onClick={restoreDraft}
-              className="font-medium text-sky-700 hover:text-sky-900 hover:underline"
+              className="font-medium text-sky-700 dark:text-sky-400 hover:text-sky-900 dark:hover:text-sky-300 hover:underline"
             >
               Restore
             </button>
             <button
               onClick={discardDraft}
-              className="font-medium text-sky-500 hover:text-sky-700 hover:underline"
+              className="font-medium text-sky-500 dark:text-sky-400 hover:text-sky-700 dark:hover:text-sky-400 hover:underline"
             >
               Discard
             </button>
@@ -445,8 +487,33 @@ export default function EditorPage() {
         </div>
       )}
 
+      <div className="flex lg:hidden mb-4 border-b border-border">
+        <button
+          type="button"
+          onClick={() => setMobileTab('edit')}
+          className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+            mobileTab === 'edit'
+              ? 'border-accent text-accent'
+              : 'border-transparent text-muted hover:text-ink'
+          }`}
+        >
+          Edit
+        </button>
+        <button
+          type="button"
+          onClick={() => setMobileTab('preview')}
+          className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+            mobileTab === 'preview'
+              ? 'border-accent text-accent'
+              : 'border-transparent text-muted hover:text-ink'
+          }`}
+        >
+          Preview
+        </button>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4" style={{ minHeight: '60vh' }}>
-        <div>
+        <div className={mobileTab === 'preview' ? 'hidden lg:block' : ''}>
           <MarkdownToolbar
             textareaRef={textareaRef}
             value={body}
@@ -457,6 +524,7 @@ export default function EditorPage() {
             ref={textareaRef}
             value={body}
             onChange={(e) => setBody(e.target.value)}
+            onKeyDown={handleEditorKeyDown}
             onDrop={handleDrop}
             onDragOver={handleDragOver}
             disabled={saving || uploading}
@@ -468,9 +536,9 @@ export default function EditorPage() {
           />
         </div>
 
-        <div className="p-6 bg-paper border border-border rounded-lg overflow-y-auto">
+        <div className={`p-6 bg-paper border border-border rounded-lg overflow-y-auto ${mobileTab === 'edit' ? 'hidden lg:block' : ''}`}>
           {previewError ? (
-            <p className="text-sm text-red-600 italic">Preview unavailable</p>
+            <p className="text-sm text-red-600 dark:text-red-400 italic">Preview unavailable</p>
           ) : preview !== null ? (
             <div
               className="prose max-w-none"

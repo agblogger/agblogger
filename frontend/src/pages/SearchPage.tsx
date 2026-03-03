@@ -4,8 +4,7 @@ import { Search } from 'lucide-react'
 import { searchPosts } from '@/api/posts'
 import type { SearchResult } from '@/api/client'
 import { useRenderedHtml } from '@/hooks/useKatex'
-import { formatDate } from '@/utils/date'
-import LoadingSpinner from '@/components/LoadingSpinner'
+import { formatRelativeDate } from '@/utils/date'
 
 export default function SearchPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -50,6 +49,9 @@ export default function SearchPage() {
 
   return (
     <div className="animate-fade-in">
+      <Link to="/" className="text-sm text-muted hover:text-accent transition-colors mb-6 inline-block">
+        &larr; Back to posts
+      </Link>
       <div className="mb-8">
         <form onSubmit={handleSearchSubmit} className="flex items-center gap-3">
           <Search size={20} className="text-muted shrink-0" />
@@ -80,13 +82,33 @@ export default function SearchPage() {
       </div>
 
       {loading ? (
-        <LoadingSpinner />
+        <div className="space-y-1" role="status" aria-label="Loading results">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="py-4 px-4 -mx-4 animate-pulse">
+              <div className="h-5 bg-border/50 rounded w-3/5 mb-2" />
+              <div className="h-3.5 bg-border/40 rounded w-full mb-1" />
+              <div className="h-3.5 bg-border/40 rounded w-4/5 mb-3" />
+              <div className="h-3 bg-border/30 rounded w-24" />
+            </div>
+          ))}
+        </div>
       ) : error !== null ? (
-        <p className="text-red-600 text-center py-16">{error}</p>
+        <p className="text-red-600 dark:text-red-400 text-center py-16">{error}</p>
       ) : results.length === 0 ? (
-        <p className="text-muted text-center py-16">
-          {query ? 'No results found.' : 'Enter a search query above.'}
-        </p>
+        <div className="text-center py-16">
+          {query ? (
+            <>
+              <p className="text-muted">
+                No results found for <span className="italic text-accent">&ldquo;{query}&rdquo;</span>
+              </p>
+              <p className="text-sm text-muted/70 mt-2">
+                Try different keywords or check your spelling.
+              </p>
+            </>
+          ) : (
+            <p className="text-muted">Enter a search query above.</p>
+          )}
+        </div>
       ) : (
         <div className="space-y-1">
           {results.map((result, i) => (
@@ -115,7 +137,7 @@ function SearchResultItem({ result, index }: { result: SearchResult; index: numb
         />
       )}
       <span className="text-xs text-muted font-mono mt-2 block">
-        {formatDate(result.created_at)}
+        {formatRelativeDate(result.created_at)}
       </span>
     </Link>
   )

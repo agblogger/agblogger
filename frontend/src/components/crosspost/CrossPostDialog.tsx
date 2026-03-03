@@ -108,16 +108,16 @@ export default function CrossPostDialog({
                   <PlatformIcon platform={result.platform} size={18} className="text-muted" />
                   <span className="text-sm font-medium text-ink flex-1">{result.platform}</span>
                   {result.status === 'posted' ? (
-                    <span className="px-2 py-0.5 text-xs font-medium bg-green-100 text-green-700 rounded-full">
+                    <span className="px-2 py-0.5 text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full">
                       Posted
                     </span>
                   ) : (
                     <div className="flex items-center gap-2">
-                      <span className="px-2 py-0.5 text-xs font-medium bg-red-100 text-red-600 rounded-full">
+                      <span className="px-2 py-0.5 text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-full">
                         Failed
                       </span>
                       {result.error !== null && (
-                        <span className="text-xs text-red-600">{result.error}</span>
+                        <span className="text-xs text-red-600 dark:text-red-400">{result.error}</span>
                       )}
                     </div>
                   )}
@@ -140,7 +140,7 @@ export default function CrossPostDialog({
             <h2 className="font-display text-xl text-ink mb-4">Cross-Post</h2>
 
             {error !== null && (
-              <div className="mb-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+              <div className="mb-4 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/40 rounded-lg px-4 py-3">
                 {error}
               </div>
             )}
@@ -167,7 +167,7 @@ export default function CrossPostDialog({
                   return (
                     <div
                       key={account.platform}
-                      className={`flex items-center gap-1.5 text-xs ${isOver ? 'text-red-600' : 'text-muted'}`}
+                      className={`flex items-center gap-1.5 text-xs ${isOver ? 'text-red-600 dark:text-red-400' : 'text-muted'}`}
                     >
                       <PlatformIcon platform={account.platform} size={14} />
                       <span>

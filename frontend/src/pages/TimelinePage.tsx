@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { useSearchParams, useNavigate } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, Upload } from 'lucide-react'
+import { useSearchParams, useNavigate, Link } from 'react-router-dom'
+import { ChevronLeft, ChevronRight, FileText, Upload } from 'lucide-react'
 import PostCard from '@/components/posts/PostCard'
 import FilterPanel, { EMPTY_FILTER, type FilterState } from '@/components/filters/FilterPanel'
 import { fetchPosts, uploadPost, type PostListParams } from '@/api/posts'
@@ -197,7 +197,7 @@ export default function TimelinePage() {
       )}
 
       {uploadError !== null && (
-        <div className="mb-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+        <div className="mb-4 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/40 rounded-lg px-4 py-3">
           {uploadError}
         </div>
       )}
@@ -225,7 +225,7 @@ export default function TimelinePage() {
         </div>
       ) : error !== null ? (
         <div className="text-center py-24">
-          <p className="font-display text-2xl text-red-600">{error}</p>
+          <p className="font-display text-2xl text-red-600 dark:text-red-400">{error}</p>
           <button
             onClick={() => setRetryCount((c) => c + 1)}
             className="text-accent text-sm hover:underline mt-4"
@@ -235,19 +235,33 @@ export default function TimelinePage() {
         </div>
       ) : !data || data.posts.length === 0 ? (
         <div className="text-center py-24">
-          <p className="font-display text-2xl text-muted italic">No posts found</p>
-          <p className="text-sm text-muted mt-2">
-            {filterState.labels.length > 0 || filterState.author || filterState.fromDate
-              ? 'Try adjusting your filters.'
-              : 'Check back soon.'}
-          </p>
-          {(filterState.labels.length > 0 || filterState.author || filterState.fromDate || filterState.toDate) && (
-            <button
-              onClick={() => setFilter(EMPTY_FILTER)}
-              className="text-accent text-sm hover:underline mt-4"
-            >
-              Clear filters
-            </button>
+          <FileText size={48} className="mx-auto text-muted/40 mb-4" />
+          {filterState.labels.length > 0 || filterState.author || filterState.fromDate || filterState.toDate ? (
+            <>
+              <p className="font-display text-2xl text-muted italic">No posts found</p>
+              <p className="text-sm text-muted mt-2">Try adjusting your filters.</p>
+              <button
+                onClick={() => setFilter(EMPTY_FILTER)}
+                className="text-accent text-sm hover:underline mt-4"
+              >
+                Clear filters
+              </button>
+            </>
+          ) : user ? (
+            <>
+              <p className="font-display text-2xl text-muted italic">No posts yet</p>
+              <Link
+                to="/editor/new"
+                className="inline-block mt-4 px-5 py-2.5 text-sm font-medium text-white bg-accent hover:bg-accent-light rounded-lg transition-colors"
+              >
+                Write your first post
+              </Link>
+            </>
+          ) : (
+            <>
+              <p className="font-display text-2xl text-muted italic">No posts yet</p>
+              <p className="text-sm text-muted mt-2">Check back soon.</p>
+            </>
           )}
         </div>
       ) : (

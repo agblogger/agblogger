@@ -146,6 +146,21 @@ describe('TableOfContents', () => {
     expect(inactiveButton.className).not.toContain('text-accent')
   })
 
+  it('renders sidebar variant with "On this page" heading', () => {
+    const ref = makeContentRef(
+      { tag: 'h2', id: 'a', text: 'Section A' },
+      { tag: 'h2', id: 'b', text: 'Section B' },
+      { tag: 'h2', id: 'c', text: 'Section C' },
+    )
+    render(<TableOfContents contentRef={ref} variant="sidebar" />)
+
+    expect(screen.getByText('On this page')).toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: /table of contents/i })).toBeInTheDocument()
+    expect(screen.getByText('Section A')).toBeInTheDocument()
+    expect(screen.getByText('Section B')).toBeInTheDocument()
+    expect(screen.getByText('Section C')).toBeInTheDocument()
+  })
+
   it('indents h3 entries', async () => {
     const ref = makeContentRef(
       { tag: 'h2', id: 'a', text: 'Section A' },

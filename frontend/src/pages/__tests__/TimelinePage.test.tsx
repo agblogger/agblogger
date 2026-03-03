@@ -172,13 +172,28 @@ describe('TimelinePage', () => {
     consoleSpy.mockRestore()
   })
 
-  it('shows empty results message', async () => {
+  it('shows empty results message for unauthenticated user', async () => {
     mockFetchPosts.mockResolvedValue({ ...postsResponse, posts: [], total: 0 })
     renderTimeline()
 
     await waitFor(() => {
-      expect(screen.getByText('No posts found')).toBeInTheDocument()
+      expect(screen.getByText('No posts yet')).toBeInTheDocument()
     })
+    expect(screen.getByText('Check back soon.')).toBeInTheDocument()
+    expect(screen.queryByText('Write your first post')).not.toBeInTheDocument()
+  })
+
+  it('shows "Write your first post" CTA for authenticated user with no posts', async () => {
+    mockUser = { id: 1, username: 'admin', email: 'a@t.com', display_name: null, is_admin: true }
+    mockFetchPosts.mockResolvedValue({ ...postsResponse, posts: [], total: 0 })
+    renderTimeline()
+
+    await waitFor(() => {
+      expect(screen.getByText('No posts yet')).toBeInTheDocument()
+    })
+    const cta = screen.getByRole('link', { name: 'Write your first post' })
+    expect(cta).toBeInTheDocument()
+    expect(cta).toHaveAttribute('href', '/editor/new')
   })
 
   // === Pagination ===
@@ -239,7 +254,7 @@ describe('TimelinePage', () => {
     expect(screen.getByText('Clear filters')).toBeInTheDocument()
   })
 
-  it('shows "Check back soon" without filters', async () => {
+  it('shows "Check back soon" for unauthenticated user without filters', async () => {
     mockFetchPosts.mockResolvedValue({ ...postsResponse, posts: [], total: 0 })
     renderTimeline()
 

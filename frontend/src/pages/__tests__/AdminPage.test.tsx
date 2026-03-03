@@ -234,7 +234,13 @@ describe('AdminPage', () => {
 
   it('renders page list with reorder buttons', async () => {
     setupLoadSuccess()
+    const user = userEvent.setup()
     renderAdmin()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Pages' })).toBeInTheDocument()
+    })
+    await user.click(screen.getByRole('button', { name: 'Pages' }))
 
     await waitFor(() => {
       expect(screen.getByText('Timeline')).toBeInTheDocument()
@@ -245,7 +251,13 @@ describe('AdminPage', () => {
 
   it('shows built-in badge for built-in pages', async () => {
     setupLoadSuccess()
+    const user = userEvent.setup()
     renderAdmin()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Pages' })).toBeInTheDocument()
+    })
+    await user.click(screen.getByRole('button', { name: 'Pages' }))
 
     await waitFor(() => {
       expect(screen.getAllByText('built-in')).toHaveLength(2)
@@ -254,7 +266,13 @@ describe('AdminPage', () => {
 
   it('move up at top is disabled', async () => {
     setupLoadSuccess()
+    const user = userEvent.setup()
     renderAdmin()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Pages' })).toBeInTheDocument()
+    })
+    await user.click(screen.getByRole('button', { name: 'Pages' }))
 
     await waitFor(() => {
       expect(screen.getByText('Timeline')).toBeInTheDocument()
@@ -265,7 +283,13 @@ describe('AdminPage', () => {
 
   it('move down at bottom is disabled', async () => {
     setupLoadSuccess()
+    const user = userEvent.setup()
     renderAdmin()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Pages' })).toBeInTheDocument()
+    })
+    await user.click(screen.getByRole('button', { name: 'Pages' }))
 
     await waitFor(() => {
       expect(screen.getByText('About')).toBeInTheDocument()
@@ -278,6 +302,11 @@ describe('AdminPage', () => {
     setupLoadSuccess()
     const user = userEvent.setup()
     renderAdmin()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Pages' })).toBeInTheDocument()
+    })
+    await user.click(screen.getByRole('button', { name: 'Pages' }))
 
     await waitFor(() => {
       expect(screen.getByText('Timeline')).toBeInTheDocument()
@@ -297,6 +326,11 @@ describe('AdminPage', () => {
     renderAdmin()
 
     await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Pages' })).toBeInTheDocument()
+    })
+    await user.click(screen.getByRole('button', { name: 'Pages' }))
+
+    await waitFor(() => {
       expect(screen.getByText('Timeline')).toBeInTheDocument()
     })
 
@@ -314,6 +348,11 @@ describe('AdminPage', () => {
     renderAdmin()
 
     await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Pages' })).toBeInTheDocument()
+    })
+    await user.click(screen.getByRole('button', { name: 'Pages' }))
+
+    await waitFor(() => {
       expect(screen.getByText('About')).toBeInTheDocument()
     })
 
@@ -328,6 +367,11 @@ describe('AdminPage', () => {
     setupLoadSuccess()
     const user = userEvent.setup()
     renderAdmin()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Pages' })).toBeInTheDocument()
+    })
+    await user.click(screen.getByRole('button', { name: 'Pages' }))
 
     await waitFor(() => {
       expect(screen.getByText('About')).toBeInTheDocument()
@@ -350,6 +394,11 @@ describe('AdminPage', () => {
     mockUpdateAdminPage.mockResolvedValue(undefined)
     const user = userEvent.setup()
     renderAdmin()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Pages' })).toBeInTheDocument()
+    })
+    await user.click(screen.getByRole('button', { name: 'Pages' }))
 
     await waitFor(() => {
       expect(screen.getByText('About')).toBeInTheDocument()
@@ -386,6 +435,11 @@ describe('AdminPage', () => {
     renderAdmin()
 
     await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Pages' })).toBeInTheDocument()
+    })
+    await user.click(screen.getByRole('button', { name: 'Pages' }))
+
+    await waitFor(() => {
       expect(screen.getByRole('button', { name: /add page/i })).toBeInTheDocument()
     })
 
@@ -413,6 +467,11 @@ describe('AdminPage', () => {
     renderAdmin()
 
     await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Pages' })).toBeInTheDocument()
+    })
+    await user.click(screen.getByRole('button', { name: 'Pages' }))
+
+    await waitFor(() => {
       expect(screen.getByRole('button', { name: /add page/i })).toBeInTheDocument()
     })
 
@@ -432,6 +491,11 @@ describe('AdminPage', () => {
     renderAdmin()
 
     await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Pages' })).toBeInTheDocument()
+    })
+    await user.click(screen.getByRole('button', { name: 'Pages' }))
+
+    await waitFor(() => {
       expect(screen.getByRole('button', { name: /add page/i })).toBeInTheDocument()
     })
 
@@ -448,6 +512,11 @@ describe('AdminPage', () => {
     mockDeleteAdminPage.mockResolvedValue(undefined)
     const user = userEvent.setup()
     renderAdmin()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Pages' })).toBeInTheDocument()
+    })
+    await user.click(screen.getByRole('button', { name: 'Pages' }))
 
     await waitFor(() => {
       expect(screen.getByText('About')).toBeInTheDocument()
@@ -481,6 +550,11 @@ describe('AdminPage', () => {
     renderAdmin()
 
     await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Pages' })).toBeInTheDocument()
+    })
+    await user.click(screen.getByRole('button', { name: 'Pages' }))
+
+    await waitFor(() => {
       expect(screen.getByText('About')).toBeInTheDocument()
     })
 
@@ -508,6 +582,11 @@ describe('AdminPage', () => {
     renderAdmin()
 
     await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Password' })).toBeInTheDocument()
+    })
+    await user.click(screen.getByRole('button', { name: 'Password' }))
+
+    await waitFor(() => {
       expect(screen.getByLabelText(/Current Password/)).toBeInTheDocument()
     })
 
@@ -521,6 +600,11 @@ describe('AdminPage', () => {
     setupLoadSuccess()
     const user = userEvent.setup()
     renderAdmin()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Password' })).toBeInTheDocument()
+    })
+    await user.click(screen.getByRole('button', { name: 'Password' }))
 
     await waitFor(() => {
       expect(screen.getByLabelText(/Current Password/)).toBeInTheDocument()
@@ -540,6 +624,11 @@ describe('AdminPage', () => {
     renderAdmin()
 
     await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Password' })).toBeInTheDocument()
+    })
+    await user.click(screen.getByRole('button', { name: 'Password' }))
+
+    await waitFor(() => {
       expect(screen.getByLabelText(/Current Password/)).toBeInTheDocument()
     })
 
@@ -556,6 +645,11 @@ describe('AdminPage', () => {
     mockChangeAdminPassword.mockResolvedValue(undefined)
     const user = userEvent.setup()
     renderAdmin()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Password' })).toBeInTheDocument()
+    })
+    await user.click(screen.getByRole('button', { name: 'Password' }))
 
     await waitFor(() => {
       expect(screen.getByLabelText(/Current Password/)).toBeInTheDocument()
@@ -586,6 +680,11 @@ describe('AdminPage', () => {
     renderAdmin()
 
     await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Password' })).toBeInTheDocument()
+    })
+    await user.click(screen.getByRole('button', { name: 'Password' }))
+
+    await waitFor(() => {
       expect(screen.getByLabelText(/Current Password/)).toBeInTheDocument()
     })
 
@@ -606,6 +705,11 @@ describe('AdminPage', () => {
     )
     const user = userEvent.setup()
     renderAdmin()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Password' })).toBeInTheDocument()
+    })
+    await user.click(screen.getByRole('button', { name: 'Password' }))
 
     await waitFor(() => {
       expect(screen.getByLabelText(/Current Password/)).toBeInTheDocument()
@@ -630,9 +734,49 @@ describe('AdminPage', () => {
     })
   })
 
+  // === Tab Navigation ===
+
+  it('switches between admin tabs', async () => {
+    setupLoadSuccess()
+    const user = userEvent.setup()
+    renderAdmin()
+
+    // Default tab shows settings
+    await waitFor(() => {
+      expect(screen.getByLabelText('Title *')).toBeInTheDocument()
+    })
+
+    // Switch to Pages tab
+    await user.click(screen.getByRole('button', { name: 'Pages' }))
+    expect(screen.queryByLabelText('Title *')).not.toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText('Timeline')).toBeInTheDocument()
+    })
+
+    // Switch to Password tab
+    await user.click(screen.getByRole('button', { name: 'Password' }))
+    expect(screen.queryByText('Timeline')).not.toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Current Password/)).toBeInTheDocument()
+    })
+
+    // Switch back to Settings
+    await user.click(screen.getByRole('button', { name: 'Settings' }))
+    expect(screen.queryByLabelText(/Current Password/)).not.toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByLabelText('Title *')).toBeInTheDocument()
+    })
+  })
+
   it('renders social accounts panel', async () => {
     setupLoadSuccess()
+    const user = userEvent.setup()
     renderAdmin()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Social' })).toBeInTheDocument()
+    })
+    await user.click(screen.getByRole('button', { name: 'Social' }))
 
     await waitFor(() => {
       expect(screen.getByTestId('social-accounts-panel')).toBeInTheDocument()
@@ -643,6 +787,11 @@ describe('AdminPage', () => {
     setupLoadSuccess()
     const user = userEvent.setup()
     renderAdmin()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Password' })).toBeInTheDocument()
+    })
+    await user.click(screen.getByRole('button', { name: 'Password' }))
 
     await waitFor(() => {
       expect(screen.getByLabelText(/Current Password/)).toBeInTheDocument()
@@ -663,6 +812,11 @@ describe('AdminPage', () => {
     setupLoadSuccess()
     const user = userEvent.setup()
     renderAdmin()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Pages' })).toBeInTheDocument()
+    })
+    await user.click(screen.getByRole('button', { name: 'Pages' }))
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /add page/i })).toBeInTheDocument()
@@ -687,6 +841,11 @@ describe('AdminPage', () => {
     renderAdmin()
 
     await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Pages' })).toBeInTheDocument()
+    })
+    await user.click(screen.getByRole('button', { name: 'Pages' }))
+
+    await waitFor(() => {
       expect(screen.getByText('About')).toBeInTheDocument()
     })
 
@@ -699,7 +858,13 @@ describe('AdminPage', () => {
 
   it('shows password min length hint', async () => {
     setupLoadSuccess()
+    const user = userEvent.setup()
     renderAdmin()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Password' })).toBeInTheDocument()
+    })
+    await user.click(screen.getByRole('button', { name: 'Password' }))
 
     await waitFor(() => {
       expect(screen.getByText(/at least 8 characters/i)).toBeInTheDocument()

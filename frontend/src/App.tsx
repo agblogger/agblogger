@@ -13,22 +13,28 @@ import EditorPage from '@/pages/EditorPage'
 import AdminPage from '@/pages/AdminPage'
 import { useSiteStore } from '@/stores/siteStore'
 import { useAuthStore } from '@/stores/authStore'
+import { useThemeStore } from '@/stores/themeStore'
 
 function Layout() {
   const location = useLocation()
   const isEditor = location.pathname.startsWith('/editor')
+  const isPost = location.pathname.startsWith('/post/')
   const isWide = isEditor || location.pathname === '/admin'
-  const mainClass = isWide
-    ? 'max-w-6xl mx-auto px-6 py-10'
-    : 'max-w-3xl mx-auto px-6 py-10'
+  const mainClass = isPost
+    ? 'max-w-3xl xl:max-w-5xl mx-auto px-6 py-10'
+    : isWide
+      ? 'max-w-6xl mx-auto px-6 py-10'
+      : 'max-w-3xl mx-auto px-6 py-10'
 
   const fetchConfig = useSiteStore((s) => s.fetchConfig)
   const checkAuth = useAuthStore((s) => s.checkAuth)
+  const initTheme = useThemeStore((s) => s.init)
 
   useEffect(() => {
     void fetchConfig()
     void checkAuth()
-  }, [fetchConfig, checkAuth])
+    initTheme()
+  }, [fetchConfig, checkAuth, initTheme])
 
   return (
     <div className="min-h-screen bg-paper">

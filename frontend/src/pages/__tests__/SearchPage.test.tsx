@@ -68,8 +68,9 @@ describe('SearchPage', () => {
     renderSearch('nonexistent')
 
     await waitFor(() => {
-      expect(screen.getByText('No results found.')).toBeInTheDocument()
+      expect(screen.getByText(/No results found for/)).toBeInTheDocument()
     })
+    expect(screen.getByText(/Try different keywords/)).toBeInTheDocument()
   })
 
   it('shows error message on failure', async () => {

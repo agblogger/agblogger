@@ -112,13 +112,13 @@ export default function ShareButton({ title, author, url }: ShareButtonProps) {
               >
                 {copied ? (
                   <>
-                    <Check size={16} className="text-green-600" />
-                    <span className="text-green-600">Copied!</span>
+                    <Check size={16} className="text-green-600 dark:text-green-400" />
+                    <span className="text-green-600 dark:text-green-400">Copied!</span>
                   </>
                 ) : copyFailed ? (
                   <>
-                    <XIcon size={16} className="text-red-600" />
-                    <span className="text-red-600">Copy failed</span>
+                    <XIcon size={16} className="text-red-600 dark:text-red-400" />
+                    <span className="text-red-600 dark:text-red-400">Copy failed</span>
                   </>
                 ) : (
                   <>

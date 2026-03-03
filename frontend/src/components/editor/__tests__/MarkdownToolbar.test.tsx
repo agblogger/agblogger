@@ -83,12 +83,12 @@ describe('MarkdownToolbar', () => {
     render(
       <MarkdownToolbar textareaRef={ref} value="" onChange={() => {}} />,
     )
-    expect(screen.getByLabelText('Bold')).toBeInTheDocument()
-    expect(screen.getByLabelText('Italic')).toBeInTheDocument()
-    expect(screen.getByLabelText('Heading')).toBeInTheDocument()
-    expect(screen.getByLabelText('Link')).toBeInTheDocument()
-    expect(screen.getByLabelText('Code')).toBeInTheDocument()
-    expect(screen.getByLabelText('Code Block')).toBeInTheDocument()
+    expect(screen.getByLabelText(/^Bold/)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^Italic/)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^Heading/)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^Link/)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^Code \(/)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^Code Block/)).toBeInTheDocument()
   })
 
   it('disables all buttons when disabled prop is true', () => {
@@ -114,7 +114,7 @@ describe('MarkdownToolbar', () => {
       <MarkdownToolbar textareaRef={ref} value="hello world" onChange={onChange} />,
     )
 
-    await user.click(screen.getByLabelText('Bold'))
+    await user.click(screen.getByLabelText(/^Bold/))
 
     expect(onChange).toHaveBeenCalledWith('hello **world**')
   })
@@ -132,7 +132,7 @@ describe('MarkdownToolbar', () => {
       <MarkdownToolbar textareaRef={ref} value="some text" onChange={onChange} />,
     )
 
-    await user.click(screen.getByLabelText('Heading'))
+    await user.click(screen.getByLabelText(/^Heading/))
 
     expect(onChange).toHaveBeenCalledWith('some text\n## Heading')
   })
@@ -146,8 +146,23 @@ describe('MarkdownToolbar', () => {
       <MarkdownToolbar textareaRef={ref} value="hello" onChange={onChange} />,
     )
 
-    await user.click(screen.getByLabelText('Bold'))
+    await user.click(screen.getByLabelText(/^Bold/))
 
     expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('shows keyboard shortcuts in button titles', () => {
+    const ref = createRef<HTMLTextAreaElement>()
+    render(
+      <MarkdownToolbar textareaRef={ref} value="" onChange={() => {}} />,
+    )
+    const boldBtn = screen.getByRole('button', { name: /Bold/ })
+    expect(boldBtn.title).toMatch(/Bold \((Cmd|Ctrl)\+B\)/)
+
+    const italicBtn = screen.getByRole('button', { name: /Italic/ })
+    expect(italicBtn.title).toMatch(/Italic \((Cmd|Ctrl)\+I\)/)
+
+    const codeBlockBtn = screen.getByRole('button', { name: /Code Block/ })
+    expect(codeBlockBtn.title).toMatch(/Code Block \((Cmd|Ctrl)\+Shift\+E\)/)
   })
 })

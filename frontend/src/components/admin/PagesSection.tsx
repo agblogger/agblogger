@@ -55,7 +55,7 @@ function PagePreview({ markdown }: { markdown: string }) {
   const rendered = useRenderedHtml(hasContent ? html : null)
 
   if (previewError) {
-    return <p className="text-sm text-red-600 italic">Preview unavailable</p>
+    return <p className="text-sm text-red-600 dark:text-red-400 italic">Preview unavailable</p>
   }
 
   if (!rendered) {
@@ -283,12 +283,12 @@ export default function PagesSection({ initialPages, busy, onSaving }: PagesSect
       </div>
 
       {pagesError !== null && (
-        <div className="mb-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+        <div className="mb-4 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/40 rounded-lg px-4 py-3">
           {pagesError}
         </div>
       )}
       {pagesSuccess !== null && (
-        <div className="mb-4 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
+        <div className="mb-4 text-sm text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800/40 rounded-lg px-4 py-3">
           {pagesSuccess}
         </div>
       )}
@@ -343,12 +343,12 @@ export default function PagesSection({ initialPages, busy, onSaving }: PagesSect
             {expandedPageId === page.id && (
               <div className="border-t border-border px-4 py-4 space-y-4">
                 {pageEditError !== null && (
-                  <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+                  <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/40 rounded-lg px-4 py-3">
                     {pageEditError}
                   </div>
                 )}
                 {pageEditSuccess !== null && (
-                  <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
+                  <div className="text-sm text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800/40 rounded-lg px-4 py-3">
                     {pageEditSuccess}
                   </div>
                 )}
@@ -415,8 +415,8 @@ export default function PagesSection({ initialPages, busy, onSaving }: PagesSect
 
                 {/* Delete section for non-builtin pages */}
                 {!BUILTIN_PAGE_IDS.has(page.id) && (
-                  <div className="pt-4 border-t border-red-200">
-                    <h3 className="text-sm font-medium text-red-700 mb-2">Danger Zone</h3>
+                  <div className="pt-4 border-t border-red-200 dark:border-red-800/40">
+                    <h3 className="text-sm font-medium text-red-700 dark:text-red-400 mb-2">Danger Zone</h3>
                     <p className="text-sm text-muted mb-3">
                       Deleting this page will remove it from the site navigation and delete its
                       file. This action cannot be undone.
@@ -447,7 +447,7 @@ export default function PagesSection({ initialPages, busy, onSaving }: PagesSect
                         onClick={() => setDeleteConfirmId(page.id)}
                         disabled={busy}
                         className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium
-                                 text-red-600 border border-red-300 rounded-lg hover:bg-red-50
+                                 text-red-600 dark:text-red-400 border border-red-300 dark:border-red-700 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30
                                  disabled:opacity-50 transition-colors"
                       >
                         <Trash2 size={14} />

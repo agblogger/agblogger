@@ -74,9 +74,9 @@ export default function ShareBar({ title, author, url }: ShareBarProps) {
             className="rounded-lg p-2 text-muted transition-colors hover:bg-paper-warm hover:text-ink"
           >
             {copied ? (
-              <Check size={18} className="text-green-600" />
+              <Check size={18} className="text-green-600 dark:text-green-400" />
             ) : copyFailed ? (
-              <XIcon size={18} className="text-red-600" />
+              <XIcon size={18} className="text-red-600 dark:text-red-400" />
             ) : (
               <Link size={18} />
             )}
@@ -85,10 +85,10 @@ export default function ShareBar({ title, author, url }: ShareBarProps) {
         </div>
 
         {copied && (
-          <span className="animate-fade-in text-xs font-medium text-green-600">Copied!</span>
+          <span className="animate-fade-in text-xs font-medium text-green-600 dark:text-green-400">Copied!</span>
         )}
         {copyFailed && (
-          <span className="animate-fade-in text-xs font-medium text-red-600">Copy failed</span>
+          <span className="animate-fade-in text-xs font-medium text-red-600 dark:text-red-400">Copy failed</span>
         )}
       </div>
 
