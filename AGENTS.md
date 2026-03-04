@@ -9,7 +9,7 @@ AgBlogger is a markdown-first blogging platform where markdown files with YAML f
 ## Build, Test, and Development Commands
 
 ```bash
-just start            # Start backend (:8000) + frontend (:5173) in the background
+just start            # Start backend (:8000) + frontend (:5173) in the background (run unsandboxed)
 just stop             # Stop the running dev server
 just health           # Check if dev server is healthy (backend + frontend)
 just start backend_port=9000 frontend_port=9173  # Custom ports
@@ -25,10 +25,9 @@ just test-backend-slow # Backend slow tests only (marked @pytest.mark.slow)
 just check-frontend   # Frontend static checks + frontend tests
 just check-frontend-static # Frontend static checks only
 just test-frontend    # Frontend tests only
-just check-semgrep    # Semgrep SAST
 ```
 
-Always start a dev server with `just start`. Remember to stop a running dev server with `just stop` when finished.
+Always start a dev server with `just start` (unsanboxed). Remember to stop a running dev server with `just stop` when finished.
 
 ## Coding Style & Naming Conventions
 
