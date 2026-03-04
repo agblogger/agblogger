@@ -139,7 +139,7 @@ class TestContentServing:
 
     @pytest.mark.asyncio
     async def test_serve_pdf_from_posts(self, client: AsyncClient, tmp_content_dir: Path) -> None:
-        """Serving a PDF returns the correct content-type."""
+        """Potentially active document types are forced to download."""
         post_dir = tmp_content_dir / "posts" / "docs"
         post_dir.mkdir(parents=True, exist_ok=True)
         (post_dir / "paper.pdf").write_bytes(b"%PDF-1.4 fake")
@@ -147,6 +147,43 @@ class TestContentServing:
         resp = await client.get("/api/content/posts/docs/paper.pdf")
         assert resp.status_code == 200
         assert resp.headers["content-type"] == "application/pdf"
+        assert resp.headers["content-disposition"].startswith("attachment")
+        assert resp.headers["content-security-policy"] == "default-src 'none'; sandbox"
+
+    @pytest.mark.asyncio
+    async def test_serve_html_asset_as_attachment(
+        self, client: AsyncClient, tmp_content_dir: Path
+    ) -> None:
+        """HTML assets should never be rendered inline under the app origin."""
+        post_dir = tmp_content_dir / "posts" / "unsafe"
+        post_dir.mkdir(parents=True, exist_ok=True)
+        (post_dir / "payload.html").write_text("<script>alert(1)</script>", encoding="utf-8")
+
+        resp = await client.get("/api/content/posts/unsafe/payload.html")
+
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith("text/html")
+        assert resp.headers["content-disposition"].startswith("attachment")
+        assert resp.headers["content-security-policy"] == "default-src 'none'; sandbox"
+
+    @pytest.mark.asyncio
+    async def test_serve_svg_asset_as_attachment(
+        self, client: AsyncClient, tmp_content_dir: Path
+    ) -> None:
+        """SVG assets should be treated as active content for direct delivery."""
+        post_dir = tmp_content_dir / "posts" / "unsafe-svg"
+        post_dir.mkdir(parents=True, exist_ok=True)
+        (post_dir / "diagram.svg").write_text(
+            '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>',
+            encoding="utf-8",
+        )
+
+        resp = await client.get("/api/content/posts/unsafe-svg/diagram.svg")
+
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == "image/svg+xml"
+        assert resp.headers["content-disposition"].startswith("attachment")
+        assert resp.headers["content-security-policy"] == "default-src 'none'; sandbox"
 
     @pytest.mark.asyncio
     async def test_symlink_escape_outside_content_dir_blocked(

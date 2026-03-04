@@ -2,39 +2,9 @@
 
 ## Plugin Architecture
 
-A `CrossPoster` protocol (`backend/crosspost/base.py`) defines the interface:
-
-```python
-class CrossPoster(Protocol):
-    platform: str
-    async def authenticate(self, credentials: dict[str, str]) -> bool: ...
-    async def post(self, content: CrossPostContent) -> CrossPostResult: ...
-    async def validate_credentials(self) -> bool: ...
-```
-
-The `CrossPostContent` dataclass carries the data for each cross-post:
-
-```python
-@dataclass
-class CrossPostContent:
-    title: str
-    excerpt: str
-    url: str
-    image_url: str | None = None
-    labels: list[str] = field(default_factory=list)
-    custom_text: str | None = None
-```
-
-The `CrossPostResult` dataclass reports the outcome:
-
-```python
-@dataclass
-class CrossPostResult:
-    platform_id: str
-    url: str
-    success: bool
-    error: str | None = None
-```
+- `CrossPoster` protocol (`backend/crosspost/base.py`) defines the interface
+- `CrossPostContent` dataclass carries the data for each cross-post
+- `CrossPostResult` dataclass reports the outcome
 
 ## Platforms
 
@@ -44,6 +14,8 @@ class CrossPostResult:
 - **Facebook** — OAuth 2.0 for Facebook Pages. Posts to Pages via Graph API v22.0 (`POST /{page-id}/feed`). Page Access Tokens are non-expiring. Multi-page selection supported.
 
 A platform registry maps names to poster classes. Each cross-post attempt is recorded in the `cross_posts` table with status, platform ID, timestamp, and error message. When tokens are refreshed during a cross-post (Bluesky or X), the updated credentials are re-encrypted and persisted.
+
+Connected account credentials are accepted only in encrypted form at read time. If a stored `SocialAccount.credentials` value cannot be decrypted or parsed after decryption, cross-posting fails closed and the user must reconnect the account; the service does not fall back to plaintext JSON in the database.
 
 Cross-posting supports an optional `custom_text` field: when provided via the API (`CrossPostRequest.custom_text`), platforms use it verbatim instead of auto-generating text from the post title, excerpt, and URL.
 

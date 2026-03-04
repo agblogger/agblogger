@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
@@ -35,6 +36,61 @@ async def session(db_session: AsyncSession, _create_tables: None) -> AsyncSessio
 
 
 class TestCrosspostDecryptFallback:
+    async def test_plaintext_json_credentials_fail_closed(self, session, monkeypatch):
+        """Plaintext JSON in the DB must not be treated as valid stored credentials."""
+        from backend.crosspost.base import CrossPostResult
+
+        class MockPoster:
+            platform = "bluesky"
+
+            async def authenticate(self, creds):
+                return True
+
+            async def post(self, content):
+                return CrossPostResult(
+                    platform_id="at://post/1",
+                    url="https://bsky.app/post/1",
+                    success=True,
+                )
+
+        async def mock_get_poster(platform, creds):
+            return MockPoster()
+
+        monkeypatch.setattr("backend.services.crosspost_service.get_poster", mock_get_poster)
+
+        now = format_datetime(now_utc())
+        account = SocialAccount(
+            user_id=1,
+            platform="bluesky",
+            account_name="test",
+            credentials=json.dumps({"access_token": "plaintext-token"}),
+            created_at=now,
+            updated_at=now,
+        )
+        session.add(account)
+        await session.commit()
+
+        mock_cm = MagicMock()
+        mock_cm.read_post.return_value = MagicMock(
+            title="Test", content="content", labels=[], is_draft=False
+        )
+        mock_cm.get_plain_excerpt.return_value = "excerpt"
+
+        results = await crosspost(
+            session=session,
+            content_manager=mock_cm,
+            post_path="posts/test.md",
+            platforms=["bluesky"],
+            actor=MagicMock(id=1, username="tester", display_name="Tester", is_admin=False),
+            site_url="https://example.com",
+            secret_key=TEST_SECRET_KEY,
+        )
+
+        assert len(results) == 1
+        assert not results[0].success
+        assert results[0].error is not None
+        assert "reconnect" in results[0].error.lower()
+
     async def test_corrupted_credentials_produce_clear_error(self, session):
         """When credentials cannot be decrypted or parsed, produce a clear error."""
         now = format_datetime(now_utc())
@@ -74,8 +130,6 @@ class TestCrosspostTokenRefreshPersistence:
     async def test_updated_credentials_are_persisted(self, session, monkeypatch):
         """When BlueskyCrossPoster refreshes tokens during post(), the new tokens
         should be encrypted and saved back to the SocialAccount."""
-        import json
-
         from backend.crosspost.base import CrossPostResult
 
         class MockPoster:

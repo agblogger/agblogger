@@ -161,6 +161,10 @@ The content file endpoint (`backend/api/content.py:_validate_path()`) enforces f
 3. Resolves via `.resolve()` to follow symlinks
 4. Verifies the resolved path stays within `content_dir` via `is_relative_to()`
 
+### Untrusted Asset Delivery
+
+Files served from `/api/content/*` are treated as untrusted content even when they live inside the canonical content directory. Passive media such as images and text files are served inline, but active document/script-capable types (currently HTML, SVG, PDF, XML, XHTML, and JavaScript MIME types) are forced to download with `Content-Disposition: attachment` and a per-response `Content-Security-Policy: default-src 'none'; sandbox`. This prevents uploaded or synced assets from bypassing the markdown sanitizer and executing under the main application origin.
+
 ### URL Rewriting
 
 Relative URLs in rendered HTML are rewritten to absolute `/api/content/` paths (`renderer.py:rewrite_relative_urls()`). Paths that escape the content root after normalization are left unchanged.
@@ -174,6 +178,8 @@ All API request bodies are validated against Pydantic schemas (`backend/schemas/
 ### Credential Encryption at Rest
 
 Cross-post OAuth credentials are encrypted with Fernet symmetric encryption (`backend/services/crypto_service.py`). The encryption key is derived from `SECRET_KEY` with a dedicated HMAC-SHA256 context that is distinct from JWT signing. Plaintext credentials are never stored in the database.
+
+If stored credentials cannot be decrypted, the cross-posting flow fails closed and requires the user to reconnect the affected account. The service does not fall back to plaintext JSON stored in the database.
 
 ### OAuth Endpoint Validation
 
@@ -246,10 +252,20 @@ Violations crash the server immediately with a descriptive error.
 - Host ports bound to `127.0.0.1` by default (not publicly accessible without explicit override)
 - Static asset caching with `Cache-Control: immutable`
 - Response compression (gzip + zstd)
+- Request-body caps for multipart upload endpoints: 55 MB for post uploads/assets and 100 MB for sync commits
 
 ### API Documentation
 
 OpenAPI docs (`/docs`, `/redoc`, `/openapi.json`) are disabled in production by default. Enabled only when `debug=True` or `expose_docs=True`.
+
+## Upload Abuse Controls
+
+Multipart upload routes are defended at two layers:
+
+- **Edge limit**: Caddy rejects oversized request bodies for `/api/posts/upload`, `/api/posts/*/assets`, and `/api/sync/commit`.
+- **App limit**: FastAPI middleware in `backend/main.py` rejects oversized multipart requests before form parsing based on `Content-Length` and streaming byte counts.
+
+The route handlers retain their existing per-file and per-request limits as a second layer.
 
 ## Sync Integrity
 

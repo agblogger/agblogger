@@ -2,6 +2,21 @@
 # The deployment script overwrites this file with your configured domain.
 
 myblog.example.com {
+    @postUpload path /api/posts/upload
+    request_body @postUpload {
+        max_size 55MB
+    }
+
+    @postAssets path_regexp post_assets ^/api/posts/.+/assets$
+    request_body @postAssets {
+        max_size 55MB
+    }
+
+    @syncCommit path /api/sync/commit
+    request_body @syncCommit {
+        max_size 100MB
+    }
+
     reverse_proxy agblogger:8000
 
     # Static asset caching

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from backend.config import Settings
+from backend.services.upload_limits import MAX_MULTIPART_BODY_SIZE
 from tests.conftest import create_test_client
 
 if TYPE_CHECKING:
@@ -54,6 +55,32 @@ async def _login(client: AsyncClient) -> str:
 
 
 class TestUploadAssets:
+    @pytest.mark.asyncio
+    async def test_rejects_multipart_request_with_excessive_content_length(
+        self, client: AsyncClient
+    ) -> None:
+        token = await _login(client)
+        boundary = "test-boundary"
+        body = (
+            f"--{boundary}\r\n"
+            'Content-Disposition: form-data; name="files"; filename="photo.png"\r\n'
+            "Content-Type: image/png\r\n\r\n"
+            "x\r\n"
+            f"--{boundary}--\r\n"
+        ).encode()
+
+        resp = await client.post(
+            "/api/posts/posts/hello.md/assets",
+            content=body,
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": f"multipart/form-data; boundary={boundary}",
+                "Content-Length": str(MAX_MULTIPART_BODY_SIZE + 1),
+            },
+        )
+
+        assert resp.status_code == 413
+
     @pytest.mark.asyncio
     async def test_upload_file_to_existing_post(
         self, client: AsyncClient, app_settings: Settings

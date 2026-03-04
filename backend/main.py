@@ -37,11 +37,13 @@ from backend.filesystem.content_manager import ContentManager
 from backend.models.base import Base
 from backend.services.csrf_service import validate_csrf_token
 from backend.services.rate_limit_service import InMemoryRateLimiter
+from backend.services.upload_limits import get_multipart_body_limit
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Awaitable, Callable
 
     from starlette.responses import Response
+    from starlette.types import Message
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +53,10 @@ _DEFAULT_INDEX_TOML = (
     '[[pages]]\nid = "labels"\ntitle = "Labels"\n'
 )
 _DEFAULT_LABELS_TOML = "[labels]\n"
+
+
+class _MultipartBodyTooLargeError(Exception):
+    """Raised when a multipart request exceeds the configured body-size limit."""
 
 
 def _configure_logging(debug: bool) -> None:
@@ -304,6 +310,54 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     if trusted_hosts:
         app.add_middleware(TrustedHostMiddleware, allowed_hosts=trusted_hosts)
+
+    @app.middleware("http")
+    async def multipart_request_limits(
+        request: Request,
+        call_next: Callable[[Request], Awaitable[Response]],
+    ) -> Response:
+        content_type = request.headers.get("Content-Type", "")
+        if "multipart/form-data" not in content_type:
+            return await call_next(request)
+
+        limit = get_multipart_body_limit(request.url.path)
+        if limit is None:
+            return await call_next(request)
+
+        content_length = request.headers.get("Content-Length")
+        if content_length is not None:
+            try:
+                if int(content_length) > limit:
+                    return JSONResponse(
+                        status_code=413,
+                        content={"detail": "Multipart request body too large"},
+                    )
+            except ValueError:
+                logger.warning("Invalid Content-Length header on %s", request.url.path)
+
+        received = 0
+        original_receive = request._receive
+
+        async def limited_receive() -> Message:
+            nonlocal received
+            message = await original_receive()
+            if message["type"] != "http.request":
+                return message
+            body = message.get("body", b"")
+            if isinstance(body, bytes):
+                received += len(body)
+                if received > limit:
+                    raise _MultipartBodyTooLargeError
+            return message
+
+        request._receive = limited_receive
+        try:
+            return await call_next(request)
+        except _MultipartBodyTooLargeError:
+            return JSONResponse(
+                status_code=413,
+                content={"detail": "Multipart request body too large"},
+            )
 
     @app.middleware("http")
     async def csrf_protection(

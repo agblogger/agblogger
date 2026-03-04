@@ -90,9 +90,10 @@ except OSError as exc:
 Use the correct exception type to control what clients see:
 
 - **`InternalServerError`** (`backend/exceptions.py`) — for errors whose details must never reach clients: decryption failures, config validation, infrastructure port conflicts, etc. The global handler returns a generic `"Internal server error"` (500) and logs the full details server-side.
+- **`ExternalServiceError`** (`backend/exceptions.py`) — for external service failures (OAuth, HTTP APIs) where details should be logged but not exposed to clients. The global handler returns `"External service error"` (502).
 - **`ValueError`** — for business logic validation errors that are safe to forward to clients: invalid dates, bad input formats, etc. The global handler returns `str(exc)` as the 422 detail.
 
-Services must never import `HTTPException` from FastAPI. Raise `ValueError` or `InternalServerError` and let the API layer or global handlers translate to HTTP responses.
+Services must never import `HTTPException` from FastAPI. Raise `ValueError`, `InternalServerError`, or `ExternalServiceError` and let the API layer or global handlers translate to HTTP responses.
 
 ### Global exception handlers
 
@@ -124,6 +125,10 @@ When modifying the sanitizer:
 
 The frontend uses `dangerouslySetInnerHTML` in several components (`PostPage`, `EditorPage`, `SearchPage`, `PageViewPage`, `AdminPage`) to render server-provided HTML. This is safe because the backend sanitizes all rendered HTML before serving it. Do not render user-supplied HTML on the frontend without backend sanitization.
 
+### Uploaded asset delivery
+
+Files reachable through `/api/content/*` must be treated as untrusted, even when they live under the managed content directory. Active document or script-capable types such as HTML, SVG, PDF, XML/XHTML, JSON, and JavaScript must not be served inline under the application origin. Preserve the current pattern in `backend/api/content.py`: force these responses to download with `Content-Disposition: attachment` and attach a restrictive per-response CSP.
+
 ### Path traversal protection
 
 The content file endpoint (`backend/api/content.py:_validate_path()`) uses four layers of defense. When modifying file-serving or path logic:
@@ -147,7 +152,12 @@ All API request bodies use Pydantic schemas. When adding new endpoints:
 Cross-post OAuth credentials are encrypted at rest via Fernet (`backend/services/crypto_service.py`), keyed to the application `SECRET_KEY`. When working with cross-post accounts:
 - Always use `encrypt_value()` before database writes and `decrypt_value()` after reads
 - Never store raw JSON credentials in the database
+- If decryption or post-decryption parsing fails, fail closed and require the user to reconnect the account; do not fall back to plaintext JSON stored in the database
 - Never log decrypted credential values
+
+### Upload size enforcement
+
+Multipart upload routes are protected by request-size limits at both the proxy and application layers. Keep the edge limits in `Caddyfile` / `Caddyfile.production` aligned with the app middleware in `backend/main.py` and the shared thresholds in `backend/services/upload_limits.py`. Reject oversized multipart requests before form parsing whenever possible.
 
 ### Token generation
 

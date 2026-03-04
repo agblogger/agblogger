@@ -19,6 +19,19 @@ from backend.models.user import User
 router = APIRouter(prefix="/api/content", tags=["content"])
 
 _ALLOWED_PREFIXES = ("posts/", "assets/")
+_ATTACHMENT_MEDIA_TYPES = frozenset(
+    {
+        "application/javascript",
+        "application/json",
+        "application/pdf",
+        "application/xhtml+xml",
+        "application/xml",
+        "image/svg+xml",
+        "text/html",
+        "text/javascript",
+        "text/xml",
+    }
+)
 
 
 def _validate_path(file_path: str, content_dir: Path) -> Path:
@@ -64,6 +77,9 @@ async def _check_draft_access(
     For files under ``posts/<dir>/``, look up the post whose ``file_path``
     starts with the same directory prefix.  If the post is a draft, only
     its author may access the file.
+
+    Note: ``file_path`` should be the resolved (symlink-followed) relative
+    path so that renamed post directories are matched correctly.
     """
     if not file_path.startswith("posts/"):
         return
@@ -130,4 +146,10 @@ async def serve_content_file(
     if content_type is None:
         content_type = "application/octet-stream"
 
-    return FileResponse(path=resolved, media_type=content_type)
+    headers: dict[str, str] = {}
+    filename = resolved.name
+    if content_type in _ATTACHMENT_MEDIA_TYPES:
+        headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+        headers["Content-Security-Policy"] = "default-src 'none'; sandbox"
+
+    return FileResponse(path=resolved, media_type=content_type, headers=headers)

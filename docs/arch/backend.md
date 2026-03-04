@@ -8,6 +8,7 @@ The `create_app()` factory:
 2. Configures docs/OpenAPI exposure based on environment (`DEBUG` or `EXPOSE_DOCS`).
 3. Adds middleware (all defined inline in `main.py`):
    - `GZipMiddleware` for response compression (minimum 500 bytes).
+   - Multipart upload-size middleware for `/api/posts/upload`, `/api/posts/*/assets`, and `/api/sync/commit`.
    - `TrustedHostMiddleware` for host header allowlisting.
    - CORS middleware for browser origin control.
    - Cookie CSRF middleware for unsafe methods.
@@ -88,6 +89,8 @@ Markdown is rendered to HTML via a long-lived `pandoc server` process managed by
 Rendering happens at publish time (during cache rebuild and post create/update), not per-request. The rendered HTML is stored in `PostCache.rendered_html`. A rendered excerpt is also generated from a markdown-preserving truncation (`generate_markdown_excerpt()`) and stored in `PostCache.rendered_excerpt`. Both timeline cards and search results render excerpt HTML client-side with KaTeX math processing via `useRenderedHtml`.
 
 Pandoc output is sanitized through an allowlist HTML sanitizer before storage and before heading-anchor injection. Unsafe tags/attributes and unsafe URL schemes (for example `javascript:`) are stripped.
+
+Files served by the content API are additionally classified by MIME type at response time. Active content types such as HTML, SVG, PDF, XML/XHTML, and JavaScript are not rendered inline; they are returned as attachments with a restrictive per-response CSP so uploaded or synced assets cannot execute under the app origin.
 
 Excerpts use a dedicated renderer path (`render_markdown_excerpt()`): Pandoc input disables raw HTML (`markdown-raw_html+...`) and excerpt sanitization is stricter than full-post sanitization. In particular, excerpts strip media-bearing tags such as `<img>` (and task-list `<input>`), preventing list/search pages from triggering remote media fetches while still preserving inline markdown formatting (bold/italic/code/math/links).
 

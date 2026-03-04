@@ -203,37 +203,32 @@ async def crosspost(
         if credentials is None:
             logger.warning(
                 "Failed to decrypt account data for %s account %s; "
-                "re-enter account data after key rotation",
+                "stored credentials are unreadable",
                 platform_name,
                 account.account_name,
             )
-            # fmt: off
-            try:
-                credentials = json.loads(account.credentials)
-            except (json.JSONDecodeError, TypeError):
-            # fmt: on
-                error_msg = (
-                    f"Credentials for {platform_name} are corrupted or unreadable. "
-                    "Please reconnect the account."
-                )
-                cp = CrossPost(
-                    user_id=actor.id,
-                    post_path=post_path,
-                    platform=platform_name,
-                    status=CrossPostStatus.FAILED,
+            error_msg = (
+                f"Credentials for {platform_name} are corrupted or unreadable. "
+                "Please reconnect the account."
+            )
+            cp = CrossPost(
+                user_id=actor.id,
+                post_path=post_path,
+                platform=platform_name,
+                status=CrossPostStatus.FAILED,
+                error=error_msg,
+                created_at=now,
+            )
+            session.add(cp)
+            results.append(
+                CrossPostResult(
+                    platform_id="",
+                    url="",
+                    success=False,
                     error=error_msg,
-                    created_at=now,
                 )
-                session.add(cp)
-                results.append(
-                    CrossPostResult(
-                        platform_id="",
-                        url="",
-                        success=False,
-                        error=error_msg,
-                    )
-                )
-                continue
+            )
+            continue
         try:
             poster = await get_poster(platform_name, credentials)
             publish_result = await poster.post(content)
