@@ -72,4 +72,101 @@ describe('useCodeBlockEnhance', () => {
 
     expect(writeText).toHaveBeenCalledWith('const x = 1')
   })
+
+  it('copies empty string when code element textContent is null', () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.assign(navigator, { clipboard: { writeText } })
+
+    container.innerHTML = '<pre><code class="language-js">placeholder</code></pre>'
+    const ref = { current: container }
+
+    renderHook(() => useCodeBlockEnhance(ref))
+
+    // Simulate null textContent (can occur in real browsers for edge-case elements)
+    const codeEl = container.querySelector('code')!
+    Object.defineProperty(codeEl, 'textContent', { value: null, configurable: true })
+
+    const copyBtn = container.querySelector('.code-block-copy') as HTMLButtonElement
+    copyBtn.click()
+
+    expect(writeText).toHaveBeenCalledWith('')
+  })
+
+  it('logs warning when clipboard writeText rejects', async () => {
+    const clipboardError = new Error('clipboard denied')
+    const writeText = vi.fn().mockRejectedValue(clipboardError)
+    Object.assign(navigator, { clipboard: { writeText } })
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    container.innerHTML = '<pre><code class="language-js">code</code></pre>'
+    const ref = { current: container }
+
+    renderHook(() => useCodeBlockEnhance(ref))
+
+    const copyBtn = container.querySelector('.code-block-copy') as HTMLButtonElement
+    copyBtn.click()
+
+    await vi.waitFor(() => {
+      expect(warnSpy).toHaveBeenCalledWith('Code block copy failed:', clipboardError)
+    })
+
+    warnSpy.mockRestore()
+  })
+
+  it('catches errors during code block enhancement without crashing', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    // Create a container where querySelectorAll returns elements that will cause errors
+    // by making parentElement throw when accessed
+    container.innerHTML = '<pre><code class="language-js">code</code></pre>'
+    const codeEl = container.querySelector('code')!
+    const originalParent = Object.getOwnPropertyDescriptor(Node.prototype, 'parentElement')!
+    Object.defineProperty(codeEl, 'parentElement', {
+      get() { throw new Error('DOM error') },
+      configurable: true,
+    })
+
+    const ref = { current: container }
+
+    // Should not throw
+    expect(() => renderHook(() => useCodeBlockEnhance(ref))).not.toThrow()
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Code block enhancement failed:',
+      expect.any(Error),
+    )
+
+    // Restore
+    Object.defineProperty(codeEl, 'parentElement', originalParent)
+    warnSpy.mockRestore()
+  })
+
+  it('catches errors during MutationObserver-triggered enhancement', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    container.innerHTML = ''
+    const ref = { current: container }
+    renderHook(() => useCodeBlockEnhance(ref))
+
+    // Now add a code block where DOM operations will throw
+    const pre = document.createElement('pre')
+    const code = document.createElement('code')
+    code.className = 'language-js'
+    code.textContent = 'code'
+    Object.defineProperty(code, 'parentElement', {
+      get() { throw new Error('DOM error in observer') },
+      configurable: true,
+    })
+    pre.appendChild(code)
+    container.appendChild(pre)
+
+    // Wait for MutationObserver to fire
+    await vi.waitFor(() => {
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Code block enhancement failed:',
+        expect.any(Error),
+      )
+    })
+
+    warnSpy.mockRestore()
+  })
 })

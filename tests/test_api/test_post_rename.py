@@ -227,6 +227,35 @@ class TestPostRename:
         assert "Readable Renamed" in content
 
     @pytest.mark.asyncio
+    async def test_old_url_accessible_unauthenticated_for_published_post(
+        self, client: AsyncClient, app_settings: Settings
+    ) -> None:
+        """Published post content should be accessible via old symlink path without auth."""
+        token = await _login(client)
+        data = await _create_post(client, token, "Public Original")
+        original_path = data["file_path"]
+
+        # Rename the post
+        resp = await client.put(
+            f"/api/posts/{original_path}",
+            json={
+                "title": "Public Renamed",
+                "body": "Accessible content.\n",
+                "labels": [],
+                "is_draft": False,
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+        new_path = resp.json()["file_path"]
+        assert new_path != original_path
+
+        # Access the old path via the content API without authentication
+        resp = await client.get(f"/api/content/{original_path}")
+        assert resp.status_code == 200
+        assert "Accessible content." in resp.text
+
+    @pytest.mark.asyncio
     async def test_no_rename_for_flat_file_posts(
         self, client: AsyncClient, app_settings: Settings
     ) -> None:

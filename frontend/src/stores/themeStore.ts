@@ -38,13 +38,22 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
   toggleMode: () => {
     const next = CYCLE[get().mode]
     const resolved = resolveTheme(next)
-    localStorage.setItem(STORAGE_KEY, next)
+    try {
+      localStorage.setItem(STORAGE_KEY, next)
+    } catch {
+      // Silently ignore — private browsing or quota exceeded
+    }
     applyTheme(resolved)
     set({ mode: next, resolvedTheme: resolved })
   },
 
   init: () => {
-    const stored = localStorage.getItem(STORAGE_KEY) as ThemeMode | null
+    let stored: ThemeMode | null
+    try {
+      stored = localStorage.getItem(STORAGE_KEY) as ThemeMode | null
+    } catch {
+      stored = null
+    }
     const mode: ThemeMode = stored === 'light' || stored === 'dark' || stored === 'system'
       ? stored
       : 'system'

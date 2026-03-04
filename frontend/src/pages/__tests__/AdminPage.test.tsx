@@ -88,6 +88,11 @@ function setupLoadSuccess() {
   mockFetchAdminPages.mockResolvedValue({ pages: defaultPages })
 }
 
+async function switchToTab(user: ReturnType<typeof userEvent.setup>, tabName: string) {
+  const btn = screen.getByRole('button', { name: tabName })
+  await user.click(btn)
+}
+
 describe('AdminPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -213,12 +218,12 @@ describe('AdminPage', () => {
       expect(screen.getByText('Site settings saved.')).toBeInTheDocument()
     })
 
-    await user.click(screen.getByRole('button', { name: 'Pages' }))
+    await switchToTab(user, 'Pages')
     await waitFor(() => {
       expect(screen.getByText('Timeline')).toBeInTheDocument()
     })
 
-    await user.click(screen.getByRole('button', { name: 'Settings' }))
+    await switchToTab(user, 'Settings')
     await waitFor(() => {
       expect(screen.getByLabelText('Title *')).toHaveValue('New Title')
     })
@@ -251,7 +256,7 @@ describe('AdminPage', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Pages' })).toBeInTheDocument()
     })
-    await user.click(screen.getByRole('button', { name: 'Pages' }))
+    await switchToTab(user, 'Pages')
 
     await waitFor(() => {
       expect(screen.getByText('Timeline')).toBeInTheDocument()
@@ -268,7 +273,7 @@ describe('AdminPage', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Pages' })).toBeInTheDocument()
     })
-    await user.click(screen.getByRole('button', { name: 'Pages' }))
+    await switchToTab(user, 'Pages')
 
     await waitFor(() => {
       expect(screen.getAllByText('built-in')).toHaveLength(2)
@@ -283,7 +288,7 @@ describe('AdminPage', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Pages' })).toBeInTheDocument()
     })
-    await user.click(screen.getByRole('button', { name: 'Pages' }))
+    await switchToTab(user, 'Pages')
 
     await waitFor(() => {
       expect(screen.getByText('Timeline')).toBeInTheDocument()
@@ -300,7 +305,7 @@ describe('AdminPage', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Pages' })).toBeInTheDocument()
     })
-    await user.click(screen.getByRole('button', { name: 'Pages' }))
+    await switchToTab(user, 'Pages')
 
     await waitFor(() => {
       expect(screen.getByText('About')).toBeInTheDocument()
@@ -317,7 +322,7 @@ describe('AdminPage', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Pages' })).toBeInTheDocument()
     })
-    await user.click(screen.getByRole('button', { name: 'Pages' }))
+    await switchToTab(user, 'Pages')
 
     await waitFor(() => {
       expect(screen.getByText('Timeline')).toBeInTheDocument()
@@ -339,7 +344,7 @@ describe('AdminPage', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Pages' })).toBeInTheDocument()
     })
-    await user.click(screen.getByRole('button', { name: 'Pages' }))
+    await switchToTab(user, 'Pages')
 
     await waitFor(() => {
       expect(screen.getByText('Timeline')).toBeInTheDocument()
@@ -361,7 +366,7 @@ describe('AdminPage', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Pages' })).toBeInTheDocument()
     })
-    await user.click(screen.getByRole('button', { name: 'Pages' }))
+    await switchToTab(user, 'Pages')
 
     await waitFor(() => {
       expect(screen.getByText('About')).toBeInTheDocument()
@@ -382,7 +387,7 @@ describe('AdminPage', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Pages' })).toBeInTheDocument()
     })
-    await user.click(screen.getByRole('button', { name: 'Pages' }))
+    await switchToTab(user, 'Pages')
 
     await waitFor(() => {
       expect(screen.getByText('About')).toBeInTheDocument()
@@ -409,7 +414,7 @@ describe('AdminPage', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Pages' })).toBeInTheDocument()
     })
-    await user.click(screen.getByRole('button', { name: 'Pages' }))
+    await switchToTab(user, 'Pages')
 
     await waitFor(() => {
       expect(screen.getByText('About')).toBeInTheDocument()
@@ -448,7 +453,7 @@ describe('AdminPage', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Pages' })).toBeInTheDocument()
     })
-    await user.click(screen.getByRole('button', { name: 'Pages' }))
+    await switchToTab(user, 'Pages')
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /add page/i })).toBeInTheDocument()
@@ -485,7 +490,7 @@ describe('AdminPage', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Pages' })).toBeInTheDocument()
     })
-    await user.click(screen.getByRole('button', { name: 'Pages' }))
+    await switchToTab(user, 'Pages')
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /add page/i })).toBeInTheDocument()
@@ -501,12 +506,12 @@ describe('AdminPage', () => {
     })
     expect(screen.getByText('Contact')).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'Settings' }))
+    await switchToTab(user, 'Settings')
     await waitFor(() => {
       expect(screen.getByLabelText('Title *')).toBeInTheDocument()
     })
 
-    await user.click(screen.getByRole('button', { name: 'Pages' }))
+    await switchToTab(user, 'Pages')
     await waitFor(() => {
       expect(screen.getByText('Contact')).toBeInTheDocument()
     })
@@ -523,7 +528,7 @@ describe('AdminPage', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Pages' })).toBeInTheDocument()
     })
-    await user.click(screen.getByRole('button', { name: 'Pages' }))
+    await switchToTab(user, 'Pages')
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /add page/i })).toBeInTheDocument()
@@ -547,7 +552,7 @@ describe('AdminPage', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Pages' })).toBeInTheDocument()
     })
-    await user.click(screen.getByRole('button', { name: 'Pages' }))
+    await switchToTab(user, 'Pages')
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /add page/i })).toBeInTheDocument()
@@ -570,7 +575,7 @@ describe('AdminPage', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Pages' })).toBeInTheDocument()
     })
-    await user.click(screen.getByRole('button', { name: 'Pages' }))
+    await switchToTab(user, 'Pages')
 
     await waitFor(() => {
       expect(screen.getByText('About')).toBeInTheDocument()
@@ -606,7 +611,7 @@ describe('AdminPage', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Pages' })).toBeInTheDocument()
     })
-    await user.click(screen.getByRole('button', { name: 'Pages' }))
+    await switchToTab(user, 'Pages')
 
     await waitFor(() => {
       expect(screen.getByText('About')).toBeInTheDocument()
@@ -638,7 +643,7 @@ describe('AdminPage', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Password' })).toBeInTheDocument()
     })
-    await user.click(screen.getByRole('button', { name: 'Password' }))
+    await switchToTab(user, 'Password')
 
     await waitFor(() => {
       expect(screen.getByLabelText(/Current Password/)).toBeInTheDocument()
@@ -658,7 +663,7 @@ describe('AdminPage', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Password' })).toBeInTheDocument()
     })
-    await user.click(screen.getByRole('button', { name: 'Password' }))
+    await switchToTab(user, 'Password')
 
     await waitFor(() => {
       expect(screen.getByLabelText(/Current Password/)).toBeInTheDocument()
@@ -680,7 +685,7 @@ describe('AdminPage', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Password' })).toBeInTheDocument()
     })
-    await user.click(screen.getByRole('button', { name: 'Password' }))
+    await switchToTab(user, 'Password')
 
     await waitFor(() => {
       expect(screen.getByLabelText(/Current Password/)).toBeInTheDocument()
@@ -703,7 +708,7 @@ describe('AdminPage', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Password' })).toBeInTheDocument()
     })
-    await user.click(screen.getByRole('button', { name: 'Password' }))
+    await switchToTab(user, 'Password')
 
     await waitFor(() => {
       expect(screen.getByLabelText(/Current Password/)).toBeInTheDocument()
@@ -736,7 +741,7 @@ describe('AdminPage', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Password' })).toBeInTheDocument()
     })
-    await user.click(screen.getByRole('button', { name: 'Password' }))
+    await switchToTab(user, 'Password')
 
     await waitFor(() => {
       expect(screen.getByLabelText(/Current Password/)).toBeInTheDocument()
@@ -763,7 +768,7 @@ describe('AdminPage', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Password' })).toBeInTheDocument()
     })
-    await user.click(screen.getByRole('button', { name: 'Password' }))
+    await switchToTab(user, 'Password')
 
     await waitFor(() => {
       expect(screen.getByLabelText(/Current Password/)).toBeInTheDocument()
@@ -801,21 +806,21 @@ describe('AdminPage', () => {
     })
 
     // Switch to Pages tab
-    await user.click(screen.getByRole('button', { name: 'Pages' }))
+    await switchToTab(user, 'Pages')
     expect(screen.queryByLabelText('Title *')).not.toBeInTheDocument()
     await waitFor(() => {
       expect(screen.getByText('Timeline')).toBeInTheDocument()
     })
 
     // Switch to Password tab
-    await user.click(screen.getByRole('button', { name: 'Password' }))
+    await switchToTab(user, 'Password')
     expect(screen.queryByText('Timeline')).not.toBeInTheDocument()
     await waitFor(() => {
       expect(screen.getByLabelText(/Current Password/)).toBeInTheDocument()
     })
 
     // Switch back to Settings
-    await user.click(screen.getByRole('button', { name: 'Settings' }))
+    await switchToTab(user, 'Settings')
     expect(screen.queryByLabelText(/Current Password/)).not.toBeInTheDocument()
     await waitFor(() => {
       expect(screen.getByLabelText('Title *')).toBeInTheDocument()
@@ -845,7 +850,7 @@ describe('AdminPage', () => {
       expect(screen.getByRole('button', { name: 'Pages' })).toBeDisabled()
     })
 
-    await user.click(screen.getByRole('button', { name: 'Pages' }))
+    await switchToTab(user, 'Pages')
     expect(screen.getByLabelText('Title *')).toBeInTheDocument()
     expect(screen.queryByText('Timeline')).not.toBeInTheDocument()
 
@@ -867,7 +872,7 @@ describe('AdminPage', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Social' })).toBeInTheDocument()
     })
-    await user.click(screen.getByRole('button', { name: 'Social' }))
+    await switchToTab(user, 'Social')
 
     await waitFor(() => {
       expect(screen.getByTestId('social-accounts-panel')).toBeInTheDocument()
@@ -882,7 +887,7 @@ describe('AdminPage', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Password' })).toBeInTheDocument()
     })
-    await user.click(screen.getByRole('button', { name: 'Password' }))
+    await switchToTab(user, 'Password')
 
     await waitFor(() => {
       expect(screen.getByLabelText(/Current Password/)).toBeInTheDocument()
@@ -907,7 +912,7 @@ describe('AdminPage', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Pages' })).toBeInTheDocument()
     })
-    await user.click(screen.getByRole('button', { name: 'Pages' }))
+    await switchToTab(user, 'Pages')
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /add page/i })).toBeInTheDocument()
@@ -934,7 +939,7 @@ describe('AdminPage', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Pages' })).toBeInTheDocument()
     })
-    await user.click(screen.getByRole('button', { name: 'Pages' }))
+    await switchToTab(user, 'Pages')
 
     await waitFor(() => {
       expect(screen.getByText('About')).toBeInTheDocument()
@@ -955,7 +960,7 @@ describe('AdminPage', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Password' })).toBeInTheDocument()
     })
-    await user.click(screen.getByRole('button', { name: 'Password' }))
+    await switchToTab(user, 'Password')
 
     await waitFor(() => {
       expect(screen.getByText(/at least 12 characters/i)).toBeInTheDocument()

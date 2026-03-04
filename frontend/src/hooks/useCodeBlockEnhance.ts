@@ -37,14 +37,16 @@ function enhanceCodeBlocks(container: HTMLElement) {
     copyBtn.textContent = 'Copy'
     copyBtn.type = 'button'
     copyBtn.addEventListener('click', () => {
-      navigator.clipboard.writeText(codeEl.textContent).then(
+      const text: string = codeEl.textContent || ''
+      navigator.clipboard.writeText(text).then(
         () => {
           copyBtn.textContent = 'Copied!'
           setTimeout(() => {
             copyBtn.textContent = 'Copy'
           }, 2000)
         },
-        () => {
+        (err: unknown) => {
+          console.warn('Code block copy failed:', err)
           copyBtn.textContent = 'Failed'
           setTimeout(() => {
             copyBtn.textContent = 'Copy'
@@ -64,10 +66,18 @@ export function useCodeBlockEnhance(contentRef: RefObject<HTMLElement | null>) {
     const container = contentRef.current
     if (!container) return
 
-    enhanceCodeBlocks(container)
+    try {
+      enhanceCodeBlocks(container)
+    } catch (err: unknown) {
+      console.warn('Code block enhancement failed:', err)
+    }
 
     const observer = new MutationObserver(() => {
-      enhanceCodeBlocks(container)
+      try {
+        enhanceCodeBlocks(container)
+      } catch (err: unknown) {
+        console.warn('Code block enhancement failed:', err)
+      }
     })
     observer.observe(container, { childList: true, subtree: true })
 

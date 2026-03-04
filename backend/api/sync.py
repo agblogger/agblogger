@@ -416,6 +416,11 @@ async def _get_base_content(
     if last_sync_commit is None:
         return None
     if not await git_service.commit_exists(last_sync_commit):
+        logger.warning(
+            "Sync base commit %s not found in repo; falling back to no base for %s",
+            last_sync_commit,
+            file_path,
+        )
         return None
     try:
         return await git_service.show_file_at_commit(last_sync_commit, file_path)

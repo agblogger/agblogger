@@ -6,7 +6,7 @@ import logging
 import re
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.deps import (
@@ -41,10 +41,18 @@ from backend.services.admin_service import (
 from backend.services.auth_service import hash_password, revoke_user_credentials, verify_password
 from backend.services.datetime_service import format_iso, now_utc
 from backend.services.git_service import GitService
+from backend.services.rate_limit_service import InMemoryRateLimiter
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
+
+
+def _set_git_warning(response: Response, commit_hash: str | None) -> None:
+    """Set X-Git-Warning header when a git commit was expected but failed."""
+    if commit_hash is None:
+        response.headers["X-Git-Warning"] = "Git commit failed; changes saved but not versioned"
+
 
 _PAGE_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 _PAGE_ID_ERROR = (
@@ -71,6 +79,7 @@ async def get_settings(
 @router.put("/site", response_model=SiteSettingsResponse)
 async def update_settings(
     body: SiteSettingsUpdate,
+    response: Response,
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
     git_service: Annotated[GitService, Depends(get_git_service)],
     _user: Annotated[User, Depends(require_admin)],
@@ -87,7 +96,7 @@ async def update_settings(
     except OSError as exc:
         logger.error("Failed to update site settings: %s", exc)
         raise HTTPException(status_code=500, detail="Failed to write site settings") from exc
-    await git_service.try_commit("Update site settings")
+    _set_git_warning(response, await git_service.try_commit("Update site settings"))
     return SiteSettingsResponse(
         title=cfg.title,
         description=cfg.description,
@@ -109,6 +118,7 @@ async def list_pages(
 @router.post("/pages", response_model=AdminPageConfig, status_code=201)
 async def create_page_endpoint(
     body: PageCreate,
+    response: Response,
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
     git_service: Annotated[GitService, Depends(get_git_service)],
     _user: Annotated[User, Depends(require_admin)],
@@ -121,7 +131,7 @@ async def create_page_endpoint(
     except OSError as exc:
         logger.error("Failed to create page %s: %s", body.id, exc)
         raise HTTPException(status_code=500, detail="Failed to create page") from exc
-    await git_service.try_commit(f"Create page: {body.id}")
+    _set_git_warning(response, await git_service.try_commit(f"Create page: {body.id}"))
     return AdminPageConfig(
         id=page.id,
         title=page.title,
@@ -134,6 +144,7 @@ async def create_page_endpoint(
 @router.put("/pages/order", response_model=AdminPagesResponse)
 async def update_order(
     body: PageOrderUpdate,
+    response: Response,
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
     git_service: Annotated[GitService, Depends(get_git_service)],
     _user: Annotated[User, Depends(require_admin)],
@@ -145,7 +156,7 @@ async def update_order(
     except OSError as exc:
         logger.error("Failed to update page order: %s", exc)
         raise HTTPException(status_code=500, detail="Failed to update page order") from exc
-    await git_service.try_commit("Update page order")
+    _set_git_warning(response, await git_service.try_commit("Update page order"))
     admin_pages = get_admin_pages(content_manager)
     return AdminPagesResponse(pages=[AdminPageConfig(**p) for p in admin_pages])
 
@@ -154,6 +165,7 @@ async def update_order(
 async def update_page_endpoint(
     page_id: str,
     body: PageUpdate,
+    response: Response,
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
     git_service: Annotated[GitService, Depends(get_git_service)],
     _user: Annotated[User, Depends(require_admin)],
@@ -168,13 +180,14 @@ async def update_page_endpoint(
     except OSError as exc:
         logger.error("Failed to update page %s: %s", page_id, exc)
         raise HTTPException(status_code=500, detail="Failed to update page") from exc
-    await git_service.try_commit(f"Update page: {page_id}")
+    _set_git_warning(response, await git_service.try_commit(f"Update page: {page_id}"))
     return {"status": "ok"}
 
 
 @router.delete("/pages/{page_id}", status_code=204)
 async def delete_page_endpoint(
     page_id: str,
+    response: Response,
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
     git_service: Annotated[GitService, Depends(get_git_service)],
     _user: Annotated[User, Depends(require_admin)],
@@ -192,25 +205,41 @@ async def delete_page_endpoint(
     except OSError as exc:
         logger.error("Failed to delete page %s: %s", page_id, exc)
         raise HTTPException(status_code=500, detail="Failed to delete page") from exc
-    await git_service.try_commit(f"Delete page: {page_id}")
+    _set_git_warning(response, await git_service.try_commit(f"Delete page: {page_id}"))
+
+
+_PASSWORD_CHANGE_MAX_FAILURES = 5
+_PASSWORD_CHANGE_WINDOW_SECONDS = 300
 
 
 @router.put("/password")
 async def change_password(
     body: PasswordChange,
+    request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
     user: Annotated[User, Depends(require_admin)],
-) -> dict[str, str]:
+) -> dict[str, str | bool]:
     """Change admin password."""
-    if body.new_password != body.confirm_password:
-        raise HTTPException(status_code=400, detail="Passwords do not match")
+    limiter: InMemoryRateLimiter = request.app.state.rate_limiter
+    rate_key = f"password_change:{user.id}"
+    limited, retry_after = limiter.is_limited(
+        rate_key, _PASSWORD_CHANGE_MAX_FAILURES, _PASSWORD_CHANGE_WINDOW_SECONDS
+    )
+    if limited:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many failed password change attempts",
+            headers={"Retry-After": str(retry_after)},
+        )
 
     if not verify_password(body.current_password, user.password_hash):
+        limiter.add_failure(rate_key, _PASSWORD_CHANGE_WINDOW_SECONDS)
         raise HTTPException(status_code=400, detail="Current password is incorrect")
 
+    limiter.clear(rate_key)
     user.password_hash = hash_password(body.new_password)
     user.updated_at = format_iso(now_utc())
     await revoke_user_credentials(session, user.id)
     session.add(user)
     await session.commit()
-    return {"status": "ok"}
+    return {"status": "ok", "sessions_revoked": True}

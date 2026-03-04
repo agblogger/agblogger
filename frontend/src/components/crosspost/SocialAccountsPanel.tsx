@@ -15,6 +15,7 @@ import type { SocialAccount, FacebookPage } from '@/api/crosspost'
 import { HTTPError } from '@/api/client'
 import { parseErrorDetail } from '@/api/parseError'
 import PlatformIcon from '@/components/crosspost/PlatformIcon'
+import { formatDate } from '@/utils/date'
 
 async function extractErrorDetail(err: unknown, fallback: string): Promise<string> {
   if (err instanceof HTTPError) {
@@ -27,15 +28,6 @@ async function extractErrorDetail(err: unknown, fallback: string): Promise<strin
 interface SocialAccountsPanelProps {
   busy: boolean
   onBusyChange: (busy: boolean) => void
-}
-
-function formatDate(iso: string): string {
-  const date = new Date(iso)
-  return date.toLocaleDateString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  })
 }
 
 export default function SocialAccountsPanel({ busy, onBusyChange }: SocialAccountsPanelProps) {

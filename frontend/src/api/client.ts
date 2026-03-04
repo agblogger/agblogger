@@ -212,11 +212,6 @@ export interface SessionAuthResponse {
   csrf_token: string
 }
 
-export interface TokenResponse {
-  access_token: string
-  token_type: string
-}
-
 export interface UserResponse {
   id: number
   username: string

@@ -161,7 +161,10 @@ async def revoke_refresh_token(session: AsyncSession, refresh_token_value: str) 
 
 
 async def revoke_user_credentials(session: AsyncSession, user_id: int) -> None:
-    """Revoke all refresh tokens and personal access tokens for a user."""
+    """Revoke all refresh tokens and personal access tokens for a user.
+
+    Caller must commit the session after calling this function.
+    """
     await session.execute(delete(RefreshToken).where(RefreshToken.user_id == user_id))
     await session.execute(
         update(PersonalAccessToken)

@@ -141,6 +141,30 @@ describe('ShareBar', () => {
     expect(screen.queryByLabelText('Share via device')).not.toBeInTheDocument()
   })
 
+  // Issue #2: unhandled rejection from native share non-AbortError
+  it('does not fire unhandledrejection when native share rejects with non-AbortError', async () => {
+    const typeError = new TypeError('Invalid share data')
+    Object.defineProperty(navigator, 'share', {
+      value: vi.fn().mockRejectedValue(typeError),
+      writable: true,
+      configurable: true,
+    })
+
+    const unhandledHandler = vi.fn()
+    window.addEventListener('unhandledrejection', unhandledHandler)
+
+    const user = userEvent.setup()
+    render(<ShareBar {...defaultProps} />)
+
+    await user.click(screen.getByLabelText('Share via device'))
+
+    // Give the microtask queue time to settle
+    await new Promise((r) => setTimeout(r, 50))
+
+    expect(unhandledHandler).not.toHaveBeenCalled()
+    window.removeEventListener('unhandledrejection', unhandledHandler)
+  })
+
   // Issue #13: email share button
   it('opens email share link with mailto', async () => {
     const windowOpen = vi.spyOn(window, 'open').mockReturnValue(null)

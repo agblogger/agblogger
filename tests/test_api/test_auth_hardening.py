@@ -440,6 +440,91 @@ class TestInviteCodeReuse:
         assert reg2.status_code == 403
 
 
+class TestPasswordModelValidation:
+    @pytest.mark.asyncio
+    async def test_mismatched_passwords_returns_422(self, client: AsyncClient) -> None:
+        """Mismatched new_password and confirm_password returns 422 from model_validator."""
+        token_resp = await client.post(
+            "/api/auth/token-login",
+            json={"username": "admin", "password": "admin123"},
+        )
+        access_token = token_resp.json()["access_token"]
+        resp = await client.put(
+            "/api/admin/password",
+            json={
+                "current_password": "admin123",
+                "new_password": "newpassword1234",
+                "confirm_password": "differentpassword",
+            },
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        assert resp.status_code == 422
+
+
+class TestPasswordRateLimiting:
+    @pytest.mark.asyncio
+    async def test_password_change_rate_limited_after_failures(self, client: AsyncClient) -> None:
+        """Exceeding the failure threshold should trigger 429."""
+        token_resp = await client.post(
+            "/api/auth/token-login",
+            json={"username": "admin", "password": "admin123"},
+        )
+        access_token = token_resp.json()["access_token"]
+        headers = {"Authorization": f"Bearer {access_token}"}
+
+        wrong_body = {
+            "current_password": "wrong-password",
+            "new_password": "newpassword1234",
+            "confirm_password": "newpassword1234",
+        }
+
+        # Send 5 wrong-password attempts (the configured threshold)
+        for _ in range(5):
+            resp = await client.put("/api/admin/password", json=wrong_body, headers=headers)
+            assert resp.status_code == 400
+
+        # The 6th attempt should be rate-limited
+        limited = await client.put("/api/admin/password", json=wrong_body, headers=headers)
+        assert limited.status_code == 429
+
+
+class TestPasswordChangeSessionRevocation:
+    @pytest.mark.asyncio
+    async def test_password_change_response_includes_sessions_revoked(
+        self, client: AsyncClient
+    ) -> None:
+        """Password change response should include sessions_revoked: true."""
+        token_resp = await client.post(
+            "/api/auth/token-login",
+            json={"username": "admin", "password": "admin123"},
+        )
+        access_token = token_resp.json()["access_token"]
+        resp = await client.put(
+            "/api/admin/password",
+            json={
+                "current_password": "admin123",
+                "new_password": "newpassword1234",
+                "confirm_password": "newpassword1234",
+            },
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["sessions_revoked"] is True
+
+
+class TestTokenLoginRefererHeader:
+    @pytest.mark.asyncio
+    async def test_token_login_rejects_referer_header(self, client: AsyncClient) -> None:
+        """Token-login should reject requests with Referer header (browser-originated)."""
+        resp = await client.post(
+            "/api/auth/token-login",
+            json={"username": "admin", "password": "admin123"},
+            headers={"Referer": "http://evil.com/page"},
+        )
+        assert resp.status_code == 403
+
+
 class TestPasswordRotation:
     @pytest.mark.asyncio
     async def test_password_change_revokes_refresh_tokens_and_pats(

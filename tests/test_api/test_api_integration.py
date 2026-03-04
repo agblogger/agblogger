@@ -1849,7 +1849,7 @@ class TestAdmin:
             },
             headers={"Authorization": f"Bearer {token}"},
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
 
 class TestSearchAfterDelete:

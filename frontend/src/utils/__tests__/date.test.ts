@@ -23,9 +23,14 @@ describe('formatDate', () => {
     expect(formatDate('2026-03-01 12:00:00+00')).toBe('Mar 1, 2026')
   })
 
-  it('falls back to raw date portion on invalid input', () => {
+  it('falls back to full string on invalid input', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     expect(formatDate('not-a-date')).toBe('not-a-date')
+  })
+
+  it('falls back to full string on multi-word invalid input', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    expect(formatDate('totally invalid date')).toBe('totally invalid date')
   })
 
   it('supports custom patterns', () => {
@@ -68,8 +73,13 @@ describe('formatRelativeDate', () => {
     expect(result).toBe('Mar 1, 2026')
   })
 
-  it('falls back to raw date portion on invalid input', () => {
+  it('falls back to full string on invalid input', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     expect(formatRelativeDate('not-a-date')).toBe('not-a-date')
+  })
+
+  it('falls back to full string on multi-word invalid input', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    expect(formatRelativeDate('totally invalid date')).toBe('totally invalid date')
   })
 })

@@ -11,7 +11,7 @@ from pathlib import Path as FilePath
 from typing import Annotated, Literal
 
 import yaml
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, UploadFile
 from sqlalchemy import delete, select, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -53,6 +53,12 @@ logger = logging.getLogger(__name__)
 async def _empty_string() -> str:
     """No-op coroutine returning empty string, for use as asyncio.gather placeholder."""
     return ""
+
+
+def _set_git_warning(response: Response, commit_hash: str | None) -> None:
+    """Set X-Git-Warning header when a git commit was expected but failed."""
+    if commit_hash is None:
+        response.headers["X-Git-Warning"] = "Git commit failed; changes saved but not versioned"
 
 
 router = APIRouter(prefix="/api/posts", tags=["posts"])
@@ -221,6 +227,7 @@ _MAX_TOTAL_UPLOAD_SIZE = 50 * 1024 * 1024  # 50 MB total
 @router.post("/upload", response_model=PostDetail, status_code=201)
 async def upload_post(
     files: list[UploadFile],
+    response: Response,
     session: Annotated[AsyncSession, Depends(get_session)],
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
     git_service: Annotated[GitService, Depends(get_git_service)],
@@ -303,7 +310,7 @@ async def upload_post(
     # Catch pandoc rendering failures and clean up assets
     try:
         rendered_excerpt, rendered_html = await _render_post(post_data.content, file_path)
-    except RuntimeError as exc:
+    except (RuntimeError, OSError) as exc:
         logger.error("Pandoc rendering failed during upload of %s: %s", file_path, exc)
         for asset in written_assets:
             asset.unlink(missing_ok=True)
@@ -347,7 +354,7 @@ async def upload_post(
 
     await session.commit()
     await session.refresh(post)
-    await git_service.try_commit(f"Upload post: {file_path}")
+    _set_git_warning(response, await git_service.try_commit(f"Upload post: {file_path}"))
 
     return _build_post_detail(post, labels=post_data.labels, rendered_html=rendered_html)
 
@@ -378,6 +385,7 @@ async def get_post_for_edit(
 async def upload_assets(
     file_path: str,
     files: list[UploadFile],
+    response: Response,
     session: Annotated[AsyncSession, Depends(get_session)],
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
     git_service: Annotated[GitService, Depends(get_git_service)],
@@ -417,7 +425,10 @@ async def upload_assets(
         uploaded.append(filename)
 
     if uploaded:
-        await git_service.try_commit(f"Upload assets to {file_path}: {', '.join(uploaded)}")
+        _set_git_warning(
+            response,
+            await git_service.try_commit(f"Upload assets to {file_path}: {', '.join(uploaded)}"),
+        )
 
     return {"uploaded": uploaded}
 
@@ -447,6 +458,7 @@ async def get_post_endpoint(
 @router.post("", response_model=PostDetail, status_code=201)
 async def create_post_endpoint(
     body: PostCreate,
+    response: Response,
     session: Annotated[AsyncSession, Depends(get_session)],
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
     git_service: Annotated[GitService, Depends(get_git_service)],
@@ -480,7 +492,7 @@ async def create_post_endpoint(
     # Catch pandoc rendering failures
     try:
         rendered_excerpt, rendered_html = await _render_post(post_data.content, file_path)
-    except RuntimeError as exc:
+    except (RuntimeError, OSError) as exc:
         logger.error("Pandoc rendering failed for new post %s: %s", file_path, exc)
         raise HTTPException(status_code=502, detail="Markdown rendering failed") from exc
 
@@ -516,7 +528,7 @@ async def create_post_endpoint(
 
     await session.commit()
     await session.refresh(post)
-    await git_service.try_commit(f"Create post: {file_path}")
+    _set_git_warning(response, await git_service.try_commit(f"Create post: {file_path}"))
 
     return _build_post_detail(post, labels=body.labels, rendered_html=rendered_html)
 
@@ -525,6 +537,7 @@ async def create_post_endpoint(
 async def update_post_endpoint(
     file_path: str,
     body: PostUpdate,
+    response: Response,
     session: Annotated[AsyncSession, Depends(get_session)],
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
     git_service: Annotated[GitService, Depends(get_git_service)],
@@ -579,7 +592,7 @@ async def update_post_endpoint(
             render_markdown_excerpt(md_excerpt) if md_excerpt else _empty_string(),
             render_markdown(post_data.content),
         )
-    except RuntimeError as exc:
+    except (RuntimeError, OSError) as exc:
         logger.error("Pandoc rendering failed for post %s: %s", file_path, exc)
         raise HTTPException(status_code=502, detail="Markdown rendering failed") from exc
     rendered_excerpt = rewrite_relative_urls(raw_rendered_excerpt, file_path)
@@ -696,7 +709,7 @@ async def update_post_endpoint(
 
     await session.commit()
     await session.refresh(existing)
-    await git_service.try_commit(f"Update post: {existing.file_path}")
+    _set_git_warning(response, await git_service.try_commit(f"Update post: {existing.file_path}"))
 
     return _build_post_detail(
         existing,
@@ -708,6 +721,7 @@ async def update_post_endpoint(
 @router.delete("/{file_path:path}", status_code=204)
 async def delete_post_endpoint(
     file_path: str,
+    response: Response,
     session: Annotated[AsyncSession, Depends(get_session)],
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
     git_service: Annotated[GitService, Depends(get_git_service)],
@@ -745,4 +759,4 @@ async def delete_post_endpoint(
     )
     await session.delete(existing)
     await session.commit()
-    await git_service.try_commit(f"Delete post: {file_path}")
+    _set_git_warning(response, await git_service.try_commit(f"Delete post: {file_path}"))

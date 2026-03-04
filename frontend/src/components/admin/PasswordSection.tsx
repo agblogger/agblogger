@@ -4,6 +4,7 @@ import { Lock } from 'lucide-react'
 import { HTTPError } from '@/api/client'
 import { parseErrorDetail } from '@/api/parseError'
 import { changeAdminPassword } from '@/api/admin'
+import { useAuthStore } from '@/stores/authStore'
 
 interface PasswordSectionProps {
   busy: boolean
@@ -41,7 +42,7 @@ export default function PasswordSection({ busy, onSaving }: PasswordSectionProps
     }
     setSavingPassword(true)
     try {
-      await changeAdminPassword({
+      const result = await changeAdminPassword({
         current_password: currentPassword,
         new_password: newPassword,
         confirm_password: confirmPassword,
@@ -50,11 +51,16 @@ export default function PasswordSection({ busy, onSaving }: PasswordSectionProps
       setCurrentPassword('')
       setNewPassword('')
       setConfirmPassword('')
+      if (result.sessions_revoked === true) {
+        void useAuthStore.getState().logout()
+      }
     } catch (err) {
       if (err instanceof HTTPError) {
-        if (err.response.status === 400) {
+        if (err.response.status === 400 || err.response.status === 422) {
           const detail = await parseErrorDetail(err.response, 'Invalid request.')
           setPasswordError(detail)
+        } else if (err.response.status === 429) {
+          setPasswordError('Too many attempts. Please try again later.')
         } else if (err.response.status === 401) {
           setPasswordError('Session expired. Please log in again.')
         } else {

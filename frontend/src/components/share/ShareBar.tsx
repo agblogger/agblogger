@@ -3,16 +3,11 @@ import { Check, Link, Mail, Share2, X as XIcon } from 'lucide-react'
 import PlatformIcon from '@/components/crosspost/PlatformIcon'
 
 import MastodonSharePrompt from './MastodonSharePrompt'
+import type { ShareProps } from './shareTypes'
 import { canNativeShare, SHARE_PLATFORMS } from './shareUtils'
 import { useShareHandlers } from './useShareHandlers'
 
-interface ShareBarProps {
-  title: string
-  author: string | null
-  url: string
-}
-
-export default function ShareBar({ title, author, url }: ShareBarProps) {
+export default function ShareBar({ title, author, url }: ShareProps) {
   const {
     shareText,
     copied,
@@ -31,7 +26,9 @@ export default function ShareBar({ title, author, url }: ShareBarProps) {
         {canNativeShare() && (
           <div className="tooltip-wrap">
             <button
-              onClick={() => void handleNativeShare()}
+              onClick={() => {
+                handleNativeShare().catch(() => {})
+              }}
               aria-label="Share via device"
               className="rounded-lg p-2 text-muted transition-colors hover:bg-paper-warm hover:text-ink"
             >

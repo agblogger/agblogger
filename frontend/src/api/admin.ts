@@ -45,6 +45,6 @@ export async function changeAdminPassword(data: {
   current_password: string
   new_password: string
   confirm_password: string
-}): Promise<void> {
-  await api.put('admin/password', { json: data })
+}): Promise<{ status: string; sessions_revoked?: boolean }> {
+  return api.put('admin/password', { json: data }).json<{ status: string; sessions_revoked?: boolean }>()
 }

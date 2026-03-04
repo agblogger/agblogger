@@ -106,7 +106,7 @@ class TestCrossPostHistoryCorruptStatus:
         assert resp.status_code == 200
         data = resp.json()
         assert len(data["items"]) == 1
-        assert data["items"][0]["status"] == "failed"
+        assert data["items"][0]["status"] == "unknown"
 
 
 class TestUpsertSocialAccountRaceCondition:

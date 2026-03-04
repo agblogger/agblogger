@@ -54,12 +54,15 @@ logger = logging.getLogger(__name__)
 
 
 def _safe_status(raw: str) -> CrossPostStatus:
-    """Convert a raw status string to CrossPostStatus, falling back to FAILED for unknown values."""
+    """Convert a raw status string to CrossPostStatus.
+
+    Falls back to UNKNOWN for unrecognised values.
+    """
     try:
         return CrossPostStatus(raw)
     except ValueError:
-        logger.warning("Unknown cross-post status %r, defaulting to FAILED", raw)
-        return CrossPostStatus.FAILED
+        logger.error("Unknown cross-post status %r, defaulting to UNKNOWN", raw)
+        return CrossPostStatus.UNKNOWN
 
 
 def _generate_pkce_pair() -> tuple[str, str]:

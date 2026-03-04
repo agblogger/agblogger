@@ -11,6 +11,7 @@ class CrossPostStatus(StrEnum):
     PENDING = "pending"
     POSTED = "posted"
     FAILED = "failed"
+    UNKNOWN = "unknown"
 
 
 class SocialAccountCreate(BaseModel):

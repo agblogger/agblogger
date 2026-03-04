@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class SiteSettingsUpdate(BaseModel):
@@ -73,3 +73,9 @@ class PasswordChange(BaseModel):
     current_password: str = Field(min_length=1)
     new_password: str = Field(min_length=12, max_length=128)
     confirm_password: str = Field(min_length=12, max_length=128)
+
+    @model_validator(mode="after")
+    def passwords_match(self) -> PasswordChange:
+        if self.new_password != self.confirm_password:
+            raise ValueError("Passwords do not match")
+        return self

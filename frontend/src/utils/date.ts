@@ -20,7 +20,7 @@ export function formatDate(dateStr: string, pattern = 'MMM d, yyyy'): string {
     return format(parseISO(normalise(dateStr)), pattern)
   } catch (err) {
     console.warn(`Failed to parse date "${dateStr}":`, err)
-    return dateStr.split(' ')[0] ?? ''
+    return dateStr || ''
   }
 }
 
@@ -37,6 +37,6 @@ export function formatRelativeDate(dateStr: string): string {
     return format(date, 'MMM d, yyyy')
   } catch (err) {
     console.warn(`Failed to parse date "${dateStr}":`, err)
-    return dateStr.split(' ')[0] ?? ''
+    return dateStr || ''
   }
 }

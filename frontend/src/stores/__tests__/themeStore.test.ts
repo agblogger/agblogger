@@ -102,4 +102,27 @@ describe('themeStore', () => {
     useThemeStore.getState().init()
     expect(useThemeStore.getState().mode).toBe('system')
   })
+
+  it('falls back to system mode when localStorage.getItem throws', () => {
+    const throwingStorage = Object.create(fakeLocalStorage) as Storage
+    throwingStorage.getItem = () => { throw new DOMException('blocked', 'SecurityError') }
+    vi.stubGlobal('localStorage', throwingStorage)
+
+    useThemeStore.getState().init()
+    expect(useThemeStore.getState().mode).toBe('system')
+    expect(useThemeStore.getState().resolvedTheme).toBe('light')
+  })
+
+  it('still updates state when localStorage.setItem throws in toggleMode', () => {
+    const throwingStorage = Object.create(fakeLocalStorage) as Storage
+    throwingStorage.setItem = () => { throw new DOMException('quota exceeded', 'QuotaExceededError') }
+    vi.stubGlobal('localStorage', throwingStorage)
+
+    useThemeStore.getState().init()
+    expect(useThemeStore.getState().mode).toBe('system')
+
+    // Should not throw and should still update the state
+    expect(() => useThemeStore.getState().toggleMode()).not.toThrow()
+    expect(useThemeStore.getState().mode).toBe('light')
+  })
 })
