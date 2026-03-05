@@ -96,4 +96,9 @@ describe('PostCard', () => {
     const excerptEl = screen.getByText('Text').closest('div')
     expect(excerptEl?.innerHTML).not.toContain('onerror')
   })
+
+  it('is wrapped in React.memo', async () => {
+    const { default: PostCardModule } = await import('../PostCard')
+    expect((PostCardModule as unknown as { $$typeof: symbol }).$$typeof).toBe(Symbol.for('react.memo'))
+  })
 })

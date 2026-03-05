@@ -1,4 +1,5 @@
 import DOMPurify from 'dompurify'
+import { memo } from 'react'
 import { Link } from 'react-router-dom'
 import type { PostSummary } from '@/api/client'
 import LabelChip from '@/components/labels/LabelChip'
@@ -10,7 +11,7 @@ interface PostCardProps {
   index?: number
 }
 
-export default function PostCard({ post, index = 0 }: PostCardProps) {
+function PostCardInner({ post, index = 0 }: PostCardProps) {
   const postUrl = `/post/${post.file_path}`
   const staggerClass = `stagger-${Math.min(index + 1, 8)}`
   const rawExcerpt = useRenderedHtml(post.rendered_excerpt)
@@ -73,3 +74,6 @@ export default function PostCard({ post, index = 0 }: PostCardProps) {
     </article>
   )
 }
+
+const PostCard = memo(PostCardInner)
+export default PostCard
