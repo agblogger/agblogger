@@ -12,6 +12,13 @@ import PagesSection from '@/components/admin/PagesSection'
 import PasswordSection from '@/components/admin/PasswordSection'
 import SocialAccountsPanel from '@/components/crosspost/SocialAccountsPanel'
 
+const ADMIN_TABS = [
+  { key: 'settings', label: 'Settings' },
+  { key: 'pages', label: 'Pages' },
+  { key: 'password', label: 'Password' },
+  { key: 'social', label: 'Social' },
+] as const
+
 export default function AdminPage() {
   const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
@@ -114,12 +121,7 @@ export default function AdminPage() {
       </div>
 
       <div className="flex border-b border-border mb-8">
-        {([
-          { key: 'settings', label: 'Settings' },
-          { key: 'pages', label: 'Pages' },
-          { key: 'password', label: 'Password' },
-          { key: 'social', label: 'Social' },
-        ] as const).map((tab) => (
+        {ADMIN_TABS.map((tab) => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
