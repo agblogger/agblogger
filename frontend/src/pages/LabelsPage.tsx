@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import { Link } from 'react-router-dom'
 import { Tag, Settings } from 'lucide-react'
@@ -7,7 +7,8 @@ import { useAuthStore } from '@/stores/authStore'
 import { fetchLabels } from '@/api/labels'
 import { HTTPError } from '@/api/client'
 import type { LabelResponse } from '@/api/client'
-import LabelGraphPage from '@/pages/LabelGraphPage'
+
+const LabelGraphPage = lazy(() => import('@/pages/LabelGraphPage'))
 
 export default function LabelsPage() {
   const [view, setView] = useState<'list' | 'graph'>('list')
@@ -53,7 +54,9 @@ export default function LabelsPage() {
           <LabelListView />
         </>
       ) : (
-        <LabelGraphPage viewToggle={viewToggle} />
+        <Suspense fallback={<LoadingSpinner />}>
+          <LabelGraphPage viewToggle={viewToggle} />
+        </Suspense>
       )}
     </div>
   )

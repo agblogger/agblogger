@@ -81,7 +81,7 @@ describe('LabelsPage', () => {
     })
 
     await userEvent.click(screen.getByRole('button', { name: 'Graph' }))
-    expect(screen.getByTestId('graph-view')).toBeInTheDocument()
+    expect(await screen.findByTestId('graph-view')).toBeInTheDocument()
     expect(screen.queryByText('#swe')).not.toBeInTheDocument()
   })
 
@@ -94,7 +94,7 @@ describe('LabelsPage', () => {
     })
 
     await userEvent.click(screen.getByRole('button', { name: 'Graph' }))
-    expect(screen.getByTestId('graph-view')).toBeInTheDocument()
+    expect(await screen.findByTestId('graph-view')).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'List' }))
     await waitFor(() => {
