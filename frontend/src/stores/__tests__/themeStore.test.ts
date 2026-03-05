@@ -115,10 +115,9 @@ describe('themeStore', () => {
 
   it('returns a cleanup function from init that removes the MQL listener', () => {
     const removeSpy = vi.fn()
-    vi.stubGlobal('matchMedia', (query: string) => ({
-      ...makeMql(query),
-      removeEventListener: removeSpy,
-    }))
+    vi.stubGlobal('matchMedia', (query: string) =>
+      Object.assign(makeMql(query), { removeEventListener: removeSpy }),
+    )
 
     const cleanup = useThemeStore.getState().init()
     expect(typeof cleanup).toBe('function')
