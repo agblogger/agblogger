@@ -446,9 +446,43 @@ class TestStaleLockFile:
         assert any("stale keypair lock" in record.message.lower() for record in caplog.records)
 
 
+class TestContentWriteLockInitialization:
+    """Verify content_write_lock is initialized during lifespan startup."""
+
+    @pytest.mark.asyncio
+    async def test_content_write_lock_set_on_app_state_after_lifespan(self, tmp_path: Path) -> None:
+        import asyncio
+
+        settings = Settings(
+            secret_key="test-secret-key-min-32-characters-long",
+            admin_password="testpassword",
+            debug=True,
+            database_url=f"sqlite+aiosqlite:///{tmp_path}/test.db",
+            content_dir=tmp_path / "content",
+            frontend_dir=tmp_path / "no-frontend",
+        )
+        app = create_app(settings)
+
+        with patch(
+            "backend.pandoc.server.PandocServer.start",
+            new_callable=AsyncMock,
+        ):
+            ctx = app.router.lifespan_context(app)
+            await ctx.__aenter__()
+            try:
+                lock = getattr(app.state, "content_write_lock", None)
+                assert lock is not None, "content_write_lock should be set on app.state"
+                assert isinstance(lock, asyncio.Lock), (
+                    f"content_write_lock should be asyncio.Lock, got {type(lock)}"
+                )
+            finally:
+                with suppress(Exception):
+                    await ctx.__aexit__(None, None, None)
+
+
 class TestStartupResilience:
     @pytest.mark.asyncio
-    async def test_lifespan_continues_when_pandoc_start_fails(self, tmp_path: Path) -> None:
+    async def test_lifespan_crashes_when_pandoc_start_fails(self, tmp_path: Path) -> None:
         settings = Settings(
             secret_key="test-secret-key-min-32-characters-long",
             admin_password="testpassword",
@@ -465,10 +499,5 @@ class TestStartupResilience:
             side_effect=RuntimeError("pandoc unavailable"),
         ):
             ctx = app.router.lifespan_context(app)
-            await ctx.__aenter__()
-            try:
-                errors = getattr(app.state, "startup_errors", [])
-                assert any("pandoc" in err.lower() for err in errors)
-            finally:
-                with suppress(Exception):
-                    await ctx.__aexit__(None, None, None)
+            with pytest.raises(RuntimeError, match="pandoc unavailable"):
+                await ctx.__aenter__()

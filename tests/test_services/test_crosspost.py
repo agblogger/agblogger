@@ -17,6 +17,7 @@ from backend.crosspost.facebook import (
     _build_facebook_text,
     exchange_facebook_oauth_token,
 )
+from backend.crosspost.http_utils import parse_json_object
 from backend.crosspost.mastodon import (
     MastodonCrossPoster,
     MastodonOAuthTokenError,
@@ -1557,3 +1558,50 @@ class TestFacebookValidateCredentials:
         params = captured_kwargs.get("params", {})
         assert isinstance(params, dict)
         assert "access_token" not in params
+
+
+class TestParseJsonObject:
+    """Tests for the shared parse_json_object utility."""
+
+    def _make_response(self, body: str, status_code: int = 200) -> httpx.Response:
+        return httpx.Response(status_code=status_code, text=body)
+
+    def test_valid_dict_returns_parsed(self) -> None:
+        resp = self._make_response('{"key": "value"}')
+        result = parse_json_object(resp, context="test endpoint")
+        assert result == {"key": "value"}
+
+    def test_valid_dict_with_error_cls(self) -> None:
+        resp = self._make_response('{"key": "value"}')
+        result = parse_json_object(resp, error_cls=ValueError, context="test endpoint")
+        assert result == {"key": "value"}
+
+    def test_non_json_without_error_cls_raises_valueerror(self) -> None:
+        resp = self._make_response("not json")
+        with pytest.raises(ValueError):
+            parse_json_object(resp, context="test endpoint")
+
+    def test_non_json_with_error_cls_raises_error_cls(self) -> None:
+        resp = self._make_response("not json")
+        with pytest.raises(FacebookOAuthTokenError, match="non-JSON"):
+            parse_json_object(resp, error_cls=FacebookOAuthTokenError, context="test endpoint")
+
+    def test_json_array_without_error_cls_raises_valueerror(self) -> None:
+        resp = self._make_response("[1, 2, 3]")
+        with pytest.raises(ValueError, match="non-object JSON"):
+            parse_json_object(resp, context="test endpoint")
+
+    def test_json_array_with_error_cls_raises_error_cls(self) -> None:
+        resp = self._make_response("[1, 2, 3]")
+        with pytest.raises(XOAuthTokenError, match="invalid JSON object"):
+            parse_json_object(resp, error_cls=XOAuthTokenError, context="test endpoint")
+
+    def test_json_string_without_error_cls_raises_valueerror(self) -> None:
+        resp = self._make_response('"just a string"')
+        with pytest.raises(ValueError, match="non-object JSON"):
+            parse_json_object(resp, context="test endpoint")
+
+    def test_json_number_with_error_cls_raises_error_cls(self) -> None:
+        resp = self._make_response("42")
+        with pytest.raises(MastodonOAuthTokenError, match="invalid JSON object"):
+            parse_json_object(resp, error_cls=MastodonOAuthTokenError, context="test endpoint")

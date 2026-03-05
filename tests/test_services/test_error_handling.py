@@ -390,13 +390,13 @@ class TestReloadConfigProtection:
         (tmp_path / "index.toml").write_text('[site]\ntitle = "Test"')
         (tmp_path / "labels.toml").write_text("[labels]")
 
-        # Force reload_config to raise
-        with patch.object(cm, "reload_config", side_effect=Exception("corrupt toml")):
-            # Simulate the sync pattern
+        # Force reload_config to raise an OSError (realistic filesystem failure)
+        with patch.object(cm, "reload_config", side_effect=OSError("permission denied")):
+            # Simulate the sync pattern with narrowed exception handling
             warnings: list[str] = []
             try:
                 cm.reload_config()
-            except Exception as exc:
+            except (OSError, ValueError, TypeError, KeyError) as exc:
                 logging.getLogger("backend.api.sync").warning(
                     "Config reload failed during sync: %s", exc
                 )

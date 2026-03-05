@@ -29,10 +29,9 @@ On startup, the lifespan handler:
 9. Initializes the `GitService` (creates a git repo in the content directory if one doesn't exist).
 10. Loads or creates the AT Protocol OAuth ES256 keypair (`content/.atproto-oauth-key.json`) and initializes OAuth state stores for Bluesky, Mastodon, X, and Facebook on `app.state`.
 11. Creates the admin user if it doesn't exist.
-12. Attempts to start the pandoc server (`PandocServer`) and initialize the renderer.
-13. If pandoc startup fails, the app continues in degraded mode, records a message in
-    `app.state.startup_errors`, and keeps serving non-rendering features.
-14. Rebuilds the full database cache from the filesystem.
+12. Starts the pandoc server (`PandocServer`) and initializes the renderer. Pandoc is a
+    required dependency — if startup fails, the server aborts with a critical log message.
+13. Rebuilds the full database cache from the filesystem.
 
 ## Layered Architecture
 

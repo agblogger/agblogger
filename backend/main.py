@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import subprocess
@@ -125,9 +126,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     settings.validate_runtime_security()
     _configure_logging(settings.debug)
     logger.info("Starting AgBlogger (debug=%s)", settings.debug)
-    startup_errors: list[str] = []
-    app.state.startup_errors = startup_errors
-
+    app.state.content_write_lock = asyncio.Lock()
     # Ensure database directory exists (M16)
     db_url = settings.database_url
     if db_url.startswith("sqlite"):
@@ -240,9 +239,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         app.state.pandoc_server = pandoc_server
         init_renderer(pandoc_server)
     except Exception as exc:
-        logger.error("Failed to start pandoc server; continuing in degraded mode: %s", exc)
-        startup_errors.append(f"Pandoc startup failed: {exc}")
-        app.state.pandoc_server = None
+        logger.critical("Failed to start pandoc server: %s. Ensure pandoc is installed.", exc)
+        raise
 
     from backend.services.cache_service import rebuild_cache
 

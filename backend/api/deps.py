@@ -1,8 +1,7 @@
-"""Shared API dependencies: DB session, auth, content manager."""
+"""Shared API dependencies: DB session, auth, content manager, content write lock."""
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import AsyncGenerator
 from types import TracebackType
 from typing import Annotated, Any, Protocol, cast
@@ -77,8 +76,10 @@ def get_content_write_lock(request: Request) -> AsyncWriteLock:
     """Get the global content write lock used to serialize content mutations."""
     lock = getattr(request.app.state, "content_write_lock", None)
     if lock is None:
-        lock = asyncio.Lock()
-        request.app.state.content_write_lock = lock
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Service temporarily unavailable",
+        )
     return cast("AsyncWriteLock", lock)
 
 

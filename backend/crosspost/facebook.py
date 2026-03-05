@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import logging
-from typing import cast
 
 import httpx
 
 from backend.crosspost.base import CrossPostContent, CrossPostResult
+from backend.crosspost.http_utils import parse_json_object
 
 logger = logging.getLogger(__name__)
 
@@ -16,27 +16,6 @@ FACEBOOK_GRAPH_API = "https://graph.facebook.com/v22.0"
 
 class FacebookOAuthTokenError(Exception):
     """Raised when Facebook OAuth token exchange fails."""
-
-
-def _parse_json_object(
-    response: httpx.Response,
-    *,
-    error_cls: type[Exception] | None = None,
-    context: str,
-) -> dict[str, object]:
-    try:
-        body = response.json()
-    except ValueError as exc:
-        if error_cls is None:
-            raise
-        msg = f"{context} returned non-JSON response"
-        raise error_cls(msg) from exc
-    if not isinstance(body, dict):
-        if error_cls is None:
-            raise ValueError(f"{context} returned non-object JSON")
-        msg = f"{context} returned invalid JSON object"
-        raise error_cls(msg)
-    return cast("dict[str, object]", body)
 
 
 def _build_facebook_text(content: CrossPostContent) -> str:
@@ -80,7 +59,7 @@ async def exchange_facebook_oauth_token(
             body = token_resp.text[:200]
             msg = f"Token exchange failed: {token_resp.status_code} - {body}"
             raise FacebookOAuthTokenError(msg)
-        token_data = _parse_json_object(
+        token_data = parse_json_object(
             token_resp,
             error_cls=FacebookOAuthTokenError,
             context="Facebook token endpoint",
@@ -106,7 +85,7 @@ async def exchange_facebook_oauth_token(
             body = ll_resp.text[:200]
             msg = f"Long-lived token exchange failed: {ll_resp.status_code} - {body}"
             raise FacebookOAuthTokenError(msg)
-        ll_data = _parse_json_object(
+        ll_data = parse_json_object(
             ll_resp,
             error_cls=FacebookOAuthTokenError,
             context="Facebook long-lived token endpoint",
@@ -127,7 +106,7 @@ async def exchange_facebook_oauth_token(
             body = pages_resp.text[:200]
             msg = f"Failed to fetch pages: {pages_resp.status_code} - {body}"
             raise FacebookOAuthTokenError(msg)
-        pages_data = _parse_json_object(
+        pages_data = parse_json_object(
             pages_resp,
             error_cls=FacebookOAuthTokenError,
             context="Facebook pages endpoint",
@@ -209,7 +188,7 @@ class FacebookCrossPoster:
                         success=False,
                         error=f"Facebook API error: {resp.status_code} {resp.text}",
                     )
-                data = _parse_json_object(resp, context="Facebook feed endpoint")
+                data = parse_json_object(resp, context="Facebook feed endpoint")
                 post_id_value = data.get("id")
                 post_id = post_id_value if isinstance(post_id_value, str) else ""
                 post_url = f"https://www.facebook.com/{post_id}" if post_id else ""

@@ -29,6 +29,7 @@ from cryptography.hazmat.primitives.serialization import (
     load_pem_private_key,
 )
 
+from backend.crosspost.http_utils import parse_json_object
 from backend.crosspost.ssrf import ssrf_safe_client
 
 if TYPE_CHECKING:
@@ -227,18 +228,6 @@ class ATProtoOAuthError(Exception):
     """Error during AT Protocol OAuth operations."""
 
 
-def _parse_json_object(response: httpx.Response, *, context: str) -> dict[str, Any]:
-    try:
-        body = response.json()
-    except ValueError as exc:
-        msg = f"{context} returned non-JSON response"
-        raise ATProtoOAuthError(msg) from exc
-    if not isinstance(body, dict):
-        msg = f"{context} returned invalid JSON object"
-        raise ATProtoOAuthError(msg)
-    return cast("dict[str, Any]", body)
-
-
 async def _is_safe_url(url: str) -> bool:
     """Validate URL format: HTTPS scheme, non-localhost hostname, valid structure.
 
@@ -332,7 +321,9 @@ async def discover_auth_server(did: str) -> dict[str, Any]:
         if resp.status_code != 200:
             msg = f"Failed to fetch DID document for {did}: HTTP {resp.status_code}"
             raise ATProtoOAuthError(msg)
-        did_doc = _parse_json_object(resp, context="DID document endpoint")
+        did_doc = parse_json_object(
+            resp, error_cls=ATProtoOAuthError, context="DID document endpoint"
+        )
 
         # Step 2: Extract PDS URL from service array
         pds_url: str | None = None
@@ -353,7 +344,9 @@ async def discover_auth_server(did: str) -> dict[str, Any]:
         if resp.status_code != 200:
             msg = f"Failed to fetch OAuth resource metadata from {pds_url}"
             raise ATProtoOAuthError(msg)
-        resource_meta = _parse_json_object(resp, context="OAuth resource metadata endpoint")
+        resource_meta = parse_json_object(
+            resp, error_cls=ATProtoOAuthError, context="OAuth resource metadata endpoint"
+        )
 
         auth_servers = resource_meta.get("authorization_servers", [])
         if not auth_servers:
@@ -371,7 +364,11 @@ async def discover_auth_server(did: str) -> dict[str, Any]:
             msg = f"Failed to fetch auth server metadata from {auth_server_url}"
             raise ATProtoOAuthError(msg)
 
-        auth_meta = _parse_json_object(resp, context="OAuth authorization server metadata endpoint")
+        auth_meta = parse_json_object(
+            resp,
+            error_cls=ATProtoOAuthError,
+            context="OAuth authorization server metadata endpoint",
+        )
         auth_meta["pds_url"] = pds_url
         return auth_meta
 
@@ -478,7 +475,7 @@ async def send_par_request(
         msg = f"PAR request failed: HTTP {resp.status_code} — {resp.text}"
         raise ATProtoOAuthError(msg)
 
-    par_resp = _parse_json_object(resp, context="OAuth PAR endpoint")
+    par_resp = parse_json_object(resp, error_cls=ATProtoOAuthError, context="OAuth PAR endpoint")
     request_uri_value = par_resp.get("request_uri")
     if not isinstance(request_uri_value, str) or not request_uri_value:
         raise ATProtoOAuthError("OAuth PAR endpoint response missing request_uri")
@@ -539,7 +536,9 @@ async def exchange_code_for_tokens(
         msg = f"Token exchange failed: HTTP {resp.status_code} — {resp.text}"
         raise ATProtoOAuthError(msg)
 
-    token_data = _parse_json_object(resp, context="OAuth token endpoint")
+    token_data = parse_json_object(
+        resp, error_cls=ATProtoOAuthError, context="OAuth token endpoint"
+    )
     token_data["dpop_nonce"] = resp.headers.get("DPoP-Nonce", dpop_nonce)
     return token_data
 
@@ -578,6 +577,8 @@ async def refresh_access_token(
         msg = f"Token refresh failed: HTTP {resp.status_code} — {resp.text}"
         raise ATProtoOAuthError(msg)
 
-    token_data = _parse_json_object(resp, context="OAuth token refresh endpoint")
+    token_data = parse_json_object(
+        resp, error_cls=ATProtoOAuthError, context="OAuth token refresh endpoint"
+    )
     token_data["dpop_nonce"] = resp.headers.get("DPoP-Nonce", dpop_nonce)
     return token_data

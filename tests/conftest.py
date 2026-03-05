@@ -190,6 +190,7 @@ async def create_test_client(settings: Settings) -> AsyncGenerator[AsyncClient]:
 
     content_manager = ContentManager(content_dir=settings.content_dir)
     app.state.content_manager = content_manager
+    app.state.content_write_lock = asyncio.Lock()
 
     git_service = GitService(content_dir=settings.content_dir)
     await git_service.init_repo()

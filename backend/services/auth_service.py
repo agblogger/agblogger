@@ -146,6 +146,10 @@ async def refresh_tokens(
         )
     )
     if (getattr(delete_result, "rowcount", 0) or 0) != 1:
+        logger.warning(
+            "Session refresh already consumed (concurrent race or replay): id=%s",
+            stored_token.id,
+        )
         return None
 
     user = await session.get(User, stored_token.user_id)
@@ -252,7 +256,13 @@ async def consume_invite_code(
         )
         .values(used_at=used_at, used_by_user_id=used_by_user_id)
     )
-    return (getattr(result, "rowcount", 0) or 0) == 1
+    consumed = (getattr(result, "rowcount", 0) or 0) == 1
+    if not consumed:
+        logger.warning(
+            "Invite code already consumed (concurrent race): invite_id=%s",
+            invite_id,
+        )
+    return consumed
 
 
 def create_personal_access_token_value() -> str:

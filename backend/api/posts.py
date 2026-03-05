@@ -159,6 +159,7 @@ def _build_post_detail(
     *,
     labels: list[str],
     rendered_html: str,
+    warnings: list[str] | None = None,
 ) -> PostDetail:
     """Build a PostDetail response from a cache row."""
     return PostDetail(
@@ -172,6 +173,7 @@ def _build_post_detail(
         rendered_excerpt=post.rendered_excerpt,
         labels=labels,
         rendered_html=rendered_html,
+        warnings=warnings or [],
     )
 
 
@@ -559,6 +561,7 @@ async def update_post_endpoint(
     user: Annotated[User, Depends(require_admin)],
 ) -> PostDetail:
     """Update an existing post."""
+    endpoint_warnings: list[str] = []
     async with content_write_lock:
         stmt = select(PostCache).where(PostCache.file_path == file_path)
         result = await session.execute(stmt)
@@ -686,7 +689,9 @@ async def update_post_endpoint(
             await session.rollback()
             raise HTTPException(status_code=500, detail="Failed to write post file") from exc
 
-        # Perform the rename after write succeeds.
+        # Perform the rename after write succeeds. Symlink failure is non-fatal:
+        # the rename is the critical operation; a missing backward-compat symlink
+        # only affects old bookmarked URLs, not application correctness.
         if needs_rename and old_dir is not None and new_dir is not None:
             try:
                 shutil.move(str(old_dir), str(new_dir))
@@ -706,9 +711,9 @@ async def update_post_endpoint(
                     new_dir.name,
                     exc,
                 )
-                response.headers["X-Path-Compatibility-Warning"] = (
-                    "Post path changed but legacy symlink could not be created"
-                )
+                symlink_warning = "Post path changed but legacy symlink could not be created"
+                response.headers["X-Path-Compatibility-Warning"] = symlink_warning
+                endpoint_warnings.append(symlink_warning)
 
             existing.file_path = new_file_path
             post_data.file_path = new_file_path
@@ -726,6 +731,7 @@ async def update_post_endpoint(
             existing,
             labels=body.labels,
             rendered_html=existing.rendered_html or "",
+            warnings=endpoint_warnings,
         )
 
 

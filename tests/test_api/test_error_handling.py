@@ -13,17 +13,17 @@ from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy.exc import OperationalError
 
 from backend.config import Settings
+from backend.main import create_app
 from backend.pandoc.renderer import RenderError
 from tests.conftest import create_test_client
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
     from pathlib import Path
-
-    from httpx import AsyncClient
 
 
 @pytest.fixture
@@ -419,12 +419,15 @@ class TestUpdatePostOSError:
                 headers={"Authorization": f"Bearer {token}"},
             )
         assert resp.status_code == 200
-        new_path = resp.json()["file_path"]
+        body = resp.json()
+        new_path = body["file_path"]
         new_dir = (app_settings.content_dir / new_path).parent
         # Directory rename should still succeed even if backward-compat symlink creation fails.
         assert new_dir.exists()
         assert not original_dir.exists()
         assert "X-Path-Compatibility-Warning" in resp.headers
+        assert "warnings" in body
+        assert any("symlink" in w.lower() for w in body["warnings"])
 
 
 class TestAssetUploadOSError:
@@ -533,6 +536,48 @@ class TestSyncGitFailure:
         data = resp.json()
         assert data["status"] == "error"
         assert any("git commit failed" in warning.lower() for warning in data["warnings"])
+
+
+class TestSyncConfigReloadFailure:
+    """Sync commit handles config reload failure gracefully with a warning."""
+
+    @pytest.mark.asyncio
+    async def test_sync_commit_config_reload_oserror_returns_warning(
+        self, client: AsyncClient
+    ) -> None:
+        token = await login(client)
+
+        with patch(
+            "backend.api.sync.ContentManager.reload_config",
+            side_effect=OSError("permission denied"),
+        ):
+            resp = await client.post(
+                "/api/sync/commit",
+                data={"metadata": '{"deleted_files": [], "last_sync_commit": null}'},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert any("config reload failed" in w.lower() for w in data["warnings"])
+
+    @pytest.mark.asyncio
+    async def test_sync_commit_config_reload_value_error_returns_warning(
+        self, client: AsyncClient
+    ) -> None:
+        token = await login(client)
+
+        with patch(
+            "backend.api.sync.ContentManager.reload_config",
+            side_effect=ValueError("bad timezone data"),
+        ):
+            resp = await client.post(
+                "/api/sync/commit",
+                data={"metadata": '{"deleted_files": [], "last_sync_commit": null}'},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert any("config reload failed" in w.lower() for w in data["warnings"])
 
 
 class TestTypeErrorHandler:
@@ -1259,3 +1304,166 @@ class TestDeletePostOSError:
             )
         assert resp.status_code == 500
         assert resp.json()["detail"] == "Failed to delete post file"
+
+
+class TestMissingServiceDependencies:
+    """Endpoints return 503 when required services are missing from app state."""
+
+    @pytest.mark.asyncio
+    async def test_missing_session_factory_returns_503(self, tmp_path: Path) -> None:
+        """When session_factory is not on app.state, endpoints return 503."""
+        settings = Settings(
+            secret_key="test-secret-key-min-32-characters-long",
+            admin_password="testpassword",
+            debug=True,
+            frontend_dir=tmp_path / "no-frontend",
+        )
+        app = create_app(settings)
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get("/api/health")
+        assert resp.status_code == 503
+
+    @pytest.mark.asyncio
+    async def test_missing_content_manager_returns_503(self, tmp_path: Path) -> None:
+        """When content_manager is not on app.state, endpoints return 503."""
+        from sqlalchemy import text
+
+        from backend.database import create_engine as create_db_engine
+        from backend.models.base import Base
+
+        settings = Settings(
+            secret_key="test-secret-key-min-32-characters-long",
+            admin_password="testpassword",
+            debug=True,
+            database_url=f"sqlite+aiosqlite:///{tmp_path}/test.db",
+            frontend_dir=tmp_path / "no-frontend",
+        )
+        app = create_app(settings)
+
+        engine, session_factory = create_db_engine(settings)
+        app.state.engine = engine
+        app.state.session_factory = session_factory
+
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        async with session_factory() as session:
+            await session.execute(
+                text(
+                    "CREATE VIRTUAL TABLE IF NOT EXISTS posts_fts USING fts5("
+                    "title, content, content='posts_cache', content_rowid='id')"
+                )
+            )
+            await session.commit()
+
+        from backend.services.auth_service import ensure_admin_user
+
+        async with session_factory() as session:
+            await ensure_admin_user(session, settings)
+
+        try:
+            async with AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as client:
+                token_resp = await client.post(
+                    "/api/auth/token-login",
+                    json={"username": "admin", "password": "testpassword"},
+                )
+                assert token_resp.status_code == 200
+                token = token_resp.json()["access_token"]
+
+                resp = await client.get(
+                    "/api/admin/site",
+                    headers={"Authorization": f"Bearer {token}"},
+                )
+            assert resp.status_code == 503
+        finally:
+            await engine.dispose()
+
+    @pytest.mark.asyncio
+    async def test_missing_git_service_returns_503(self, tmp_path: Path) -> None:
+        """When git_service is not on app.state, endpoints return 503."""
+        from sqlalchemy import text
+
+        from backend.database import create_engine as create_db_engine
+        from backend.models.base import Base
+
+        settings = Settings(
+            secret_key="test-secret-key-min-32-characters-long",
+            admin_password="testpassword",
+            debug=True,
+            database_url=f"sqlite+aiosqlite:///{tmp_path}/test.db",
+            content_dir=tmp_path / "content",
+            frontend_dir=tmp_path / "no-frontend",
+        )
+        app = create_app(settings)
+
+        engine, session_factory = create_db_engine(settings)
+        app.state.engine = engine
+        app.state.session_factory = session_factory
+        app.state.content_write_lock = __import__("asyncio").Lock()
+
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        async with session_factory() as session:
+            await session.execute(
+                text(
+                    "CREATE VIRTUAL TABLE IF NOT EXISTS posts_fts USING fts5("
+                    "title, content, content='posts_cache', content_rowid='id')"
+                )
+            )
+            await session.commit()
+
+        from backend.filesystem.content_manager import ContentManager
+        from backend.main import ensure_content_dir
+        from backend.services.auth_service import ensure_admin_user
+
+        ensure_content_dir(settings.content_dir)
+        app.state.content_manager = ContentManager(content_dir=settings.content_dir)
+
+        async with session_factory() as session:
+            await ensure_admin_user(session, settings)
+
+        try:
+            async with AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as client:
+                token_resp = await client.post(
+                    "/api/auth/token-login",
+                    json={"username": "admin", "password": "testpassword"},
+                )
+                assert token_resp.status_code == 200
+                token = token_resp.json()["access_token"]
+
+                resp = await client.post(
+                    "/api/sync/status",
+                    json={"client_manifest": []},
+                    headers={"Authorization": f"Bearer {token}"},
+                )
+            assert resp.status_code == 503
+        finally:
+            await engine.dispose()
+
+
+class TestSyncStatusHeadCommitFailure:
+    """sync_status returns server_commit=null when git head_commit fails."""
+
+    @pytest.mark.asyncio
+    async def test_sync_status_returns_null_server_commit_on_git_failure(
+        self, client: AsyncClient
+    ) -> None:
+        token = await login(client)
+        headers = {"Authorization": f"Bearer {token}"}
+
+        with patch(
+            "backend.api.sync.GitService.head_commit",
+            new_callable=AsyncMock,
+            side_effect=subprocess.CalledProcessError(128, "git rev-parse"),
+        ):
+            resp = await client.post(
+                "/api/sync/status",
+                json={"client_manifest": []},
+                headers=headers,
+            )
+        assert resp.status_code == 200
+        assert resp.json()["server_commit"] is None

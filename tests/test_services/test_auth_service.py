@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+from datetime import timedelta
 from typing import TYPE_CHECKING
 
 import jwt
@@ -257,6 +259,31 @@ class TestTokenLifecycle:
         )
         assert result.scalar_one_or_none() is None
 
+    async def test_refresh_token_race_logs_warning(
+        self,
+        session: AsyncSession,
+        test_settings: Settings,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """When a refresh token is already consumed by a concurrent request, a warning is logged."""
+        user = await _create_user(session, username="race-log-user")
+        _, refresh_value = await create_tokens(session, user, test_settings)
+
+        bind = session.bind
+        assert bind is not None
+        session_factory = async_sessionmaker(bind=bind, class_=AsyncSession, expire_on_commit=False)
+
+        async def _try_refresh() -> tuple[str, str] | None:
+            async with session_factory() as worker_session:
+                return await refresh_tokens(worker_session, refresh_value, test_settings)
+
+        with caplog.at_level(logging.WARNING, logger="backend.services.auth_service"):
+            first, second = await asyncio.gather(_try_refresh(), _try_refresh())
+
+        successes = [r for r in (first, second) if r is not None]
+        assert len(successes) == 1
+        assert any("already consumed" in record.message for record in caplog.records)
+
 
 class TestInviteConsumption:
     async def test_consume_invite_code_single_use_under_concurrency(
@@ -295,3 +322,38 @@ class TestInviteConsumption:
 
         first, second = await asyncio.gather(_consume(user_a.id), _consume(user_b.id))
         assert {first, second} == {True, False}
+
+    async def test_consume_invite_code_race_logs_warning(
+        self, session: AsyncSession, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """When an invite code is already consumed, a warning is logged."""
+        creator = await _create_user(session, username="invite-log-creator")
+        user = await _create_user(session, username="invite-log-user")
+
+        now = format_iso(now_utc())
+        future = format_iso(now_utc() + timedelta(days=7))
+        invite = InviteCode(
+            code_hash=hash_token("aginvite_race_log_test"),
+            created_by_user_id=creator.id,
+            created_at=now,
+            expires_at=future,
+        )
+        session.add(invite)
+        await session.commit()
+        await session.refresh(invite)
+
+        # Consume once — should succeed.
+        consumed = await consume_invite_code(
+            session, invite_id=invite.id, used_by_user_id=user.id, used_at=now
+        )
+        await session.commit()
+        assert consumed is True
+
+        # Attempt to consume again — should fail and log a warning.
+        with caplog.at_level(logging.WARNING, logger="backend.services.auth_service"):
+            consumed_again = await consume_invite_code(
+                session, invite_id=invite.id, used_by_user_id=user.id, used_at=now
+            )
+
+        assert consumed_again is False
+        assert any("already consumed" in record.message for record in caplog.records)

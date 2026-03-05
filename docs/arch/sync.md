@@ -60,9 +60,9 @@ All content-mutating endpoints (`/api/posts`, `/api/labels`, `/api/admin`, and `
 share a single application-level async write lock (`app.state.content_write_lock`). This serializes
 filesystem + cache mutation windows across endpoints and prevents cross-endpoint check-then-act races.
 
-`sync_status` and `sync_commit` also degrade gracefully when git metadata/commit operations fail:
-they log the failure server-side and return a successful HTTP response with warning/error status fields
-instead of crashing the request handler.
+`sync_commit` degrades gracefully when git commit/HEAD operations fail, returning status `"error"` with
+warning messages in the response. `sync_status` returns `null` for `server_commit` when git HEAD cannot
+be read, logging the failure server-side.
 
 ## Git Content Versioning
 

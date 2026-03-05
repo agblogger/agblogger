@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import logging
-from typing import cast
 
 import httpx
 
 from backend.crosspost.base import CrossPostContent, CrossPostResult
+from backend.crosspost.http_utils import parse_json_object
 
 logger = logging.getLogger(__name__)
 
@@ -50,27 +50,6 @@ class XOAuthTokenError(Exception):
     """Raised when X OAuth token exchange fails."""
 
 
-def _parse_json_object(
-    response: httpx.Response,
-    *,
-    error_cls: type[Exception] | None = None,
-    context: str,
-) -> dict[str, object]:
-    try:
-        body = response.json()
-    except ValueError as exc:
-        if error_cls is None:
-            raise
-        msg = f"{context} returned non-JSON response"
-        raise error_cls(msg) from exc
-    if not isinstance(body, dict):
-        if error_cls is None:
-            raise ValueError(f"{context} returned non-object JSON")
-        msg = f"{context} returned invalid JSON object"
-        raise error_cls(msg)
-    return cast("dict[str, object]", body)
-
-
 async def exchange_x_oauth_token(
     code: str,
     client_id: str,
@@ -100,7 +79,7 @@ async def exchange_x_oauth_token(
             body = token_resp.text[:200]
             msg = f"Token exchange failed: {token_resp.status_code} - {body}"
             raise XOAuthTokenError(msg)
-        token_data = _parse_json_object(
+        token_data = parse_json_object(
             token_resp,
             error_cls=XOAuthTokenError,
             context="X token endpoint",
@@ -122,7 +101,7 @@ async def exchange_x_oauth_token(
             body = user_resp.text[:200]
             msg = f"User fetch failed: {user_resp.status_code} - {body}"
             raise XOAuthTokenError(msg)
-        user_data = _parse_json_object(
+        user_data = parse_json_object(
             user_resp,
             error_cls=XOAuthTokenError,
             context="X user profile endpoint",
@@ -180,19 +159,15 @@ class XCrossPoster:
                     logger.warning("X auth failed: %s %s", resp.status_code, resp.text)
                     self._access_token = None
                     return False
-                data = _parse_json_object(resp, context="X user profile endpoint")
+                data = parse_json_object(resp, context="X user profile endpoint")
                 data_obj = data.get("data")
                 if isinstance(data_obj, dict):
                     username = data_obj.get("username")
                     if isinstance(username, str):
                         self._username = username
                 return True
-            except httpx.HTTPError:
-                logger.exception("X auth HTTP error")
-                self._access_token = None
-                return False
-            except ValueError:
-                logger.exception("X auth HTTP error")
+            except (httpx.HTTPError, ValueError) as exc:
+                logger.warning("X auth response parse error: %s", exc)
                 self._access_token = None
                 return False
 
@@ -217,7 +192,7 @@ class XCrossPoster:
                 if resp.status_code != 200:
                     logger.warning("X refresh request failed with status %s", resp.status_code)
                     return False
-                token_data = _parse_json_object(resp, context="X token refresh endpoint")
+                token_data = parse_json_object(resp, context="X token refresh endpoint")
                 new_access_token_value = token_data.get("access_token")
                 if not isinstance(new_access_token_value, str) or not new_access_token_value:
                     logger.warning("X refresh response missing expected field")
@@ -234,11 +209,8 @@ class XCrossPoster:
                     "client_secret": self._client_secret,
                 }
                 return True
-            except httpx.HTTPError:
-                logger.exception("X token refresh error")
-                return False
-            except ValueError:
-                logger.exception("X token refresh error")
+            except (httpx.HTTPError, ValueError) as exc:
+                logger.warning("X OAuth refresh error: %s", exc)
                 return False
 
     async def post(self, content: CrossPostContent) -> CrossPostResult:
@@ -275,7 +247,7 @@ class XCrossPoster:
                         success=False,
                         error=f"X API error: {resp.status_code} {resp.text}",
                     )
-                data = _parse_json_object(resp, context="X tweets endpoint")
+                data = parse_json_object(resp, context="X tweets endpoint")
                 tweet_id = ""
                 data_obj = data.get("data")
                 if isinstance(data_obj, dict):

@@ -24,6 +24,7 @@ class PostDetail(PostSummary):
 
     rendered_html: str
     content: str | None = None
+    warnings: list[str] = Field(default_factory=list)
 
 
 class PostEditResponse(BaseModel):

@@ -386,7 +386,7 @@ async def _sync_commit_inner(
 
     try:
         content_manager.reload_config()
-    except Exception as exc:
+    except (OSError, ValueError, TypeError, KeyError) as exc:
         logger.warning("Config reload failed during sync: %s", exc)
         sync_warnings.append("Config reload failed; site settings may be stale until restart.")
 

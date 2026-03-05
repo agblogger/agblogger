@@ -92,3 +92,71 @@ class TestWriteLocking:
         )
         assert resp.status_code == 200
         assert lock.enter_count >= 1
+
+    @pytest.mark.asyncio
+    async def test_post_update_uses_content_write_lock(self, client: AsyncClient) -> None:
+        token = await _login(client)
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # Create a post first
+        create_resp = await client.post(
+            "/api/posts",
+            json={
+                "title": "Update Lock Test",
+                "body": "Original content",
+                "labels": [],
+                "is_draft": False,
+            },
+            headers=headers,
+        )
+        assert create_resp.status_code == 201
+        file_path = create_resp.json()["file_path"]
+
+        # Now inject the counting lock and update
+        lock = _CountingLock()
+        app = client._transport.app  # type: ignore[attr-defined]
+        app.state.content_write_lock = lock
+
+        resp = await client.put(
+            f"/api/posts/{file_path}",
+            json={
+                "title": "Updated Lock Test",
+                "body": "Updated content",
+                "labels": [],
+                "is_draft": False,
+            },
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        assert lock.enter_count >= 1
+
+    @pytest.mark.asyncio
+    async def test_post_delete_uses_content_write_lock(self, client: AsyncClient) -> None:
+        token = await _login(client)
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # Create a post first
+        create_resp = await client.post(
+            "/api/posts",
+            json={
+                "title": "Delete Lock Test",
+                "body": "Content to delete",
+                "labels": [],
+                "is_draft": False,
+            },
+            headers=headers,
+        )
+        assert create_resp.status_code == 201
+        file_path = create_resp.json()["file_path"]
+
+        # Now inject the counting lock and delete
+        lock = _CountingLock()
+        app = client._transport.app  # type: ignore[attr-defined]
+        app.state.content_write_lock = lock
+
+        resp = await client.delete(
+            f"/api/posts/{file_path}",
+            headers=headers,
+        )
+        assert resp.status_code == 204
+        assert lock.enter_count >= 1
