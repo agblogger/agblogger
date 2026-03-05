@@ -107,7 +107,7 @@ class ContentManager:
         """
         full_path = (self.content_dir / rel_path).resolve()
         if not full_path.is_relative_to(self.content_dir.resolve()):
-            raise ValueError(f"Path traversal detected: {rel_path}")
+            raise ValueError("Path traversal detected")
         return full_path
 
     def read_post_from_string(

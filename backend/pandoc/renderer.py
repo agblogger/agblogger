@@ -322,7 +322,8 @@ async def _render_markdown(
         try:
             response = await client.post(f"{server.base_url}/", json=payload, headers=headers)
         except Exception as retry_exc:
-            raise RenderError(f"Pandoc server unreachable after restart: {retry_exc}") from None
+            msg = f"Pandoc server unreachable after restart: {retry_exc}"
+            raise RenderError(msg) from retry_exc
     except httpx.ReadTimeout:
         raise RenderError(f"Pandoc rendering timed out after {_RENDER_TIMEOUT}s") from None
 

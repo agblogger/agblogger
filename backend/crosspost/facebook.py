@@ -8,13 +8,14 @@ import httpx
 
 from backend.crosspost.base import CrossPostContent, CrossPostResult
 from backend.crosspost.http_utils import parse_json_object
+from backend.exceptions import ExternalServiceError
 
 logger = logging.getLogger(__name__)
 
 FACEBOOK_GRAPH_API = "https://graph.facebook.com/v22.0"
 
 
-class FacebookOAuthTokenError(Exception):
+class FacebookOAuthTokenError(ExternalServiceError):
     """Raised when Facebook OAuth token exchange fails."""
 
 

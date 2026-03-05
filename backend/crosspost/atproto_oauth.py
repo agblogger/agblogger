@@ -31,6 +31,7 @@ from cryptography.hazmat.primitives.serialization import (
 
 from backend.crosspost.http_utils import parse_json_object
 from backend.crosspost.ssrf import ssrf_safe_client
+from backend.exceptions import ExternalServiceError
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -224,7 +225,7 @@ def create_client_assertion(
     return jwt.encode(payload, key, algorithm="ES256", headers=headers)
 
 
-class ATProtoOAuthError(Exception):
+class ATProtoOAuthError(ExternalServiceError):
     """Error during AT Protocol OAuth operations."""
 
 

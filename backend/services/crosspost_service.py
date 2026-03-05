@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T")
 
 
-class DuplicateAccountError(Exception):
+class DuplicateAccountError(ValueError):
     """Raised when a social account with the same user/platform/name already exists."""
 
 

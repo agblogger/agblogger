@@ -10,6 +10,7 @@ import httpx
 from backend.crosspost.base import CrossPostContent, CrossPostResult
 from backend.crosspost.http_utils import parse_json_object
 from backend.crosspost.ssrf import ssrf_safe_client
+from backend.exceptions import ExternalServiceError
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +41,7 @@ def _normalize_instance_url(raw_url: str) -> str | None:
     return f"https://{parsed.hostname}{port}"
 
 
-class MastodonOAuthTokenError(Exception):
+class MastodonOAuthTokenError(ExternalServiceError):
     """Raised when Mastodon OAuth token exchange or verification fails."""
 
 

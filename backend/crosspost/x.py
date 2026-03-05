@@ -8,6 +8,7 @@ import httpx
 
 from backend.crosspost.base import CrossPostContent, CrossPostResult
 from backend.crosspost.http_utils import parse_json_object
+from backend.exceptions import ExternalServiceError
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +47,7 @@ def _build_tweet_text(content: CrossPostContent) -> str:
     return excerpt + suffix
 
 
-class XOAuthTokenError(Exception):
+class XOAuthTokenError(ExternalServiceError):
     """Raised when X OAuth token exchange fails."""
 
 

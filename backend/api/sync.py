@@ -49,7 +49,7 @@ def _resolve_safe_path(content_dir: Path, file_path: str) -> Path:
     target = file_path.lstrip("/")
     full_path = (content_dir / target).resolve()
     if not full_path.is_relative_to(content_dir.resolve()):
-        raise HTTPException(status_code=400, detail=f"Invalid file path: {file_path}")
+        raise HTTPException(status_code=400, detail="Invalid file path")
     return full_path
 
 
@@ -232,18 +232,24 @@ async def _sync_commit_inner(
     # Load old manifest before any changes (needed for new-vs-edit detection)
     old_manifest = await get_server_manifest(session)
 
+    sync_warnings: list[str] = []
+
     # ── Apply deletions ──
     for file_path in deleted_files:
         full_path = _resolve_safe_path(content_dir, file_path)
         if full_path.exists() and full_path.is_file():
-            full_path.unlink()
+            try:
+                full_path.unlink()
+            except OSError as exc:
+                logger.error("Sync: failed to delete %s: %s", file_path.lstrip("/"), exc)
+                sync_warnings.append(f"Failed to delete {file_path.lstrip('/')}")
+                continue
             logger.info("Sync: deleted file %s", file_path.lstrip("/"))
 
     # ── Process uploaded files ──
     conflicts: list[SyncConflictInfo] = []
     to_download: list[str] = []
     uploaded_paths: list[str] = []
-    sync_warnings: list[str] = []
 
     for upload in upload_files:
         if upload.filename is None:

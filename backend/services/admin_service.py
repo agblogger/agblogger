@@ -97,7 +97,15 @@ def create_page(cm: ContentManager, *, page_id: str, title: str) -> PageConfig:
         timezone=cfg.timezone,
         pages=[*cfg.pages, new_page],
     )
-    write_site_config(cm.content_dir, updated)
+    try:
+        write_site_config(cm.content_dir, updated)
+    except Exception:
+        # Clean up the orphan .md file if config write fails
+        try:
+            md_path.unlink(missing_ok=True)
+        except OSError as cleanup_exc:
+            logger.warning("Failed to clean up orphan page file %s: %s", md_path, cleanup_exc)
+        raise
     cm.reload_config()
     return new_page
 
@@ -115,6 +123,8 @@ def update_page(
     if page is None:
         msg = f"Page '{page_id}' not found"
         raise ValueError(msg)
+
+    original_title = page.title
 
     if title is not None:
         pages = [
@@ -137,7 +147,36 @@ def update_page(
         except ValueError as exc:
             msg = f"Page '{page_id}' has an invalid file path"
             raise ValueError(msg) from exc
-        page_path.write_text(content, encoding="utf-8")
+        try:
+            page_path.write_text(content, encoding="utf-8")
+        except OSError:
+            if title is not None:
+                # Roll back the title change in config
+                rollback_pages = [
+                    PageConfig(
+                        id=p.id,
+                        title=original_title if p.id == page_id else p.title,
+                        file=p.file,
+                    )
+                    for p in cm.site_config.pages
+                ]
+                rollback_cfg = SiteConfig(
+                    title=cfg.title,
+                    description=cfg.description,
+                    default_author=cfg.default_author,
+                    timezone=cfg.timezone,
+                    pages=rollback_pages,
+                )
+                try:
+                    write_site_config(cm.content_dir, rollback_cfg)
+                    cm.reload_config()
+                except OSError as rollback_exc:
+                    logger.error(
+                        "Failed to rollback title change for page %s: %s",
+                        page_id,
+                        rollback_exc,
+                    )
+            raise
 
 
 def delete_page(cm: ContentManager, page_id: str, *, delete_file: bool) -> None:

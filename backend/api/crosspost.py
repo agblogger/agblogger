@@ -479,9 +479,14 @@ async def mastodon_authorize(
                 timeout=15.0,
             )
             if reg_resp.status_code != 200:
+                logger.error(
+                    "Mastodon app registration failed: HTTP %d from %s",
+                    reg_resp.status_code,
+                    instance_url,
+                )
                 raise HTTPException(
                     status_code=status.HTTP_502_BAD_GATEWAY,
-                    detail=f"App registration failed: {reg_resp.status_code}",
+                    detail="Mastodon app registration failed",
                 )
             try:
                 reg_data = reg_resp.json()

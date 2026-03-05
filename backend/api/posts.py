@@ -720,7 +720,23 @@ async def update_post_endpoint(
             existing.rendered_excerpt = new_rendered_excerpt
             existing.rendered_html = new_rendered_html
 
-        await session.commit()
+        try:
+            await session.commit()
+        except Exception:
+            if needs_rename and new_dir is not None and old_dir is not None and new_dir.exists():
+                try:
+                    # Remove the backward-compat symlink at old_dir if it was created
+                    if old_dir.is_symlink():
+                        old_dir.unlink()
+                    shutil.move(str(new_dir), str(old_dir))
+                except OSError as mv_exc:
+                    logger.error(
+                        "Failed to rollback directory rename %s -> %s: %s",
+                        new_dir,
+                        old_dir,
+                        mv_exc,
+                    )
+            raise
         await session.refresh(existing)
         _set_git_warning(
             response,

@@ -19,7 +19,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import IntegrityError, OperationalError
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from backend.api.admin import router as admin_router
@@ -553,6 +553,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             content={"detail": "External process failed"},
         )
 
+    @app.exception_handler(subprocess.TimeoutExpired)
+    async def timeout_expired_handler(
+        request: Request, exc: subprocess.TimeoutExpired
+    ) -> JSONResponse:
+        logger.error(
+            "TimeoutExpired in %s %s: timeout=%ss",
+            request.method,
+            request.url.path,
+            exc.timeout,
+            exc_info=exc,
+        )
+        return JSONResponse(
+            status_code=502,
+            content={"detail": "External process timed out"},
+        )
+
     @app.exception_handler(UnicodeDecodeError)
     async def unicode_error_handler(request: Request, exc: UnicodeDecodeError) -> JSONResponse:
         logger.error(
@@ -561,6 +577,30 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return JSONResponse(
             status_code=422,
             content={"detail": "Invalid content encoding"},
+        )
+
+    @app.exception_handler(IntegrityError)
+    async def integrity_error_handler(request: Request, exc: IntegrityError) -> JSONResponse:
+        logger.error(
+            "IntegrityError in %s %s: %s", request.method, request.url.path, exc, exc_info=exc
+        )
+        return JSONResponse(
+            status_code=409,
+            content={"detail": "Data conflict"},
+        )
+
+    @app.exception_handler(KeyError)
+    async def key_error_handler(request: Request, exc: KeyError) -> JSONResponse:
+        logger.error(
+            "[BUG] KeyError in %s %s: %s",
+            request.method,
+            request.url.path,
+            exc,
+            exc_info=exc,
+        )
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "Internal server error"},
         )
 
     @app.exception_handler(OperationalError)
