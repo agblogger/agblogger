@@ -773,6 +773,33 @@ describe('EditorPage', () => {
     })
   })
 
+  it('enhances code blocks in preview panel', async () => {
+    const user = userEvent.setup()
+    const mockApi = (await import('@/api/client')).default
+    const mockPost = vi.mocked(mockApi.post)
+    mockPost.mockClear()
+    mockPost.mockReturnValue({
+      json: () =>
+        Promise.resolve({
+          html: '<pre><code class="language-python">print("hello")</code></pre>',
+        }),
+    } as ReturnType<typeof mockApi.post>)
+
+    renderEditor('/editor/new')
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Title/)).toBeInTheDocument()
+    })
+
+    const textareas = document.querySelectorAll('textarea')
+    await user.type(textareas[0]!, 'Some code content')
+
+    await waitFor(() => {
+      expect(document.querySelector('.code-block-header')).not.toBeNull()
+    })
+    expect(document.querySelector('.code-block-lang')?.textContent).toBe('python')
+  })
+
   it('renders mobile tab buttons for edit and preview', async () => {
     renderEditor('/editor/new')
     await waitFor(() => {

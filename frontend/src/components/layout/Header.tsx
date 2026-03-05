@@ -101,6 +101,7 @@ export default function Header() {
                 onClick={() => setSearchOpen(true)}
                 className="p-2 text-muted hover:text-ink transition-colors rounded-lg hover:bg-paper-warm"
                 aria-label="Search"
+                title="Search (/)"
               >
                 <Search size={18} />
               </button>

@@ -187,6 +187,12 @@ describe('Header', () => {
     expect(screen.queryByPlaceholderText('Search posts...')).not.toBeInTheDocument()
   })
 
+  it('search button has keyboard shortcut tooltip', () => {
+    renderHeader()
+    const searchButton = screen.getByLabelText('Search')
+    expect(searchButton.getAttribute('title')).toBe('Search (/)')
+  })
+
   it('opens search on / key press', async () => {
     renderHeader()
     await userEvent.keyboard('/')

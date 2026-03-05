@@ -9,6 +9,7 @@ import type { SocialAccount } from '@/api/crosspost'
 import { HTTPError } from '@/api/client'
 import { parseErrorDetail } from '@/api/parseError'
 import api from '@/api/client'
+import { useCodeBlockEnhance } from '@/hooks/useCodeBlockEnhance'
 import { useEditorAutoSave } from '@/hooks/useEditorAutoSave'
 import type { DraftData } from '@/hooks/useEditorAutoSave'
 import { useRenderedHtml } from '@/hooks/useKatex'
@@ -42,6 +43,7 @@ export default function EditorPage() {
   const [error, setError] = useState<string | null>(null)
   const renderedPreview = useRenderedHtml(preview)
   const previewRequestRef = useRef(0)
+  const previewRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [accounts, setAccounts] = useState<SocialAccount[]>([])
@@ -49,6 +51,7 @@ export default function EditorPage() {
   const [showCrossPostDialog, setShowCrossPostDialog] = useState(false)
   const [mobileTab, setMobileTab] = useState<'edit' | 'preview'>('edit')
   const [savedFilePath, setSavedFilePath] = useState<string | null>(null)
+  useCodeBlockEnhance(previewRef, renderedPreview)
 
   const autoSaveKey = isNew ? 'agblogger:draft:new' : `agblogger:draft:${filePath}`
   const currentState = useMemo<DraftData>(
@@ -541,6 +544,7 @@ export default function EditorPage() {
             <p className="text-sm text-red-600 dark:text-red-400 italic">Preview unavailable</p>
           ) : preview !== null ? (
             <div
+              ref={previewRef}
               className="prose max-w-none"
               dangerouslySetInnerHTML={{ __html: renderedPreview }}
             />
