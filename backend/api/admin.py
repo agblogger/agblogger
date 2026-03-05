@@ -16,6 +16,7 @@ from backend.api.deps import (
     get_git_service,
     get_session,
     require_admin,
+    set_git_warning,
 )
 from backend.exceptions import BuiltinPageError
 from backend.filesystem.content_manager import ContentManager
@@ -48,12 +49,6 @@ from backend.services.rate_limit_service import InMemoryRateLimiter
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
-
-
-def _set_git_warning(response: Response, commit_hash: str | None) -> None:
-    """Set X-Git-Warning header when a git commit was expected but failed."""
-    if commit_hash is None:
-        response.headers["X-Git-Warning"] = "Git commit failed; changes saved but not versioned"
 
 
 _PAGE_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
@@ -100,7 +95,7 @@ async def update_settings(
         except OSError as exc:
             logger.error("Failed to update site settings: %s", exc)
             raise HTTPException(status_code=500, detail="Failed to write site settings") from exc
-        _set_git_warning(response, await git_service.try_commit("Update site settings"))
+        set_git_warning(response, await git_service.try_commit("Update site settings"))
         return SiteSettingsResponse(
             title=cfg.title,
             description=cfg.description,
@@ -137,7 +132,7 @@ async def create_page_endpoint(
         except OSError as exc:
             logger.error("Failed to create page %s: %s", body.id, exc)
             raise HTTPException(status_code=500, detail="Failed to create page") from exc
-        _set_git_warning(response, await git_service.try_commit(f"Create page: {body.id}"))
+        set_git_warning(response, await git_service.try_commit(f"Create page: {body.id}"))
         return AdminPageConfig(
             id=page.id,
             title=page.title,
@@ -164,7 +159,7 @@ async def update_order(
         except OSError as exc:
             logger.error("Failed to update page order: %s", exc)
             raise HTTPException(status_code=500, detail="Failed to update page order") from exc
-        _set_git_warning(response, await git_service.try_commit("Update page order"))
+        set_git_warning(response, await git_service.try_commit("Update page order"))
         admin_pages = get_admin_pages(content_manager)
         return AdminPagesResponse(pages=[AdminPageConfig(**p) for p in admin_pages])
 
@@ -190,7 +185,7 @@ async def update_page_endpoint(
         except OSError as exc:
             logger.error("Failed to update page %s: %s", page_id, exc)
             raise HTTPException(status_code=500, detail="Failed to update page") from exc
-        _set_git_warning(response, await git_service.try_commit(f"Update page: {page_id}"))
+        set_git_warning(response, await git_service.try_commit(f"Update page: {page_id}"))
         return {"status": "ok"}
 
 
@@ -217,7 +212,7 @@ async def delete_page_endpoint(
         except OSError as exc:
             logger.error("Failed to delete page %s: %s", page_id, exc)
             raise HTTPException(status_code=500, detail="Failed to delete page") from exc
-        _set_git_warning(response, await git_service.try_commit(f"Delete page: {page_id}"))
+        set_git_warning(response, await git_service.try_commit(f"Delete page: {page_id}"))
 
 
 _PASSWORD_CHANGE_MAX_FAILURES = 5

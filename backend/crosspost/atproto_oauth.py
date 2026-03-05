@@ -124,8 +124,10 @@ def load_or_create_keypair(
                 lock_path.unlink(missing_ok=True)
         except OSError as exc:
             logger.warning("Stale keypair lock inspection failed for %s: %s", lock_path, exc)
-            with contextlib.suppress(OSError):
+            try:
                 lock_path.unlink(missing_ok=True)
+            except OSError as cleanup_exc:
+                logger.warning("Failed to remove stale lock file %s: %s", lock_path, cleanup_exc)
 
     lock_fd: int | None = None
     for _attempt in range(500):

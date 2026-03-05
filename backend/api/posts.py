@@ -13,7 +13,7 @@ from typing import Annotated, Literal
 import yaml
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, UploadFile
 from sqlalchemy import delete, select, text
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.deps import (
@@ -24,6 +24,7 @@ from backend.api.deps import (
     get_git_service,
     get_session,
     require_admin,
+    set_git_warning,
 )
 from backend.filesystem.content_manager import ContentManager, hash_content
 from backend.filesystem.frontmatter import (
@@ -57,13 +58,9 @@ async def _empty_string() -> str:
     return ""
 
 
-def _set_git_warning(response: Response, commit_hash: str | None) -> None:
-    """Set X-Git-Warning header when a git commit was expected but failed."""
-    if commit_hash is None:
-        response.headers["X-Git-Warning"] = "Git commit failed; changes saved but not versioned"
-
-
 router = APIRouter(prefix="/api/posts", tags=["posts"])
+
+_DB_COMMIT_ERRORS = (OperationalError, IntegrityError)
 
 _FTS_DELETE_SQL = text(
     "INSERT INTO posts_fts(posts_fts, rowid, title, content) "
@@ -360,7 +357,7 @@ async def upload_post(
 
         await session.commit()
         await session.refresh(post)
-        _set_git_warning(response, await git_service.try_commit(f"Upload post: {file_path}"))
+        set_git_warning(response, await git_service.try_commit(f"Upload post: {file_path}"))
 
         return _build_post_detail(post, labels=post_data.labels, rendered_html=rendered_html)
 
@@ -439,7 +436,7 @@ async def upload_assets(
 
         if uploaded:
             commit_message = f"Upload assets to {file_path}: {', '.join(uploaded)}"
-            _set_git_warning(
+            set_git_warning(
                 response,
                 await git_service.try_commit(commit_message),
             )
@@ -544,7 +541,7 @@ async def create_post_endpoint(
 
         await session.commit()
         await session.refresh(post)
-        _set_git_warning(response, await git_service.try_commit(f"Create post: {file_path}"))
+        set_git_warning(response, await git_service.try_commit(f"Create post: {file_path}"))
 
         return _build_post_detail(post, labels=body.labels, rendered_html=rendered_html)
 
@@ -722,7 +719,7 @@ async def update_post_endpoint(
 
         try:
             await session.commit()
-        except Exception:
+        except _DB_COMMIT_ERRORS:
             if needs_rename and new_dir is not None and old_dir is not None and new_dir.exists():
                 try:
                     # Remove the backward-compat symlink at old_dir if it was created
@@ -738,7 +735,7 @@ async def update_post_endpoint(
                     )
             raise
         await session.refresh(existing)
-        _set_git_warning(
+        set_git_warning(
             response,
             await git_service.try_commit(f"Update post: {existing.file_path}"),
         )
@@ -794,4 +791,4 @@ async def delete_post_endpoint(
         )
         await session.delete(existing)
         await session.commit()
-        _set_git_warning(response, await git_service.try_commit(f"Delete post: {file_path}"))
+        set_git_warning(response, await git_service.try_commit(f"Delete post: {file_path}"))

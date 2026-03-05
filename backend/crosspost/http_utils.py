@@ -24,12 +24,14 @@ def parse_json_object(
         body = response.json()
     except ValueError as exc:
         if error_cls is None:
-            raise
+            msg = f"{context} returned non-JSON response"
+            raise ValueError(msg) from exc
         msg = f"{context} returned non-JSON response"
         raise error_cls(msg) from exc
     if not isinstance(body, dict):
+        msg = f"{context} returned non-object JSON"
         if error_cls is None:
-            raise ValueError(f"{context} returned non-object JSON")
+            raise ValueError(msg)
         msg = f"{context} returned invalid JSON object"
         raise error_cls(msg)
     return cast("dict[str, Any]", body)

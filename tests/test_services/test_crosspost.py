@@ -1578,7 +1578,7 @@ class TestParseJsonObject:
 
     def test_non_json_without_error_cls_raises_valueerror(self) -> None:
         resp = self._make_response("not json")
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="test endpoint"):
             parse_json_object(resp, context="test endpoint")
 
     def test_non_json_with_error_cls_raises_error_cls(self) -> None:

@@ -6,7 +6,7 @@ from collections.abc import AsyncGenerator
 from types import TracebackType
 from typing import Annotated, Any, Protocol, cast
 
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, HTTPException, Request, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,6 +17,12 @@ from backend.services.auth_service import authenticate_personal_access_token, de
 from backend.services.git_service import GitService
 
 security = HTTPBearer(auto_error=False)
+
+
+def set_git_warning(response: Response, commit_hash: str | None) -> None:
+    """Set X-Git-Warning header when a git commit was expected but failed."""
+    if commit_hash is None:
+        response.headers["X-Git-Warning"] = "Git commit failed; changes saved but not versioned"
 
 
 class AsyncWriteLock(Protocol):

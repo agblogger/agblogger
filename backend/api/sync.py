@@ -88,6 +88,7 @@ class SyncStatusResponse(BaseModel):
     to_delete_remote: list[str]
     conflicts: list[SyncPlanItem]
     server_commit: str | None = None
+    warnings: list[str] = []
 
 
 class SyncConflictInfo(BaseModel):
@@ -144,10 +145,14 @@ async def sync_status(
     ]
 
     server_commit: str | None = None
+    status_warnings: list[str] = []
     try:
         server_commit = await git_service.head_commit()
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError) as exc:
         logger.error("Failed to read git HEAD during sync status: %s", exc)
+        status_warnings.append(
+            "Git history unavailable; sync may not detect all changes correctly."
+        )
 
     return SyncStatusResponse(
         to_upload=plan.to_upload,
@@ -156,6 +161,7 @@ async def sync_status(
         to_delete_remote=plan.to_delete_remote,
         conflicts=conflicts,
         server_commit=server_commit,
+        warnings=status_warnings,
     )
 
 
@@ -312,9 +318,6 @@ async def _sync_commit_inner(
                 continue
 
             if merge_result.body_conflicted or merge_result.field_conflicts:
-                # Conflict detected. Write merged content (which preserves non-conflicting
-                # changes from both sides, e.g. label additions) but report the conflict
-                # so the client knows which fields/body had server-wins resolution.
                 conflicts.append(
                     SyncConflictInfo(
                         file_path=target_path,
@@ -322,22 +325,14 @@ async def _sync_commit_inner(
                         field_conflicts=merge_result.field_conflicts,
                     )
                 )
-                try:
-                    full_path.write_text(merge_result.merged_content, encoding="utf-8")
-                except OSError as exc:
-                    raise HTTPException(
-                        status_code=500, detail=f"File I/O error writing {target_path}"
-                    ) from exc
-                to_download.append(target_path)
-            else:
-                # Clean merge — write merged result
-                try:
-                    full_path.write_text(merge_result.merged_content, encoding="utf-8")
-                except OSError as exc:
-                    raise HTTPException(
-                        status_code=500, detail=f"File I/O error writing {target_path}"
-                    ) from exc
-                to_download.append(target_path)
+
+            try:
+                full_path.write_text(merge_result.merged_content, encoding="utf-8")
+            except OSError as exc:
+                raise HTTPException(
+                    status_code=500, detail=f"File I/O error writing {target_path}"
+                ) from exc
+            to_download.append(target_path)
 
             uploaded_paths.append(target_path)
         else:
@@ -365,14 +360,7 @@ async def _sync_commit_inner(
     username = user.display_name or user.username
     try:
         await git_service.commit_all(f"Sync commit by {username}")
-    except subprocess.CalledProcessError as exc:
-        logger.error("Git commit failed during sync by %s: %s", username, exc)
-        sync_warnings.append(
-            "Git commit failed; sync history may be degraded. "
-            "Three-way merge on the next sync may produce incorrect results."
-        )
-        git_failed = True
-    except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError) as exc:
         logger.error("Git commit failed during sync by %s: %s", username, exc)
         sync_warnings.append(
             "Git commit failed; sync history may be degraded. "
@@ -414,7 +402,10 @@ async def _sync_commit_inner(
             commit_hash = await git_service.head_commit()
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError) as exc:
             logger.error("Failed to read git HEAD after sync commit: %s", exc)
-            sync_warnings.append("Git commit failed; sync history may be degraded.")
+            sync_warnings.append(
+                "Failed to read commit hash after sync; data was committed successfully "
+                "but sync history tracking may be degraded."
+            )
             git_failed = True
 
     files_changed = len(uploaded_paths) + len(deleted_files)

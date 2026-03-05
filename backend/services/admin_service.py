@@ -99,7 +99,7 @@ def create_page(cm: ContentManager, *, page_id: str, title: str) -> PageConfig:
     )
     try:
         write_site_config(cm.content_dir, updated)
-    except Exception:
+    except OSError:
         # Clean up the orphan .md file if config write fails
         try:
             md_path.unlink(missing_ok=True)
