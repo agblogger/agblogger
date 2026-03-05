@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Filter, X, Calendar, User, Tag, ChevronDown, ChevronUp } from 'lucide-react'
 import { fetchLabels } from '@/api/labels'
 import type { LabelResponse } from '@/api/client'
@@ -60,10 +60,14 @@ export default function FilterPanel({ value, onChange }: FilterPanelProps) {
   const hasActive =
     value.labels.length > 0 || value.author !== '' || value.fromDate !== '' || value.toDate !== ''
 
-  const filteredLabels = allLabels.filter(
-    (l) =>
-      l.id.toLowerCase().includes(labelSearch.toLowerCase()) ||
-      l.names.some((n) => n.toLowerCase().includes(labelSearch.toLowerCase())),
+  const filteredLabels = useMemo(
+    () =>
+      allLabels.filter(
+        (l) =>
+          l.id.toLowerCase().includes(labelSearch.toLowerCase()) ||
+          l.names.some((n) => n.toLowerCase().includes(labelSearch.toLowerCase())),
+      ),
+    [allLabels, labelSearch],
   )
 
   function toggleLabel(id: string) {
