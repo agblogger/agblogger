@@ -1,4 +1,6 @@
 const MASTODON_INSTANCE_KEY = 'agblogger:mastodon-instance'
+const HOSTNAME_RE =
+  /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)+$/
 
 export const SHARE_PLATFORMS = [
   { id: 'bluesky', label: 'Share on Bluesky' },
@@ -99,7 +101,7 @@ export function isValidHostname(value: string): boolean {
   let hostname = value.replace(/^https?:\/\//, '')
   hostname = hostname.trim()
   if (hostname === '') return false
-  return /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)+$/.test(hostname)
+  return HOSTNAME_RE.test(hostname)
 }
 
 /**
