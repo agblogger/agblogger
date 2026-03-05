@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { memo, useEffect, useState } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import { Search } from 'lucide-react'
 import { searchPosts } from '@/api/posts'
@@ -120,7 +120,7 @@ export default function SearchPage() {
   )
 }
 
-function SearchResultItem({ result, index }: { result: SearchResult; index: number }) {
+const SearchResultItem = memo(function SearchResultItem({ result, index }: { result: SearchResult; index: number }) {
   const renderedExcerpt = useRenderedHtml(result.rendered_excerpt)
 
   return (
@@ -141,4 +141,4 @@ function SearchResultItem({ result, index }: { result: SearchResult; index: numb
       </span>
     </Link>
   )
-}
+})
