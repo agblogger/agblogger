@@ -31,6 +31,13 @@ describe('LabelChip', () => {
     expect(screen.getByText('#swe').tagName).toBe('SPAN')
   })
 
+  it('is wrapped in React.memo', async () => {
+    const { default: LabelChipModule } = await import('../LabelChip')
+    expect((LabelChipModule as unknown as { $$typeof: symbol }).$$typeof).toBe(
+      Symbol.for('react.memo'),
+    )
+  })
+
   it('stops event propagation on click', async () => {
     const parentClick = vi.fn()
     render(

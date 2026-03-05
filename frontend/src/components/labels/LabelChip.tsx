@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { Link } from 'react-router-dom'
 
 interface LabelChipProps {
@@ -5,7 +6,7 @@ interface LabelChipProps {
   clickable?: boolean
 }
 
-export default function LabelChip({ labelId, clickable = true }: LabelChipProps) {
+function LabelChipInner({ labelId, clickable = true }: LabelChipProps) {
   const className =
     'inline-flex items-center px-2.5 py-1 text-xs font-semibold rounded-lg border border-border/60 ' +
     'bg-tag-bg text-tag-text transition-colors hover:bg-border hover:text-ink'
@@ -24,3 +25,6 @@ export default function LabelChip({ labelId, clickable = true }: LabelChipProps)
 
   return <span className={className}>#{labelId}</span>
 }
+
+const LabelChip = memo(LabelChipInner)
+export default LabelChip
