@@ -61,7 +61,10 @@ function enhanceCodeBlocks(container: HTMLElement) {
   })
 }
 
-export function useCodeBlockEnhance(contentRef: RefObject<HTMLElement | null>) {
+export function useCodeBlockEnhance(
+  contentRef: RefObject<HTMLElement | null>,
+  content?: string,
+) {
   useEffect(() => {
     const container = contentRef.current
     if (!container) return
@@ -82,5 +85,5 @@ export function useCodeBlockEnhance(contentRef: RefObject<HTMLElement | null>) {
     observer.observe(container, { childList: true, subtree: true })
 
     return () => observer.disconnect()
-  }, [contentRef])
+  }, [contentRef, content])
 }

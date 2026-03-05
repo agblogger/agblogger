@@ -508,7 +508,7 @@ describe('EditorPage', () => {
     renderEditor('/editor/new')
 
     await waitFor(() => {
-      expect(screen.getByText('Preview will appear here...')).toBeInTheDocument()
+      expect(screen.getByText('Start typing to see a live preview')).toBeInTheDocument()
     })
   })
 

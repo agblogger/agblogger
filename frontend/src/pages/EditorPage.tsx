@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Save, ArrowLeft, Upload } from 'lucide-react'
+import { Save, ArrowLeft, Upload, Eye } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 
 import { fetchPostForEdit, createPost, updatePost, uploadAssets } from '@/api/posts'
@@ -545,7 +545,10 @@ export default function EditorPage() {
               dangerouslySetInnerHTML={{ __html: renderedPreview }}
             />
           ) : (
-            <p className="text-sm text-muted italic">Preview will appear here...</p>
+            <div className="flex flex-col items-center justify-center h-full min-h-[200px] border-2 border-dashed border-border/50 rounded-lg bg-paper-warm/30">
+              <Eye size={32} className="text-muted/40 mb-3" />
+              <p className="text-sm text-muted/60">Start typing to see a live preview</p>
+            </div>
           )}
         </div>
       </div>

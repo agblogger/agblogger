@@ -103,7 +103,6 @@ export default function Header() {
                 aria-label="Search"
               >
                 <Search size={18} />
-                <kbd className="hidden sm:inline-flex ml-1.5 items-center px-1.5 py-0.5 text-[10px] font-mono text-muted/60 bg-paper-warm border border-border/60 rounded">/</kbd>
               </button>
             )}
 
