@@ -166,109 +166,110 @@ async def create_test_client(settings: Settings) -> AsyncGenerator[AsyncClient]:
     from backend.database import create_engine as create_db_engine
     from backend.filesystem.content_manager import ContentManager
     from backend.models.base import Base
+    from backend.pandoc.renderer import close_renderer, init_renderer
+    from backend.pandoc.server import PandocServer
     from backend.services.auth_service import ensure_admin_user
+    from backend.services.cache_service import rebuild_cache
 
     app = create_app(settings)
     settings.validate_runtime_security()
 
     engine, session_factory = create_db_engine(settings)
-    app.state.engine = engine
-    app.state.session_factory = session_factory
-    app.state.settings = settings
-
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
-    async with session_factory() as session:
-        await session.execute(
-            text(
-                "CREATE VIRTUAL TABLE IF NOT EXISTS posts_fts USING fts5("
-                "title, content, content='posts_cache', content_rowid='id')"
-            )
-        )
-        await session.commit()
-
-    content_manager = ContentManager(content_dir=settings.content_dir)
-    app.state.content_manager = content_manager
-    app.state.content_write_lock = asyncio.Lock()
-
-    git_service = GitService(content_dir=settings.content_dir)
-    await git_service.init_repo()
-    app.state.git_service = git_service
-
-    # mutmut stats/test runs can perturb cryptography internals in instrumented modules.
-    # For mutation-testing contexts, these state fields only need to exist.
-    # Note: MUTANT_UNDER_TEST is a standard env var set by mutmut itself
-    # when running mutants — do not rename it.
-    in_mutation_mode = "MUTANT_UNDER_TEST" in os.environ
-    from backend.crosspost.bluesky_oauth_state import OAuthStateStore
-
-    if in_mutation_mode:
-        atproto_key: object = object()
-        atproto_jwk: dict[str, str] = {
-            "kty": "EC",
-            "crv": "P-256",
-            "x": "mutmut-x",
-            "y": "mutmut-y",
-            "kid": "mutmut",
-        }
-    else:
-        from backend.crosspost.atproto_oauth import load_or_create_keypair
-
-        oauth_key_path = settings.content_dir / ".atproto-oauth-key.json"
-        atproto_key, atproto_jwk = load_or_create_keypair(oauth_key_path)
-    app.state.atproto_oauth_key = atproto_key
-    app.state.atproto_oauth_jwk = atproto_jwk
-    app.state.bluesky_oauth_state = OAuthStateStore(ttl_seconds=600)
-    app.state.mastodon_oauth_state = OAuthStateStore(ttl_seconds=600)
-    app.state.x_oauth_state = OAuthStateStore(ttl_seconds=600)
-    app.state.facebook_oauth_state = OAuthStateStore(ttl_seconds=600)
-
-    async with session_factory() as session:
-        await ensure_admin_user(session, settings)
-
-    from backend.pandoc.renderer import close_renderer, init_renderer
-    from backend.pandoc.server import PandocServer
-
-    test_port = 13100 + os.getpid() % 900
     pandoc_server: PandocServer | None = None
-    if not _pandoc_server_broken:
-        try:
-            pandoc_server = PandocServer(port=test_port)
-            await pandoc_server.start()
-            app.state.pandoc_server = pandoc_server
-            init_renderer(pandoc_server)
-            # Verify the server can actually render (catches broken builds
-            # where +server is listed but the runtime crashes on first request).
-            from backend.pandoc.renderer import render_markdown
+    try:
+        app.state.engine = engine
+        app.state.session_factory = session_factory
+        app.state.settings = settings
 
-            await render_markdown("test")
-        except Exception:
-            logger.warning("Pandoc server unavailable in tests, using subprocess fallback")
-            await close_renderer()
-            if pandoc_server is not None:
-                await pandoc_server.stop()
-            pandoc_server = None
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+
+        async with session_factory() as session:
+            await session.execute(
+                text(
+                    "CREATE VIRTUAL TABLE IF NOT EXISTS posts_fts USING fts5("
+                    "title, content, content='posts_cache', content_rowid='id')"
+                )
+            )
+            await session.commit()
+
+        content_manager = ContentManager(content_dir=settings.content_dir)
+        app.state.content_manager = content_manager
+        app.state.content_write_lock = asyncio.Lock()
+
+        git_service = GitService(content_dir=settings.content_dir)
+        await git_service.init_repo()
+        app.state.git_service = git_service
+
+        # mutmut stats/test runs can perturb cryptography internals in instrumented
+        # modules.  For mutation-testing contexts, these state fields only need to
+        # exist.
+        # Note: MUTANT_UNDER_TEST is a standard env var set by mutmut itself
+        # when running mutants — do not rename it.
+        in_mutation_mode = "MUTANT_UNDER_TEST" in os.environ
+        from backend.crosspost.bluesky_oauth_state import OAuthStateStore
+
+        if in_mutation_mode:
+            atproto_key: object = object()
+            atproto_jwk: dict[str, str] = {
+                "kty": "EC",
+                "crv": "P-256",
+                "x": "mutmut-x",
+                "y": "mutmut-y",
+                "kid": "mutmut",
+            }
+        else:
+            from backend.crosspost.atproto_oauth import load_or_create_keypair
+
+            oauth_key_path = settings.content_dir / ".atproto-oauth-key.json"
+            atproto_key, atproto_jwk = load_or_create_keypair(oauth_key_path)
+        app.state.atproto_oauth_key = atproto_key
+        app.state.atproto_oauth_jwk = atproto_jwk
+        app.state.bluesky_oauth_state = OAuthStateStore(ttl_seconds=600)
+        app.state.mastodon_oauth_state = OAuthStateStore(ttl_seconds=600)
+        app.state.x_oauth_state = OAuthStateStore(ttl_seconds=600)
+        app.state.facebook_oauth_state = OAuthStateStore(ttl_seconds=600)
+
+        async with session_factory() as session:
+            await ensure_admin_user(session, settings)
+
+        test_port = 13100 + os.getpid() % 900
+        if not _pandoc_server_broken:
+            try:
+                pandoc_server = PandocServer(port=test_port)
+                await pandoc_server.start()
+                app.state.pandoc_server = pandoc_server
+                init_renderer(pandoc_server)
+                # Verify the server can actually render (catches broken builds
+                # where +server is listed but the runtime crashes on first
+                # request).
+                from backend.pandoc.renderer import render_markdown
+
+                await render_markdown("test")
+            except Exception:
+                logger.warning("Pandoc server unavailable in tests, using subprocess fallback")
+                await close_renderer()
+                if pandoc_server is not None:
+                    await pandoc_server.stop()
+                pandoc_server = None
+                _install_subprocess_fallback()
+        else:
             _install_subprocess_fallback()
-    else:
-        _install_subprocess_fallback()
 
-    from backend.services.cache_service import rebuild_cache
+        async with session_factory() as session:
+            await rebuild_cache(session, content_manager)
 
-    async with session_factory() as session:
-        await rebuild_cache(session, content_manager)
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app),
-        base_url="http://test",
-    ) as ac:
-        yield ac
-
-    await close_renderer()
-    if pandoc_server is not None:
-        await pandoc_server.stop()
-    _restore_original_renderer()
-    await engine.dispose()
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as ac:
+            yield ac
+    finally:
+        await close_renderer()
+        if pandoc_server is not None:
+            await pandoc_server.stop()
+        _restore_original_renderer()
+        await engine.dispose()
 
 
 @pytest.fixture

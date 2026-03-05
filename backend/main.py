@@ -144,6 +144,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         )
         raise
 
+    from backend.pandoc.renderer import close_renderer, init_renderer
+    from backend.pandoc.server import PandocServer
+
+    pandoc_server = PandocServer()
+    pandoc_started = False
     try:
         async with engine.begin() as conn:
             # Drop cache tables so create_all always matches current schema.
@@ -160,11 +165,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
                 await conn.execute(text(statement))
             await conn.run_sync(Base.metadata.create_all)
         await _ensure_crosspost_user_id_column(app)
-    except Exception as exc:
-        logger.critical("Failed to create database schema: %s.", exc)
-        raise
 
-    try:
         async with session_factory() as session:
             await session.execute(
                 text(
@@ -173,106 +174,68 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
                 )
             )
             await session.commit()
-    except Exception as exc:
-        logger.critical("Failed to create FTS5 virtual table: %s.", exc)
-        raise
 
-    try:
         ensure_content_dir(settings.content_dir)
-    except Exception as exc:
-        logger.critical(
-            "Failed to initialize content directory at %s: %s.", settings.content_dir, exc
-        )
-        raise
 
-    content_manager = ContentManager(content_dir=settings.content_dir)
-    app.state.content_manager = content_manager
+        content_manager = ContentManager(content_dir=settings.content_dir)
+        app.state.content_manager = content_manager
 
-    from backend.services.git_service import GitService
+        from backend.services.git_service import GitService
 
-    try:
         git_service = GitService(content_dir=settings.content_dir)
         await git_service.init_repo()
         app.state.git_service = git_service
-    except Exception as exc:
-        logger.critical(
-            "Failed to initialize git repository at %s: %s. Ensure git is installed.",
-            settings.content_dir,
-            exc,
-        )
-        raise
 
-    from backend.crosspost.atproto_oauth import load_or_create_keypair
-    from backend.crosspost.bluesky_oauth_state import OAuthStateStore
+        from backend.crosspost.atproto_oauth import load_or_create_keypair
+        from backend.crosspost.bluesky_oauth_state import OAuthStateStore
 
-    oauth_key_path = settings.content_dir / ".atproto-oauth-key.json"
-    try:
+        oauth_key_path = settings.content_dir / ".atproto-oauth-key.json"
         atproto_key, atproto_jwk = load_or_create_keypair(oauth_key_path)
         app.state.atproto_oauth_key = atproto_key
         app.state.atproto_oauth_jwk = atproto_jwk
-    except Exception as exc:
-        logger.critical("Failed to load or create OAuth keypair at %s: %s.", oauth_key_path, exc)
-        raise
 
-    app.state.bluesky_oauth_state = OAuthStateStore(ttl_seconds=600)
-    app.state.mastodon_oauth_state = OAuthStateStore(ttl_seconds=600)
-    app.state.x_oauth_state = OAuthStateStore(ttl_seconds=600)
-    app.state.facebook_oauth_state = OAuthStateStore(ttl_seconds=600)
+        app.state.bluesky_oauth_state = OAuthStateStore(ttl_seconds=600)
+        app.state.mastodon_oauth_state = OAuthStateStore(ttl_seconds=600)
+        app.state.x_oauth_state = OAuthStateStore(ttl_seconds=600)
+        app.state.facebook_oauth_state = OAuthStateStore(ttl_seconds=600)
 
-    from backend.services.auth_service import ensure_admin_user
+        from backend.services.auth_service import ensure_admin_user
 
-    try:
         async with session_factory() as session:
             await ensure_admin_user(session, settings)
-    except Exception as exc:
-        logger.critical("Failed to ensure admin user: %s.", exc)
-        raise
 
-    from backend.pandoc.renderer import close_renderer, init_renderer
-    from backend.pandoc.server import PandocServer
-
-    pandoc_server = PandocServer()
-    pandoc_started = False
-    try:
         await pandoc_server.start()
         pandoc_started = True
         app.state.pandoc_server = pandoc_server
         init_renderer(pandoc_server)
-    except Exception as exc:
-        logger.critical("Failed to start pandoc server: %s. Ensure pandoc is installed.", exc)
-        raise
 
-    from backend.services.cache_service import rebuild_cache
+        from backend.services.cache_service import rebuild_cache
 
-    try:
         async with session_factory() as session:
             post_count, warnings = await rebuild_cache(session, content_manager)
             logger.info("Indexed %d posts from filesystem", post_count)
             for warning in warnings:
                 logger.warning("Cache rebuild: %s", warning)
-    except Exception as exc:
-        logger.critical("Failed to rebuild cache from filesystem: %s.", exc)
-        raise
 
-    yield
-
-    try:
-        await close_renderer()
-    except Exception as exc:
-        logger.error("Error during renderer shutdown: %s", exc, exc_info=True)
-
-    if pandoc_started:
+        yield
+    finally:
         try:
-            await pandoc_server.stop()
+            await close_renderer()
         except Exception as exc:
-            logger.error("Error during pandoc server shutdown: %s", exc, exc_info=True)
+            logger.error("Error during renderer shutdown: %s", exc, exc_info=True)
 
-    try:
-        await engine.dispose()
-    except Exception as exc:
-        logger.error("Error during engine disposal: %s", exc, exc_info=True)
+        if pandoc_started:
+            try:
+                await pandoc_server.stop()
+            except Exception as exc:
+                logger.error("Error during pandoc server shutdown: %s", exc, exc_info=True)
 
-    logger.info("AgBlogger stopped")
+        try:
+            await engine.dispose()
+        except Exception as exc:
+            logger.error("Error during engine disposal: %s", exc, exc_info=True)
+
+        logger.info("AgBlogger stopped")
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
