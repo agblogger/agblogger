@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Save, ArrowLeft, Upload } from 'lucide-react'
+import { Save, ArrowLeft, Upload, Eye } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 
 import { fetchPostForEdit, createPost, updatePost, uploadAssets } from '@/api/posts'
@@ -9,6 +9,7 @@ import type { SocialAccount } from '@/api/crosspost'
 import { HTTPError } from '@/api/client'
 import { parseErrorDetail } from '@/api/parseError'
 import api from '@/api/client'
+import { useCodeBlockEnhance } from '@/hooks/useCodeBlockEnhance'
 import { useEditorAutoSave } from '@/hooks/useEditorAutoSave'
 import type { DraftData } from '@/hooks/useEditorAutoSave'
 import { useRenderedHtml } from '@/hooks/useKatex'
@@ -42,6 +43,7 @@ export default function EditorPage() {
   const [error, setError] = useState<string | null>(null)
   const renderedPreview = useRenderedHtml(preview)
   const previewRequestRef = useRef(0)
+  const previewRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [accounts, setAccounts] = useState<SocialAccount[]>([])
@@ -49,6 +51,7 @@ export default function EditorPage() {
   const [showCrossPostDialog, setShowCrossPostDialog] = useState(false)
   const [mobileTab, setMobileTab] = useState<'edit' | 'preview'>('edit')
   const [savedFilePath, setSavedFilePath] = useState<string | null>(null)
+  useCodeBlockEnhance(previewRef, renderedPreview)
 
   const autoSaveKey = isNew ? 'agblogger:draft:new' : `agblogger:draft:${filePath}`
   const currentState = useMemo<DraftData>(
@@ -541,11 +544,15 @@ export default function EditorPage() {
             <p className="text-sm text-red-600 dark:text-red-400 italic">Preview unavailable</p>
           ) : preview !== null ? (
             <div
+              ref={previewRef}
               className="prose max-w-none"
               dangerouslySetInnerHTML={{ __html: renderedPreview }}
             />
           ) : (
-            <p className="text-sm text-muted italic">Preview will appear here...</p>
+            <div className="flex flex-col items-center justify-center h-full min-h-[200px] border-2 border-dashed border-border/50 rounded-lg bg-paper-warm/30">
+              <Eye size={32} className="text-muted/40 mb-3" />
+              <p className="text-sm text-muted/60">Start typing to see a live preview</p>
+            </div>
           )}
         </div>
       </div>

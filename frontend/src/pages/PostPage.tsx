@@ -26,7 +26,7 @@ export default function PostPage() {
   const user = useAuthStore((s) => s.user)
   const contentRef = useRef<HTMLDivElement>(null)
   const renderedHtml = useRenderedHtml(post?.rendered_html)
-  useCodeBlockEnhance(contentRef)
+  useCodeBlockEnhance(contentRef, renderedHtml)
 
   async function handleDelete(withAssets: boolean) {
     if (filePath === undefined) return
