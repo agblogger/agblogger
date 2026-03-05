@@ -58,6 +58,24 @@ describe('useCodeBlockEnhance', () => {
     expect(headers).toHaveLength(1)
   })
 
+  it('re-runs enhancement when content parameter changes', () => {
+    const ref = { current: container }
+    container.innerHTML = ''
+
+    const { rerender } = renderHook(
+      ({ content }) => useCodeBlockEnhance(ref, content),
+      { initialProps: { content: undefined as string | undefined } },
+    )
+
+    expect(container.querySelector('.code-block-header')).toBeNull()
+
+    container.innerHTML = '<pre><code class="language-python">print("hello")</code></pre>'
+    rerender({ content: '<pre><code class="language-python">print("hello")</code></pre>' })
+
+    expect(container.querySelector('.code-block-header')).not.toBeNull()
+    expect(container.querySelector('.code-block-lang')?.textContent).toBe('python')
+  })
+
   it('copies code to clipboard on copy button click', () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     Object.assign(navigator, { clipboard: { writeText } })
