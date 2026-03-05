@@ -254,21 +254,24 @@ export default function LabelGraphPage({ viewToggle }: { viewToggle: React.React
     [graphData, user, mutating],
   )
 
-  const interactiveFlowProps: Pick<
-    ReactFlowProps,
-    'isValidConnection' | 'onConnect' | 'onEdgeClick' | 'edgesReconnectable'
-  > = user
-    ? {
-        isValidConnection,
-        onConnect: (connection) => {
-          void onConnect(connection)
-        },
-        onEdgeClick: (event, edge) => {
-          void onEdgeClick(event, edge)
-        },
-        edgesReconnectable: true,
-      }
-    : { edgesReconnectable: false }
+  const interactiveFlowProps = useMemo<
+    Pick<ReactFlowProps, 'isValidConnection' | 'onConnect' | 'onEdgeClick' | 'edgesReconnectable'>
+  >(
+    () =>
+      user
+        ? {
+            isValidConnection,
+            onConnect: (connection) => {
+              void onConnect(connection)
+            },
+            onEdgeClick: (event, edge) => {
+              void onEdgeClick(event, edge)
+            },
+            edgesReconnectable: true,
+          }
+        : { edgesReconnectable: false },
+    [user, isValidConnection, onConnect, onEdgeClick],
+  )
 
   if (loading) {
     return <LoadingSpinner />
