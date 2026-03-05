@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { renderHook } from '@testing-library/react'
+import { renderHook, waitFor } from '@testing-library/react'
 
 vi.mock('katex', () => ({
   default: {
@@ -9,6 +9,8 @@ vi.mock('katex', () => ({
     },
   },
 }))
+
+vi.mock('katex/dist/katex.min.css', () => ({}))
 
 // Must import after mock
 const { useRenderedHtml } = await import('@/hooks/useKatex')
@@ -30,56 +32,75 @@ describe('useRenderedHtml', () => {
     expect(result.current).toBe('<p>Hello world</p>')
   })
 
-  it('renders inline math spans', () => {
+  it('returns raw HTML without math unchanged (no katex needed)', () => {
+    const { result } = renderHook(() => useRenderedHtml('<p>No math here</p>'))
+    expect(result.current).toBe('<p>No math here</p>')
+  })
+
+  it('renders inline math spans', async () => {
     const html = '<p>The value <span class="math inline">x^2</span> is positive.</p>'
     const { result } = renderHook(() => useRenderedHtml(html))
-    expect(result.current).toBe(
-      '<p>The value <span class="math inline"><rendered-inline>x^2</rendered-inline></span> is positive.</p>',
-    )
+    await waitFor(() => {
+      expect(result.current).toBe(
+        '<p>The value <span class="math inline"><rendered-inline>x^2</rendered-inline></span> is positive.</p>',
+      )
+    })
   })
 
-  it('renders display math spans with displayMode', () => {
+  it('renders display math spans with displayMode', async () => {
     const html = '<span class="math display">\\sum_{i=0}^n i</span>'
     const { result } = renderHook(() => useRenderedHtml(html))
-    expect(result.current).toBe(
-      '<span class="math display"><rendered-display>\\sum_{i=0}^n i</rendered-display></span>',
-    )
+    await waitFor(() => {
+      expect(result.current).toBe(
+        '<span class="math display"><rendered-display>\\sum_{i=0}^n i</rendered-display></span>',
+      )
+    })
   })
 
-  it('handles multiple math spans', () => {
+  it('handles multiple math spans', async () => {
     const html = '<span class="math inline">a</span> and <span class="math display">b</span>'
     const { result } = renderHook(() => useRenderedHtml(html))
-    expect(result.current).toContain('<rendered-inline>a</rendered-inline>')
-    expect(result.current).toContain('<rendered-display>b</rendered-display>')
+    await waitFor(() => {
+      expect(result.current).toContain('<rendered-inline>a</rendered-inline>')
+      expect(result.current).toContain('<rendered-display>b</rendered-display>')
+    })
   })
 
-  it('trims whitespace from tex content', () => {
+  it('trims whitespace from tex content', async () => {
     const html = '<span class="math inline"> x + 1 </span>'
     const { result } = renderHook(() => useRenderedHtml(html))
-    expect(result.current).toContain('<rendered-inline>x + 1</rendered-inline>')
+    await waitFor(() => {
+      expect(result.current).toContain('<rendered-inline>x + 1</rendered-inline>')
+    })
   })
 
-  it('decodes HTML entities in math content', () => {
+  it('decodes HTML entities in math content', async () => {
     // Regression: matrix &amp; was passed literally to KaTeX instead of &
     const html =
       '<span class="math display">\\begin{pmatrix} a &amp; b \\\\ c &amp; d \\end{pmatrix}</span>'
     const { result } = renderHook(() => useRenderedHtml(html))
-    // The mock renders tex directly, so we can check & is decoded
-    expect(result.current).toContain(
-      '\\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix}',
-    )
-    expect(result.current).not.toContain('&amp;')
+    await waitFor(() => {
+      // The mock renders tex directly, so we can check & is decoded
+      expect(result.current).toContain(
+        '\\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix}',
+      )
+      expect(result.current).not.toContain('&amp;')
+    })
   })
 
-  it('decodes &lt; and &gt; in math content', () => {
+  it('decodes &lt; and &gt; in math content', async () => {
     const html = '<span class="math inline">a &lt; b &gt; c</span>'
     const { result } = renderHook(() => useRenderedHtml(html))
-    expect(result.current).toContain('a < b > c')
+    await waitFor(() => {
+      expect(result.current).toContain('a < b > c')
+    })
   })
 
-  it('decodes &quot; in math content', () => {
+  it('decodes &quot; in math content', async () => {
     const html = '<span class="math inline">&quot;text&quot;</span>'
     const { result } = renderHook(() => useRenderedHtml(html))
-    expect(result.current).toContain('"text"')
+    await waitFor(() => {
+      expect(result.current).toContain('"text"')
+    })
   })
 })
