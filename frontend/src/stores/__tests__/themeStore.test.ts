@@ -113,6 +113,19 @@ describe('themeStore', () => {
     expect(useThemeStore.getState().resolvedTheme).toBe('light')
   })
 
+  it('returns a cleanup function from init that removes the MQL listener', () => {
+    const removeSpy = vi.fn()
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      ...makeMql(query),
+      removeEventListener: removeSpy,
+    }))
+
+    const cleanup = useThemeStore.getState().init()
+    expect(typeof cleanup).toBe('function')
+    cleanup()
+    expect(removeSpy).toHaveBeenCalledWith('change', expect.any(Function))
+  })
+
   it('still updates state when localStorage.setItem throws in toggleMode', () => {
     const throwingStorage = Object.create(fakeLocalStorage) as Storage
     throwingStorage.setItem = () => { throw new DOMException('quota exceeded', 'QuotaExceededError') }

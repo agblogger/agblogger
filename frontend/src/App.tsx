@@ -33,7 +33,8 @@ function Layout() {
   useEffect(() => {
     void fetchConfig()
     void checkAuth()
-    initTheme()
+    const cleanupTheme = initTheme()
+    return cleanupTheme
   }, [fetchConfig, checkAuth, initTheme])
 
   return (

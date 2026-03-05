@@ -6,7 +6,7 @@ interface ThemeState {
   mode: ThemeMode
   resolvedTheme: 'light' | 'dark'
   toggleMode: () => void
-  init: () => void
+  init: () => () => void
 }
 
 const STORAGE_KEY = 'agblogger:theme'
@@ -62,13 +62,15 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
     set({ mode, resolvedTheme: resolved })
 
     const mql = window.matchMedia('(prefers-color-scheme: dark)')
-    mql.addEventListener('change', () => {
+    const handler = () => {
       const current = get().mode
       if (current === 'system') {
         const newResolved = getSystemTheme()
         applyTheme(newResolved)
         set({ resolvedTheme: newResolved })
       }
-    })
+    }
+    mql.addEventListener('change', handler)
+    return () => mql.removeEventListener('change', handler)
   },
 }))
