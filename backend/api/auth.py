@@ -36,6 +36,7 @@ from backend.schemas.auth import (
 )
 from backend.services.auth_service import (
     authenticate_user,
+    consume_invite_code,
     create_access_token,
     create_invite_code,
     create_personal_access_token,
@@ -290,8 +291,18 @@ async def register(
         ) from None
 
     if invite is not None:
-        invite.used_at = now
-        invite.used_by_user_id = user.id
+        consumed = await consume_invite_code(
+            session,
+            invite_id=invite.id,
+            used_by_user_id=user.id,
+            used_at=now,
+        )
+        if not consumed:
+            await session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Invite code already used",
+            )
 
     await session.commit()
     await session.refresh(user)

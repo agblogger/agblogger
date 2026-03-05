@@ -2,17 +2,20 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING
 
 import jwt
 import pytest
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from backend.models.base import Base
-from backend.models.user import RefreshToken, User
+from backend.models.user import InviteCode, RefreshToken, User
 from backend.services.auth_service import (
     ALGORITHM,
     authenticate_user,
+    consume_invite_code,
     create_access_token,
     create_refresh_token_value,
     create_tokens,
@@ -26,7 +29,7 @@ from backend.services.datetime_service import format_iso, now_utc
 from backend.services.key_derivation import derive_access_token_key
 
 if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
+    from sqlalchemy.ext.asyncio import AsyncEngine
 
     from backend.config import Settings
 
@@ -224,3 +227,71 @@ class TestTokenLifecycle:
             select(RefreshToken).where(RefreshToken.token_hash == new_hash)
         )
         assert result.scalar_one_or_none() is not None
+
+    async def test_refresh_token_single_use_under_concurrency(
+        self, session: AsyncSession, test_settings: Settings
+    ) -> None:
+        user = await _create_user(session, username="race-user")
+        _, original_refresh = await create_tokens(session, user, test_settings)
+
+        bind = session.bind
+        assert bind is not None
+        session_factory = async_sessionmaker(
+            bind=bind,
+            class_=AsyncSession,
+            expire_on_commit=False,
+        )
+
+        async def _try_refresh() -> tuple[str, str] | None:
+            async with session_factory() as worker_session:
+                return await refresh_tokens(worker_session, original_refresh, test_settings)
+
+        first, second = await asyncio.gather(_try_refresh(), _try_refresh())
+        successes = [result for result in (first, second) if result is not None]
+        assert len(successes) == 1
+
+        # Old token must be gone regardless of concurrency ordering.
+        old_hash = hash_token(original_refresh)
+        result = await session.execute(
+            select(RefreshToken).where(RefreshToken.token_hash == old_hash)
+        )
+        assert result.scalar_one_or_none() is None
+
+
+class TestInviteConsumption:
+    async def test_consume_invite_code_single_use_under_concurrency(
+        self, session: AsyncSession
+    ) -> None:
+        creator = await _create_user(session, username="invite-creator")
+        user_a = await _create_user(session, username="invite-a")
+        user_b = await _create_user(session, username="invite-b")
+
+        now = format_iso(now_utc())
+        invite = InviteCode(
+            code_hash=hash_token("aginvite_test_token"),
+            created_by_user_id=creator.id,
+            created_at=now,
+            expires_at=format_iso(now_utc()),
+        )
+        session.add(invite)
+        await session.commit()
+        await session.refresh(invite)
+
+        bind = session.bind
+        assert bind is not None
+        session_factory = async_sessionmaker(
+            bind=bind,
+            class_=AsyncSession,
+            expire_on_commit=False,
+        )
+
+        async def _consume(user_id: int) -> bool:
+            async with session_factory() as worker_session:
+                consumed = await consume_invite_code(
+                    worker_session, invite_id=invite.id, used_by_user_id=user_id, used_at=now
+                )
+                await worker_session.commit()
+                return consumed
+
+        first, second = await asyncio.gather(_consume(user_a.id), _consume(user_b.id))
+        assert {first, second} == {True, False}

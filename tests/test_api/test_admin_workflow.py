@@ -182,3 +182,26 @@ class TestAdminPageWorkflow:
             headers=headers,
         )
         assert resp.status_code == 409
+
+    @pytest.mark.asyncio
+    async def test_admin_pages_tolerates_unreadable_page_file(
+        self, client: AsyncClient, app_settings: Settings
+    ) -> None:
+        token = await _login(client)
+        headers = {"Authorization": f"Bearer {token}"}
+
+        create_resp = await client.post(
+            "/api/admin/pages",
+            json={"id": "broken", "title": "Broken"},
+            headers=headers,
+        )
+        assert create_resp.status_code == 201
+
+        broken_path = app_settings.content_dir / "broken.md"
+        broken_path.write_bytes(b"\xff\xfe\xfd")
+
+        pages_resp = await client.get("/api/admin/pages", headers=headers)
+        assert pages_resp.status_code == 200
+        pages = pages_resp.json()["pages"]
+        broken_entry = next(page for page in pages if page["id"] == "broken")
+        assert broken_entry["content"] is None

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 
 from backend.exceptions import BuiltinPageError
@@ -15,6 +16,7 @@ if TYPE_CHECKING:
     from backend.filesystem.content_manager import ContentManager
 
 BUILTIN_PAGE_IDS = {"timeline", "labels"}
+logger = logging.getLogger(__name__)
 
 
 def get_site_settings(cm: ContentManager) -> SiteConfig:
@@ -55,7 +57,11 @@ def get_admin_pages(cm: ContentManager) -> list[dict[str, Any]]:
             except ValueError:
                 page_path = None
             if page_path is not None and page_path.exists():
-                content = page_path.read_text(encoding="utf-8")
+                try:
+                    content = page_path.read_text(encoding="utf-8")
+                except (OSError, UnicodeDecodeError) as exc:
+                    logger.warning("Failed to read admin page content %s: %s", page.file, exc)
+                    content = None
         result.append(
             {
                 "id": page.id,

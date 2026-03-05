@@ -125,6 +125,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     settings.validate_runtime_security()
     _configure_logging(settings.debug)
     logger.info("Starting AgBlogger (debug=%s)", settings.debug)
+    startup_errors: list[str] = []
+    app.state.startup_errors = startup_errors
 
     # Ensure database directory exists (M16)
     db_url = settings.database_url
@@ -231,13 +233,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     from backend.pandoc.server import PandocServer
 
     pandoc_server = PandocServer()
+    pandoc_started = False
     try:
         await pandoc_server.start()
+        pandoc_started = True
+        app.state.pandoc_server = pandoc_server
+        init_renderer(pandoc_server)
     except Exception as exc:
-        logger.critical("Failed to start pandoc server: %s", exc)
-        raise
-    app.state.pandoc_server = pandoc_server
-    init_renderer(pandoc_server)
+        logger.error("Failed to start pandoc server; continuing in degraded mode: %s", exc)
+        startup_errors.append(f"Pandoc startup failed: {exc}")
+        app.state.pandoc_server = None
 
     from backend.services.cache_service import rebuild_cache
 
@@ -258,10 +263,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     except Exception as exc:
         logger.error("Error during renderer shutdown: %s", exc, exc_info=True)
 
-    try:
-        await pandoc_server.stop()
-    except Exception as exc:
-        logger.error("Error during pandoc server shutdown: %s", exc, exc_info=True)
+    if pandoc_started:
+        try:
+            await pandoc_server.stop()
+        except Exception as exc:
+            logger.error("Error during pandoc server shutdown: %s", exc, exc_info=True)
 
     try:
         await engine.dispose()

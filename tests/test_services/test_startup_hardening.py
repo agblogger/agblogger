@@ -7,8 +7,9 @@ import logging
 import os
 import subprocess
 import time
+from contextlib import suppress
 from typing import TYPE_CHECKING
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 import yaml
@@ -416,3 +417,58 @@ class TestStaleLockFile:
         # Should regenerate despite corruption
         private_key, _jwk = load_or_create_keypair(key_path)
         assert private_key is not None
+
+    def test_stale_lock_inspection_error_is_logged(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        from pathlib import Path
+        from unittest.mock import patch
+
+        from backend.crosspost.atproto_oauth import load_or_create_keypair
+
+        key_path = tmp_path / "test-key.json"
+        lock_path = key_path.with_name(f".{key_path.name}.lock")
+        lock_path.write_text("")
+
+        original_stat = Path.stat
+
+        def _stat_with_failure(self: Path):
+            if self == lock_path:
+                raise OSError("stat failed")
+            return original_stat(self)
+
+        with (
+            patch.object(Path, "stat", _stat_with_failure),
+            caplog.at_level(logging.WARNING, logger="backend.crosspost.atproto_oauth"),
+        ):
+            _private_key, _jwk = load_or_create_keypair(key_path)
+
+        assert any("stale keypair lock" in record.message.lower() for record in caplog.records)
+
+
+class TestStartupResilience:
+    @pytest.mark.asyncio
+    async def test_lifespan_continues_when_pandoc_start_fails(self, tmp_path: Path) -> None:
+        settings = Settings(
+            secret_key="test-secret-key-min-32-characters-long",
+            admin_password="testpassword",
+            debug=True,
+            database_url=f"sqlite+aiosqlite:///{tmp_path}/test.db",
+            content_dir=tmp_path / "content",
+            frontend_dir=tmp_path / "no-frontend",
+        )
+        app = create_app(settings)
+
+        with patch(
+            "backend.pandoc.server.PandocServer.start",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("pandoc unavailable"),
+        ):
+            ctx = app.router.lifespan_context(app)
+            await ctx.__aenter__()
+            try:
+                errors = getattr(app.state, "startup_errors", [])
+                assert any("pandoc" in err.lower() for err in errors)
+            finally:
+                with suppress(Exception):
+                    await ctx.__aexit__(None, None, None)

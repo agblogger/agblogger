@@ -273,6 +273,40 @@ class TestMastodonOAuthTokenExchange:
                 pkce_verifier="test-verifier",
             )
 
+    async def test_raises_on_non_json_token_response(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        class DummyResponse:
+            status_code = 200
+            text = "<html>bad gateway</html>"
+
+            @staticmethod
+            def json() -> dict[str, str]:
+                raise ValueError("not json")
+
+        class FakeClient:
+            async def post(self, url: str, **kwargs) -> DummyResponse:
+                return DummyResponse()
+
+        from tests.test_services._ssrf_helpers import make_fake_ssrf_safe_client
+
+        monkeypatch.setattr(
+            "backend.crosspost.mastodon.ssrf_safe_client",
+            make_fake_ssrf_safe_client(FakeClient),
+        )
+        monkeypatch.setattr(
+            "backend.crosspost.mastodon._normalize_instance_url",
+            lambda u: "https://mastodon.social",
+        )
+
+        with pytest.raises(MastodonOAuthTokenError, match="non-JSON"):
+            await exchange_mastodon_oauth_token(
+                instance_url="https://mastodon.social",
+                code="test-code",
+                client_id="test-client-id",
+                client_secret="test-client-secret",
+                redirect_uri="https://example.com/callback",
+                pkce_verifier="test-verifier",
+            )
+
 
 def _make_oauth_credentials() -> dict[str, str]:
     """Build a complete set of OAuth credentials for testing."""
@@ -750,6 +784,49 @@ class TestXOAuthTokenExchange:
         monkeypatch.setattr("backend.crosspost.x.httpx.AsyncClient", DummyAsyncClient)
 
         with pytest.raises(XOAuthTokenError, match="Forbidden"):
+            await exchange_x_oauth_token(
+                code="test-code",
+                client_id="cid",
+                client_secret="csec",
+                redirect_uri="https://example.com/cb",
+                pkce_verifier="verifier",
+            )
+
+    async def test_raises_on_non_json_user_profile_response(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        class DummyTokenResponse:
+            status_code = 200
+            text = ""
+
+            @staticmethod
+            def json() -> dict[str, str]:
+                return {"access_token": "at", "refresh_token": "rt"}
+
+        class DummyUserResponse:
+            status_code = 200
+            text = "<html>oops</html>"
+
+            @staticmethod
+            def json() -> dict[str, object]:
+                raise ValueError("not json")
+
+        class DummyAsyncClient:
+            async def __aenter__(self) -> DummyAsyncClient:
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+            async def post(self, url: str, **kwargs) -> DummyTokenResponse:
+                return DummyTokenResponse()
+
+            async def get(self, url: str, **kwargs) -> DummyUserResponse:
+                return DummyUserResponse()
+
+        monkeypatch.setattr("backend.crosspost.x.httpx.AsyncClient", DummyAsyncClient)
+
+        with pytest.raises(XOAuthTokenError, match="non-JSON"):
             await exchange_x_oauth_token(
                 code="test-code",
                 client_id="cid",
@@ -1386,6 +1463,35 @@ class TestFacebookOAuthTokenExchange:
         assert "params" not in captured_calls[1][2]
         assert captured_calls[2][2].get("headers") == {"Authorization": "Bearer long_lived_token"}
         assert "params" not in captured_calls[2][2]
+
+    async def test_raises_on_non_json_token_response(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        class DummyResponse:
+            status_code = 200
+            text = "<html>proxy error</html>"
+
+            @staticmethod
+            def json() -> dict[str, str]:
+                raise ValueError("not json")
+
+        class DummyAsyncClient:
+            async def __aenter__(self) -> DummyAsyncClient:
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+            async def post(self, url: str, **kwargs) -> DummyResponse:
+                return DummyResponse()
+
+        monkeypatch.setattr("backend.crosspost.facebook.httpx.AsyncClient", DummyAsyncClient)
+
+        with pytest.raises(FacebookOAuthTokenError, match="non-JSON"):
+            await exchange_facebook_oauth_token(
+                code="test-code",
+                app_id="app_123",
+                app_secret="secret",
+                redirect_uri="https://example.com/cb",
+            )
 
 
 class TestFacebookValidateCredentials:

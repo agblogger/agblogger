@@ -54,6 +54,16 @@ During `sync_commit`, before scanning files and updating the manifest, the serve
 
 Recognized front matter fields: `title`, `created_at`, `modified_at`, `author`, `labels`, `draft`.
 
+## Write Serialization and Graceful Degradation
+
+All content-mutating endpoints (`/api/posts`, `/api/labels`, `/api/admin`, and `/api/sync/commit`)
+share a single application-level async write lock (`app.state.content_write_lock`). This serializes
+filesystem + cache mutation windows across endpoints and prevents cross-endpoint check-then-act races.
+
+`sync_status` and `sync_commit` also degrade gracefully when git metadata/commit operations fail:
+they log the failure server-side and return a successful HTTP response with warning/error status fields
+instead of crashing the request handler.
+
 ## Git Content Versioning
 
 The server's `content/` directory is a git repository. Every file-modifying operation (post create/update/delete, label create/update/delete, sync commit) creates a git commit via `GitService`. This provides:

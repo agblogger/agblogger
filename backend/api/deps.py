@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncGenerator
-from typing import Annotated
+from types import TracebackType
+from typing import Annotated, Any, Protocol, cast
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -18,6 +20,19 @@ from backend.services.git_service import GitService
 security = HTTPBearer(auto_error=False)
 
 
+class AsyncWriteLock(Protocol):
+    """Structural type for async locks used with ``async with``."""
+
+    async def __aenter__(self) -> Any: ...
+
+    async def __aexit__(
+        self,
+        _exc_type: type[BaseException] | None,
+        _exc: BaseException | None,
+        _tb: TracebackType | None,
+    ) -> bool | None: ...
+
+
 def get_settings(request: Request) -> Settings:
     """Get application settings from app state."""
     settings: Settings = request.app.state.settings
@@ -26,21 +41,45 @@ def get_settings(request: Request) -> Settings:
 
 def get_git_service(request: Request) -> GitService:
     """Get git service from app state."""
-    gs: GitService = request.app.state.git_service
-    return gs
+    gs = getattr(request.app.state, "git_service", None)
+    if gs is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Service temporarily unavailable",
+        )
+    return cast("GitService", gs)
 
 
 def get_content_manager(request: Request) -> ContentManager:
     """Get content manager from app state."""
-    cm: ContentManager = request.app.state.content_manager
-    return cm
+    cm = getattr(request.app.state, "content_manager", None)
+    if cm is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Service temporarily unavailable",
+        )
+    return cast("ContentManager", cm)
 
 
 async def get_session(request: Request) -> AsyncGenerator[AsyncSession]:
     """Get a database session."""
-    session_factory = request.app.state.session_factory
+    session_factory = getattr(request.app.state, "session_factory", None)
+    if session_factory is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database temporarily unavailable",
+        )
     async with session_factory() as session:
         yield session
+
+
+def get_content_write_lock(request: Request) -> AsyncWriteLock:
+    """Get the global content write lock used to serialize content mutations."""
+    lock = getattr(request.app.state, "content_write_lock", None)
+    if lock is None:
+        lock = asyncio.Lock()
+        request.app.state.content_write_lock = lock
+    return cast("AsyncWriteLock", lock)
 
 
 async def get_current_user(

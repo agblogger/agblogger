@@ -1,4 +1,3 @@
-
 I want to create a web blogging platform AgBlogger with the following features / requirements. Create a plan to design and implement AgBlogger and write it to PLAN.md. Choose most appropriate technologies and architecture based on the requirements. Consider performance and ease of deployment. Take your time – this is a complex task.
 
 - The blog posts are markdown-based. Markdown files are the ultimate source of truth. The app can use a lightweight relational database to speed up search, filtering, etc, but both post content and metadata are stored in markdown files. Metadata related to a post is specified in a YAML front matter block at the beginning of the post's markdown file. Config data not related to any specific post is stored in TOML files.
@@ -19,10 +18,10 @@ I want to create a web blogging platform AgBlogger with the following features /
 			[labels]
 				[labels.cs]
 				names = ["computer science"]
-				
+
 				[labels.swe]
 				names = ["software engineering", "programming", "software development"]
-			    parent = "#cs"			    
+			    parent = "#cs"
 			```
 		- labels may be defined implicitly (not yet present in a TOML file) – referring to a new label with #label-id creates an entry for #label-id
 	- Labels are organized in a directed acyclic graph (DAG). A label can have any number of parents (supercategories) and children (subcategories), as long as there are no cycles.
@@ -41,14 +40,14 @@ I want to create a web blogging platform AgBlogger with the following features /
 	labels: [#swe, #ai]
 	---
 	# Title
-	
+
 	Blog post markdown content
 	```
 - Config data not connected directly with any single post stored in TOML files:
 	- label definitions,
 	- project-level (blog-level) preferences.
 - Sync between a local directory containing blog posts in markdown and the blogging platform server.
-	- It should in principle be possible to add/edit/delete posts with their metadata entirely locally by editing markdown files and then sync with the blogging platform server. 
+	- It should in principle be possible to add/edit/delete posts with their metadata entirely locally by editing markdown files and then sync with the blogging platform server.
 	- The sync is possible in both direction - also bring in changes from the server to local folder.
 	- Intelligent conflict resolution which doesn't require user intervention in most cases.
 	- The local directory may include other files than just markdown posts, e.g., image, PDF, binary, or other files. All files in the local directory and subdirectories (recursively) should be synced.

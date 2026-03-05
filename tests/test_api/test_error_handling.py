@@ -7,6 +7,7 @@ M3 (asset upload OSError), C1 (render before rename).
 
 from __future__ import annotations
 
+import subprocess
 import tomllib
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, patch
@@ -417,9 +418,13 @@ class TestUpdatePostOSError:
                 },
                 headers={"Authorization": f"Bearer {token}"},
             )
-        assert resp.status_code == 500
-        # Original directory should still be at its original location (rolled back)
-        assert original_dir.exists(), "Directory was not rolled back after symlink failure"
+        assert resp.status_code == 200
+        new_path = resp.json()["file_path"]
+        new_dir = (app_settings.content_dir / new_path).parent
+        # Directory rename should still succeed even if backward-compat symlink creation fails.
+        assert new_dir.exists()
+        assert not original_dir.exists()
+        assert "X-Path-Compatibility-Warning" in resp.headers
 
 
 class TestAssetUploadOSError:
@@ -487,6 +492,47 @@ class TestSyncCacheRebuildFailure:
         assert resp.status_code == 200
         data = resp.json()
         assert any("cache" in w.lower() for w in data["warnings"])
+
+
+class TestSyncGitFailure:
+    """Sync should degrade gracefully when git commit operations fail."""
+
+    @pytest.mark.asyncio
+    async def test_sync_commit_git_timeout_returns_warning(self, client: AsyncClient) -> None:
+        token = await login(client)
+        timeout = subprocess.TimeoutExpired(cmd=["git", "commit"], timeout=30)
+        with patch(
+            "backend.api.sync.GitService.commit_all",
+            new_callable=AsyncMock,
+            side_effect=timeout,
+        ):
+            resp = await client.post(
+                "/api/sync/commit",
+                data={"metadata": '{"deleted_files": [], "last_sync_commit": null}'},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "error"
+        assert any("git commit failed" in warning.lower() for warning in data["warnings"])
+
+    @pytest.mark.asyncio
+    async def test_sync_commit_git_missing_returns_warning(self, client: AsyncClient) -> None:
+        token = await login(client)
+        with patch(
+            "backend.api.sync.GitService.commit_all",
+            new_callable=AsyncMock,
+            side_effect=FileNotFoundError("git not found"),
+        ):
+            resp = await client.post(
+                "/api/sync/commit",
+                data={"metadata": '{"deleted_files": [], "last_sync_commit": null}'},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "error"
+        assert any("git commit failed" in warning.lower() for warning in data["warnings"])
 
 
 class TestTypeErrorHandler:

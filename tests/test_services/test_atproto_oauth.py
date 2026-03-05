@@ -292,6 +292,21 @@ class TestAuthServerDiscovery:
         assert result["token_endpoint"] == "https://auth.example.com/oauth/token"
         assert result["pds_url"] == "https://pds.example.com"
 
+    async def test_discover_auth_server_rejects_non_json_did_document(self, monkeypatch) -> None:
+        async def mock_get(self, url, **kwargs):
+            if url == "https://plc.directory/did:plc:abc123":
+                return httpx.Response(200, text="<html>not json</html>")
+            return httpx.Response(404)
+
+        monkeypatch.setattr(
+            "backend.crosspost.atproto_oauth.ssrf_safe_client",
+            _make_fake_ssrf_client_with_mocked_method("get", mock_get),
+        )
+        monkeypatch.setattr("backend.crosspost.atproto_oauth._is_safe_url", _always_safe)
+
+        with pytest.raises(ATProtoOAuthError, match="non-JSON"):
+            await discover_auth_server("did:plc:abc123")
+
 
 class TestPARRequest:
     async def test_send_par_request(self, monkeypatch) -> None:

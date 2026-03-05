@@ -130,19 +130,29 @@ async def refresh_tokens(
 
     expires = _parse_iso_datetime(stored_token.expires_at)
     if expires is None:
-        await session.delete(stored_token)
+        await session.execute(delete(RefreshToken).where(RefreshToken.id == stored_token.id))
         await session.commit()
         return None
     if expires < datetime.now(UTC):
-        await session.delete(stored_token)
+        await session.execute(delete(RefreshToken).where(RefreshToken.id == stored_token.id))
         await session.commit()
+        return None
+
+    # Single-use guarantee under concurrency: only one caller can consume the token.
+    delete_result = await session.execute(
+        delete(RefreshToken).where(
+            RefreshToken.id == stored_token.id,
+            RefreshToken.token_hash == token_h,
+        )
+    )
+    if (getattr(delete_result, "rowcount", 0) or 0) != 1:
         return None
 
     user = await session.get(User, stored_token.user_id)
     if user is None:
+        await session.commit()
         return None
 
-    await session.delete(stored_token)
     return await create_tokens(session, user, settings)
 
 
@@ -220,6 +230,29 @@ async def get_valid_invite_code(
     if expires is None or expires <= now_utc():
         return None
     return invite
+
+
+async def consume_invite_code(
+    session: AsyncSession,
+    *,
+    invite_id: int,
+    used_by_user_id: int,
+    used_at: str,
+) -> bool:
+    """Atomically mark an invite as used exactly once.
+
+    Returns True iff this call consumed the invite. Returns False when the invite
+    was already consumed by another concurrent request.
+    """
+    result = await session.execute(
+        update(InviteCode)
+        .where(
+            InviteCode.id == invite_id,
+            InviteCode.used_at.is_(None),
+        )
+        .values(used_at=used_at, used_by_user_id=used_by_user_id)
+    )
+    return (getattr(result, "rowcount", 0) or 0) == 1
 
 
 def create_personal_access_token_value() -> str:

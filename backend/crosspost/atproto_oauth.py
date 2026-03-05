@@ -120,8 +120,10 @@ def load_or_create_keypair(
                     "Removing stale keypair lock file (age: %.0fs): %s", lock_age, lock_path
                 )
                 lock_path.unlink(missing_ok=True)
-        except OSError:
-            pass  # If we can't check/remove it, the loop will handle it
+        except OSError as exc:
+            logger.warning("Stale keypair lock inspection failed for %s: %s", lock_path, exc)
+            with contextlib.suppress(OSError):
+                lock_path.unlink(missing_ok=True)
 
     lock_fd: int | None = None
     for _attempt in range(500):
@@ -225,6 +227,18 @@ class ATProtoOAuthError(Exception):
     """Error during AT Protocol OAuth operations."""
 
 
+def _parse_json_object(response: httpx.Response, *, context: str) -> dict[str, Any]:
+    try:
+        body = response.json()
+    except ValueError as exc:
+        msg = f"{context} returned non-JSON response"
+        raise ATProtoOAuthError(msg) from exc
+    if not isinstance(body, dict):
+        msg = f"{context} returned invalid JSON object"
+        raise ATProtoOAuthError(msg)
+    return cast("dict[str, Any]", body)
+
+
 async def _is_safe_url(url: str) -> bool:
     """Validate URL format: HTTPS scheme, non-localhost hostname, valid structure.
 
@@ -318,7 +332,7 @@ async def discover_auth_server(did: str) -> dict[str, Any]:
         if resp.status_code != 200:
             msg = f"Failed to fetch DID document for {did}: HTTP {resp.status_code}"
             raise ATProtoOAuthError(msg)
-        did_doc = resp.json()
+        did_doc = _parse_json_object(resp, context="DID document endpoint")
 
         # Step 2: Extract PDS URL from service array
         pds_url: str | None = None
@@ -339,7 +353,7 @@ async def discover_auth_server(did: str) -> dict[str, Any]:
         if resp.status_code != 200:
             msg = f"Failed to fetch OAuth resource metadata from {pds_url}"
             raise ATProtoOAuthError(msg)
-        resource_meta = resp.json()
+        resource_meta = _parse_json_object(resp, context="OAuth resource metadata endpoint")
 
         auth_servers = resource_meta.get("authorization_servers", [])
         if not auth_servers:
@@ -357,7 +371,7 @@ async def discover_auth_server(did: str) -> dict[str, Any]:
             msg = f"Failed to fetch auth server metadata from {auth_server_url}"
             raise ATProtoOAuthError(msg)
 
-        auth_meta: dict[str, Any] = resp.json()
+        auth_meta = _parse_json_object(resp, context="OAuth authorization server metadata endpoint")
         auth_meta["pds_url"] = pds_url
         return auth_meta
 
@@ -405,7 +419,7 @@ async def _auth_server_post(
                     body = resp.json()
                 except ValueError:
                     return resp
-                if body.get("error") == "use_dpop_nonce":
+                if isinstance(body, dict) and body.get("error") == "use_dpop_nonce":
                     current_nonce = new_nonce
                     continue
             return resp
@@ -464,8 +478,11 @@ async def send_par_request(
         msg = f"PAR request failed: HTTP {resp.status_code} — {resp.text}"
         raise ATProtoOAuthError(msg)
 
-    par_resp = resp.json()
-    request_uri = par_resp["request_uri"]
+    par_resp = _parse_json_object(resp, context="OAuth PAR endpoint")
+    request_uri_value = par_resp.get("request_uri")
+    if not isinstance(request_uri_value, str) or not request_uri_value:
+        raise ATProtoOAuthError("OAuth PAR endpoint response missing request_uri")
+    request_uri = request_uri_value
     new_nonce = resp.headers.get("DPoP-Nonce", dpop_nonce)
 
     auth_url_params = urllib.parse.urlencode(
@@ -522,7 +539,7 @@ async def exchange_code_for_tokens(
         msg = f"Token exchange failed: HTTP {resp.status_code} — {resp.text}"
         raise ATProtoOAuthError(msg)
 
-    token_data: dict[str, Any] = resp.json()
+    token_data = _parse_json_object(resp, context="OAuth token endpoint")
     token_data["dpop_nonce"] = resp.headers.get("DPoP-Nonce", dpop_nonce)
     return token_data
 
@@ -561,6 +578,6 @@ async def refresh_access_token(
         msg = f"Token refresh failed: HTTP {resp.status_code} — {resp.text}"
         raise ATProtoOAuthError(msg)
 
-    token_data: dict[str, Any] = resp.json()
+    token_data = _parse_json_object(resp, context="OAuth token refresh endpoint")
     token_data["dpop_nonce"] = resp.headers.get("DPoP-Nonce", dpop_nonce)
     return token_data

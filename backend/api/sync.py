@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import subprocess
@@ -14,7 +13,14 @@ from pydantic import BaseModel, Field
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.deps import get_content_manager, get_git_service, get_session, require_admin
+from backend.api.deps import (
+    AsyncWriteLock,
+    get_content_manager,
+    get_content_write_lock,
+    get_git_service,
+    get_session,
+    require_admin,
+)
 from backend.filesystem.content_manager import ContentManager
 from backend.models.user import User
 from backend.services.git_service import GitService
@@ -34,10 +40,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/sync", tags=["sync"])
-
-# Serialize sync commits to prevent concurrent modifications to the content
-# directory and server manifest.
-_sync_lock = asyncio.Lock()
 
 _MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10 MB
 
@@ -141,13 +143,19 @@ async def sync_status(
         for c in plan.conflicts
     ]
 
+    server_commit: str | None = None
+    try:
+        server_commit = await git_service.head_commit()
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError) as exc:
+        logger.error("Failed to read git HEAD during sync status: %s", exc)
+
     return SyncStatusResponse(
         to_upload=plan.to_upload,
         to_download=plan.to_download,
         to_delete_local=plan.to_delete_local,
         to_delete_remote=plan.to_delete_remote,
         conflicts=conflicts,
-        server_commit=await git_service.head_commit(),
+        server_commit=server_commit,
     )
 
 
@@ -170,6 +178,7 @@ async def sync_commit(
     session: Annotated[AsyncSession, Depends(get_session)],
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
     git_service: Annotated[GitService, Depends(get_git_service)],
+    content_write_lock: Annotated[AsyncWriteLock, Depends(get_content_write_lock)],
     user: Annotated[User, Depends(require_admin)],
     metadata: Annotated[str, Form()] = "{}",
     files: list[UploadFile] | None = File(default=None),
@@ -180,7 +189,7 @@ async def sync_commit(
     - ``metadata``: JSON string containing ``deleted_files`` and ``last_sync_commit``
     - ``files``: uploaded files whose filenames encode the relative path
     """
-    async with _sync_lock:
+    async with content_write_lock:
         return await _sync_commit_inner(
             metadata_json=metadata,
             upload_files=files or [],
@@ -200,7 +209,7 @@ async def _sync_commit_inner(
     git_service: GitService,
     user: User,
 ) -> SyncCommitResponse:
-    """Inner sync commit logic, called under _sync_lock."""
+    """Inner sync commit logic, called under the shared content write lock."""
     content_dir = content_manager.content_dir
 
     # ── Parse metadata ──
@@ -351,12 +360,14 @@ async def _sync_commit_inner(
     try:
         await git_service.commit_all(f"Sync commit by {username}")
     except subprocess.CalledProcessError as exc:
-        logger.error(
-            "Git commit failed during sync by %s (exit %d): %s",
-            username,
-            exc.returncode,
-            exc.stderr.strip() if exc.stderr else "no stderr",
+        logger.error("Git commit failed during sync by %s: %s", username, exc)
+        sync_warnings.append(
+            "Git commit failed; sync history may be degraded. "
+            "Three-way merge on the next sync may produce incorrect results."
         )
+        git_failed = True
+    except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
+        logger.error("Git commit failed during sync by %s: %s", username, exc)
         sync_warnings.append(
             "Git commit failed; sync history may be degraded. "
             "Three-way merge on the next sync may produce incorrect results."
@@ -391,6 +402,15 @@ async def _sync_commit_inner(
             "until the next server restart."
         )
 
+    commit_hash: str | None = None
+    if not git_failed:
+        try:
+            commit_hash = await git_service.head_commit()
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError) as exc:
+            logger.error("Failed to read git HEAD after sync commit: %s", exc)
+            sync_warnings.append("Git commit failed; sync history may be degraded.")
+            git_failed = True
+
     files_changed = len(uploaded_paths) + len(deleted_files)
     all_warnings = sync_warnings + fm_warnings + cache_warnings
 
@@ -398,7 +418,7 @@ async def _sync_commit_inner(
         status="error" if git_failed else "ok",
         files_synced=files_changed,
         warnings=all_warnings,
-        commit_hash=None if git_failed else await git_service.head_commit(),
+        commit_hash=None if git_failed else commit_hash,
         conflicts=conflicts,
         to_download=to_download,
     )

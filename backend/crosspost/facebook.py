@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import cast
 
 import httpx
 
@@ -15,6 +16,27 @@ FACEBOOK_GRAPH_API = "https://graph.facebook.com/v22.0"
 
 class FacebookOAuthTokenError(Exception):
     """Raised when Facebook OAuth token exchange fails."""
+
+
+def _parse_json_object(
+    response: httpx.Response,
+    *,
+    error_cls: type[Exception] | None = None,
+    context: str,
+) -> dict[str, object]:
+    try:
+        body = response.json()
+    except ValueError as exc:
+        if error_cls is None:
+            raise
+        msg = f"{context} returned non-JSON response"
+        raise error_cls(msg) from exc
+    if not isinstance(body, dict):
+        if error_cls is None:
+            raise ValueError(f"{context} returned non-object JSON")
+        msg = f"{context} returned invalid JSON object"
+        raise error_cls(msg)
+    return cast("dict[str, object]", body)
 
 
 def _build_facebook_text(content: CrossPostContent) -> str:
@@ -58,11 +80,16 @@ async def exchange_facebook_oauth_token(
             body = token_resp.text[:200]
             msg = f"Token exchange failed: {token_resp.status_code} - {body}"
             raise FacebookOAuthTokenError(msg)
-        token_data = token_resp.json()
-        short_token = token_data.get("access_token")
-        if not short_token:
+        token_data = _parse_json_object(
+            token_resp,
+            error_cls=FacebookOAuthTokenError,
+            context="Facebook token endpoint",
+        )
+        short_token_value = token_data.get("access_token")
+        if not isinstance(short_token_value, str) or not short_token_value:
             msg = "Token response missing access_token"
             raise FacebookOAuthTokenError(msg)
+        short_token = short_token_value
 
         # Exchange for long-lived user token
         ll_resp = await http_client.post(
@@ -79,11 +106,16 @@ async def exchange_facebook_oauth_token(
             body = ll_resp.text[:200]
             msg = f"Long-lived token exchange failed: {ll_resp.status_code} - {body}"
             raise FacebookOAuthTokenError(msg)
-        ll_data = ll_resp.json()
-        long_lived_token = ll_data.get("access_token")
-        if not long_lived_token:
+        ll_data = _parse_json_object(
+            ll_resp,
+            error_cls=FacebookOAuthTokenError,
+            context="Facebook long-lived token endpoint",
+        )
+        long_lived_token_value = ll_data.get("access_token")
+        if not isinstance(long_lived_token_value, str) or not long_lived_token_value:
             msg = "Long-lived token response missing access_token"
             raise FacebookOAuthTokenError(msg)
+        long_lived_token = long_lived_token_value
 
         # Fetch managed pages
         pages_resp = await http_client.get(
@@ -95,15 +127,19 @@ async def exchange_facebook_oauth_token(
             body = pages_resp.text[:200]
             msg = f"Failed to fetch pages: {pages_resp.status_code} - {body}"
             raise FacebookOAuthTokenError(msg)
-        pages_data = pages_resp.json()
-        pages = pages_data.get("data", [])
-        if not pages:
+        pages_data = _parse_json_object(
+            pages_resp,
+            error_cls=FacebookOAuthTokenError,
+            context="Facebook pages endpoint",
+        )
+        pages_value = pages_data.get("data", [])
+        if not isinstance(pages_value, list) or not pages_value:
             msg = "No Facebook Pages found. You must manage at least one Page."
             raise FacebookOAuthTokenError(msg)
 
     return {
         "user_access_token": long_lived_token,
-        "pages": pages,
+        "pages": pages_value,
     }
 
 
@@ -173,11 +209,12 @@ class FacebookCrossPoster:
                         success=False,
                         error=f"Facebook API error: {resp.status_code} {resp.text}",
                     )
-                data = resp.json()
-                post_id = data.get("id", "")
+                data = _parse_json_object(resp, context="Facebook feed endpoint")
+                post_id_value = data.get("id")
+                post_id = post_id_value if isinstance(post_id_value, str) else ""
                 post_url = f"https://www.facebook.com/{post_id}" if post_id else ""
                 return CrossPostResult(platform_id=post_id, url=post_url, success=True)
-            except httpx.HTTPError as exc:
+            except (httpx.HTTPError, ValueError) as exc:
                 logger.exception("Facebook post HTTP error")
                 return CrossPostResult(
                     platform_id="",

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -96,6 +97,41 @@ class TestRegistrationPolicy:
             headers={"X-CSRF-Token": csrf_token},
         )
         assert register_resp.status_code == 201
+
+    @pytest.mark.asyncio
+    async def test_register_returns_409_when_invite_consumption_conflicts(
+        self, client: AsyncClient
+    ) -> None:
+        token_login_resp = await client.post(
+            "/api/auth/token-login",
+            json={"username": "admin", "password": "admin123"},
+        )
+        assert token_login_resp.status_code == 200
+        access_token = token_login_resp.json()["access_token"]
+
+        invite_resp = await client.post(
+            "/api/auth/invites",
+            json={},
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        assert invite_resp.status_code == 201
+        invite_code = invite_resp.json()["invite_code"]
+
+        with patch(
+            "backend.api.auth.consume_invite_code",
+            new_callable=AsyncMock,
+            return_value=False,
+        ):
+            register_resp = await client.post(
+                "/api/auth/register",
+                json={
+                    "username": "invite-race-user",
+                    "email": "invite-race@test.com",
+                    "password": "password1234",
+                    "invite_code": invite_code,
+                },
+            )
+        assert register_resp.status_code == 409
 
 
 class TestCsrf:
