@@ -17,7 +17,7 @@ from backend.crosspost.facebook import (
     _build_facebook_text,
     exchange_facebook_oauth_token,
 )
-from backend.crosspost.http_utils import parse_json_object
+from backend.crosspost.http_utils import parse_json_object, require_str_field
 from backend.crosspost.mastodon import (
     MastodonCrossPoster,
     MastodonOAuthTokenError,
@@ -32,6 +32,29 @@ from backend.crosspost.x import (
     _build_tweet_text,
     exchange_x_oauth_token,
 )
+
+
+class TestRequireStrField:
+    """require_str_field extracts and validates string fields from dicts."""
+
+    def test_returns_value_when_present_and_string(self) -> None:
+        assert require_str_field({"key": "val"}, "key", context="test") == "val"
+
+    def test_raises_when_missing(self) -> None:
+        with pytest.raises(ValueError, match=r"test.*missing.*key"):
+            require_str_field({}, "key", context="test")
+
+    def test_raises_when_not_string(self) -> None:
+        with pytest.raises(ValueError, match=r"test.*missing.*key"):
+            require_str_field({"key": 123}, "key", context="test")
+
+    def test_raises_when_empty_string(self) -> None:
+        with pytest.raises(ValueError, match=r"test.*missing.*key"):
+            require_str_field({"key": ""}, "key", context="test")
+
+    def test_custom_error_cls(self) -> None:
+        with pytest.raises(RuntimeError, match=r"missing"):
+            require_str_field({}, "key", context="test", error_cls=RuntimeError)
 
 
 class TestBlueSkyFormatting:

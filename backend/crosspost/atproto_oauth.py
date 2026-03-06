@@ -29,7 +29,7 @@ from cryptography.hazmat.primitives.serialization import (
     load_pem_private_key,
 )
 
-from backend.crosspost.http_utils import parse_json_object
+from backend.crosspost.http_utils import parse_json_object, require_str_field
 from backend.crosspost.ssrf import ssrf_safe_client
 from backend.exceptions import ExternalServiceError
 
@@ -479,10 +479,11 @@ async def send_par_request(
         raise ATProtoOAuthError(msg)
 
     par_resp = parse_json_object(resp, error_cls=ATProtoOAuthError, context="OAuth PAR endpoint")
-    request_uri_value = par_resp.get("request_uri")
-    if not isinstance(request_uri_value, str) or not request_uri_value:
-        raise ATProtoOAuthError("OAuth PAR endpoint response missing request_uri")
-    request_uri = request_uri_value
+    request_uri = require_str_field(
+        par_resp, "request_uri",
+        context="OAuth PAR endpoint",
+        error_cls=ATProtoOAuthError,
+    )
     new_nonce = resp.headers.get("DPoP-Nonce", dpop_nonce)
 
     auth_url_params = urllib.parse.urlencode(

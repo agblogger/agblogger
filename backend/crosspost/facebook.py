@@ -7,7 +7,7 @@ import logging
 import httpx
 
 from backend.crosspost.base import CrossPostContent, CrossPostResult
-from backend.crosspost.http_utils import parse_json_object
+from backend.crosspost.http_utils import parse_json_object, require_str_field
 from backend.exceptions import ExternalServiceError
 
 logger = logging.getLogger(__name__)
@@ -65,11 +65,11 @@ async def exchange_facebook_oauth_token(
             error_cls=FacebookOAuthTokenError,
             context="Facebook token endpoint",
         )
-        short_token_value = token_data.get("access_token")
-        if not isinstance(short_token_value, str) or not short_token_value:
-            msg = "Token response missing access_token"
-            raise FacebookOAuthTokenError(msg)
-        short_token = short_token_value
+        short_token = require_str_field(
+            token_data, "access_token",
+            context="Facebook token endpoint",
+            error_cls=FacebookOAuthTokenError,
+        )
 
         # Exchange for long-lived user token
         ll_resp = await http_client.post(
@@ -91,11 +91,11 @@ async def exchange_facebook_oauth_token(
             error_cls=FacebookOAuthTokenError,
             context="Facebook long-lived token endpoint",
         )
-        long_lived_token_value = ll_data.get("access_token")
-        if not isinstance(long_lived_token_value, str) or not long_lived_token_value:
-            msg = "Long-lived token response missing access_token"
-            raise FacebookOAuthTokenError(msg)
-        long_lived_token = long_lived_token_value
+        long_lived_token = require_str_field(
+            ll_data, "access_token",
+            context="Facebook long-lived token endpoint",
+            error_cls=FacebookOAuthTokenError,
+        )
 
         # Fetch managed pages
         pages_resp = await http_client.get(

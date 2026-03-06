@@ -30,3 +30,23 @@ def parse_json_object(
         msg = f"{context} returned non-object JSON"
         raise cls(msg)
     return cast("dict[str, Any]", body)
+
+
+def require_str_field(
+    data: dict[str, Any],
+    field: str,
+    *,
+    context: str,
+    error_cls: type[Exception] | None = None,
+) -> str:
+    """Extract a required non-empty string field from a dict.
+
+    Raises *error_cls* (or ``ValueError`` when not given) if the field is
+    missing, not a string, or empty.
+    """
+    value = data.get(field)
+    if not isinstance(value, str) or not value:
+        cls = error_cls or ValueError
+        msg = f"{context} response missing {field}"
+        raise cls(msg)
+    return value

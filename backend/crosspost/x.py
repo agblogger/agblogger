@@ -7,7 +7,7 @@ import logging
 import httpx
 
 from backend.crosspost.base import CrossPostContent, CrossPostResult
-from backend.crosspost.http_utils import parse_json_object
+from backend.crosspost.http_utils import parse_json_object, require_str_field
 from backend.exceptions import ExternalServiceError
 
 logger = logging.getLogger(__name__)
@@ -85,11 +85,11 @@ async def exchange_x_oauth_token(
             error_cls=XOAuthTokenError,
             context="X token endpoint",
         )
-        access_token_value = token_data.get("access_token")
-        if not isinstance(access_token_value, str) or not access_token_value:
-            msg = "Token response missing access_token"
-            raise XOAuthTokenError(msg)
-        access_token = access_token_value
+        access_token = require_str_field(
+            token_data, "access_token",
+            context="X token endpoint",
+            error_cls=XOAuthTokenError,
+        )
         refresh_token_value = token_data.get("refresh_token", "")
         refresh_token = refresh_token_value if isinstance(refresh_token_value, str) else ""
 
@@ -111,11 +111,11 @@ async def exchange_x_oauth_token(
         if not isinstance(data_obj, dict) or "username" not in data_obj:
             msg = "User profile response missing username"
             raise XOAuthTokenError(msg)
-        username_value = data_obj["username"]
-        if not isinstance(username_value, str) or not username_value:
-            msg = "User profile response missing username"
-            raise XOAuthTokenError(msg)
-        username = username_value
+        username = require_str_field(
+            data_obj, "username",
+            context="X user profile endpoint",
+            error_cls=XOAuthTokenError,
+        )
 
     return {
         "access_token": access_token,
@@ -194,11 +194,15 @@ class XCrossPoster:
                     logger.warning("X refresh request failed with status %s", resp.status_code)
                     return False
                 token_data = parse_json_object(resp, context="X token refresh endpoint")
-                new_access_token_value = token_data.get("access_token")
-                if not isinstance(new_access_token_value, str) or not new_access_token_value:
+                try:
+                    new_access_token = require_str_field(
+                        token_data, "access_token",
+                        context="X token refresh endpoint",
+                    )
+                except ValueError:
                     logger.warning("X refresh response missing expected field")
                     return False
-                self._access_token = new_access_token_value
+                self._access_token = new_access_token
                 refresh_token_value = token_data.get("refresh_token", self._refresh_token)
                 if isinstance(refresh_token_value, str):
                     self._refresh_token = refresh_token_value

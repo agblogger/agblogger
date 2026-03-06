@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 import httpx
 
 from backend.crosspost.base import CrossPostContent, CrossPostResult
-from backend.crosspost.http_utils import parse_json_object
+from backend.crosspost.http_utils import parse_json_object, require_str_field
 from backend.crosspost.ssrf import ssrf_safe_client
 from backend.exceptions import ExternalServiceError
 
@@ -85,11 +85,11 @@ async def exchange_mastodon_oauth_token(
             context="Mastodon token endpoint",
         )
 
-    access_token_value = token_data.get("access_token")
-    if not isinstance(access_token_value, str) or not access_token_value:
-        msg = "Token response missing access_token"
-        raise MastodonOAuthTokenError(msg)
-    access_token = access_token_value
+    access_token = require_str_field(
+        token_data, "access_token",
+        context="Mastodon token endpoint",
+        error_cls=MastodonOAuthTokenError,
+    )
 
     async with ssrf_safe_client() as http_client:
         verify_resp = await http_client.get(
