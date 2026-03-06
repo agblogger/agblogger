@@ -150,49 +150,67 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     pandoc_server = PandocServer()
     pandoc_started = False
     try:
-        async with engine.begin() as conn:
-            # Drop cache tables so create_all always matches current schema.
-            # These are regenerated from the filesystem on every startup.
-            drop_cache_tables_sql = (
-                "DROP TABLE IF EXISTS post_labels_cache",
-                "DROP TABLE IF EXISTS label_parents_cache",
-                "DROP TABLE IF EXISTS posts_fts",
-                "DROP TABLE IF EXISTS posts_cache",
-                "DROP TABLE IF EXISTS labels_cache",
-                "DROP TABLE IF EXISTS sync_manifest",
-            )
-            for statement in drop_cache_tables_sql:
-                await conn.execute(text(statement))
-            await conn.run_sync(Base.metadata.create_all)
-        await _ensure_crosspost_user_id_column(app)
-
-        async with session_factory() as session:
-            await session.execute(
-                text(
-                    "CREATE VIRTUAL TABLE IF NOT EXISTS posts_fts USING fts5("
-                    "title, content, content='posts_cache', content_rowid='id')"
+        try:
+            async with engine.begin() as conn:
+                # Drop cache tables so create_all always matches current schema.
+                # These are regenerated from the filesystem on every startup.
+                drop_cache_tables_sql = (
+                    "DROP TABLE IF EXISTS post_labels_cache",
+                    "DROP TABLE IF EXISTS label_parents_cache",
+                    "DROP TABLE IF EXISTS posts_fts",
+                    "DROP TABLE IF EXISTS posts_cache",
+                    "DROP TABLE IF EXISTS labels_cache",
+                    "DROP TABLE IF EXISTS sync_manifest",
                 )
-            )
-            await session.commit()
+                for statement in drop_cache_tables_sql:
+                    await conn.execute(text(statement))
+                await conn.run_sync(Base.metadata.create_all)
+            await _ensure_crosspost_user_id_column(app)
 
-        ensure_content_dir(settings.content_dir)
+            async with session_factory() as session:
+                await session.execute(
+                    text(
+                        "CREATE VIRTUAL TABLE IF NOT EXISTS posts_fts USING fts5("
+                        "title, content, content='posts_cache', content_rowid='id')"
+                    )
+                )
+                await session.commit()
+        except Exception as exc:
+            logger.critical("Failed to create database schema: %s", exc)
+            raise
+
+        try:
+            ensure_content_dir(settings.content_dir)
+        except Exception as exc:
+            logger.critical("Failed to initialize content directory: %s", exc)
+            raise
 
         content_manager = ContentManager(content_dir=settings.content_dir)
         app.state.content_manager = content_manager
 
         from backend.services.git_service import GitService
 
-        git_service = GitService(content_dir=settings.content_dir)
-        await git_service.init_repo()
-        app.state.git_service = git_service
+        try:
+            git_service = GitService(content_dir=settings.content_dir)
+            await git_service.init_repo()
+            app.state.git_service = git_service
+        except Exception as exc:
+            logger.critical(
+                "Failed to initialize git: %s. Ensure git is installed.", exc
+            )
+            raise
 
         from backend.crosspost.atproto_oauth import load_or_create_keypair
         from backend.crosspost.bluesky_oauth_state import OAuthStateStore
 
-        oauth_key_path = settings.content_dir / ".atproto-oauth-key.json"
-        atproto_key, atproto_jwk = load_or_create_keypair(oauth_key_path)
-        app.state.atproto_oauth_key = atproto_key
-        app.state.atproto_oauth_jwk = atproto_jwk
+        try:
+            oauth_key_path = settings.content_dir / ".atproto-oauth-key.json"
+            atproto_key, atproto_jwk = load_or_create_keypair(oauth_key_path)
+            app.state.atproto_oauth_key = atproto_key
+            app.state.atproto_oauth_jwk = atproto_jwk
+        except Exception as exc:
+            logger.critical("Failed to load or create OAuth keypair: %s", exc)
+            raise
 
         app.state.bluesky_oauth_state = OAuthStateStore(ttl_seconds=600)
         app.state.mastodon_oauth_state = OAuthStateStore(ttl_seconds=600)
@@ -201,21 +219,35 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
         from backend.services.auth_service import ensure_admin_user
 
-        async with session_factory() as session:
-            await ensure_admin_user(session, settings)
+        try:
+            async with session_factory() as session:
+                await ensure_admin_user(session, settings)
+        except Exception as exc:
+            logger.critical("Failed to ensure admin user: %s", exc)
+            raise
 
-        await pandoc_server.start()
-        pandoc_started = True
-        app.state.pandoc_server = pandoc_server
-        init_renderer(pandoc_server)
+        try:
+            await pandoc_server.start()
+            pandoc_started = True
+            app.state.pandoc_server = pandoc_server
+            init_renderer(pandoc_server)
+        except Exception as exc:
+            logger.critical(
+                "Failed to start pandoc server: %s. Ensure pandoc is installed.", exc
+            )
+            raise
 
         from backend.services.cache_service import rebuild_cache
 
-        async with session_factory() as session:
-            post_count, warnings = await rebuild_cache(session, content_manager)
-            logger.info("Indexed %d posts from filesystem", post_count)
-            for warning in warnings:
-                logger.warning("Cache rebuild: %s", warning)
+        try:
+            async with session_factory() as session:
+                post_count, warnings = await rebuild_cache(session, content_manager)
+                logger.info("Indexed %d posts from filesystem", post_count)
+                for warning in warnings:
+                    logger.warning("Cache rebuild: %s", warning)
+        except Exception as exc:
+            logger.critical("Failed to rebuild cache: %s", exc)
+            raise
 
         yield
     finally:

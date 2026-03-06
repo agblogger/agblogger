@@ -480,6 +480,101 @@ class TestContentWriteLockInitialization:
                     await ctx.__aexit__(None, None, None)
 
 
+class TestStartupStepLogging:
+    """Each startup step should log a critical message identifying the failing component."""
+
+    @pytest.mark.asyncio
+    async def test_schema_creation_failure_logs_critical_with_context(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        settings = Settings(
+            secret_key="test-secret-key-min-32-characters-long",
+            admin_password="testpassword",
+            debug=True,
+            frontend_dir=tmp_path / "no-frontend",
+            database_url=f"sqlite+aiosqlite:///{tmp_path}/test.db",
+            content_dir=tmp_path / "content",
+        )
+        app = create_app(settings)
+
+        with (
+            patch("backend.main._configure_logging"),
+            patch(
+                "backend.main.Base.metadata.create_all",
+                side_effect=RuntimeError("schema creation failed"),
+            ),
+            caplog.at_level(logging.CRITICAL, logger="backend.main"),
+            suppress(Exception),
+        ):
+            async with app.router.lifespan_context(app):
+                pass
+
+        critical_msgs = [r.message for r in caplog.records if r.levelno >= logging.CRITICAL]
+        assert any("database" in m.lower() or "schema" in m.lower() for m in critical_msgs), (
+            f"Expected critical log about database/schema failure, got: {critical_msgs}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_pandoc_failure_logs_critical_with_context(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        settings = Settings(
+            secret_key="test-secret-key-min-32-characters-long",
+            admin_password="testpassword",
+            debug=True,
+            frontend_dir=tmp_path / "no-frontend",
+            content_dir=tmp_path / "content",
+        )
+        app = create_app(settings)
+
+        with (
+            patch("backend.main._configure_logging"),
+            patch(
+                "backend.pandoc.server.PandocServer.start",
+                side_effect=FileNotFoundError("pandoc"),
+            ),
+            caplog.at_level(logging.CRITICAL, logger="backend.main"),
+            suppress(Exception),
+        ):
+            async with app.router.lifespan_context(app):
+                pass
+
+        critical_msgs = [r.message for r in caplog.records if r.levelno >= logging.CRITICAL]
+        assert any("pandoc" in m.lower() for m in critical_msgs), (
+            f"Expected critical log about pandoc failure, got: {critical_msgs}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_git_init_failure_logs_critical_with_context(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        settings = Settings(
+            secret_key="test-secret-key-min-32-characters-long",
+            admin_password="testpassword",
+            debug=True,
+            frontend_dir=tmp_path / "no-frontend",
+            content_dir=tmp_path / "content",
+        )
+        app = create_app(settings)
+
+        with (
+            patch("backend.main._configure_logging"),
+            patch(
+                "backend.services.git_service.GitService.init_repo",
+                side_effect=FileNotFoundError("git not found"),
+            ),
+            caplog.at_level(logging.CRITICAL, logger="backend.main"),
+            suppress(Exception),
+        ):
+            async with app.router.lifespan_context(app):
+                pass
+
+        critical_msgs = [r.message for r in caplog.records if r.levelno >= logging.CRITICAL]
+        assert any("git" in m.lower() for m in critical_msgs), (
+            f"Expected critical log about git failure, got: {critical_msgs}"
+        )
+
+
 class TestStartupResilience:
     @pytest.mark.asyncio
     async def test_lifespan_crashes_when_pandoc_start_fails(self, tmp_path: Path) -> None:
