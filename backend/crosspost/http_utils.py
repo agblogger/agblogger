@@ -16,22 +16,17 @@ def parse_json_object(
 ) -> dict[str, Any]:
     """Parse an HTTP response body as a JSON object (dict).
 
-    If *error_cls* is provided, non-JSON and non-dict responses raise that
-    exception type.  Otherwise the raw ``ValueError`` propagates for non-JSON
-    bodies, and a plain ``ValueError`` is raised for non-dict JSON values.
+    Raises *error_cls* (or ``ValueError`` when not given) for non-JSON bodies
+    (with a snippet of the response text) and for non-dict JSON values.
     """
+    cls = error_cls or ValueError
     try:
         body = response.json()
     except ValueError as exc:
-        if error_cls is None:
-            msg = f"{context} returned non-JSON response"
-            raise ValueError(msg) from exc
-        msg = f"{context} returned non-JSON response"
-        raise error_cls(msg) from exc
+        snippet = response.text[:200] if response.text else "(empty)"
+        msg = f"{context} returned non-JSON response: {snippet}"
+        raise cls(msg) from exc
     if not isinstance(body, dict):
         msg = f"{context} returned non-object JSON"
-        if error_cls is None:
-            raise ValueError(msg)
-        msg = f"{context} returned invalid JSON object"
-        raise error_cls(msg)
+        raise cls(msg)
     return cast("dict[str, Any]", body)

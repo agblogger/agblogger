@@ -1593,7 +1593,7 @@ class TestParseJsonObject:
 
     def test_json_array_with_error_cls_raises_error_cls(self) -> None:
         resp = self._make_response("[1, 2, 3]")
-        with pytest.raises(XOAuthTokenError, match="invalid JSON object"):
+        with pytest.raises(XOAuthTokenError, match="non-object JSON"):
             parse_json_object(resp, error_cls=XOAuthTokenError, context="test endpoint")
 
     def test_json_string_without_error_cls_raises_valueerror(self) -> None:
@@ -1603,5 +1603,25 @@ class TestParseJsonObject:
 
     def test_json_number_with_error_cls_raises_error_cls(self) -> None:
         resp = self._make_response("42")
-        with pytest.raises(MastodonOAuthTokenError, match="invalid JSON object"):
+        with pytest.raises(MastodonOAuthTokenError, match="non-object JSON"):
             parse_json_object(resp, error_cls=MastodonOAuthTokenError, context="test endpoint")
+
+
+class TestParseJsonObjectMessages:
+    """parse_json_object error messages should be consistent and include response snippet."""
+
+    def test_non_dict_message_consistent_with_and_without_error_cls(self) -> None:
+        resp = httpx.Response(200, json=[1, 2, 3])
+
+        # Without error_cls
+        with pytest.raises(ValueError, match="non-object JSON"):
+            parse_json_object(resp, context="Test endpoint")
+
+        # With error_cls
+        with pytest.raises(RuntimeError, match="non-object JSON"):
+            parse_json_object(resp, error_cls=RuntimeError, context="Test endpoint")
+
+    def test_non_json_includes_response_snippet(self) -> None:
+        resp = httpx.Response(200, text="<html>Error</html>")
+        with pytest.raises(ValueError, match="<html>"):
+            parse_json_object(resp, context="Test endpoint")
