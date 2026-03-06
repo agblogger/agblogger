@@ -553,3 +553,42 @@ class TestIssue14SyncStatusAfterHeadCommitFailure:
             "commit hash" in w.lower() or "head" in w.lower()
             for w in data.get("warnings", [])
         )
+
+
+# ── Issue 14b: Failed sync deletions should not be counted ──
+
+
+class TestIssue14SyncDeletionFailureCount:
+    """Failed deletions should not be counted in files_synced."""
+
+    async def test_failed_deletion_not_counted(self, client: AsyncClient) -> None:
+        headers = await _login(client)
+
+        # Create a file first via sync
+        resp = await client.post(
+            "/api/sync/commit",
+            data={
+                "metadata": json.dumps({"deleted_files": [], "last_sync_commit": None}),
+            },
+            files=[("files", ("posts/to-delete.md", b"---\ntitle: X\ncreated_at: 2026-02-02 22:21:29+00\nauthor: Admin\nauthor_username: admin\nlabels: []\n---\nBody", "text/plain"))],
+            headers=headers,
+        )
+        assert resp.status_code == 200
+
+        # Now try to delete it but make unlink fail
+        with patch("pathlib.Path.unlink", side_effect=OSError("permission denied")):
+            resp = await client.post(
+                "/api/sync/commit",
+                data={
+                    "metadata": json.dumps({
+                        "deleted_files": ["posts/to-delete.md"],
+                        "last_sync_commit": None,
+                    }),
+                },
+                headers=headers,
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        # Failed deletion should NOT count as synced
+        assert data["files_synced"] == 0

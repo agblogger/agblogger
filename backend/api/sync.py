@@ -241,6 +241,7 @@ async def _sync_commit_inner(
     sync_warnings: list[str] = []
 
     # ── Apply deletions ──
+    successful_deletions = 0
     for file_path in deleted_files:
         full_path = _resolve_safe_path(content_dir, file_path)
         if full_path.exists() and full_path.is_file():
@@ -250,6 +251,7 @@ async def _sync_commit_inner(
                 logger.error("Sync: failed to delete %s: %s", file_path.lstrip("/"), exc)
                 sync_warnings.append(f"Failed to delete {file_path.lstrip('/')}")
                 continue
+            successful_deletions += 1
             logger.info("Sync: deleted file %s", file_path.lstrip("/"))
 
     # ── Process uploaded files ──
@@ -411,7 +413,7 @@ async def _sync_commit_inner(
             )
             # Do NOT set git_failed here — the commit itself succeeded
 
-    files_changed = len(uploaded_paths) + len(deleted_files)
+    files_changed = len(uploaded_paths) + successful_deletions
     all_warnings = sync_warnings + fm_warnings + cache_warnings
 
     return SyncCommitResponse(
