@@ -409,7 +409,7 @@ async def _sync_commit_inner(
                 "Failed to read commit hash after sync; data was committed successfully "
                 "but sync history tracking may be degraded."
             )
-            git_failed = True
+            # Do NOT set git_failed here — the commit itself succeeded
 
     files_changed = len(uploaded_paths) + len(deleted_files)
     all_warnings = sync_warnings + fm_warnings + cache_warnings

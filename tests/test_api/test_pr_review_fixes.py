@@ -15,6 +15,7 @@ plus additional security fixes:
 11. Test for symlink rollback on commit failure
 12. Test for sync_status git failure degradation
 13. Sync error responses should not leak internal file paths
+14. Sync status should be 'ok' when commit succeeds but HEAD read fails
 """
 
 from __future__ import annotations
@@ -513,3 +514,42 @@ class TestIssue3SyncNoPathLeak:
         # Should NOT contain the uploaded file path — that leaks internal structure
         assert "test-path-leak" not in detail
         assert "posts/" not in detail
+
+
+# ── Issue 14: Sync status 'ok' when commit succeeds but HEAD read fails ──
+
+
+class TestIssue14SyncStatusAfterHeadCommitFailure:
+    """When git commit succeeds but head_commit() fails, status should be 'ok'."""
+
+    async def test_status_is_ok_when_commit_succeeds_but_head_read_fails(
+        self, client: AsyncClient
+    ) -> None:
+        headers = await _login(client)
+
+        with (
+            patch(
+                "backend.api.sync.GitService.commit_all",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "backend.api.sync.GitService.head_commit",
+                new_callable=AsyncMock,
+                side_effect=subprocess.CalledProcessError(1, "git rev-parse"),
+            ),
+        ):
+            resp = await client.post(
+                "/api/sync/commit",
+                data={"metadata": json.dumps({"deleted_files": [], "last_sync_commit": None})},
+                headers=headers,
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        # Commit succeeded, only head read failed — status should be "ok"
+        assert data["status"] == "ok"
+        assert data["commit_hash"] is None
+        assert any(
+            "commit hash" in w.lower() or "head" in w.lower()
+            for w in data.get("warnings", [])
+        )
