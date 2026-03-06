@@ -33,6 +33,12 @@ On startup, the lifespan handler:
     required dependency — if startup fails, the server aborts with a critical log message.
 13. Rebuilds the full database cache from the filesystem.
 
+## Content Write Lock
+
+All content-mutating API endpoints (post create/update/delete, admin page CRUD, label CRUD, sync commit) acquire a shared `asyncio.Lock` (`app.state.content_write_lock`) for the full duration of the request. This serializes all content mutations to prevent filesystem race conditions (e.g., concurrent renames, overlapping git commits).
+
+**Known limitation:** The lock is global — all write operations are serialized even when they affect different posts. This is acceptable for a single-user self-hosted blog but would need fine-grained locking (e.g., per-post) to scale to concurrent multi-user editing.
+
 ## Layered Architecture
 
 ```
