@@ -1306,6 +1306,27 @@ class TestDeletePostOSError:
         assert resp.json()["detail"] == "Failed to delete post file"
 
 
+class TestGetSettings503:
+    """get_settings should return 503 when settings is missing, like other deps."""
+
+    @pytest.mark.asyncio
+    async def test_get_settings_returns_503_when_missing(self) -> None:
+        from fastapi import Depends, FastAPI
+
+        from backend.api.deps import get_settings
+
+        app = FastAPI()
+
+        @app.get("/test-settings")
+        async def _endpoint(s: Settings = Depends(get_settings)) -> dict[str, bool]:
+            return {"ok": True}
+
+        # Don't set app.state.settings
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            resp = await ac.get("/test-settings")
+        assert resp.status_code == 503
+
+
 class TestMissingServiceDependencies:
     """Endpoints return 503 when required services are missing from app state."""
 

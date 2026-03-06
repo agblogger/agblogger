@@ -38,55 +38,62 @@ class AsyncWriteLock(Protocol):
     ) -> bool | None: ...
 
 
+_SERVICE_UNAVAILABLE = "Service temporarily unavailable"
+_DB_UNAVAILABLE = "Database temporarily unavailable"
+
+
+def _require_app_state(request: Request, attr: str, detail: str) -> Any:
+    """Get a required attribute from app state, raising 503 if missing."""
+    value = getattr(request.app.state, attr, None)
+    if value is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=detail,
+        )
+    return value
+
+
 def get_settings(request: Request) -> Settings:
     """Get application settings from app state."""
-    settings: Settings = request.app.state.settings
-    return settings
+    return cast(
+        "Settings",
+        _require_app_state(request, "settings", _SERVICE_UNAVAILABLE),
+    )
 
 
 def get_git_service(request: Request) -> GitService:
     """Get git service from app state."""
-    gs = getattr(request.app.state, "git_service", None)
-    if gs is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Service temporarily unavailable",
-        )
-    return cast("GitService", gs)
+    return cast(
+        "GitService",
+        _require_app_state(request, "git_service", _SERVICE_UNAVAILABLE),
+    )
 
 
 def get_content_manager(request: Request) -> ContentManager:
     """Get content manager from app state."""
-    cm = getattr(request.app.state, "content_manager", None)
-    if cm is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Service temporarily unavailable",
-        )
-    return cast("ContentManager", cm)
+    return cast(
+        "ContentManager",
+        _require_app_state(request, "content_manager", _SERVICE_UNAVAILABLE),
+    )
 
 
 async def get_session(request: Request) -> AsyncGenerator[AsyncSession]:
     """Get a database session."""
-    session_factory = getattr(request.app.state, "session_factory", None)
-    if session_factory is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Database temporarily unavailable",
-        )
+    session_factory = _require_app_state(
+        request,
+        "session_factory",
+        _DB_UNAVAILABLE,
+    )
     async with session_factory() as session:
         yield session
 
 
 def get_content_write_lock(request: Request) -> AsyncWriteLock:
     """Get the global content write lock used to serialize content mutations."""
-    lock = getattr(request.app.state, "content_write_lock", None)
-    if lock is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Service temporarily unavailable",
-        )
-    return cast("AsyncWriteLock", lock)
+    return cast(
+        "AsyncWriteLock",
+        _require_app_state(request, "content_write_lock", _SERVICE_UNAVAILABLE),
+    )
 
 
 async def get_current_user(
