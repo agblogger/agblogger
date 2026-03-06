@@ -719,7 +719,8 @@ async def update_post_endpoint(
 
         try:
             await session.commit()
-        except _DB_COMMIT_ERRORS:
+        except _DB_COMMIT_ERRORS as exc:
+            logger.error("DB commit failed for post update %s: %s", file_path, exc)
             if needs_rename and new_dir is not None and old_dir is not None and new_dir.exists():
                 try:
                     # Remove the backward-compat symlink at old_dir if it was created

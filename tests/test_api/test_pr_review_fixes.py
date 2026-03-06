@@ -79,22 +79,34 @@ async def _login(client: AsyncClient) -> dict[str, str]:
 # ── Issue 1: Narrow except Exception on session.commit() ──
 
 
-class TestIssue1NarrowCommitExcept:
-    """session.commit() should only catch DB exceptions, not all Exception."""
+class TestIssue1CommitFailureLogsError:
+    """DB commit failure in update_post should log the error before re-raising."""
 
-    async def test_commit_catch_does_not_trigger_rollback_for_non_db_error(
-        self, tmp_path: Path
+    async def test_commit_failure_is_logged_with_context(
+        self, client: AsyncClient, app_settings: Settings, caplog: pytest.LogCaptureFixture
     ) -> None:
-        """If a non-DB exception occurs during commit, it should NOT trigger
-        the directory rollback logic (which is only for DB failures)."""
-        import inspect
+        headers = await _login(client)
 
-        from backend.api import posts as posts_mod
+        # The fixture already creates a post at "2026-02-02-hello-world"
+        file_path = "posts/2026-02-02-hello-world/index.md"
 
-        source = inspect.getsource(posts_mod.update_post_endpoint)
-        # The except block should NOT catch bare Exception
-        # It should catch specific DB exceptions (via _DB_COMMIT_ERRORS constant)
-        assert "except Exception:" not in source
+        with (
+            patch(
+                "backend.api.posts.AsyncSession.commit",
+                new_callable=AsyncMock,
+                side_effect=OperationalError("disk full", {}, Exception()),
+            ),
+            caplog.at_level(logging.ERROR, logger="backend.api.posts"),
+        ):
+            resp = await client.put(
+                f"/api/posts/{file_path}",
+                json={"title": "Hello World", "body": "Updated", "labels": [], "is_draft": False},
+                headers=headers,
+            )
+
+        assert resp.status_code >= 400
+        error_msgs = [r.message for r in caplog.records if r.levelno >= logging.ERROR]
+        assert any("commit failed" in m.lower() or "db commit" in m.lower() for m in error_msgs)
 
 
 # ── Issue 2: Narrow except Exception on config write ──
