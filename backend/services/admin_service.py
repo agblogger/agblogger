@@ -90,13 +90,7 @@ def create_page(cm: ContentManager, *, page_id: str, title: str) -> PageConfig:
     md_path.write_text(f"# {title}\n", encoding="utf-8")
 
     new_page = PageConfig(id=page_id, title=title, file=file_name)
-    updated = SiteConfig(
-        title=cfg.title,
-        description=cfg.description,
-        default_author=cfg.default_author,
-        timezone=cfg.timezone,
-        pages=[*cfg.pages, new_page],
-    )
+    updated = cfg.with_pages([*cfg.pages, new_page])
     try:
         write_site_config(cm.content_dir, updated)
     except OSError:
@@ -131,13 +125,7 @@ def update_page(
             PageConfig(id=p.id, title=title if p.id == page_id else p.title, file=p.file)
             for p in cfg.pages
         ]
-        updated = SiteConfig(
-            title=cfg.title,
-            description=cfg.description,
-            default_author=cfg.default_author,
-            timezone=cfg.timezone,
-            pages=pages,
-        )
+        updated = cfg.with_pages(pages)
         write_site_config(cm.content_dir, updated)
         cm.reload_config()
 
@@ -160,13 +148,7 @@ def update_page(
                     )
                     for p in cm.site_config.pages
                 ]
-                rollback_cfg = SiteConfig(
-                    title=cfg.title,
-                    description=cfg.description,
-                    default_author=cfg.default_author,
-                    timezone=cfg.timezone,
-                    pages=rollback_pages,
-                )
+                rollback_cfg = cfg.with_pages(rollback_pages)
                 try:
                     write_site_config(cm.content_dir, rollback_cfg)
                     cm.reload_config()
@@ -200,13 +182,7 @@ def delete_page(cm: ContentManager, page_id: str, *, delete_file: bool) -> None:
         if file_path.exists():
             file_path.unlink()
 
-    updated = SiteConfig(
-        title=cfg.title,
-        description=cfg.description,
-        default_author=cfg.default_author,
-        timezone=cfg.timezone,
-        pages=[p for p in cfg.pages if p.id != page_id],
-    )
+    updated = cfg.with_pages([p for p in cfg.pages if p.id != page_id])
     write_site_config(cm.content_dir, updated)
     cm.reload_config()
 
@@ -214,12 +190,6 @@ def delete_page(cm: ContentManager, page_id: str, *, delete_file: bool) -> None:
 def update_page_order(cm: ContentManager, pages: list[PageConfig]) -> None:
     """Replace the page list with a new ordered list."""
     cfg = cm.site_config
-    updated = SiteConfig(
-        title=cfg.title,
-        description=cfg.description,
-        default_author=cfg.default_author,
-        timezone=cfg.timezone,
-        pages=pages,
-    )
+    updated = cfg.with_pages(pages)
     write_site_config(cm.content_dir, updated)
     cm.reload_config()

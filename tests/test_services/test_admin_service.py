@@ -8,7 +8,7 @@ from unittest.mock import patch
 import pytest
 
 from backend.filesystem.content_manager import ContentManager
-from backend.filesystem.toml_manager import PageConfig, parse_site_config
+from backend.filesystem.toml_manager import PageConfig, SiteConfig, parse_site_config
 from backend.services.admin_service import (
     create_page,
     delete_page,
@@ -176,3 +176,28 @@ class TestUpdatePageOrder:
         assert [p.id for p in reloaded.pages] == ["labels", "timeline", "about"]
         assert reloaded.pages[0].title == "Tags"
         assert reloaded.pages[1].title == "Home"
+
+
+class TestSiteConfigWithPages:
+    """SiteConfig.with_pages() should return a copy with replaced pages."""
+
+    def test_with_pages_returns_new_config(self) -> None:
+        cfg = SiteConfig(
+            title="Blog",
+            description="Desc",
+            default_author="Admin",
+            timezone="UTC",
+            pages=[PageConfig(id="p1", title="Page 1")],
+        )
+        new_pages = [PageConfig(id="p2", title="Page 2")]
+        result = cfg.with_pages(new_pages)
+
+        assert result.title == "Blog"
+        assert result.description == "Desc"
+        assert result.default_author == "Admin"
+        assert result.timezone == "UTC"
+        assert len(result.pages) == 1
+        assert result.pages[0].id == "p2"
+        # Original unchanged
+        assert len(cfg.pages) == 1
+        assert cfg.pages[0].id == "p1"

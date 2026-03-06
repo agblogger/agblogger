@@ -26,6 +26,16 @@ class SiteConfig:
     timezone: str = "UTC"
     pages: list[PageConfig] = field(default_factory=list)
 
+    def with_pages(self, pages: list[PageConfig]) -> SiteConfig:
+        """Return a copy with the pages list replaced."""
+        return SiteConfig(
+            title=self.title,
+            description=self.description,
+            default_author=self.default_author,
+            timezone=self.timezone,
+            pages=pages,
+        )
+
 
 @dataclass
 class PageConfig:
