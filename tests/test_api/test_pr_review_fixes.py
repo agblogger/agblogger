@@ -6,7 +6,7 @@ plus additional security fixes:
 2. Narrow except Exception on config write in create_page
 3. sync_status returns warnings on git failure
 4. parse_json_object always wraps ValueError with context
-5. KeyError handler uses logger.critical
+5. KeyError handler should use logger.error (not critical)
 6. Lock file cleanup failure is logged (no contextlib.suppress)
 7. Misleading "Git commit failed" warning after successful commit
 8. _set_git_warning extracted to deps.py
@@ -186,9 +186,9 @@ class TestIssue4ParseJsonObjectContext:
 
 
 class TestIssue5KeyErrorLogLevel:
-    """KeyError global handler should log at CRITICAL level."""
+    """KeyError global handler should log at ERROR level, not CRITICAL."""
 
-    async def test_key_error_logged_at_critical(
+    async def test_key_error_logged_at_error_not_critical(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ) -> None:
         from httpx import ASGITransport, AsyncClient
@@ -207,13 +207,16 @@ class TestIssue5KeyErrorLogLevel:
         async def _raise_key_error() -> None:
             raise KeyError("secret_key_name")
 
-        with caplog.at_level(logging.CRITICAL, logger="backend.main"):
+        with caplog.at_level(logging.DEBUG, logger="backend.main"):
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
                 resp = await ac.get("/test-key-error-level")
 
         assert resp.status_code == 500
-        critical_records = [r for r in caplog.records if r.levelno == logging.CRITICAL]
-        assert any("[BUG]" in r.message for r in critical_records)
+        # Should be ERROR, not CRITICAL
+        key_error_records = [r for r in caplog.records if "[BUG]" in r.message]
+        assert len(key_error_records) >= 1
+        assert all(r.levelno == logging.ERROR for r in key_error_records)
+        assert not any(r.levelno == logging.CRITICAL for r in key_error_records)
 
 
 # ── Issue 6: Lock file cleanup failure is logged ──

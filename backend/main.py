@@ -623,7 +623,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.exception_handler(KeyError)
     async def key_error_handler(request: Request, exc: KeyError) -> JSONResponse:
-        logger.critical(
+        logger.error(
             "[BUG] KeyError in %s %s: %s",
             request.method,
             request.url.path,
