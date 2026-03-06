@@ -7,6 +7,7 @@ M3 (asset upload OSError), C1 (render before rename).
 
 from __future__ import annotations
 
+import asyncio
 import subprocess
 import tomllib
 from typing import TYPE_CHECKING
@@ -1324,6 +1325,26 @@ class TestGetSettings503:
         # Don't set app.state.settings
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             resp = await ac.get("/test-settings")
+        assert resp.status_code == 503
+
+
+class TestMissingContentWriteLock:
+    """Endpoints should return 503 when content_write_lock is not set."""
+
+    @pytest.mark.asyncio
+    async def test_endpoint_returns_503_without_lock(self) -> None:
+        from fastapi import Depends, FastAPI
+
+        from backend.api.deps import get_content_write_lock
+
+        app = FastAPI()
+
+        @app.get("/test-lock")
+        async def _endpoint(lock: asyncio.Lock = Depends(get_content_write_lock)) -> dict[str, bool]:
+            return {"ok": True}
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            resp = await ac.get("/test-lock")
         assert resp.status_code == 503
 
 
