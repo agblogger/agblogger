@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING
+from unittest.mock import patch
 
 import pytest
 
@@ -160,3 +162,53 @@ class TestWriteLocking:
         )
         assert resp.status_code == 204
         assert lock.enter_count >= 1
+
+
+class TestWriteLockSerialization:
+    """The content write lock should serialize concurrent write operations."""
+
+    @pytest.mark.asyncio
+    async def test_concurrent_creates_are_serialized(self, client: AsyncClient) -> None:
+        """Two concurrent post creates should not overlap execution."""
+        from backend.api import posts as posts_mod
+
+        token = await _login(client)
+        headers = {"Authorization": f"Bearer {token}"}
+
+        execution_log: list[str] = []
+        real_render = posts_mod._render_post
+
+        async def _tracking_render(content: str, file_path: str) -> tuple[str, str]:
+            name = "A" if "Body A" in content else "B"
+            execution_log.append(f"start:{name}")
+            await asyncio.sleep(0.05)
+            result: tuple[str, str] = await real_render(content, file_path)
+            execution_log.append(f"end:{name}")
+            return result
+
+        with patch.object(posts_mod, "_render_post", new=_tracking_render):
+            results = await asyncio.gather(
+                client.post(
+                    "/api/posts",
+                    json={"title": "Lock A", "body": "Body A", "labels": [], "is_draft": False},
+                    headers=headers,
+                ),
+                client.post(
+                    "/api/posts",
+                    json={"title": "Lock B", "body": "Body B", "labels": [], "is_draft": False},
+                    headers=headers,
+                ),
+            )
+
+        assert all(r.status_code == 201 for r in results), [r.text for r in results]
+        # Under serialization, operations should NOT interleave.
+        # The log must be [start:X, end:X, start:Y, end:Y] (not start:X, start:Y, ...).
+        assert len(execution_log) == 4
+        first = execution_log[0].split(":", 1)[1]
+        second = "B" if first == "A" else "A"
+        assert execution_log == [
+            f"start:{first}",
+            f"end:{first}",
+            f"start:{second}",
+            f"end:{second}",
+        ]
