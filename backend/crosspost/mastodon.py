@@ -86,7 +86,8 @@ async def exchange_mastodon_oauth_token(
         )
 
     access_token = require_str_field(
-        token_data, "access_token",
+        token_data,
+        "access_token",
         context="Mastodon token endpoint",
         error_cls=MastodonOAuthTokenError,
     )

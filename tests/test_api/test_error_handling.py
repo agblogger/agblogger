@@ -7,7 +7,6 @@ M3 (asset upload OSError), C1 (render before rename).
 
 from __future__ import annotations
 
-import asyncio
 import subprocess
 import tomllib
 from typing import TYPE_CHECKING
@@ -23,6 +22,7 @@ from backend.pandoc.renderer import RenderError
 from tests.conftest import create_test_client
 
 if TYPE_CHECKING:
+    import asyncio
     from collections.abc import AsyncGenerator
     from pathlib import Path
 
@@ -1318,8 +1318,10 @@ class TestGetSettings503:
 
         app = FastAPI()
 
+        _settings_dep = Depends(get_settings)
+
         @app.get("/test-settings")
-        async def _endpoint(s: Settings = Depends(get_settings)) -> dict[str, bool]:
+        async def _endpoint(s: Settings = _settings_dep) -> dict[str, bool]:
             return {"ok": True}
 
         # Don't set app.state.settings
@@ -1339,8 +1341,10 @@ class TestMissingContentWriteLock:
 
         app = FastAPI()
 
+        _lock_dep = Depends(get_content_write_lock)
+
         @app.get("/test-lock")
-        async def _endpoint(lock: asyncio.Lock = Depends(get_content_write_lock)) -> dict[str, bool]:
+        async def _endpoint(lock: asyncio.Lock = _lock_dep) -> dict[str, bool]:
             return {"ok": True}
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:

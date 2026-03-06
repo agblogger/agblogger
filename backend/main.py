@@ -195,9 +195,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
             await git_service.init_repo()
             app.state.git_service = git_service
         except Exception as exc:
-            logger.critical(
-                "Failed to initialize git: %s. Ensure git is installed.", exc
-            )
+            logger.critical("Failed to initialize git: %s. Ensure git is installed.", exc)
             raise
 
         from backend.crosspost.atproto_oauth import load_or_create_keypair
@@ -232,9 +230,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
             app.state.pandoc_server = pandoc_server
             init_renderer(pandoc_server)
         except Exception as exc:
-            logger.critical(
-                "Failed to start pandoc server: %s. Ensure pandoc is installed.", exc
-            )
+            logger.critical("Failed to start pandoc server: %s. Ensure pandoc is installed.", exc)
             raise
 
         from backend.services.cache_service import rebuild_cache

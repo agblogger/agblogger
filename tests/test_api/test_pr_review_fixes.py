@@ -495,21 +495,32 @@ class TestIssue12SyncStatusGitFailure:
 class TestIssue3SyncNoPathLeak:
     """Sync error responses should not leak internal file paths."""
 
-    async def test_sync_write_error_does_not_leak_path(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_sync_write_error_does_not_leak_path(self, client: AsyncClient) -> None:
         headers = await _login(client)
 
         with patch("pathlib.Path.write_text", side_effect=OSError("disk full")):
             resp = await client.post(
                 "/api/sync/commit",
                 data={
-                    "metadata": json.dumps({
-                        "deleted_files": [],
-                        "last_sync_commit": None,
-                    })
+                    "metadata": json.dumps(
+                        {
+                            "deleted_files": [],
+                            "last_sync_commit": None,
+                        }
+                    )
                 },
-                files=[("files", ("posts/test-path-leak.md", b"---\ntitle: T\ncreated_at: 2026-02-02 22:21:29+00\nauthor: Admin\nauthor_username: admin\nlabels: []\n---\nBody", "text/plain"))],
+                files=[
+                    (
+                        "files",
+                        (
+                            "posts/test-path-leak.md",
+                            b"---\ntitle: T\ncreated_at: 2026-02-02 22:21:29+00\n"
+                            b"author: Admin\nauthor_username: admin\nlabels: []\n"
+                            b"---\nBody",
+                            "text/plain",
+                        ),
+                    )
+                ],
                 headers=headers,
             )
 
@@ -554,8 +565,7 @@ class TestIssue14SyncStatusAfterHeadCommitFailure:
         assert data["status"] == "ok"
         assert data["commit_hash"] is None
         assert any(
-            "commit hash" in w.lower() or "head" in w.lower()
-            for w in data.get("warnings", [])
+            "commit hash" in w.lower() or "head" in w.lower() for w in data.get("warnings", [])
         )
 
 
@@ -574,7 +584,18 @@ class TestIssue14SyncDeletionFailureCount:
             data={
                 "metadata": json.dumps({"deleted_files": [], "last_sync_commit": None}),
             },
-            files=[("files", ("posts/to-delete.md", b"---\ntitle: X\ncreated_at: 2026-02-02 22:21:29+00\nauthor: Admin\nauthor_username: admin\nlabels: []\n---\nBody", "text/plain"))],
+            files=[
+                (
+                    "files",
+                    (
+                        "posts/to-delete.md",
+                        b"---\ntitle: X\ncreated_at: 2026-02-02 22:21:29+00\n"
+                        b"author: Admin\nauthor_username: admin\nlabels: []\n"
+                        b"---\nBody",
+                        "text/plain",
+                    ),
+                )
+            ],
             headers=headers,
         )
         assert resp.status_code == 200
@@ -584,10 +605,12 @@ class TestIssue14SyncDeletionFailureCount:
             resp = await client.post(
                 "/api/sync/commit",
                 data={
-                    "metadata": json.dumps({
-                        "deleted_files": ["posts/to-delete.md"],
-                        "last_sync_commit": None,
-                    }),
+                    "metadata": json.dumps(
+                        {
+                            "deleted_files": ["posts/to-delete.md"],
+                            "last_sync_commit": None,
+                        }
+                    ),
                 },
                 headers=headers,
             )

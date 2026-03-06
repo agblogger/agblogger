@@ -294,9 +294,7 @@ async def _sync_commit_inner(
                 full_path.write_bytes(upload_content)
             except OSError as exc:
                 logger.error("Sync: I/O error writing binary %s: %s", target_path, exc)
-                raise HTTPException(
-                    status_code=500, detail="File I/O error during sync"
-                ) from exc
+                raise HTTPException(status_code=500, detail="File I/O error during sync") from exc
             uploaded_paths.append(target_path)
             continue
 
@@ -333,9 +331,7 @@ async def _sync_commit_inner(
                 full_path.write_text(merge_result.merged_content, encoding="utf-8")
             except OSError as exc:
                 logger.error("Sync: I/O error writing merged %s: %s", target_path, exc)
-                raise HTTPException(
-                    status_code=500, detail="File I/O error during sync"
-                ) from exc
+                raise HTTPException(status_code=500, detail="File I/O error during sync") from exc
             to_download.append(target_path)
 
             uploaded_paths.append(target_path)
@@ -346,9 +342,7 @@ async def _sync_commit_inner(
                 full_path.write_text(client_text, encoding="utf-8")
             except OSError as exc:
                 logger.error("Sync: I/O error writing %s: %s", target_path, exc)
-                raise HTTPException(
-                    status_code=500, detail="File I/O error during sync"
-                ) from exc
+                raise HTTPException(status_code=500, detail="File I/O error during sync") from exc
             uploaded_paths.append(target_path)
 
     # ── Normalize front matter for uploaded + merged post files ──

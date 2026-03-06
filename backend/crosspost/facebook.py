@@ -66,7 +66,8 @@ async def exchange_facebook_oauth_token(
             context="Facebook token endpoint",
         )
         short_token = require_str_field(
-            token_data, "access_token",
+            token_data,
+            "access_token",
             context="Facebook token endpoint",
             error_cls=FacebookOAuthTokenError,
         )
@@ -92,7 +93,8 @@ async def exchange_facebook_oauth_token(
             context="Facebook long-lived token endpoint",
         )
         long_lived_token = require_str_field(
-            ll_data, "access_token",
+            ll_data,
+            "access_token",
             context="Facebook long-lived token endpoint",
             error_cls=FacebookOAuthTokenError,
         )

@@ -480,7 +480,8 @@ async def send_par_request(
 
     par_resp = parse_json_object(resp, error_cls=ATProtoOAuthError, context="OAuth PAR endpoint")
     request_uri = require_str_field(
-        par_resp, "request_uri",
+        par_resp,
+        "request_uri",
         context="OAuth PAR endpoint",
         error_cls=ATProtoOAuthError,
     )

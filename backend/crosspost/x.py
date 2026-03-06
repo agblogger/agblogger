@@ -86,7 +86,8 @@ async def exchange_x_oauth_token(
             context="X token endpoint",
         )
         access_token = require_str_field(
-            token_data, "access_token",
+            token_data,
+            "access_token",
             context="X token endpoint",
             error_cls=XOAuthTokenError,
         )
@@ -112,7 +113,8 @@ async def exchange_x_oauth_token(
             msg = "User profile response missing username"
             raise XOAuthTokenError(msg)
         username = require_str_field(
-            data_obj, "username",
+            data_obj,
+            "username",
             context="X user profile endpoint",
             error_cls=XOAuthTokenError,
         )
@@ -196,7 +198,8 @@ class XCrossPoster:
                 token_data = parse_json_object(resp, context="X token refresh endpoint")
                 try:
                     new_access_token = require_str_field(
-                        token_data, "access_token",
+                        token_data,
+                        "access_token",
                         context="X token refresh endpoint",
                     )
                 except ValueError:
