@@ -44,7 +44,7 @@ def inject_og_tags(
     """
     # Truncate description if needed
     if len(description) > _MAX_DESCRIPTION_LENGTH:
-        description = description[:_MAX_DESCRIPTION_LENGTH] + "..."
+        description = description[: _MAX_DESCRIPTION_LENGTH - 3] + "..."
 
     # Escape all values
     esc_title = html.escape(title)

@@ -152,9 +152,9 @@ class TestInjectOgTags:
             description=long_desc,
             url="https://example.com/post/1",
         )
-        # Should contain truncated description (200 chars + "...")
-        assert "a" * 200 + "..." in result
-        assert "a" * 201 not in result
+        # Should contain truncated description (197 chars + "..." = 200 total)
+        assert "a" * 197 + "..." in result
+        assert "a" * 198 + "..." not in result
 
     def test_does_not_truncate_short_description(self) -> None:
         desc = "a" * 200
