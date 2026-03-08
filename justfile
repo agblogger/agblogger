@@ -334,6 +334,9 @@ install prefix="$HOME/.local": build-cli
 deploy:
     uv run agblogger-deploy
 
+release level:
+    uv run agblogger-release "{{ level }}"
+
 # ── Development server ──────────────────────────────────────────────
 
 backend_port := "8000"

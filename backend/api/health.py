@@ -11,6 +11,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.deps import get_session
+from backend.version import get_version
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,6 @@ async def health_check(
 
     return HealthResponse(
         status="ok" if db_status == "ok" else "degraded",
-        version="0.1.0",
+        version=get_version(),
         database=db_status,
     )

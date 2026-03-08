@@ -158,6 +158,16 @@ This produces `dist/cli/agblogger` (or `agblogger.exe` on Windows). The binary b
 
 The build targets the current platform — cross-compile by running `just build-cli` on each target OS.
 
+## Releases
+
+Create a GitHub release with a semantic version bump, git tag, and tarballed source snapshot:
+
+```bash
+just release patch
+```
+
+Use `major`, `minor`, or `patch`. The release workflow requires a clean git worktree, updates the project version everywhere it is tracked, creates a `release: vX.Y.Z` commit, tags it, pushes the branch and tag, and creates a GitHub release with `dist/releases/agblogger-X.Y.Z.tar.gz` attached.
+
 ## Deployment
 
 ### 1. Run the interactive deploy script

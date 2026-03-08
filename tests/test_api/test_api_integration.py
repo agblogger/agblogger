@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from backend.config import Settings
+from backend.version import get_version
 from tests.conftest import create_test_client
 
 if TYPE_CHECKING:
@@ -58,7 +59,7 @@ class TestHealth:
         assert resp.status_code == 200
         data = resp.json()
         assert data["status"] == "ok"
-        assert data["version"] == "0.1.0"
+        assert data["version"] == get_version()
         assert data["database"] == "ok"
 
 

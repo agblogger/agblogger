@@ -16,6 +16,8 @@ The `create_app()` factory:
 4. Registers API routers under `/api/`.
 5. Serves the React SPA static files from `frontend/dist/`.
 
+Application version metadata comes from the repo-root `VERSION` file during source-based execution and falls back to installed package metadata when running from an installed wheel. `backend/main.py` uses this shared value for the FastAPI/OpenAPI version, and `/api/health` returns the same version string.
+
 On startup, the lifespan handler:
 
 1. Validates production security settings (`validate_runtime_security()`), failing fast for insecure defaults.

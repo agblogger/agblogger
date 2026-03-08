@@ -39,6 +39,7 @@ from backend.models.base import Base
 from backend.services.csrf_service import validate_csrf_token
 from backend.services.rate_limit_service import InMemoryRateLimiter
 from backend.services.upload_limits import get_multipart_body_limit
+from backend.version import get_version
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Awaitable, Callable
@@ -282,7 +283,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(
         title="AgBlogger",
         description="A markdown-first blogging platform",
-        version="0.1.0",
+        version=get_version(),
         lifespan=lifespan,
         docs_url="/docs" if docs_enabled else None,
         redoc_url="/redoc" if docs_enabled else None,

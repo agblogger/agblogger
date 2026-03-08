@@ -26,9 +26,10 @@ agblogger/
 │       ├── stores/     Zustand state management
 │       ├── pages/      Route-level page components
 │       └── components/ Reusable UI components
-├── cli/                CLIs: sync, deployment, dev server, mutation testing, DAST
+├── cli/                CLIs: sync, deployment, release, dev server, mutation testing, DAST
 ├── tests/              pytest test suite
 ├── docs/               Project documentation
+├── VERSION             Source-of-truth application version for releases/runtime metadata
 ├── Dockerfile          Multi-stage Docker build
 ├── docker-compose.yml  Container orchestration
 ├── Caddyfile           Reverse proxy (HTTPS)
