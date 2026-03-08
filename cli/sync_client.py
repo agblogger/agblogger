@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 import sys
+from contextlib import suppress
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -20,6 +21,9 @@ except ImportError:
     sys.exit(1)
 
 MANIFEST_FILE = ".agblogger-manifest.json"
+CONFIG_FILE = ".agblogger-sync.json"
+PAT_ENV_VAR = "AGBLOGGER_PAT"
+_LOCALHOST_HOSTS = {"localhost", "127.0.0.1", "::1"}
 
 
 @dataclass
@@ -81,6 +85,145 @@ def _is_safe_local_path(content_dir: Path, file_path: str) -> Path | None:
     if not local_path.is_relative_to(content_dir.resolve()):
         return None
     return local_path
+
+
+# ── Config management ────────────────────────────────────────────────
+
+
+def validate_server_url(server_url: str, allow_insecure_http: bool = False) -> str:
+    """Validate server URL and enforce HTTPS for non-localhost hosts by default."""
+    normalized = server_url.strip().rstrip("/")
+    parsed = urlparse(normalized)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("Server URL must include scheme and host (e.g. https://example.com)")
+
+    hostname = parsed.hostname
+    if parsed.scheme == "http" and not allow_insecure_http and hostname not in _LOCALHOST_HOSTS:
+        raise ValueError(
+            "HTTPS is required for non-localhost servers. "
+            "Use --allow-insecure-http only on trusted networks."
+        )
+
+    return normalized
+
+
+def load_config(dir_path: Path) -> dict[str, str]:
+    """Load sync config from file."""
+    config_path = dir_path / CONFIG_FILE
+    if not config_path.exists():
+        return {}
+    config: dict[str, str] = json.loads(config_path.read_text())
+    return config
+
+
+def save_config(dir_path: Path, config: dict[str, str]) -> None:
+    """Save sync config to file and restrict permissions to owner-only."""
+    config_path = dir_path / CONFIG_FILE
+    config_path.write_text(json.dumps(config, indent=2))
+    with suppress(OSError):
+        config_path.chmod(0o600)
+
+
+def migrate_config_pat(config: dict[str, str], dir_path: Path) -> dict[str, str]:
+    """Remove plaintext PAT from config if present. Returns cleaned config."""
+    if "pat" not in config:
+        return config
+    print(
+        f"Warning: Removing plaintext PAT from config file (insecure). "
+        f"Use the {PAT_ENV_VAR} environment variable instead.",
+        file=sys.stderr,
+    )
+    cleaned = {k: v for k, v in config.items() if k != "pat"}
+    save_config(dir_path, cleaned)
+    return cleaned
+
+
+# ── Plan helpers ─────────────────────────────────────────────────────
+
+
+def has_pending_changes(plan: dict[str, Any]) -> bool:
+    """Check whether a sync plan has any pending operations."""
+    return bool(
+        plan.get("to_upload")
+        or plan.get("to_download")
+        or plan.get("to_delete_local")
+        or plan.get("to_delete_remote")
+        or plan.get("conflicts")
+    )
+
+
+def format_plan_summary(plan: dict[str, Any]) -> str:
+    """Format a sync plan as a human-readable file list."""
+    lines: list[str] = []
+    for f in plan.get("to_upload", []):
+        lines.append(f"  + {f} (upload)")
+    for f in plan.get("to_download", []):
+        lines.append(f"  < {f} (download)")
+    for f in plan.get("to_delete_local", []):
+        lines.append(f"  - {f} (delete local)")
+    for f in plan.get("to_delete_remote", []):
+        lines.append(f"  - {f} (delete remote)")
+    for c in plan.get("conflicts", []):
+        lines.append(f"  ! {c['file_path']} (conflict)")
+    return "\n".join(lines)
+
+
+def confirm_sync(plan: dict[str, Any]) -> bool:
+    """Display sync plan and prompt for confirmation."""
+    summary = format_plan_summary(plan)
+    if summary:
+        print(summary)
+    try:
+        response = input("Proceed with sync? [y/N]: ")
+    except KeyboardInterrupt, EOFError:
+        print()
+        return False
+    return response.strip().lower() in {"y", "yes"}
+
+
+# ── Authentication ───────────────────────────────────────────────────
+
+
+def login_interactive(
+    server_url: str,
+    *,
+    cli_username: str | None,
+    config_username: str | None,
+) -> str:
+    """Interactively authenticate and return an access token."""
+    username = cli_username or config_username
+    if not username:
+        username = input("Username: ")
+    password = getpass.getpass("Password: ")
+
+    try:
+        client = httpx.Client(base_url=server_url, timeout=30.0)
+        try:
+            resp = client.post(
+                "/api/auth/token-login",
+                json={"username": username, "password": password},
+            )
+        finally:
+            client.close()
+    except httpx.ConnectError:
+        print(f"Error: Could not connect to server at {server_url}")
+        sys.exit(1)
+    except httpx.TimeoutException:
+        print(f"Error: Connection to {server_url} timed out")
+        sys.exit(1)
+
+    if resp.status_code == 401:
+        print("Error: Invalid username or password")
+        sys.exit(1)
+    if resp.status_code != 200:
+        print(f"Error: Login failed (HTTP {resp.status_code})")
+        sys.exit(1)
+
+    result: str = resp.json()["access_token"]
+    return result
+
+
+# ── Sync client ──────────────────────────────────────────────────────
 
 
 class SyncClient:
@@ -157,9 +300,10 @@ class SyncClient:
         local_path.write_bytes(resp.content)
         return True
 
-    def sync(self) -> None:
+    def sync(self, plan: dict[str, Any] | None = None) -> None:
         """Bidirectional sync with the server."""
-        plan = self.status()
+        if plan is None:
+            plan = self.status()
         to_upload: list[str] = plan.get("to_upload", [])
         to_download_plan: list[str] = plan.get("to_download", [])
         to_delete_remote: list[str] = plan.get("to_delete_remote", [])
@@ -256,40 +400,7 @@ class SyncClient:
         print(f"Sync complete. {total} file(s) synced, {len(response_conflicts)} conflict(s).")
 
 
-CONFIG_FILE = ".agblogger-sync.json"
-_LOCALHOST_HOSTS = {"localhost", "127.0.0.1", "::1"}
-
-
-def validate_server_url(server_url: str, allow_insecure_http: bool = False) -> str:
-    """Validate server URL and enforce HTTPS for non-localhost hosts by default."""
-    normalized = server_url.strip().rstrip("/")
-    parsed = urlparse(normalized)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise ValueError("Server URL must include scheme and host (e.g. https://example.com)")
-
-    hostname = parsed.hostname
-    if parsed.scheme == "http" and not allow_insecure_http and hostname not in _LOCALHOST_HOSTS:
-        raise ValueError(
-            "HTTPS is required for non-localhost servers. "
-            "Use --allow-insecure-http only on trusted networks."
-        )
-
-    return normalized
-
-
-def load_config(dir_path: Path) -> dict[str, str]:
-    """Load sync config from file."""
-    config_path = dir_path / CONFIG_FILE
-    if not config_path.exists():
-        return {}
-    config: dict[str, str] = json.loads(config_path.read_text())
-    return config
-
-
-def save_config(dir_path: Path, config: dict[str, str]) -> None:
-    """Save sync config to file."""
-    config_path = dir_path / CONFIG_FILE
-    config_path.write_text(json.dumps(config, indent=2))
+# ── CLI entry point ──────────────────────────────────────────────────
 
 
 def main() -> None:
@@ -306,12 +417,13 @@ def main() -> None:
         help="Allow http:// server URLs for non-localhost hosts",
     )
     parser.add_argument("--username", "-u", help="Username for authentication")
-    parser.add_argument("--pat", help="Personal access token for authentication")
+    parser.add_argument("--pat", help="Personal access token (one-time use, not stored)")
 
     subparsers = parser.add_subparsers(dest="command")
     subparsers.add_parser("init", help="Initialize sync configuration")
     subparsers.add_parser("status", help="Show what would change")
-    subparsers.add_parser("sync", help="Bidirectional sync")
+    sync_parser = subparsers.add_parser("sync", help="Bidirectional sync")
+    sync_parser.add_argument("--yes", "-y", action="store_true", help="Skip confirmation prompt")
 
     args = parser.parse_args()
     content_dir = Path(args.dir).resolve()
@@ -325,20 +437,21 @@ def main() -> None:
         except ValueError as exc:
             print(f"Error: {exc}")
             sys.exit(1)
-        config = {
+        config: dict[str, str] = {
             "server": server_url,
             "content_dir": str(content_dir),
         }
         if args.username:
             config["username"] = args.username
-        if args.pat:
-            config["pat"] = args.pat
         save_config(content_dir, config)
         print(f"Initialized sync config in {content_dir / CONFIG_FILE}")
+        print(f"Set the {PAT_ENV_VAR} environment variable for authentication.")
         return
 
-    # Load config
+    # Load config and migrate insecure PAT if present
     config = load_config(content_dir)
+    config = migrate_config_pat(config, content_dir)
+
     configured_server_url = args.server or config.get("server")
     if not configured_server_url:
         print("Error: No server configured. Run 'agblogger-sync init --server <url>' first.")
@@ -349,34 +462,24 @@ def main() -> None:
         print(f"Error: {exc}")
         sys.exit(1)
 
-    token = args.pat or config.get("pat")
+    # Resolve token: CLI flag > env var > interactive login
+    token = args.pat or os.environ.get(PAT_ENV_VAR)
     if token is None:
-        username = args.username or config.get("username")
-        if not username:
-            username = input("Username: ")
-        password = getpass.getpass("Password: ")
-
-        # Create client and login
-        temp_client = httpx.Client(base_url=server_url, timeout=30.0)
-        login_resp = temp_client.post(
-            "/api/auth/token-login",
-            json={"username": username, "password": password},
+        token = login_interactive(
+            server_url,
+            cli_username=args.username,
+            config_username=config.get("username"),
         )
-        if login_resp.status_code != 200:
-            print(f"Error: Login failed ({login_resp.status_code})")
-            sys.exit(1)
-        token = login_resp.json()["access_token"]
-        temp_client.close()
 
     with SyncClient(server_url, content_dir, token) as client:
         if args.command == "status":
             plan = client.status()
             print("Sync Status:")
-            print(f"  To upload:       {len(plan.get('to_upload', []))}")
-            print(f"  To download:     {len(plan.get('to_download', []))}")
-            print(f"  To delete local: {len(plan.get('to_delete_local', []))}")
-            print(f"  To delete remote:{len(plan.get('to_delete_remote', []))}")
-            print(f"  Conflicts:       {len(plan.get('conflicts', []))}")
+            print(f"  To upload:        {len(plan.get('to_upload', []))}")
+            print(f"  To download:      {len(plan.get('to_download', []))}")
+            print(f"  To delete local:  {len(plan.get('to_delete_local', []))}")
+            print(f"  To delete remote: {len(plan.get('to_delete_remote', []))}")
+            print(f"  Conflicts:        {len(plan.get('conflicts', []))}")
 
             for f in plan.get("to_upload", []):
                 print(f"    + {f} (upload)")
@@ -386,7 +489,11 @@ def main() -> None:
                 print(f"    ! {c['file_path']} (conflict)")
 
         elif args.command == "sync":
-            client.sync()
+            plan = client.status()
+            if has_pending_changes(plan) and not args.yes and not confirm_sync(plan):
+                print("Sync cancelled.")
+                sys.exit(0)
+            client.sync(plan)
         else:
             parser.print_help()
 
