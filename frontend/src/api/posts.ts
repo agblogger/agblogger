@@ -1,5 +1,12 @@
 import api from './client'
-import type { PostDetail, PostEditResponse, PostListResponse, SearchResult } from './client'
+import type {
+  AssetInfo,
+  AssetListResponse,
+  PostDetail,
+  PostEditResponse,
+  PostListResponse,
+  SearchResult,
+} from './client'
 
 export interface PostListParams {
   page?: number
@@ -77,4 +84,24 @@ export async function uploadAssets(
     form.append('files', file)
   }
   return api.post(`posts/${filePath}/assets`, { body: form }).json<{ uploaded: string[] }>()
+}
+
+export async function fetchPostAssets(filePath: string): Promise<AssetListResponse> {
+  return api.get(`posts/${filePath}/assets`).json<AssetListResponse>()
+}
+
+export async function deletePostAsset(filePath: string, filename: string): Promise<void> {
+  await api.delete(`posts/${filePath}/assets/${encodeURIComponent(filename)}`)
+}
+
+export async function renamePostAsset(
+  filePath: string,
+  filename: string,
+  newName: string,
+): Promise<AssetInfo> {
+  return api
+    .patch(`posts/${filePath}/assets/${encodeURIComponent(filename)}`, {
+      json: { new_name: newName },
+    })
+    .json<AssetInfo>()
 }

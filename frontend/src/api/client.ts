@@ -240,6 +240,16 @@ export interface PostEditResponse {
   author: string | null
 }
 
+export interface AssetInfo {
+  name: string
+  size: number
+  is_image: boolean
+}
+
+export interface AssetListResponse {
+  assets: AssetInfo[]
+}
+
 export interface AdminSiteSettings {
   title: string
   description: string
