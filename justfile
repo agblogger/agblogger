@@ -308,7 +308,7 @@ build:
 build-cli:
     uv run pyinstaller \
         --onefile \
-        --name agblogger-sync \
+        --name agblogger \
         --strip \
         --distpath dist/cli \
         --workpath build/cli \
@@ -326,8 +326,8 @@ build-cli:
 # Install the CLI client to prefix/bin (default: ~/.local/bin)
 install prefix="$HOME/.local": build-cli
     mkdir -p "{{ prefix }}/bin"
-    cp dist/cli/agblogger-sync "{{ prefix }}/bin/agblogger-sync"
-    @echo "✓ Installed agblogger-sync to {{ prefix }}/bin/"
+    cp dist/cli/agblogger "{{ prefix }}/bin/agblogger"
+    @echo "✓ Installed agblogger to {{ prefix }}/bin/"
 
 # ── Deployment ──────────────────────────────────────────────
 

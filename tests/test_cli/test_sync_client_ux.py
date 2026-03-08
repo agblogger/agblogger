@@ -73,7 +73,7 @@ class TestInitDoesNotStorePat:
         monkeypatch.setattr(
             "sys.argv",
             [
-                "agblogger-sync",
+                "agblogger",
                 "-d",
                 str(tmp_path),
                 "-s",
@@ -98,7 +98,7 @@ class TestInitDoesNotStorePat:
     ) -> None:
         monkeypatch.setattr(
             "sys.argv",
-            ["agblogger-sync", "-d", str(tmp_path), "-s", "https://example.com", "init"],
+            ["agblogger", "-d", str(tmp_path), "-s", "https://example.com", "init"],
         )
         from cli.sync_client import main
 
@@ -112,7 +112,7 @@ class TestEnvVarAuth:
         save_config(tmp_path, {"server": "https://example.com"})
         monkeypatch.setattr(
             "sys.argv",
-            ["agblogger-sync", "-d", str(tmp_path), "status"],
+            ["agblogger", "-d", str(tmp_path), "status"],
         )
         monkeypatch.setenv("AGBLOGGER_PAT", "env-token")
 
@@ -240,7 +240,7 @@ class TestSyncConfirmationIntegration:
         yes_flag: bool = False,
     ) -> MagicMock:
         save_config(tmp_path, {"server": "https://example.com"})
-        argv = ["agblogger-sync", "-d", str(tmp_path), "--pat", "token", "sync"]
+        argv = ["agblogger", "-d", str(tmp_path), "--pat", "token", "sync"]
         if yes_flag:
             argv.append("--yes")
         monkeypatch.setattr("sys.argv", argv)
@@ -462,7 +462,7 @@ class TestStatusFormattingRegression:
         save_config(tmp_path, {"server": "https://example.com"})
         monkeypatch.setattr(
             "sys.argv",
-            ["agblogger-sync", "-d", str(tmp_path), "--pat", "token", "status"],
+            ["agblogger", "-d", str(tmp_path), "--pat", "token", "status"],
         )
 
         mock_client = MagicMock()

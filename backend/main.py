@@ -723,16 +723,3 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
 
 app = create_app()
-
-
-def cli_entry() -> None:
-    """CLI entry point for running the server."""
-    import uvicorn
-
-    settings: Settings = app.state.settings
-    uvicorn.run(
-        "backend.main:app",
-        host=settings.host,
-        port=settings.port,
-        reload=settings.debug,
-    )

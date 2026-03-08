@@ -150,10 +150,10 @@ Build a single-file executable that runs without a Python installation:
 just build-cli
 ```
 
-This produces `dist/cli/agblogger-sync` (or `agblogger-sync.exe` on Windows). The binary bundles the Python interpreter and all dependencies. Distribute it to users as-is:
+This produces `dist/cli/agblogger` (or `agblogger.exe` on Windows). The binary bundles the Python interpreter and all dependencies. Distribute it to users as-is:
 
 ```bash
-./agblogger-sync --dir ./my-blog --server https://your-server.com init
+./agblogger --dir ./my-blog --server https://your-server.com init
 ```
 
 The build targets the current platform — cross-compile by running `just build-cli` on each target OS.

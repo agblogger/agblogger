@@ -20,7 +20,7 @@ except ImportError:
     sys.exit(1)
 
 MANIFEST_FILE = ".agblogger-manifest.json"
-CONFIG_FILE = ".agblogger-sync.json"
+CONFIG_FILE = ".agblogger.json"
 PAT_ENV_VAR = "AGBLOGGER_PAT"
 _LOCALHOST_HOSTS = {"localhost", "127.0.0.1", "::1"}
 
@@ -400,7 +400,7 @@ class SyncClient:
 def main() -> None:
     """CLI entry point."""
     parser = argparse.ArgumentParser(
-        prog="agblogger-sync",
+        prog="agblogger",
         description="Sync local content with AgBlogger server",
     )
     parser.add_argument("--dir", "-d", default=".", help="Content directory (default: current)")
@@ -447,7 +447,7 @@ def main() -> None:
 
     configured_server_url = args.server or config.get("server")
     if not configured_server_url:
-        print("Error: No server configured. Run 'agblogger-sync init --server <url>' first.")
+        print("Error: No server configured. Run 'agblogger init --server <url>' first.")
         sys.exit(1)
     try:
         server_url = validate_server_url(configured_server_url, args.allow_insecure_http)

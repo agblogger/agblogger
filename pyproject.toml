@@ -61,8 +61,7 @@ dev = [
 ]
 
 [project.scripts]
-agblogger = "backend.main:cli_entry"
-agblogger-sync = "cli.sync_client:main"
+agblogger = "cli.sync_client:main"
 agblogger-deploy = "cli.deploy_production:main"
 
 [build-system]
@@ -144,6 +143,7 @@ DEP002 = [
     "vulture",
     "pre-commit",
     "pyinstaller",
+    "uvicorn",
 ]
 
 [tool.basedpyright]

@@ -92,7 +92,7 @@ The server version always wins on unresolvable conflicts. The client is informed
 
 ## CLI Sync Client (`cli/sync_client.py`)
 
-A standalone Python script using httpx with subcommands: `init`, `status`, `sync`. Stores config in `.agblogger-sync.json` (including `last_sync_commit`) and the local manifest in `.agblogger-manifest.json`. The `sync` command calls `POST /api/sync/status` to get the sync plan, uploads all changed files plus deletion metadata in a single multipart `POST /api/sync/commit` request, downloads server-changed and merged files, and reports any conflicts. The returned `commit_hash` is saved for subsequent syncs.
+A standalone Python script using httpx with subcommands: `init`, `status`, `sync`. Stores config in `.agblogger.json` (including `last_sync_commit`) and the local manifest in `.agblogger-manifest.json`. The `sync` command calls `POST /api/sync/status` to get the sync plan, uploads all changed files plus deletion metadata in a single multipart `POST /api/sync/commit` request, downloads server-changed and merged files, and reports any conflicts. The returned `commit_hash` is saved for subsequent syncs.
 
 CLI authentication supports either:
 - Interactive username/password prompt (obtaining a JWT access token), or
