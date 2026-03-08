@@ -189,7 +189,7 @@ ignore_missing_imports = true
 testpaths = ["tests"]
 asyncio_mode = "auto"
 filterwarnings = ["error"]
-markers = ["slow: tests that take more than 2s to run"]
+markers = ["slow: tests that take more than 1s to run"]
 
 [tool.coverage.run]
 source = ["backend", "cli"]

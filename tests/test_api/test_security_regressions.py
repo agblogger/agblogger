@@ -598,6 +598,7 @@ class TestTrustedProxyForwarding:
             trusted_proxy_ips=["127.0.0.1"],
         )
 
+    @pytest.mark.slow
     @pytest.mark.asyncio
     async def test_trusted_proxy_separates_forwarded_ips(
         self, trusted_proxy_settings: Settings

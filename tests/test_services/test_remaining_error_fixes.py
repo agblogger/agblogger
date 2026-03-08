@@ -26,6 +26,7 @@ if TYPE_CHECKING:
 class TestPostRenameRollbackOnCommitFailure:
     """If session.commit() fails after directory rename, the rename must be rolled back."""
 
+    @pytest.mark.slow
     async def test_commit_failure_rolls_back_rename(self, tmp_path: Path) -> None:
         from backend.config import Settings
         from tests.conftest import create_test_client
