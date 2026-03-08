@@ -94,10 +94,24 @@ async function switchToTab(user: ReturnType<typeof userEvent.setup>, tabName: st
 }
 
 describe('AdminPage', () => {
+  // Mock Intl.supportedValuesOf for TimezoneCombobox
+  const originalIntl = globalThis.Intl
   beforeEach(() => {
     vi.clearAllMocks()
+    globalThis.Intl = {
+      ...originalIntl,
+      supportedValuesOf: vi.fn().mockReturnValue(['America/New_York', 'Europe/London', 'Asia/Tokyo', 'UTC']),
+      DateTimeFormat: class extends originalIntl.DateTimeFormat {
+        override resolvedOptions() {
+          return { ...super.resolvedOptions(), timeZone: 'America/New_York' }
+        }
+      },
+    } as unknown as typeof Intl
     mockUser = { id: 1, username: 'admin', email: 'a@t.com', display_name: 'Admin', is_admin: true }
     mockIsInitialized = true
+  })
+  afterEach(() => {
+    globalThis.Intl = originalIntl
   })
 
   // === Auth guards ===

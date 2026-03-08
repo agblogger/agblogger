@@ -4,6 +4,7 @@ import { Settings, Save } from 'lucide-react'
 import { HTTPError } from '@/api/client'
 import type { AdminSiteSettings } from '@/api/client'
 import { updateAdminSiteSettings } from '@/api/admin'
+import TimezoneCombobox from './TimezoneCombobox'
 import { useSiteStore } from '@/stores/siteStore'
 
 interface SiteSettingsSectionProps {
@@ -147,20 +148,13 @@ export default function SiteSettingsSection({
           <label htmlFor="site-timezone" className="block text-xs font-medium text-muted mb-1">
             Timezone
           </label>
-          <input
-            id="site-timezone"
-            type="text"
+          <TimezoneCombobox
             value={siteSettings.timezone}
-            onChange={(e) => {
-              setSiteSettings({ ...siteSettings, timezone: e.target.value })
+            onChange={(tz) => {
+              setSiteSettings({ ...siteSettings, timezone: tz })
               setSiteSuccess(null)
             }}
             disabled={busy}
-            placeholder="e.g. America/New_York"
-            className="w-full px-3 py-2 bg-paper-warm border border-border rounded-lg
-                     text-ink text-sm
-                     focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/20
-                     disabled:opacity-50"
           />
         </div>
       </div>
