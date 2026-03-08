@@ -29,11 +29,12 @@ The `useEditorAutoSave` hook (`hooks/useEditorAutoSave.ts`) provides crash recov
 
 ## State Management
 
-Three Zustand stores:
+Four Zustand stores:
 
 - **`authStore`** — User state (`user`, `isLoading`, `isLoggingOut`, `isInitialized`, `error`), login/logout, session check via `checkAuth()`.
 - **`siteStore`** — Site configuration fetched on app load.
 - **`themeStore`** — Theme preference (`mode`: light/dark/system, `resolvedTheme`: light/dark). Persists to `localStorage` (key: `agblogger:theme`), listens to system preference changes, and provides `toggleMode()` to cycle through modes.
+- **`filterPanelStore`** — Shared state for the filter panel (`panelState`: closed/open/closing, `activeFilterCount`). The filter toggle button lives in `Header` (rendered only on the timeline page `/`), while the panel body lives in `FilterPanel` within `TimelinePage`. The store coordinates open/close state between these components.
 
 The `ky` HTTP client uses cookie-based authentication (`credentials: 'include'`). Browser login relies on `HttpOnly` cookies and keeps only the returned `csrf_token` in memory; it does not store bearer tokens from JSON. For unsafe methods (POST/PUT/PATCH/DELETE), it ensures an in-memory CSRF token is available, fetching it from `GET /api/auth/csrf` when necessary, then injects it as the `X-CSRF-Token` header. On 401 responses, the client auto-attempts a token refresh via `POST /api/auth/refresh`, updates the cached CSRF token from the refresh response, and retries the original request.
 
