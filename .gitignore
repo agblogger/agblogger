@@ -51,6 +51,9 @@ data/
 # ── Content (auto-generated on first startup) ──────────────────────
 content/
 
+# ── DAST (ZAP) ─────────────────────────────────────────────────────
+zap.yaml
+
 # ── CodeQL ──────────────────────────────────────────────────────────
 codeql-db/
 
