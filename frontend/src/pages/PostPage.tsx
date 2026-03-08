@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Calendar, User, PenLine, Trash2 } from 'lucide-react'
-import { fetchPost, deletePost } from '@/api/posts'
+import { fetchPost, deletePost, fetchPostForEdit, updatePost } from '@/api/posts'
 import { useAuthStore } from '@/stores/authStore'
 import { HTTPError } from '@/api/client'
 import LabelChip from '@/components/labels/LabelChip'
@@ -21,8 +21,10 @@ export default function PostPage() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [publishError, setPublishError] = useState<string | null>(null)
   const [deleteMode, setDeleteMode] = useState<'post' | 'all' | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [publishing, setPublishing] = useState(false)
   const user = useAuthStore((s) => s.user)
   const contentRef = useRef<HTMLDivElement>(null)
   const renderedHtml = useRenderedHtml(post?.rendered_html)
@@ -44,6 +46,30 @@ export default function PostPage() {
       setDeleteMode(null)
     } finally {
       setDeleting(false)
+    }
+  }
+
+  async function handlePublish() {
+    if (filePath === undefined) return
+    setPublishing(true)
+    setPublishError(null)
+    try {
+      const editData = await fetchPostForEdit(filePath)
+      const updated = await updatePost(filePath, {
+        title: editData.title,
+        body: editData.body,
+        labels: editData.labels,
+        is_draft: false,
+      })
+      setPost(updated)
+    } catch (err) {
+      if (err instanceof HTTPError && err.response.status === 401) {
+        setPublishError('Session expired. Please log in again.')
+      } else {
+        setPublishError('Failed to publish post. Please try again.')
+      }
+    } finally {
+      setPublishing(false)
     }
   }
 
@@ -129,6 +155,27 @@ export default function PostPage() {
         <h1 className="font-display text-4xl md:text-5xl text-ink leading-tight tracking-tight">
           {post.title}
         </h1>
+
+        {user && post.is_draft && (
+          <div className="flex items-center justify-between mt-3">
+            <span className="text-xs px-2 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 rounded-full font-medium">
+              Draft
+            </span>
+            <button
+              onClick={() => void handlePublish()}
+              disabled={publishing}
+              className="px-4 py-2 text-sm font-medium text-white bg-accent hover:bg-accent/90 rounded-lg transition-colors disabled:opacity-50"
+            >
+              {publishing ? 'Publishing...' : 'Publish'}
+            </button>
+          </div>
+        )}
+
+        {publishError !== null && (
+          <div className="mt-3 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/40 rounded-lg px-4 py-3">
+            {publishError}
+          </div>
+        )}
 
         <div className="mt-5 text-sm text-muted">
           <div className="flex items-center gap-4 flex-wrap">

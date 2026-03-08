@@ -384,6 +384,24 @@ describe('PostPage', () => {
     })
   })
 
+  it('shows error message on publish failure', async () => {
+    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null, is_admin: true }
+    mockFetchPost.mockResolvedValue(draftPost)
+    mockFetchPostForEdit.mockRejectedValue(new Error('Network error'))
+    renderPostPage('/post/posts/2026-03-08-draft/index.md')
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /publish/i })).toBeInTheDocument()
+    })
+    await userEvent.click(screen.getByRole('button', { name: /publish/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Failed to publish post. Please try again.')).toBeInTheDocument()
+    })
+    // Button should be re-enabled after failure
+    expect(screen.getByRole('button', { name: /publish/i })).toBeEnabled()
+  })
+
   it('publish button is disabled during API call', async () => {
     mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null, is_admin: true }
     mockFetchPost.mockResolvedValue(draftPost)
