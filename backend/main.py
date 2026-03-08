@@ -16,9 +16,9 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError, OperationalError
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
@@ -640,6 +640,60 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             status_code=503,
             content={"detail": "Database temporarily unavailable"},
         )
+
+    # OG tag route — must be registered before the StaticFiles catch-all
+    @app.get("/post/{file_path:path}", response_class=HTMLResponse, include_in_schema=False)
+    async def post_with_og_tags(file_path: str, request: Request) -> HTMLResponse:
+        from backend.models.post import PostCache
+        from backend.services.opengraph_service import inject_og_tags, strip_html_tags
+
+        frontend_dir_path: Path = request.app.state.settings.frontend_dir
+        index_path = frontend_dir_path / "index.html"
+
+        # Read and cache the base index.html
+        base_html: str | None = getattr(request.app.state, "_og_base_html", None)
+        if base_html is None:
+            try:
+                base_html = index_path.read_text(encoding="utf-8")
+                request.app.state._og_base_html = base_html
+            except OSError:
+                logger.warning("index.html not found at %s", index_path)
+                return HTMLResponse("<html><body>Not found</body></html>", status_code=404)
+
+        # Look up the post in the cache
+        try:
+            session_factory = request.app.state.session_factory
+            async with session_factory() as session:
+                stmt = select(PostCache).where(PostCache.file_path == file_path)
+                result = await session.execute(stmt)
+                post = result.scalar_one_or_none()
+        except Exception:
+            logger.exception("DB error looking up post for OG tags: %s", file_path)
+            return HTMLResponse(base_html)
+
+        if post is None or post.is_draft:
+            return HTMLResponse(base_html)
+
+        description = ""
+        if post.rendered_excerpt:
+            description = strip_html_tags(post.rendered_excerpt)
+
+        content_manager: ContentManager = request.app.state.content_manager
+        site_name = content_manager.site_config.title
+
+        from backend.services.datetime_service import format_iso
+
+        enriched = inject_og_tags(
+            base_html,
+            title=post.title,
+            description=description,
+            url=str(request.url),
+            site_name=site_name,
+            author=post.author,
+            published_time=format_iso(post.created_at),
+            modified_time=format_iso(post.modified_at),
+        )
+        return HTMLResponse(enriched)
 
     # Serve frontend static files in production
     frontend_dir = settings.frontend_dir
