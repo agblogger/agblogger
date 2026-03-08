@@ -92,9 +92,7 @@ class TestPublishTransition:
         )
 
     @pytest.mark.asyncio
-    async def test_non_transition_update_preserves_created_at(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_non_transition_update_preserves_created_at(self, client: AsyncClient) -> None:
         """Updating a published post without changing draft status should preserve created_at."""
         token = await _login(client)
         headers = {"Authorization": f"Bearer {token}"}
@@ -134,9 +132,7 @@ class TestPublishTransition:
         )
 
     @pytest.mark.asyncio
-    async def test_redraft_and_republish_updates_created_at(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_redraft_and_republish_updates_created_at(self, client: AsyncClient) -> None:
         """Re-drafting then re-publishing should update created_at on the second publish."""
         token = await _login(client)
         headers = {"Authorization": f"Bearer {token}"}
