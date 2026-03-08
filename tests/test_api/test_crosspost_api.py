@@ -540,6 +540,41 @@ class TestFacebookSelectPage:
             assert resp.json()["detail"] == "Invalid or expired page selection state"
 
 
+class TestListSocialAccounts:
+    async def test_accounts_returned_alphabetically(self, test_settings: Settings) -> None:
+        test_settings.admin_password = "admin"
+        async with create_test_client(test_settings) as client:
+            login_resp = await client.post(
+                "/api/auth/token-login",
+                json={"username": "admin", "password": "admin"},
+            )
+            token = login_resp.json()["access_token"]
+            headers = {"Authorization": f"Bearer {token}"}
+
+            # Create accounts in non-alphabetical order
+            for platform, name in [
+                ("x", "@xuser"),
+                ("bluesky", "user.bsky.social"),
+                ("mastodon", "@user@mastodon.social"),
+                ("facebook", "My Page"),
+            ]:
+                resp = await client.post(
+                    "/api/crosspost/accounts",
+                    json={
+                        "platform": platform,
+                        "account_name": name,
+                        "credentials": {"access_token": "fake"},
+                    },
+                    headers=headers,
+                )
+                assert resp.status_code == 201
+
+            list_resp = await client.get("/api/crosspost/accounts", headers=headers)
+            assert list_resp.status_code == 200
+            platforms = [a["platform"] for a in list_resp.json()]
+            assert platforms == ["bluesky", "facebook", "mastodon", "x"]
+
+
 class TestDeleteSocialAccount:
     async def test_delete_requires_auth(self, test_settings: Settings) -> None:
         async with create_test_client(test_settings) as client:

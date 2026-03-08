@@ -82,7 +82,11 @@ async def get_social_accounts(
     user_id: int,
 ) -> list[SocialAccount]:
     """List all social accounts for a user."""
-    stmt = select(SocialAccount).where(SocialAccount.user_id == user_id)
+    stmt = (
+        select(SocialAccount)
+        .where(SocialAccount.user_id == user_id)
+        .order_by(SocialAccount.platform, SocialAccount.account_name)
+    )
     result = await session.execute(stmt)
     return list(result.scalars().all())
 
