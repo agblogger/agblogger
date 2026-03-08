@@ -9,6 +9,7 @@ export const SHARE_PLATFORMS = [
   { id: 'facebook', label: 'Share on Facebook' },
   { id: 'linkedin', label: 'Share on LinkedIn' },
   { id: 'reddit', label: 'Share on Reddit' },
+  { id: 'hackernews', label: 'Share on Hacker News' },
 ] as const
 
 export function getShareText(title: string, author: string | null, url: string): string {
@@ -39,11 +40,13 @@ export function getShareUrl(
     case 'x':
       return `https://x.com/intent/tweet?text=${encodeURIComponent(text)}`
     case 'facebook':
-      return `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}&quote=${encodeURIComponent(title)}`
+      return `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`
     case 'linkedin':
       return `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}`
     case 'reddit':
       return `https://www.reddit.com/submit?url=${encodeURIComponent(url)}&title=${encodeURIComponent(title)}`
+    case 'hackernews':
+      return `https://news.ycombinator.com/submitlink?u=${encodeURIComponent(url)}&t=${encodeURIComponent(title)}`
     case 'email':
       return `mailto:?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(text)}`
     default:

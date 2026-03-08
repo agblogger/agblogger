@@ -49,7 +49,7 @@ describe('getShareUrl', () => {
   it('returns Facebook sharer URL', () => {
     const result = getShareUrl('facebook', text, url, title)
     expect(result).toBe(
-      `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}&quote=${encodeURIComponent(title)}`,
+      `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`,
     )
   })
 

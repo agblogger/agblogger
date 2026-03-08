@@ -71,6 +71,26 @@ export default function ShareButton({ title, author, url }: ShareButtonProps) {
             />
           ) : (
             <div className="space-y-0.5">
+              {canNativeShare() && (
+                <>
+                  <button
+                    onClick={() => {
+                      handleNativeShare()
+                        .then(() => {
+                          setShowDropdown(false)
+                        })
+                        .catch(() => {})
+                    }}
+                    aria-label="Share via device"
+                    className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm
+                             text-muted transition-colors hover:bg-paper-warm hover:text-ink"
+                  >
+                    <Share2 size={16} />
+                    <span>Share via device</span>
+                  </button>
+                  <div className="my-1 border-t border-border" />
+                </>
+              )}
               {SHARE_PLATFORMS.map((platform) => (
                 <button
                   key={platform.id}

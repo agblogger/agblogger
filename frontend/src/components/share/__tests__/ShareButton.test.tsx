@@ -32,79 +32,7 @@ describe('ShareButton', () => {
     expect(screen.getByLabelText('Share this post')).toBeInTheDocument()
   })
 
-  it('calls native share directly when available', async () => {
-    const mockShare = vi.fn().mockResolvedValue(undefined)
-    Object.defineProperty(navigator, 'share', {
-      value: mockShare,
-      writable: true,
-      configurable: true,
-    })
-    const user = userEvent.setup()
-    render(<ShareButton {...defaultProps} />)
-
-    await user.click(screen.getByLabelText('Share this post'))
-
-    expect(mockShare).toHaveBeenCalledWith(
-      expect.objectContaining({
-        title: 'Hello World',
-        url: 'https://blog.example.com/post/hello',
-      }),
-    )
-  })
-
-  it('does not open dropdown when native share is available', async () => {
-    Object.defineProperty(navigator, 'share', {
-      value: vi.fn().mockResolvedValue(undefined),
-      writable: true,
-      configurable: true,
-    })
-    const user = userEvent.setup()
-    render(<ShareButton {...defaultProps} />)
-
-    await user.click(screen.getByLabelText('Share this post'))
-
-    expect(screen.queryByLabelText('Share on Bluesky')).not.toBeInTheDocument()
-  })
-
-  // Issue #7: native share non-AbortError should fall back to dropdown
-  it('falls back to dropdown when native share fails with non-AbortError', async () => {
-    vi.spyOn(console, 'warn').mockImplementation(() => {})
-    Object.defineProperty(navigator, 'share', {
-      value: vi.fn().mockRejectedValue(new TypeError('Invalid share data')),
-      writable: true,
-      configurable: true,
-    })
-    const user = userEvent.setup()
-    render(<ShareButton {...defaultProps} />)
-
-    await user.click(screen.getByLabelText('Share this post'))
-
-    await waitFor(() => {
-      expect(screen.getByLabelText('Share on Bluesky')).toBeInTheDocument()
-    })
-  })
-
-  it('does not open dropdown when native share is cancelled by user', async () => {
-    const abortError = new DOMException('Share cancelled', 'AbortError')
-    Object.defineProperty(navigator, 'share', {
-      value: vi.fn().mockRejectedValue(abortError),
-      writable: true,
-      configurable: true,
-    })
-    const user = userEvent.setup()
-    render(<ShareButton {...defaultProps} />)
-
-    await user.click(screen.getByLabelText('Share this post'))
-
-    expect(screen.queryByLabelText('Share on Bluesky')).not.toBeInTheDocument()
-  })
-
-  it('opens dropdown when native share is unavailable', async () => {
-    Object.defineProperty(navigator, 'share', {
-      value: undefined,
-      writable: true,
-      configurable: true,
-    })
+  it('always opens dropdown on click, showing all platform options', async () => {
     const user = userEvent.setup()
     render(<ShareButton {...defaultProps} />)
 
@@ -118,6 +46,55 @@ describe('ShareButton', () => {
     expect(screen.getByLabelText('Share on Reddit')).toBeInTheDocument()
     expect(screen.getByLabelText('Share via email')).toBeInTheDocument()
     expect(screen.getByLabelText('Copy link')).toBeInTheDocument()
+  })
+
+  it('shows native share option in dropdown when available', async () => {
+    Object.defineProperty(navigator, 'share', {
+      value: vi.fn().mockResolvedValue(undefined),
+      writable: true,
+      configurable: true,
+    })
+    const user = userEvent.setup()
+    render(<ShareButton {...defaultProps} />)
+
+    await user.click(screen.getByLabelText('Share this post'))
+
+    expect(screen.getByLabelText('Share via device')).toBeInTheDocument()
+  })
+
+  it('hides native share option when unavailable', async () => {
+    Object.defineProperty(navigator, 'share', {
+      value: undefined,
+      writable: true,
+      configurable: true,
+    })
+    const user = userEvent.setup()
+    render(<ShareButton {...defaultProps} />)
+
+    await user.click(screen.getByLabelText('Share this post'))
+
+    expect(screen.queryByLabelText('Share via device')).not.toBeInTheDocument()
+  })
+
+  it('calls navigator.share when clicking native share option in dropdown', async () => {
+    const mockShare = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'share', {
+      value: mockShare,
+      writable: true,
+      configurable: true,
+    })
+    const user = userEvent.setup()
+    render(<ShareButton {...defaultProps} />)
+
+    await user.click(screen.getByLabelText('Share this post'))
+    await user.click(screen.getByLabelText('Share via device'))
+
+    expect(mockShare).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Hello World',
+        url: 'https://blog.example.com/post/hello',
+      }),
+    )
   })
 
   it('closes dropdown when clicking outside', async () => {

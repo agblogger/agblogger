@@ -80,6 +80,21 @@ export default function PlatformIcon({ platform, size = 16, className = '' }: Pl
     )
   }
 
+  if (platform === 'hackernews') {
+    return (
+      <svg
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="currentColor"
+        className={className}
+        aria-label="Hacker News"
+      >
+        <path d="M0 0v24h24V0H0zm12.8 13.7v5.1h-1.6v-5.1L7 5.2h1.8l3.2 5.8 3.1-5.8H17l-4.2 8.5z" />
+      </svg>
+    )
+  }
+
   if (platform === 'reddit') {
     return (
       <svg

@@ -108,7 +108,6 @@ describe('shareUtils property tests', () => {
         expect(facebook.origin).toBe('https://www.facebook.com')
         expect(facebook.pathname).toBe('/sharer/sharer.php')
         expectQueryParam(facebook, 'u', url)
-        expectQueryParam(facebook, 'quote', title)
 
         const linkedIn = new URL(getShareUrl('linkedin', text, url, title))
         expect(linkedIn.origin).toBe('https://www.linkedin.com')
