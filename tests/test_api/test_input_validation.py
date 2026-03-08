@@ -229,6 +229,16 @@ class TestTimezoneValidation:
         assert resp.status_code == 422
 
     @pytest.mark.asyncio
+    async def test_empty_timezone_rejected(self, client: AsyncClient) -> None:
+        token = await login(client)
+        resp = await client.put(
+            "/api/admin/site",
+            json={"title": "Blog", "timezone": ""},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 422
+
+    @pytest.mark.asyncio
     async def test_valid_timezone_accepted(self, client: AsyncClient) -> None:
         token = await login(client)
         resp = await client.put(
