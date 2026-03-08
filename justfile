@@ -161,9 +161,9 @@ check-backend-static:
 test-backend coverage="false":
     @echo "\n── Backend: tests ──"
     if [ "{{ coverage }}" = "true" ] || [ "{{ coverage }}" = "coverage=true" ]; then \
-        uv run pytest tests/ -v -m "not slow" --cov=backend --cov=cli --cov-report=term-missing; \
+        uv run pytest tests/ -v -m "not slow" -n auto --cov=backend --cov=cli --cov-report=term-missing; \
     elif [ "{{ coverage }}" = "false" ] || [ "{{ coverage }}" = "coverage=false" ]; then \
-        uv run pytest tests/ -v -m "not slow"; \
+        uv run pytest tests/ -v -m "not slow" -n auto; \
     else \
         echo "Invalid coverage option '{{ coverage }}' (use coverage=true|false)" >&2; \
         exit 1; \
@@ -172,7 +172,7 @@ test-backend coverage="false":
 # Backend slow tests only (marked @pytest.mark.slow)
 test-backend-slow:
     @echo "\n── Backend: slow tests ──"
-    uv run pytest tests/ -v -m slow
+    uv run pytest tests/ -v -m slow -n auto
 
 # Backend full gate (static + tests)
 check-backend: check-backend-static test-backend

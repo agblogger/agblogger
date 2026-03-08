@@ -48,7 +48,13 @@ def _restore_original_renderer() -> None:
 
     Called during fixture teardown so that unit tests for the renderer module
     see the real (HTTP-based) function rather than the subprocess shim.
+    Also resets the ``_pandoc_server_broken`` flag so the next test retries
+    server mode (important for pytest-xdist where each worker manages its own
+    pandoc server lifecycle).
     """
+    global _pandoc_server_broken
+    _pandoc_server_broken = False
+
     import sys
 
     import backend.pandoc.renderer as _renderer_mod

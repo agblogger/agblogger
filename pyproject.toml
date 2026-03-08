@@ -58,6 +58,7 @@ dev = [
     "pre-commit>=4.1",
     "pyinstaller>=6.0",
     "hypothesis>=6.151.9",
+    "pytest-xdist>=3.5",
 ]
 
 [project.scripts]

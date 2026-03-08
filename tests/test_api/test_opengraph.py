@@ -61,33 +61,32 @@ async def client(og_settings: Settings) -> AsyncGenerator[AsyncClient]:
 class TestPostOgTagsPublished:
     """OG tags are injected for published posts."""
 
-    @pytest.mark.asyncio
     async def test_og_title_present(self, client: AsyncClient) -> None:
         resp = await client.get("/post/posts/hello.md")
         assert resp.status_code == 200
         assert 'og:title" content="Hello World"' in resp.text
 
-    @pytest.mark.asyncio
     async def test_og_description_present(self, client: AsyncClient) -> None:
         resp = await client.get("/post/posts/hello.md")
         assert 'og:description"' in resp.text
 
-    @pytest.mark.asyncio
     async def test_twitter_card_present(self, client: AsyncClient) -> None:
         resp = await client.get("/post/posts/hello.md")
         assert 'twitter:card" content="summary"' in resp.text
 
-    @pytest.mark.asyncio
     async def test_html_title_updated(self, client: AsyncClient) -> None:
         resp = await client.get("/post/posts/hello.md")
         assert "<title>Hello World</title>" in resp.text
 
-    @pytest.mark.asyncio
     async def test_og_type_article(self, client: AsyncClient) -> None:
         resp = await client.get("/post/posts/hello.md")
         assert 'og:type" content="article"' in resp.text
 
-    @pytest.mark.asyncio
+    async def test_og_url_present(self, client: AsyncClient) -> None:
+        resp = await client.get("/post/posts/hello.md")
+        assert 'og:url"' in resp.text
+        assert "/post/posts/hello.md" in resp.text
+
     async def test_content_type_is_html(self, client: AsyncClient) -> None:
         resp = await client.get("/post/posts/hello.md")
         assert resp.status_code == 200
@@ -97,7 +96,6 @@ class TestPostOgTagsPublished:
 class TestPostOgTagsMissing:
     """No OG tags for missing posts."""
 
-    @pytest.mark.asyncio
     async def test_missing_post_returns_plain_html(self, client: AsyncClient) -> None:
         resp = await client.get("/post/posts/nonexistent.md")
         assert resp.status_code == 200
@@ -108,7 +106,6 @@ class TestPostOgTagsMissing:
 class TestPostOgTagsDraft:
     """No OG tags leaked for draft posts."""
 
-    @pytest.mark.asyncio
     async def test_draft_post_returns_plain_html(self, client: AsyncClient) -> None:
         resp = await client.get("/post/posts/my-draft.md")
         assert resp.status_code == 200

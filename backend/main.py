@@ -645,6 +645,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/post/{file_path:path}", response_class=HTMLResponse, include_in_schema=False)
     async def post_with_og_tags(file_path: str, request: Request) -> HTMLResponse:
         from backend.models.post import PostCache
+        from backend.services.datetime_service import format_iso
         from backend.services.opengraph_service import inject_og_tags, strip_html_tags
 
         frontend_dir_path: Path = request.app.state.settings.frontend_dir
@@ -654,7 +655,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         base_html: str | None = getattr(request.app.state, "_og_base_html", None)
         if base_html is None:
             try:
-                base_html = index_path.read_text(encoding="utf-8")
+                base_html = await asyncio.to_thread(
+                    index_path.read_text, encoding="utf-8"
+                )
                 request.app.state._og_base_html = base_html
             except OSError:
                 logger.warning("index.html not found at %s", index_path)
@@ -680,8 +683,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         content_manager: ContentManager = request.app.state.content_manager
         site_name = content_manager.site_config.title
-
-        from backend.services.datetime_service import format_iso
 
         enriched = inject_og_tags(
             base_html,
