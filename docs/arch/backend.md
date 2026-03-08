@@ -110,6 +110,14 @@ After rendering and sanitization, `rewrite_relative_urls()` rewrites relative `s
 
 Lua filter files exist in `backend/pandoc/filters/` as placeholders for future use (callouts, tabsets, video embeds, local link rewriting) but are not currently wired into the rendering pipeline.
 
+## Open Graph Meta Tags
+
+Post pages (`/post/{file_path}`) are served with Open Graph and Twitter Card meta tags injected into the SPA's `index.html`. This enables rich link previews on social media (Facebook, LinkedIn, Slack, Discord, iMessage, etc.).
+
+The route queries `PostCache` for the post's title, excerpt, author, and timestamps. The excerpt HTML is stripped to plain text for the `og:description` tag. Drafts and missing posts receive the unmodified `index.html` so no metadata is leaked. The base `index.html` is cached in `app.state` after first read.
+
+Tags injected: `og:title`, `og:description`, `og:url`, `og:type` (article), `og:site_name`, `article:author`, `article:published_time`, `article:modified_time`, `twitter:card` (summary), `twitter:title`, `twitter:description`.
+
 ## Exception Conventions
 
 The service layer uses exception types defined in `backend/exceptions.py` to separate internal errors from business logic errors:

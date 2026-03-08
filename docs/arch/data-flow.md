@@ -66,6 +66,20 @@ GET /api/posts/{path}
         → return cached metadata + HTML
 ```
 
+## Viewing a Post (Social Media Crawler)
+
+```
+GET /post/{file_path}
+    → Query PostCache by file_path
+    → If found and not draft:
+        → Strip HTML from rendered_excerpt for description
+        → Read site_config.title for og:site_name
+        → inject_og_tags() into cached index.html
+        → Return enriched HTML (SPA boots normally)
+    → If not found or draft:
+        → Return unmodified index.html
+```
+
 ## Uploading a Post (File or Folder)
 
 ```
