@@ -54,6 +54,7 @@ export default function FileStrip({
     )
   }
 
+  const resolvedPath = filePath
   const controlsDisabled = disabled || operating
 
   function handleToggle() {
@@ -78,7 +79,7 @@ export default function FileStrip({
     setError(null)
     setConfirmDelete(null)
     try {
-      await deletePostAsset(filePath!, name)
+      await deletePostAsset(resolvedPath, name)
       await loadAssets()
     } catch (err) {
       if (err instanceof HTTPError) {
@@ -95,7 +96,7 @@ export default function FileStrip({
     setOperating(true)
     setError(null)
     try {
-      await renamePostAsset(filePath!, oldName, newName)
+      await renamePostAsset(resolvedPath, oldName, newName)
       const updatedBody = body.replaceAll(oldName, newName)
       onBodyChange(updatedBody)
       await loadAssets()
@@ -116,7 +117,7 @@ export default function FileStrip({
     setOperating(true)
     setError(null)
     try {
-      await uploadAssets(filePath!, Array.from(files))
+      await uploadAssets(resolvedPath, Array.from(files))
       await loadAssets()
     } catch (err) {
       if (err instanceof HTTPError) {

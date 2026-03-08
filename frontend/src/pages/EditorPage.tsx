@@ -51,7 +51,7 @@ export default function EditorPage() {
   const [mobileTab, setMobileTab] = useState<'edit' | 'preview'>('edit')
   const [savedFilePath, setSavedFilePath] = useState<string | null>(null)
   const [effectiveFilePath, setEffectiveFilePath] = useState<string | null>(
-    isNew ? null : filePath ?? null,
+    isNew ? null : filePath,
   )
   useCodeBlockEnhance(previewRef, renderedPreview)
 
