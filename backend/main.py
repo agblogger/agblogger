@@ -655,9 +655,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         base_html: str | None = getattr(request.app.state, "_og_base_html", None)
         if base_html is None:
             try:
-                base_html = await asyncio.to_thread(
-                    index_path.read_text, encoding="utf-8"
-                )
+                base_html = await asyncio.to_thread(index_path.read_text, encoding="utf-8")
                 request.app.state._og_base_html = base_html
             except OSError:
                 logger.warning("index.html not found at %s", index_path)
