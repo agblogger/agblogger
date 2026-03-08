@@ -16,7 +16,6 @@ from cli.sync_client import (
     has_pending_changes,
     load_config,
     login_interactive,
-    migrate_config_pat,
     save_config,
 )
 
@@ -56,46 +55,6 @@ class TestConfigFilePermissions:
         save_config(tmp_path, {"server": "https://example.com"})
         mode = config_path.stat().st_mode & 0o777
         assert mode == 0o600
-
-
-# ── PAT migration ───────────────────────────────────────────────────
-
-
-class TestMigrateConfigPat:
-    def test_removes_plaintext_pat(self, tmp_path: Path) -> None:
-        save_config(tmp_path, {"server": "https://example.com", "pat": "secret"})
-        config = load_config(tmp_path)
-        migrated = migrate_config_pat(config, tmp_path)
-        assert "pat" not in migrated
-
-    def test_persists_cleaned_config(self, tmp_path: Path) -> None:
-        save_config(tmp_path, {"server": "https://example.com", "pat": "secret"})
-        config = load_config(tmp_path)
-        migrate_config_pat(config, tmp_path)
-        reloaded = load_config(tmp_path)
-        assert "pat" not in reloaded
-        assert reloaded["server"] == "https://example.com"
-
-    def test_warns_to_use_env_var(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-        save_config(tmp_path, {"server": "https://example.com", "pat": "secret"})
-        config = load_config(tmp_path)
-        migrate_config_pat(config, tmp_path)
-        captured = capsys.readouterr()
-        assert "AGBLOGGER_PAT" in captured.err
-
-    def test_noop_without_pat(self, tmp_path: Path) -> None:
-        original = {"server": "https://example.com"}
-        save_config(tmp_path, original)
-        config = load_config(tmp_path)
-        migrated = migrate_config_pat(config, tmp_path)
-        assert migrated == original
-
-    def test_noop_no_warning(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-        save_config(tmp_path, {"server": "https://example.com"})
-        config = load_config(tmp_path)
-        migrate_config_pat(config, tmp_path)
-        captured = capsys.readouterr()
-        assert captured.err == ""
 
 
 class TestInitDoesNotStorePat:

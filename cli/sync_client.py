@@ -124,20 +124,6 @@ def save_config(dir_path: Path, config: dict[str, str]) -> None:
         config_path.chmod(0o600)
 
 
-def migrate_config_pat(config: dict[str, str], dir_path: Path) -> dict[str, str]:
-    """Remove plaintext PAT from config if present. Returns cleaned config."""
-    if "pat" not in config:
-        return config
-    print(
-        f"Warning: Removing plaintext PAT from config file (insecure). "
-        f"Use the {PAT_ENV_VAR} environment variable instead.",
-        file=sys.stderr,
-    )
-    cleaned = {k: v for k, v in config.items() if k != "pat"}
-    save_config(dir_path, cleaned)
-    return cleaned
-
-
 # ── Plan helpers ─────────────────────────────────────────────────────
 
 
@@ -448,9 +434,8 @@ def main() -> None:
         print(f"Set the {PAT_ENV_VAR} environment variable for authentication.")
         return
 
-    # Load config and migrate insecure PAT if present
+    # Load config
     config = load_config(content_dir)
-    config = migrate_config_pat(config, content_dir)
 
     configured_server_url = args.server or config.get("server")
     if not configured_server_url:
