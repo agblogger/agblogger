@@ -220,3 +220,109 @@ def test_justfile_exposes_release_recipe() -> None:
     content = justfile.read_text(encoding="utf-8")
 
     assert 'release level:\n    uv run agblogger-release "{{ level }}"' in content
+
+
+# ── T1: Release error path tests ────────────────────────────────────
+
+
+def test_ensure_tag_absent_raises_when_tag_exists(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
+    from cli.release import _ensure_tag_absent
+
+    def fake_run(
+        command: list[str],
+        *,
+        cwd: Path,
+        check: bool,
+        capture_output: bool = False,
+        text: bool = False,
+    ) -> SimpleNamespace:
+        del cwd, check, capture_output, text
+        return SimpleNamespace(returncode=0, stdout="abc123\n", stderr="")
+
+    monkeypatch.setattr("cli.release.subprocess.run", fake_run)
+
+    with pytest.raises(ReleaseError, match="already exists"):
+        _ensure_tag_absent(tmp_path, "v1.0.0")
+
+
+def test_ensure_release_absent_raises_when_release_exists(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    from cli.release import _ensure_release_absent
+
+    def fake_run(
+        command: list[str],
+        *,
+        cwd: Path,
+        check: bool,
+        capture_output: bool = False,
+        text: bool = False,
+    ) -> SimpleNamespace:
+        del cwd, check, capture_output, text
+        return SimpleNamespace(returncode=0, stdout="release info\n", stderr="")
+
+    monkeypatch.setattr("cli.release.subprocess.run", fake_run)
+
+    with pytest.raises(ReleaseError, match="already exists"):
+        _ensure_release_absent(tmp_path, "v1.0.0")
+
+
+def test_require_tool_raises_when_missing(monkeypatch: MonkeyPatch) -> None:
+    from cli.release import _require_tool
+
+    monkeypatch.setattr("cli.release.shutil.which", lambda _name: None)
+
+    with pytest.raises(ReleaseError, match="not installed"):
+        _require_tool("nonexistent-tool")
+
+
+def test_bump_version_rejects_unsupported_level() -> None:
+    with pytest.raises(ReleaseError, match="Unsupported release level"):
+        bump_version("1.0.0", "rc")
+
+
+def test_read_repo_version_raises_when_missing(tmp_path: Path) -> None:
+    with pytest.raises(ReleaseError, match="Missing VERSION file"):
+        read_repo_version(tmp_path)
+
+
+# ── I3: main() error recovery ───────────────────────────────────────
+
+
+def test_main_handles_release_error(
+    monkeypatch: MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from cli.release import main
+
+    monkeypatch.setattr("sys.argv", ["agblogger-release", "patch"])
+    monkeypatch.setattr(
+        "cli.release.run_release",
+        lambda *args, **kwargs: (_ for _ in ()).throw(ReleaseError("tag already exists")),
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        main()
+    assert exc_info.value.code == 1
+    captured = capsys.readouterr()
+    assert "tag already exists" in captured.err
+
+
+def test_main_handles_subprocess_error(
+    monkeypatch: MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import subprocess
+
+    from cli.release import main
+
+    monkeypatch.setattr("sys.argv", ["agblogger-release", "patch"])
+
+    def raise_subprocess_error(*args: object, **kwargs: object) -> None:
+        raise subprocess.CalledProcessError(1, "git push")
+
+    monkeypatch.setattr("cli.release.run_release", raise_subprocess_error)
+
+    with pytest.raises(SystemExit) as exc_info:
+        main()
+    assert exc_info.value.code == 1
+    captured = capsys.readouterr()
+    assert "git push" in captured.err

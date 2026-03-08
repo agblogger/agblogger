@@ -419,4 +419,69 @@ describe('PostPage', () => {
       expect(screen.getByRole('button', { name: /publish/i })).toBeDisabled()
     })
   })
+  it('shows server detail on 409 publish failure', async () => {
+    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null, is_admin: true }
+    mockFetchPost.mockResolvedValue(draftPost)
+    mockFetchPostForEdit.mockResolvedValue({
+      file_path: 'posts/2026-03-08-draft/index.md',
+      title: 'My Draft',
+      body: 'Draft content.\n',
+      labels: ['tech'],
+      is_draft: true,
+      created_at: '2026-03-08 10:00:00+00:00',
+      modified_at: '2026-03-08 10:00:00+00:00',
+      author: 'Admin',
+    })
+    mockUpdatePost.mockRejectedValue(
+      new (MockHTTPError as unknown as new (s: number, b?: string) => Error)(
+        409,
+        JSON.stringify({ detail: 'Post was modified by another user' }),
+      ),
+    )
+    renderPostPage('/post/posts/2026-03-08-draft/index.md')
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /publish/i })).toBeInTheDocument()
+    })
+    await userEvent.click(screen.getByRole('button', { name: /publish/i }))
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('Post was modified by another user'),
+      ).toBeInTheDocument()
+    })
+  })
+
+  it('shows generic error on 500 publish failure', async () => {
+    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null, is_admin: true }
+    mockFetchPost.mockResolvedValue(draftPost)
+    mockFetchPostForEdit.mockResolvedValue({
+      file_path: 'posts/2026-03-08-draft/index.md',
+      title: 'My Draft',
+      body: 'Draft content.\n',
+      labels: ['tech'],
+      is_draft: true,
+      created_at: '2026-03-08 10:00:00+00:00',
+      modified_at: '2026-03-08 10:00:00+00:00',
+      author: 'Admin',
+    })
+    mockUpdatePost.mockRejectedValue(
+      new (MockHTTPError as unknown as new (s: number, b?: string) => Error)(
+        500,
+        JSON.stringify({ detail: 'Internal server error' }),
+      ),
+    )
+    renderPostPage('/post/posts/2026-03-08-draft/index.md')
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /publish/i })).toBeInTheDocument()
+    })
+    await userEvent.click(screen.getByRole('button', { name: /publish/i }))
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('Failed to publish post. Please try again.'),
+      ).toBeInTheDocument()
+    })
+  })
 })

@@ -4,6 +4,7 @@ import { ArrowLeft, Calendar, User, PenLine, Trash2 } from 'lucide-react'
 import { fetchPost, deletePost, fetchPostForEdit, updatePost } from '@/api/posts'
 import { useAuthStore } from '@/stores/authStore'
 import { HTTPError } from '@/api/client'
+import { parseErrorDetail } from '@/api/parseError'
 import LabelChip from '@/components/labels/LabelChip'
 import CrossPostSection from '@/components/crosspost/CrossPostSection'
 import ShareButton from '@/components/share/ShareButton'
@@ -65,6 +66,12 @@ export default function PostPage() {
     } catch (err) {
       if (err instanceof HTTPError && err.response.status === 401) {
         setPublishError('Session expired. Please log in again.')
+      } else if (err instanceof HTTPError && err.response.status < 500) {
+        const detail = await parseErrorDetail(
+          err.response,
+          'Failed to publish post. Please try again.',
+        )
+        setPublishError(detail)
       } else {
         setPublishError('Failed to publish post. Please try again.')
       }

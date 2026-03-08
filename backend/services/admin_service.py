@@ -305,7 +305,8 @@ async def update_user_display_name(
             .values(author=author_value)
         )
         await session.commit()
-    except _DISPLAY_NAME_DB_ERRORS:
+    except _DISPLAY_NAME_DB_ERRORS as exc:
+        logger.error("Database error during display name update: %s", exc)
         await session.rollback()
         user.display_name = original_display_name
         user.updated_at = original_updated_at

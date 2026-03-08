@@ -21,7 +21,7 @@ Uses `createBrowserRouter` (data router) with `RouterProvider` for full react-ro
 
 The `useEditorAutoSave` hook (`hooks/useEditorAutoSave.ts`) provides crash recovery and unsaved-changes protection:
 
-- **Dirty tracking**: Compares current form state (body, labels, isDraft, newPath) to the loaded/initial state
+- **Dirty tracking**: Compares current form state (title, body, labels, isDraft) to the loaded/initial state
 - **Debounced auto-save**: Writes draft to `localStorage` (key: `agblogger:draft:<filePath>`) 3 seconds after the last edit
 - **Navigation blocking**: `useBlocker` shows a native `window.confirm` dialog for in-app SPA navigation; `beforeunload` covers tab close and page refresh
 - **Draft recovery**: On editor mount, detects stale drafts and shows a banner with Restore/Discard options

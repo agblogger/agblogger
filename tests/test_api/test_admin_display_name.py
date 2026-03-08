@@ -222,7 +222,8 @@ class TestUpdateDisplayName:
 
         assert resp.status_code == 500
         detail = resp.json()["detail"]
-        assert file_path in detail
+        # C2: detail must NOT leak internal error information
+        assert detail == "Failed to update display name"
 
         me_resp = await client.get("/api/auth/me", headers=headers)
         assert me_resp.status_code == 200
@@ -283,8 +284,8 @@ class TestUpdateDisplayName:
 
         assert resp.status_code == 500
         detail = resp.json()["detail"]
-        # The response should identify which file(s) failed
-        assert file_path2 in detail
+        # C2: detail must NOT leak internal error information like file paths
+        assert detail == "Failed to update display name"
 
         # DB should be rolled back - user display name unchanged
         me_resp = await client.get("/api/auth/me", headers=headers)
@@ -352,6 +353,77 @@ class TestUpdateDisplayName:
         assert post_file.read_text(encoding="utf-8") == original_post_content
         current_index_toml = (app_settings.content_dir / "index.toml").read_text(encoding="utf-8")
         assert current_index_toml == original_index_toml
+
+    @pytest.mark.asyncio
+    async def test_oserror_response_does_not_leak_internal_details(
+        self, client: AsyncClient, app_settings: Settings
+    ) -> None:
+        """C2: The 500 response must not expose internal error messages like file paths."""
+        token = await _login(client)
+        headers = {"Authorization": f"Bearer {token}"}
+
+        create_resp = await client.post(
+            "/api/posts",
+            json={
+                "title": "Leak Test Post",
+                "body": "Hello world",
+                "labels": [],
+                "is_draft": False,
+            },
+            headers=headers,
+        )
+        assert create_resp.status_code == 201
+        file_path = create_resp.json()["file_path"]
+
+        from backend.filesystem.content_manager import ContentManager
+
+        original_write_post = ContentManager.write_post
+
+        def failing_write_post(self: ContentManager, rel_path: str, post_data: PostData) -> None:
+            if rel_path == file_path:
+                raise OSError("/secret/internal/path/error")
+            original_write_post(self, rel_path, post_data)
+
+        with patch.object(ContentManager, "write_post", new=failing_write_post):
+            resp = await client.put(
+                "/api/admin/display-name",
+                json={"display_name": "Updated Author"},
+                headers=headers,
+            )
+
+        assert resp.status_code == 500
+        detail = resp.json()["detail"]
+        # Must NOT contain the internal error message or file paths
+        assert detail == "Failed to update display name"
+        assert "/secret/internal/path/error" not in detail
+        assert file_path not in detail
+
+    @pytest.mark.asyncio
+    async def test_db_error_during_display_name_update_is_logged(
+        self, client: AsyncClient, app_settings: Settings
+    ) -> None:
+        """I2: Database errors during display name update must be logged."""
+        token = await _login(client)
+        headers = {"Authorization": f"Bearer {token}"}
+
+        with (
+            patch(
+                "sqlalchemy.ext.asyncio.AsyncSession.commit",
+                side_effect=OperationalError("database locked", {}, Exception()),
+            ),
+            patch("backend.services.admin_service.logger") as mock_logger,
+        ):
+            resp = await client.put(
+                "/api/admin/display-name",
+                json={"display_name": "Updated Author"},
+                headers=headers,
+            )
+
+        assert resp.status_code == 503
+        mock_logger.error.assert_called()
+        # Verify the log message mentions the database error
+        log_call_args = str(mock_logger.error.call_args)
+        assert "database" in log_call_args.lower() or "display name" in log_call_args.lower()
 
 
 class TestDisplayNameUpdateSchema:

@@ -21,6 +21,7 @@ DEFAULT_CADDYFILE = "Caddyfile.production"
 DEFAULT_NO_CADDY_COMPOSE_FILE = "docker-compose.nocaddy.yml"
 DEFAULT_CADDY_PUBLIC_COMPOSE_FILE = "docker-compose.caddy-public.yml"
 SCAN_IMAGE_TAG = "agblogger-deploy-scan:latest"
+# Constructed to avoid static-analysis tools flagging literal 0.0.0.0
 PUBLIC_BIND_IP = ".".join(("0", "0", "0", "0"))
 LOCALHOST_BIND_IP = "127.0.0.1"
 

@@ -7,6 +7,7 @@ import json
 import re
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -298,7 +299,14 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     """Run the release workflow."""
     args = build_parser().parse_args()
-    result = run_release(repo_root(), args.level, remote=args.remote)
+    try:
+        result = run_release(repo_root(), args.level, remote=args.remote)
+    except ReleaseError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
+    except subprocess.CalledProcessError as exc:
+        print(f"Error: Command failed: {exc}", file=sys.stderr)
+        sys.exit(1)
     print(
         f"Released {result.tag}: {result.old_version} -> {result.new_version} "
         f"({result.tarball_path})"

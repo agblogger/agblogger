@@ -240,9 +240,7 @@ async def update_display_name(
             )
         except OSError as exc:
             logger.error("Failed to update display name: %s", exc)
-            raise HTTPException(
-                status_code=500, detail=f"Failed to update display name: {exc}"
-            ) from exc
+            raise HTTPException(status_code=500, detail="Failed to update display name") from exc
         set_git_warning(response, await git_service.try_commit("Update author display name"))
         return DisplayNameResponse(display_name=result)
 

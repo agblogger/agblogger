@@ -595,3 +595,48 @@ class TestRenameAsset:
         new_path = app_settings.content_dir / "posts" / "2026-02-02-hello-world" / "new.png"
         assert not old_path.exists()
         assert new_path.exists()
+
+    @pytest.mark.asyncio
+    async def test_stat_failure_before_rename_logs_warning(
+        self, client: AsyncClient, app_settings: Settings
+    ) -> None:
+        """I1: When stat() fails on old_path before rename, a warning must be logged."""
+        token = await _login(client)
+        file_content = b"fake image data"
+
+        # Upload an asset
+        upload_resp = await client.post(
+            f"/api/posts/{POST_PATH}/assets",
+            files=[("files", ("old.png", file_content, "image/png"))],
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert upload_resp.status_code == 200
+
+        # Patch Path.stat to raise OSError for the old file (simulating transient FS issue)
+        original_stat = type(app_settings.content_dir).stat
+
+        def _broken_stat(self: Path) -> Any:
+            if self.name == "old.png":
+                raise OSError("simulated stat failure on old_path")
+            return original_stat(self)
+
+        with (
+            patch.object(type(app_settings.content_dir), "stat", _broken_stat),
+            patch("backend.api.posts.logger") as mock_logger,
+        ):
+            resp = await client.patch(
+                f"/api/posts/{POST_PATH}/assets/old.png",
+                json={"new_name": "new.png"},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+
+        # Rename should still succeed with fallback size=0
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["name"] == "new.png"
+        assert data["size"] == 0
+
+        # A warning should have been logged about the stat failure
+        mock_logger.warning.assert_called()
+        warning_args = str(mock_logger.warning.call_args)
+        assert "stat" in warning_args.lower() or "old.png" in warning_args

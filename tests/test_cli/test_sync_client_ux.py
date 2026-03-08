@@ -17,6 +17,7 @@ from cli.sync_client import (
     load_config,
     login_interactive,
     save_config,
+    validate_server_url,
 )
 
 if TYPE_CHECKING:
@@ -319,13 +320,17 @@ class TestLoginInteractive:
         status_code: int = 200,
         json_data: dict[str, Any] | None = None,
         side_effect: Exception | None = None,
+        json_side_effect: Exception | None = None,
     ) -> MagicMock:
         mock = MagicMock()
         if side_effect:
             mock.post.side_effect = side_effect
         else:
             resp = MagicMock(status_code=status_code)
-            resp.json.return_value = json_data or {"access_token": "tok"}
+            if json_side_effect:
+                resp.json.side_effect = json_side_effect
+            else:
+                resp.json.return_value = json_data or {"access_token": "tok"}
             mock.post.return_value = resp
         return mock
 
@@ -404,6 +409,135 @@ class TestLoginInteractive:
         ):
             login_interactive("https://example.com", cli_username=None, config_username="cfg-user")
         mock_input.assert_not_called()
+
+    def test_missing_access_token_key_exits(self, capsys: pytest.CaptureFixture[str]) -> None:
+        mock = self._mock_client(json_data={"token": "something"})
+        with (
+            patch("cli.sync_client.httpx.Client", return_value=mock),
+            patch("getpass.getpass", return_value="pass"),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            login_interactive("https://example.com", cli_username="admin", config_username=None)
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        assert "Error" in captured.out
+
+    def test_invalid_json_response_exits(self, capsys: pytest.CaptureFixture[str]) -> None:
+        mock = self._mock_client(json_side_effect=ValueError("not json"))
+        with (
+            patch("cli.sync_client.httpx.Client", return_value=mock),
+            patch("getpass.getpass", return_value="pass"),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            login_interactive("https://example.com", cli_username="admin", config_username=None)
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        assert "Error" in captured.out
+
+    def test_500_status_exits_with_error(self, capsys: pytest.CaptureFixture[str]) -> None:
+        mock = self._mock_client(status_code=500)
+        with (
+            patch("cli.sync_client.httpx.Client", return_value=mock),
+            patch("getpass.getpass", return_value="pass"),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            login_interactive("https://example.com", cli_username="admin", config_username=None)
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        assert "500" in captured.out
+
+
+# ── validate_server_url ──────────────────────────────────────────────
+
+
+class TestValidateServerUrl:
+    def test_valid_https_url_passes(self) -> None:
+        result = validate_server_url("https://example.com")
+        assert result == "https://example.com"
+
+    def test_http_localhost_passes(self) -> None:
+        result = validate_server_url("http://localhost:8000")
+        assert result == "http://localhost:8000"
+
+    def test_http_non_localhost_raises(self) -> None:
+        with pytest.raises(ValueError, match="HTTPS is required"):
+            validate_server_url("http://example.com")
+
+    def test_invalid_scheme_raises(self) -> None:
+        with pytest.raises(ValueError, match="scheme and host"):
+            validate_server_url("ftp://example.com")
+
+    def test_missing_netloc_raises(self) -> None:
+        with pytest.raises(ValueError, match="scheme and host"):
+            validate_server_url("https://")
+
+
+# ── main() error handling ────────────────────────────────────────────
+
+
+class TestMainHttpErrorHandling:
+    def _setup_main(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        command: str,
+    ) -> MagicMock:
+        save_config(tmp_path, {"server": "https://example.com"})
+        monkeypatch.setattr(
+            "sys.argv",
+            ["agblogger", "-d", str(tmp_path), "--pat", "token", command],
+        )
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        return mock_client
+
+    def test_status_http_error_exits_cleanly(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        mock_client = self._setup_main(tmp_path, monkeypatch, "status")
+        request = httpx.Request("POST", "https://example.com/api/sync/status")
+        response = httpx.Response(status_code=403, request=request)
+        mock_client.status.side_effect = httpx.HTTPStatusError(
+            "Forbidden", request=request, response=response
+        )
+        with (
+            patch("cli.sync_client.SyncClient", return_value=mock_client),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            from cli.sync_client import main
+
+            main()
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        assert "403" in captured.out
+
+    def test_sync_http_error_exits_cleanly(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        mock_client = self._setup_main(tmp_path, monkeypatch, "sync")
+        mock_client.status.return_value = _plan()
+        request = httpx.Request("POST", "https://example.com/api/sync/commit")
+        response = httpx.Response(status_code=500, request=request)
+        mock_client.sync.side_effect = httpx.HTTPStatusError(
+            "Server Error", request=request, response=response
+        )
+        with (
+            patch("cli.sync_client.SyncClient", return_value=mock_client),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            from cli.sync_client import main
+
+            main()
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        assert "500" in captured.out
 
 
 # ── Status formatting regression ─────────────────────────────────────

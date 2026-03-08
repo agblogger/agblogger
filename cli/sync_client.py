@@ -213,7 +213,15 @@ def login_interactive(
         print(f"Error: Login failed (HTTP {resp.status_code})")
         sys.exit(1)
 
-    result: str = resp.json()["access_token"]
+    try:
+        data = resp.json()
+    except ValueError, UnicodeDecodeError:
+        print("Error: Server returned invalid response")
+        sys.exit(1)
+    if "access_token" not in data:
+        print("Error: Server response missing access token")
+        sys.exit(1)
+    result: str = data["access_token"]
     return result
 
 
@@ -464,31 +472,35 @@ def main() -> None:
             config_username=config.get("username"),
         )
 
-    with SyncClient(server_url, content_dir, token) as client:
-        if args.command == "status":
-            plan = client.status()
-            print("Sync Status:")
-            print(f"  To upload:        {len(plan.get('to_upload', []))}")
-            print(f"  To download:      {len(plan.get('to_download', []))}")
-            print(f"  To delete local:  {len(plan.get('to_delete_local', []))}")
-            print(f"  To delete remote: {len(plan.get('to_delete_remote', []))}")
-            print(f"  Conflicts:        {len(plan.get('conflicts', []))}")
+    try:
+        with SyncClient(server_url, content_dir, token) as client:
+            if args.command == "status":
+                plan = client.status()
+                print("Sync Status:")
+                print(f"  To upload:        {len(plan.get('to_upload', []))}")
+                print(f"  To download:      {len(plan.get('to_download', []))}")
+                print(f"  To delete local:  {len(plan.get('to_delete_local', []))}")
+                print(f"  To delete remote: {len(plan.get('to_delete_remote', []))}")
+                print(f"  Conflicts:        {len(plan.get('conflicts', []))}")
 
-            for f in plan.get("to_upload", []):
-                print(f"    + {f} (upload)")
-            for f in plan.get("to_download", []):
-                print(f"    < {f} (download)")
-            for c in plan.get("conflicts", []):
-                print(f"    ! {c['file_path']} (conflict)")
+                for f in plan.get("to_upload", []):
+                    print(f"    + {f} (upload)")
+                for f in plan.get("to_download", []):
+                    print(f"    < {f} (download)")
+                for c in plan.get("conflicts", []):
+                    print(f"    ! {c['file_path']} (conflict)")
 
-        elif args.command == "sync":
-            plan = client.status()
-            if has_pending_changes(plan) and not args.yes and not confirm_sync(plan):
-                print("Sync cancelled.")
-                sys.exit(0)
-            client.sync(plan)
-        else:
-            parser.print_help()
+            elif args.command == "sync":
+                plan = client.status()
+                if has_pending_changes(plan) and not args.yes and not confirm_sync(plan):
+                    print("Sync cancelled.")
+                    sys.exit(0)
+                client.sync(plan)
+            else:
+                parser.print_help()
+    except httpx.HTTPStatusError as exc:
+        print(f"Error: Server returned HTTP {exc.response.status_code}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

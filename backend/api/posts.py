@@ -570,7 +570,8 @@ async def rename_asset(
         # and stat on the new path could fail due to transient filesystem issues.
         try:
             file_size = old_path.stat().st_size
-        except OSError:
+        except OSError as exc:
+            logger.warning("Failed to stat asset %s before rename: %s", old_path, exc)
             file_size = 0
 
         try:

@@ -9,7 +9,7 @@ from pathlib import Path
 
 @lru_cache(maxsize=1)
 def get_version() -> str:
-    """Return the application version from the repo root or installed package metadata."""
+    """Return the application version (cached for process lifetime)."""
     version_path = Path(__file__).resolve().parents[1] / "VERSION"
     if version_path.exists():
         return version_path.read_text(encoding="utf-8").strip()

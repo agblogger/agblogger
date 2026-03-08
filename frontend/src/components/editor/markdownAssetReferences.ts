@@ -1,3 +1,5 @@
+// Matches markdown inline links and images: ![alt](target "title") or [text](target "title").
+// Captures: (1) label portion ![...] or [...], (2) URL target, (3) remaining text before closing paren.
 const INLINE_ASSET_REFERENCE_PATTERN = /(!?\[[^\]]*])\(\s*(<[^>\n]+>|[^)\s]+)([^)]*)\)/g
 
 function rewriteTarget(target: string, oldName: string, newName: string): string {

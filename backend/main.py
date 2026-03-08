@@ -128,7 +128,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     _configure_logging(settings.debug)
     logger.info("Starting AgBlogger (debug=%s)", settings.debug)
     app.state.content_write_lock = asyncio.Lock()
-    # Ensure database directory exists (M16)
+    # Ensure SQLite database parent directory exists
     db_url = settings.database_url
     if db_url.startswith("sqlite"):
         db_path = db_url.split("///", 1)[-1] if "///" in db_url else None

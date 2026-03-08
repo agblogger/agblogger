@@ -57,7 +57,6 @@ export default function FileStrip({
     )
   }
 
-  const resolvedPath = filePath
   const controlsDisabled = disabled || operating
 
   function handleToggle() {
@@ -78,11 +77,12 @@ export default function FileStrip({
   }
 
   async function performDelete(name: string) {
+    if (filePath === null) return
     setOperating(true)
     setError(null)
     setConfirmDelete(null)
     try {
-      await deletePostAsset(resolvedPath, name)
+      await deletePostAsset(filePath, name)
       await loadAssets()
     } catch (err) {
       if (err instanceof HTTPError) {
@@ -97,10 +97,11 @@ export default function FileStrip({
   }
 
   async function handleRename(oldName: string, newName: string) {
+    if (filePath === null) return
     setOperating(true)
     setError(null)
     try {
-      await renamePostAsset(resolvedPath, oldName, newName)
+      await renamePostAsset(filePath, oldName, newName)
       const updatedBody = rewriteMarkdownAssetReferences(body, oldName, newName)
       onBodyChange(updatedBody)
       await loadAssets()
@@ -117,12 +118,13 @@ export default function FileStrip({
   }
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    if (filePath === null) return
     const files = e.target.files
     if (files === null || files.length === 0) return
     setOperating(true)
     setError(null)
     try {
-      await uploadAssets(resolvedPath, Array.from(files))
+      await uploadAssets(filePath, Array.from(files))
       await loadAssets()
     } catch (err) {
       if (err instanceof HTTPError) {
