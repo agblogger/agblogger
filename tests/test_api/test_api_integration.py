@@ -268,6 +268,20 @@ class TestFiltering:
         assert data["total"] >= 1
 
     @pytest.mark.asyncio
+    async def test_filter_by_author_case_insensitive(self, client: AsyncClient) -> None:
+        resp = await client.get("/api/posts", params={"author": "admin"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] >= 1
+
+    @pytest.mark.asyncio
+    async def test_filter_by_author_partial_match(self, client: AsyncClient) -> None:
+        resp = await client.get("/api/posts", params={"author": "Adm"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] >= 1
+
+    @pytest.mark.asyncio
     async def test_filter_by_date_range(self, client: AsyncClient) -> None:
         resp = await client.get("/api/posts", params={"from": "2026-01-01", "to": "2026-12-31"})
         assert resp.status_code == 200

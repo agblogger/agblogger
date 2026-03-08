@@ -63,7 +63,8 @@ async def list_posts(
         stmt = stmt.where(PostCache.is_draft.is_(False))
 
     if author:
-        stmt = stmt.where(PostCache.author == author)
+        escaped = author.replace("%", r"\%").replace("_", r"\_")
+        stmt = stmt.where(PostCache.author.ilike(f"%{escaped}%", escape="\\"))
 
     if from_date:
         try:
