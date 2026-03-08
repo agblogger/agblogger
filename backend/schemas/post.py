@@ -96,3 +96,9 @@ class AssetListResponse(BaseModel):
     """Response for listing post assets."""
 
     assets: list[AssetInfo]
+
+
+class AssetRenameRequest(BaseModel):
+    """Request body for renaming an asset."""
+
+    new_name: str = Field(min_length=1, max_length=255)

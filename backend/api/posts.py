@@ -39,6 +39,7 @@ from backend.pandoc.renderer import render_markdown, render_markdown_excerpt, re
 from backend.schemas.post import (
     AssetInfo,
     AssetListResponse,
+    AssetRenameRequest,
     PostDetail,
     PostEditResponse,
     PostListResponse,
@@ -524,6 +525,58 @@ async def delete_asset(
         set_git_warning(
             response,
             await git_service.try_commit(f"Delete asset {filename} from {file_path}"),
+        )
+
+
+@router.patch("/{file_path:path}/assets/{filename}", response_model=AssetInfo)
+async def rename_asset(
+    file_path: str,
+    filename: str,
+    body: AssetRenameRequest,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    content_manager: Annotated[ContentManager, Depends(get_content_manager)],
+    git_service: Annotated[GitService, Depends(get_git_service)],
+    content_write_lock: Annotated[AsyncWriteLock, Depends(get_content_write_lock)],
+    _user: Annotated[User, Depends(require_admin)],
+) -> AssetInfo:
+    """Rename an asset file in a post's directory."""
+    _validate_asset_filename(filename)
+    _validate_asset_filename(body.new_name)
+
+    async with content_write_lock:
+        stmt = select(PostCache).where(PostCache.file_path == file_path)
+        result = await session.execute(stmt)
+        if result.scalar_one_or_none() is None:
+            raise HTTPException(status_code=404, detail="Post not found")
+
+        post_dir = (content_manager.content_dir / file_path).parent
+        old_path = post_dir / filename
+        new_path = post_dir / body.new_name
+
+        if not old_path.is_file():
+            raise HTTPException(status_code=404, detail="Asset not found")
+        if new_path.exists():
+            raise HTTPException(status_code=409, detail="A file with that name already exists")
+
+        try:
+            old_path.rename(new_path)
+        except OSError as exc:
+            logger.error("Failed to rename asset %s -> %s: %s", old_path, new_path, exc)
+            raise HTTPException(status_code=500, detail="Failed to rename asset") from exc
+
+        set_git_warning(
+            response,
+            await git_service.try_commit(
+                f"Rename asset {filename} -> {body.new_name} in {file_path}"
+            ),
+        )
+
+        ext = new_path.suffix.lstrip(".").lower()
+        return AssetInfo(
+            name=body.new_name,
+            size=new_path.stat().st_size,
+            is_image=ext in _IMAGE_EXTENSIONS,
         )
 
 

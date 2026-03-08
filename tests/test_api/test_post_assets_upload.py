@@ -381,3 +381,121 @@ class TestDeleteAsset:
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 400
+
+
+class TestRenameAsset:
+    @pytest.mark.asyncio
+    async def test_rename_asset(
+        self, client: AsyncClient, app_settings: Settings
+    ) -> None:
+        """Upload old.png, PATCH rename to new.png, verify old gone and new exists."""
+        token = await _login(client)
+        file_content = b"fake image data"
+
+        # Upload an asset
+        upload_resp = await client.post(
+            "/api/posts/posts/hello.md/assets",
+            files=[("files", ("old.png", file_content, "image/png"))],
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert upload_resp.status_code == 200
+
+        # Rename old.png -> new.png
+        resp = await client.patch(
+            "/api/posts/posts/hello.md/assets/old.png",
+            json={"new_name": "new.png"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["name"] == "new.png"
+        assert data["size"] == len(file_content)
+        assert data["is_image"] is True
+
+        # Verify old file is gone, new file exists
+        old_path = app_settings.content_dir / "posts" / "old.png"
+        new_path = app_settings.content_dir / "posts" / "new.png"
+        assert not old_path.exists()
+        assert new_path.exists()
+        assert new_path.read_bytes() == file_content
+
+    @pytest.mark.asyncio
+    async def test_rename_to_existing_name(self, client: AsyncClient) -> None:
+        """Upload a.png and b.png, try rename a -> b, expect 409."""
+        token = await _login(client)
+
+        # Upload two assets
+        await client.post(
+            "/api/posts/posts/hello.md/assets",
+            files=[
+                ("files", ("a.png", b"data-a", "image/png")),
+                ("files", ("b.png", b"data-b", "image/png")),
+            ],
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        resp = await client.patch(
+            "/api/posts/posts/hello.md/assets/a.png",
+            json={"new_name": "b.png"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 409
+
+    @pytest.mark.asyncio
+    async def test_rename_nonexistent_asset(self, client: AsyncClient) -> None:
+        """PATCH for asset that doesn't exist returns 404."""
+        token = await _login(client)
+
+        resp = await client.patch(
+            "/api/posts/posts/hello.md/assets/nonexistent.png",
+            json={"new_name": "renamed.png"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_rename_to_invalid_name(self, client: AsyncClient) -> None:
+        """Upload, try rename to .hidden, expect 400."""
+        token = await _login(client)
+
+        # Upload an asset
+        await client.post(
+            "/api/posts/posts/hello.md/assets",
+            files=[("files", ("photo.png", b"data", "image/png"))],
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        resp = await client.patch(
+            "/api/posts/posts/hello.md/assets/photo.png",
+            json={"new_name": ".hidden"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_rename_requires_auth(self, client: AsyncClient) -> None:
+        """PATCH without auth returns 401."""
+        resp = await client.patch(
+            "/api/posts/posts/hello.md/assets/photo.png",
+            json={"new_name": "new.png"},
+        )
+        assert resp.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_cannot_rename_to_index_md(self, client: AsyncClient) -> None:
+        """Upload, try rename to index.md, expect 400."""
+        token = await _login(client)
+
+        # Upload an asset
+        await client.post(
+            "/api/posts/posts/hello.md/assets",
+            files=[("files", ("photo.png", b"data", "image/png"))],
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        resp = await client.patch(
+            "/api/posts/posts/hello.md/assets/photo.png",
+            json={"new_name": "index.md"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 400
