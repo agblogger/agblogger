@@ -83,17 +83,15 @@ export default function TimezoneCombobox({ value, onChange, disabled }: Timezone
     setHighlightIndex(-1)
   }
 
-  function closeDropdown() {
+  const closeDropdown = useCallback(() => {
     setIsOpen(false)
     setSearchText(null)
     setHighlightIndex(-1)
-  }
+  }, [])
 
   function selectTimezone(tz: string) {
     onChange(tz)
-    setIsOpen(false)
-    setSearchText(null)
-    setHighlightIndex(-1)
+    closeDropdown()
   }
 
   function handleInputChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -156,7 +154,7 @@ export default function TimezoneCombobox({ value, onChange, disabled }: Timezone
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
-  })
+  }, [isOpen, closeDropdown])
 
   // Scroll highlighted option into view
   useEffect(() => {
