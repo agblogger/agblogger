@@ -72,6 +72,15 @@ _FTS_INSERT_SQL = text(
 )
 
 
+def _get_post_asset_directory(file_path: str, content_manager: ContentManager) -> FilePath:
+    """Return the asset directory for a directory-backed post."""
+    post_file = content_manager.content_dir / file_path
+    if post_file.name != "index.md":
+        msg = "Asset management requires a directory-style post ending in /index.md"
+        raise HTTPException(status_code=400, detail=msg)
+    return post_file.parent
+
+
 async def _replace_post_labels(
     session: AsyncSession,
     *,
@@ -418,7 +427,7 @@ async def upload_assets(
         if post is None:
             raise HTTPException(status_code=404, detail="Post not found")
 
-        post_dir = (content_manager.content_dir / file_path).parent
+        post_dir = _get_post_asset_directory(file_path, content_manager)
         uploaded: list[str] = []
         for filename, data in asset_data:
             dest = post_dir / filename
@@ -458,19 +467,11 @@ async def list_assets(
     if result.scalar_one_or_none() is None:
         raise HTTPException(status_code=404, detail="Post not found")
 
-    post_file = content_manager.content_dir / file_path
-    # Flat-file posts (e.g. posts/hello.md) don't have a per-post directory,
-    # so they cannot have co-located assets. Only directory-style posts
-    # (where the file is index.md inside a per-post directory) support assets.
-    if post_file.name != "index.md":
-        return AssetListResponse(assets=[])
-
-    post_dir = post_file.parent
-    post_filename = post_file.name
+    post_dir = _get_post_asset_directory(file_path, content_manager)
     assets: list[AssetInfo] = []
     try:
         for entry in sorted(post_dir.iterdir()):
-            if entry.name == post_filename or entry.name.startswith(".") or not entry.is_file():
+            if entry.name == "index.md" or entry.name.startswith(".") or not entry.is_file():
                 continue
             ext = entry.suffix.lstrip(".").lower()
             assets.append(
@@ -518,7 +519,7 @@ async def delete_asset(
         if result.scalar_one_or_none() is None:
             raise HTTPException(status_code=404, detail="Post not found")
 
-        asset_path = (content_manager.content_dir / file_path).parent / filename
+        asset_path = _get_post_asset_directory(file_path, content_manager) / filename
         if not asset_path.is_file():
             raise HTTPException(status_code=404, detail="Asset not found")
 
@@ -556,7 +557,7 @@ async def rename_asset(
         if result.scalar_one_or_none() is None:
             raise HTTPException(status_code=404, detail="Post not found")
 
-        post_dir = (content_manager.content_dir / file_path).parent
+        post_dir = _get_post_asset_directory(file_path, content_manager)
         old_path = post_dir / filename
         new_path = post_dir / body.new_name
 

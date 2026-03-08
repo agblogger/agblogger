@@ -105,6 +105,7 @@ Frontend sends multipart file upload
     → POST /api/posts/{path}/assets
         → Require admin
         → Verify post exists in DB cache
+        → Reject flat-file post paths; asset management requires `.../index.md`
         → Write files to post's directory (10 MB limit per file)
         → Git commit
         → Return list of uploaded filenames

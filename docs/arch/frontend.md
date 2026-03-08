@@ -32,9 +32,10 @@ The `useEditorAutoSave` hook (`hooks/useEditorAutoSave.ts`) provides crash recov
 The `FileStrip` component (`components/editor/FileStrip.tsx`) provides inline asset management within the editor, positioned between the metadata bar and the editor/preview split:
 
 - **Collapsible strip**: Header shows paperclip icon + file count; expands to show `FileCard` grid with thumbnails (images) or file-type icons
+- **Directory-backed posts only**: The strip renders for new drafts and saved posts whose canonical path ends in `/index.md`; legacy flat-file paths do not expose asset management UI
 - **Operations**: Upload (via hidden file input), delete (with confirmation if file is referenced in body), rename (with auto-update limited to markdown link/image destinations that reference the renamed asset), insert markdown at cursor, copy filename
 - **Save-and-stay flow**: New posts stay on the editor after save (URL replaces to `/editor/{file_path}`); a "View post" button appears once saved
-- **Backend endpoints**: `GET /api/posts/{file_path}/assets` (list), `DELETE .../assets/{filename}` (delete), `PATCH .../assets/{filename}` (rename)
+- **Backend endpoints**: `GET /api/posts/{file_path}/assets` (list), `DELETE .../assets/{filename}` (delete), `PATCH .../assets/{filename}` (rename); these endpoints reject flat-file post paths
 
 ## Admin Settings
 

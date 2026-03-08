@@ -7,6 +7,7 @@ from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError, OperationalError
 
 from backend.exceptions import BuiltinPageError
 from backend.filesystem.toml_manager import (
@@ -24,6 +25,7 @@ if TYPE_CHECKING:
     from backend.models.user import User
 
 BUILTIN_PAGE_IDS = {"timeline", "labels"}
+_DISPLAY_NAME_DB_ERRORS = (OperationalError, IntegrityError)
 logger = logging.getLogger(__name__)
 
 
@@ -238,6 +240,7 @@ async def update_user_display_name(
     stmt = select(PostCache.file_path).where(PostCache.author_username == user.username)
     result = await session.execute(stmt)
     file_paths = [row[0] for row in result.all()]
+    original_default_author = cm.site_config.default_author
 
     original_posts: dict[str, PostData] = {}
     updated_posts: dict[str, PostData] = {}
@@ -250,16 +253,7 @@ async def update_user_display_name(
         original_posts[file_path] = post_data
         updated_posts[file_path] = replace(post_data, author=author_value)
 
-    written_paths: list[str] = []
-    current_path: str | None = None
-    try:
-        for current_path, post_data in updated_posts.items():
-            cm.write_post(current_path, post_data)
-            written_paths.append(current_path)
-        current_path = None
-        sync_site_default_author(cm, default_author=author_value)
-    except OSError as exc:
-        failed_path = current_path if current_path not in written_paths else None
+    def rollback_filesystem_changes(written_paths: list[str]) -> None:
         for written_path in reversed(written_paths):
             original_post = original_posts.get(written_path)
             if original_post is None:
@@ -272,23 +266,51 @@ async def update_user_display_name(
                     written_path,
                     rollback_exc,
                 )
+        if cm.site_config.default_author != original_default_author:
+            try:
+                sync_site_default_author(cm, default_author=original_default_author)
+            except OSError as rollback_exc:
+                logger.error(
+                    "Failed to rollback default author after display-name migration: %s",
+                    rollback_exc,
+                )
+
+    written_paths: list[str] = []
+    current_path: str | None = None
+    try:
+        for current_path, post_data in updated_posts.items():
+            cm.write_post(current_path, post_data)
+            written_paths.append(current_path)
+        current_path = None
+        sync_site_default_author(cm, default_author=author_value)
+    except OSError as exc:
+        failed_path = current_path if current_path not in written_paths else None
+        rollback_filesystem_changes(written_paths)
         if failed_path is not None:
             msg = f"Failed to update author in {failed_path}: {exc}"
         else:
             msg = f"Failed to update site config: {exc}"
         raise OSError(msg) from exc
 
+    original_display_name = user.display_name
+    original_updated_at = user.updated_at
     user.display_name = display_name
     user.updated_at = format_iso(now_utc())
     session.add(user)
 
-    await session.execute(
-        update(PostCache)
-        .where(PostCache.author_username == user.username)
-        .values(author=author_value)
-    )
-
-    await session.commit()
+    try:
+        await session.execute(
+            update(PostCache)
+            .where(PostCache.author_username == user.username)
+            .values(author=author_value)
+        )
+        await session.commit()
+    except _DISPLAY_NAME_DB_ERRORS:
+        await session.rollback()
+        user.display_name = original_display_name
+        user.updated_at = original_updated_at
+        rollback_filesystem_changes(written_paths)
+        raise
     return display_name
 
 

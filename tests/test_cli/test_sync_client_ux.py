@@ -216,6 +216,10 @@ class TestConfirmSync:
         with patch("builtins.input", side_effect=KeyboardInterrupt):
             assert confirm_sync(_plan(to_upload=["a.md"])) is False
 
+    def test_eof_returns_false(self) -> None:
+        with patch("builtins.input", side_effect=EOFError):
+            assert confirm_sync(_plan(to_upload=["a.md"])) is False
+
     def test_prints_plan_summary(self, capsys: pytest.CaptureFixture[str]) -> None:
         with patch("builtins.input", return_value="n"):
             confirm_sync(_plan(to_upload=["posts/new.md"]))

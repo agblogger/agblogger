@@ -93,6 +93,11 @@ const editResponse: PostEditResponse = {
   author: 'Admin',
 }
 
+const directoryEditResponse: PostEditResponse = {
+  ...editResponse,
+  file_path: 'posts/2026-03-08-existing-post/index.md',
+}
+
 describe('EditorPage', () => {
   beforeEach(() => {
     mockUser = { id: 1, username: 'jane', email: 'jane@test.com', display_name: null, is_admin: true }
@@ -688,13 +693,24 @@ describe('EditorPage', () => {
   })
 
   it('shows FileStrip for existing post', async () => {
-    mockFetchPostForEdit.mockResolvedValue(editResponse)
-    renderEditor('/editor/posts/existing.md')
+    mockFetchPostForEdit.mockResolvedValue(directoryEditResponse)
+    renderEditor('/editor/posts/2026-03-08-existing-post/index.md')
     await waitFor(() => {
       expect(screen.getByLabelText(/Title/)).toHaveValue('Existing Post')
     })
     // FileStrip header should show "Files" (empty assets from mock)
     expect(screen.getByText('Files')).toBeInTheDocument()
+  })
+
+  it('hides FileStrip for legacy flat-file posts', async () => {
+    mockFetchPostForEdit.mockResolvedValue(editResponse)
+    renderEditor('/editor/posts/existing.md')
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Title/)).toHaveValue('Existing Post')
+    })
+
+    expect(screen.queryByText('Files')).not.toBeInTheDocument()
   })
 
   it('shows save-first message for new post FileStrip', async () => {
@@ -756,8 +772,8 @@ describe('EditorPage', () => {
   })
 
   it('shows FileStrip with Files header for existing post', async () => {
-    mockFetchPostForEdit.mockResolvedValue(editResponse)
-    renderEditor('/editor/posts/existing.md')
+    mockFetchPostForEdit.mockResolvedValue(directoryEditResponse)
+    renderEditor('/editor/posts/2026-03-08-existing-post/index.md')
 
     await waitFor(() => {
       expect(screen.getByLabelText(/Title/)).toHaveValue('Existing Post')

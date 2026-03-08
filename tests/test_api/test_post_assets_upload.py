@@ -18,13 +18,23 @@ if TYPE_CHECKING:
     from httpx import AsyncClient
 
 
+POST_PATH = "posts/2026-02-02-hello-world/index.md"
+LEGACY_POST_PATH = "posts/legacy-post.md"
+
+
 @pytest.fixture
 def app_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
     """Create settings for test app with a sample post."""
     posts_dir = tmp_content_dir / "posts"
-    (posts_dir / "hello.md").write_text(
+    hello_post_dir = posts_dir / "2026-02-02-hello-world"
+    hello_post_dir.mkdir()
+    (hello_post_dir / "index.md").write_text(
         "---\ntitle: Hello World\ncreated_at: 2026-02-02 22:21:29.975359+00\n"
-        "author: Admin\nlabels: []\n---\n\nTest content.\n"
+        "author: Admin\nauthor_username: admin\nlabels: []\n---\n\nTest content.\n"
+    )
+    (posts_dir / "legacy-post.md").write_text(
+        "---\ntitle: Legacy Post\ncreated_at: 2026-02-03 09:00:00+00\n"
+        "author: Admin\nauthor_username: admin\nlabels: []\n---\n\nLegacy content.\n"
     )
     (tmp_content_dir / "labels.toml").write_text("[labels]\n")
     db_path = tmp_path / "test.db"
@@ -71,7 +81,7 @@ class TestUploadAssets:
         ).encode()
 
         resp = await client.post(
-            "/api/posts/posts/hello.md/assets",
+            f"/api/posts/{POST_PATH}/assets",
             content=body,
             headers={
                 "Authorization": f"Bearer {token}",
@@ -90,7 +100,7 @@ class TestUploadAssets:
         file_content = b"fake image data"
 
         resp = await client.post(
-            "/api/posts/posts/hello.md/assets",
+            f"/api/posts/{POST_PATH}/assets",
             files=[("files", ("photo.png", file_content, "image/png"))],
             headers={"Authorization": f"Bearer {token}"},
         )
@@ -100,7 +110,7 @@ class TestUploadAssets:
         assert data["uploaded"] == ["photo.png"]
 
         # Verify the file actually exists on disk
-        uploaded_path = app_settings.content_dir / "posts" / "photo.png"
+        uploaded_path = app_settings.content_dir / "posts" / "2026-02-02-hello-world" / "photo.png"
         assert uploaded_path.exists()
         assert uploaded_path.read_bytes() == file_content
 
@@ -109,7 +119,7 @@ class TestUploadAssets:
         token = await _login(client)
 
         resp = await client.post(
-            "/api/posts/posts/hello.md/assets",
+            f"/api/posts/{POST_PATH}/assets",
             files=[
                 ("files", ("a.png", b"data-a", "image/png")),
                 ("files", ("b.pdf", b"data-b", "application/pdf")),
@@ -121,13 +131,13 @@ class TestUploadAssets:
         data = resp.json()
         assert set(data["uploaded"]) == {"a.png", "b.pdf"}
 
-        assert (app_settings.content_dir / "posts" / "a.png").exists()
-        assert (app_settings.content_dir / "posts" / "b.pdf").exists()
+        assert (app_settings.content_dir / "posts" / "2026-02-02-hello-world" / "a.png").exists()
+        assert (app_settings.content_dir / "posts" / "2026-02-02-hello-world" / "b.pdf").exists()
 
     @pytest.mark.asyncio
     async def test_upload_requires_auth(self, client: AsyncClient) -> None:
         resp = await client.post(
-            "/api/posts/posts/hello.md/assets",
+            f"/api/posts/{POST_PATH}/assets",
             files=[("files", ("photo.png", b"data", "image/png"))],
         )
         assert resp.status_code == 401
@@ -137,7 +147,7 @@ class TestUploadAssets:
         token = await _login(client)
 
         resp = await client.post(
-            "/api/posts/posts/nonexistent.md/assets",
+            "/api/posts/posts/nonexistent/index.md/assets",
             files=[("files", ("photo.png", b"data", "image/png"))],
             headers={"Authorization": f"Bearer {token}"},
         )
@@ -150,7 +160,7 @@ class TestUploadAssets:
         large_content = b"x" * (10 * 1024 * 1024 + 1)
 
         resp = await client.post(
-            "/api/posts/posts/hello.md/assets",
+            f"/api/posts/{POST_PATH}/assets",
             files=[("files", ("large.bin", large_content, "application/octet-stream"))],
             headers={"Authorization": f"Bearer {token}"},
         )
@@ -161,7 +171,7 @@ class TestUploadAssets:
         token = await _login(client)
 
         resp = await client.post(
-            "/api/posts/posts/hello.md/assets",
+            f"/api/posts/{POST_PATH}/assets",
             files=[("files", (".hidden", b"data", "application/octet-stream"))],
             headers={"Authorization": f"Bearer {token}"},
         )
@@ -174,7 +184,7 @@ class TestUploadAssets:
         token = await _login(client)
 
         resp = await client.post(
-            "/api/posts/posts/hello.md/assets",
+            f"/api/posts/{POST_PATH}/assets",
             files=[("files", ("subdir/photo.png", b"data", "image/png"))],
             headers={"Authorization": f"Bearer {token}"},
         )
@@ -183,7 +193,21 @@ class TestUploadAssets:
         data = resp.json()
         # Directory components should be stripped, only filename kept
         assert data["uploaded"] == ["photo.png"]
-        assert (app_settings.content_dir / "posts" / "photo.png").exists()
+        uploaded_path = app_settings.content_dir / "posts" / "2026-02-02-hello-world" / "photo.png"
+        assert uploaded_path.exists()
+
+    @pytest.mark.asyncio
+    async def test_upload_rejects_legacy_flat_file_post(self, client: AsyncClient) -> None:
+        token = await _login(client)
+
+        resp = await client.post(
+            f"/api/posts/{LEGACY_POST_PATH}/assets",
+            files=[("files", ("photo.png", b"data", "image/png"))],
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert resp.status_code == 400
+        assert "directory-style" in resp.json()["detail"]
 
 
 class TestListAssets:
@@ -193,7 +217,7 @@ class TestListAssets:
         token = await _login(client)
 
         resp = await client.get(
-            "/api/posts/posts/hello.md/assets",
+            f"/api/posts/{POST_PATH}/assets",
             headers={"Authorization": f"Bearer {token}"},
         )
 
@@ -202,35 +226,22 @@ class TestListAssets:
         assert data["assets"] == []
 
     @pytest.mark.asyncio
-    async def test_list_assets_flat_file_post_returns_empty(
+    async def test_list_assets_rejects_legacy_flat_file_post(
         self, client: AsyncClient, app_settings: Settings
     ) -> None:
-        """Flat-file posts (not in per-post directory) must return empty asset list.
-
-        Regression: for posts/hello.md, post_file.parent is the entire posts/
-        directory. Without the flat-file check, iterating posts/ would expose
-        other posts as 'assets'.
-        """
+        """Legacy flat-file posts do not support editor asset management."""
         token = await _login(client)
 
-        # Create a second flat-file post so there are multiple files in posts/
         posts_dir = app_settings.content_dir / "posts"
-        (posts_dir / "other.md").write_text(
-            "---\ntitle: Other Post\ncreated_at: 2026-02-03 10:00:00+00\n"
-            "author: Admin\nlabels: []\n---\n\nOther content.\n"
-        )
-        # Also place a non-md file in posts/ to simulate a stray file
         (posts_dir / "stray-image.png").write_bytes(b"fake png data")
 
         resp = await client.get(
-            "/api/posts/posts/hello.md/assets",
+            f"/api/posts/{LEGACY_POST_PATH}/assets",
             headers={"Authorization": f"Bearer {token}"},
         )
 
-        assert resp.status_code == 200
-        data = resp.json()
-        # Flat-file posts don't support co-located assets — must be empty
-        assert data["assets"] == [], f"Flat-file post should have no assets, got: {data['assets']}"
+        assert resp.status_code == 400
+        assert "directory-style" in resp.json()["detail"]
 
     @pytest.mark.asyncio
     async def test_list_assets_after_upload(
@@ -310,7 +321,7 @@ class TestListAssets:
     @pytest.mark.asyncio
     async def test_list_assets_requires_auth(self, client: AsyncClient) -> None:
         """GET without auth returns 401."""
-        resp = await client.get("/api/posts/posts/hello.md/assets")
+        resp = await client.get(f"/api/posts/{POST_PATH}/assets")
         assert resp.status_code == 401
 
     @pytest.mark.asyncio
@@ -319,7 +330,7 @@ class TestListAssets:
         token = await _login(client)
 
         resp = await client.get(
-            "/api/posts/posts/nonexistent.md/assets",
+            "/api/posts/posts/nonexistent/index.md/assets",
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 404
@@ -334,19 +345,19 @@ class TestDeleteAsset:
 
         # Upload an asset
         upload_resp = await client.post(
-            "/api/posts/posts/hello.md/assets",
+            f"/api/posts/{POST_PATH}/assets",
             files=[("files", ("photo.png", file_content, "image/png"))],
             headers={"Authorization": f"Bearer {token}"},
         )
         assert upload_resp.status_code == 200
 
         # Verify it exists on disk
-        asset_path = app_settings.content_dir / "posts" / "photo.png"
+        asset_path = app_settings.content_dir / "posts" / "2026-02-02-hello-world" / "photo.png"
         assert asset_path.exists()
 
         # Delete the asset
         resp = await client.delete(
-            "/api/posts/posts/hello.md/assets/photo.png",
+            f"/api/posts/{POST_PATH}/assets/photo.png",
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 204
@@ -360,7 +371,7 @@ class TestDeleteAsset:
         token = await _login(client)
 
         resp = await client.delete(
-            "/api/posts/posts/hello.md/assets/nonexistent.png",
+            f"/api/posts/{POST_PATH}/assets/nonexistent.png",
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 404
@@ -369,7 +380,7 @@ class TestDeleteAsset:
     async def test_delete_asset_requires_auth(self, client: AsyncClient) -> None:
         """DELETE without auth returns 401."""
         resp = await client.delete(
-            "/api/posts/posts/hello.md/assets/photo.png",
+            f"/api/posts/{POST_PATH}/assets/photo.png",
         )
         assert resp.status_code == 401
 
@@ -400,7 +411,7 @@ class TestDeleteAsset:
         token = await _login(client)
 
         resp = await client.delete(
-            "/api/posts/posts/hello.md/assets/.gitkeep",
+            f"/api/posts/{POST_PATH}/assets/.gitkeep",
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 400
@@ -416,7 +427,7 @@ class TestDeleteAsset:
 
         # Backslash traversal: caught by _validate_asset_filename → 400
         resp = await client.delete(
-            "/api/posts/posts/hello.md/assets/..%5C..%5Cindex.toml",
+            f"/api/posts/{POST_PATH}/assets/..%5C..%5Cindex.toml",
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 400
@@ -431,7 +442,7 @@ class TestRenameAsset:
 
         # Upload an asset
         upload_resp = await client.post(
-            "/api/posts/posts/hello.md/assets",
+            f"/api/posts/{POST_PATH}/assets",
             files=[("files", ("old.png", file_content, "image/png"))],
             headers={"Authorization": f"Bearer {token}"},
         )
@@ -439,7 +450,7 @@ class TestRenameAsset:
 
         # Rename old.png -> new.png
         resp = await client.patch(
-            "/api/posts/posts/hello.md/assets/old.png",
+            f"/api/posts/{POST_PATH}/assets/old.png",
             json={"new_name": "new.png"},
             headers={"Authorization": f"Bearer {token}"},
         )
@@ -450,8 +461,8 @@ class TestRenameAsset:
         assert data["is_image"] is True
 
         # Verify old file is gone, new file exists
-        old_path = app_settings.content_dir / "posts" / "old.png"
-        new_path = app_settings.content_dir / "posts" / "new.png"
+        old_path = app_settings.content_dir / "posts" / "2026-02-02-hello-world" / "old.png"
+        new_path = app_settings.content_dir / "posts" / "2026-02-02-hello-world" / "new.png"
         assert not old_path.exists()
         assert new_path.exists()
         assert new_path.read_bytes() == file_content
@@ -463,7 +474,7 @@ class TestRenameAsset:
 
         # Upload two assets
         await client.post(
-            "/api/posts/posts/hello.md/assets",
+            f"/api/posts/{POST_PATH}/assets",
             files=[
                 ("files", ("a.png", b"data-a", "image/png")),
                 ("files", ("b.png", b"data-b", "image/png")),
@@ -472,7 +483,7 @@ class TestRenameAsset:
         )
 
         resp = await client.patch(
-            "/api/posts/posts/hello.md/assets/a.png",
+            f"/api/posts/{POST_PATH}/assets/a.png",
             json={"new_name": "b.png"},
             headers={"Authorization": f"Bearer {token}"},
         )
@@ -484,7 +495,7 @@ class TestRenameAsset:
         token = await _login(client)
 
         resp = await client.patch(
-            "/api/posts/posts/hello.md/assets/nonexistent.png",
+            f"/api/posts/{POST_PATH}/assets/nonexistent.png",
             json={"new_name": "renamed.png"},
             headers={"Authorization": f"Bearer {token}"},
         )
@@ -497,13 +508,13 @@ class TestRenameAsset:
 
         # Upload an asset
         await client.post(
-            "/api/posts/posts/hello.md/assets",
+            f"/api/posts/{POST_PATH}/assets",
             files=[("files", ("photo.png", b"data", "image/png"))],
             headers={"Authorization": f"Bearer {token}"},
         )
 
         resp = await client.patch(
-            "/api/posts/posts/hello.md/assets/photo.png",
+            f"/api/posts/{POST_PATH}/assets/photo.png",
             json={"new_name": ".hidden"},
             headers={"Authorization": f"Bearer {token}"},
         )
@@ -513,7 +524,7 @@ class TestRenameAsset:
     async def test_rename_requires_auth(self, client: AsyncClient) -> None:
         """PATCH without auth returns 401."""
         resp = await client.patch(
-            "/api/posts/posts/hello.md/assets/photo.png",
+            f"/api/posts/{POST_PATH}/assets/photo.png",
             json={"new_name": "new.png"},
         )
         assert resp.status_code == 401
@@ -525,13 +536,13 @@ class TestRenameAsset:
 
         # Upload an asset
         await client.post(
-            "/api/posts/posts/hello.md/assets",
+            f"/api/posts/{POST_PATH}/assets",
             files=[("files", ("photo.png", b"data", "image/png"))],
             headers={"Authorization": f"Bearer {token}"},
         )
 
         resp = await client.patch(
-            "/api/posts/posts/hello.md/assets/photo.png",
+            f"/api/posts/{POST_PATH}/assets/photo.png",
             json={"new_name": "index.md"},
             headers={"Authorization": f"Bearer {token}"},
         )
@@ -550,7 +561,7 @@ class TestRenameAsset:
 
         # Upload an asset
         upload_resp = await client.post(
-            "/api/posts/posts/hello.md/assets",
+            f"/api/posts/{POST_PATH}/assets",
             files=[("files", ("old.png", file_content, "image/png"))],
             headers={"Authorization": f"Bearer {token}"},
         )
@@ -566,7 +577,7 @@ class TestRenameAsset:
 
         with patch.object(type(app_settings.content_dir), "stat", _broken_stat):
             resp = await client.patch(
-                "/api/posts/posts/hello.md/assets/old.png",
+                f"/api/posts/{POST_PATH}/assets/old.png",
                 json={"new_name": "new.png"},
                 headers={"Authorization": f"Bearer {token}"},
             )
@@ -580,7 +591,7 @@ class TestRenameAsset:
         assert data["size"] == len(file_content)
 
         # Verify the rename actually happened
-        old_path = app_settings.content_dir / "posts" / "old.png"
-        new_path = app_settings.content_dir / "posts" / "new.png"
+        old_path = app_settings.content_dir / "posts" / "2026-02-02-hello-world" / "old.png"
+        new_path = app_settings.content_dir / "posts" / "2026-02-02-hello-world" / "new.png"
         assert not old_path.exists()
         assert new_path.exists()

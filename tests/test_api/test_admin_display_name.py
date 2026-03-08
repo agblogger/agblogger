@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import pytest
+from sqlalchemy.exc import OperationalError
 
 from backend.config import Settings
 from backend.schemas.admin import DisplayNameUpdate
@@ -302,6 +303,55 @@ class TestUpdateDisplayName:
         # Disk files should be unchanged
         assert post_file1.read_text(encoding="utf-8") == original1
         assert post_file2.read_text(encoding="utf-8") == original2
+
+    @pytest.mark.asyncio
+    async def test_db_commit_failure_rolls_back_files_and_site_config(
+        self, client: AsyncClient, app_settings: Settings
+    ) -> None:
+        token = await _login(client)
+        headers = {"Authorization": f"Bearer {token}"}
+
+        create_resp = await client.post(
+            "/api/posts",
+            json={
+                "title": "Commit Rollback Post",
+                "body": "Hello world",
+                "labels": [],
+                "is_draft": False,
+            },
+            headers=headers,
+        )
+        assert create_resp.status_code == 201
+        file_path = create_resp.json()["file_path"]
+
+        post_file = app_settings.content_dir / file_path
+        original_post_content = post_file.read_text(encoding="utf-8")
+        original_index_toml = (app_settings.content_dir / "index.toml").read_text(encoding="utf-8")
+
+        with patch(
+            "sqlalchemy.ext.asyncio.AsyncSession.commit",
+            side_effect=OperationalError("database locked", {}, Exception()),
+        ):
+            resp = await client.put(
+                "/api/admin/display-name",
+                json={"display_name": "Updated Author"},
+                headers=headers,
+            )
+
+        assert resp.status_code == 503
+        assert resp.json()["detail"] == "Database temporarily unavailable"
+
+        me_resp = await client.get("/api/auth/me", headers=headers)
+        assert me_resp.status_code == 200
+        assert me_resp.json()["display_name"] == "Admin"
+
+        post_resp = await client.get(f"/api/posts/{file_path}", headers=headers)
+        assert post_resp.status_code == 200
+        assert post_resp.json()["author"] == "Admin"
+
+        assert post_file.read_text(encoding="utf-8") == original_post_content
+        current_index_toml = (app_settings.content_dir / "index.toml").read_text(encoding="utf-8")
+        assert current_index_toml == original_index_toml
 
 
 class TestDisplayNameUpdateSchema:

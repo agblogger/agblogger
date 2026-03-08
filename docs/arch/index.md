@@ -58,8 +58,9 @@ content/
 ├── labels.toml             Label DAG definitions
 ├── about.md                Top-level page
 ├── posts/
-│   ├── 2026-02-02-hello-world.md        Flat post (legacy)
-│   └── 2026-02-20-my-post/              Post-per-directory (new posts)
+│   ├── 2026-02-02-hello-world/
+│   │   └── index.md                     Post content
+│   └── 2026-02-20-my-post/
 │       ├── index.md                     Post content
 │       ├── photo.png                    Co-located asset
 │       └── diagram.svg                  Co-located asset
@@ -85,7 +86,7 @@ Content here...
 - **Ownership** uses `author_username` as the stable draft owner identifier. The human-readable `author` field remains for display.
 - **Labels** are referenced as `#label-id` strings.
 - **Timestamps** use strict ISO output format; lax input is accepted via pendulum.
-- **Post-per-directory**: New posts created via the web UI are stored as `posts/<date>-<slug>/index.md` with co-located assets. The slug is generated from the title via NFKD unicode normalization → ASCII → lowercase → hyphenated (max 80 chars). Existing flat posts (`posts/hello.md`) continue to work.
+- **Post-per-directory**: Posts created and shipped with AgBlogger use `posts/<date>-<slug>/index.md` with co-located assets. The slug is generated from the title via NFKD unicode normalization → ASCII → lowercase → hyphenated (max 80 chars). Editor file management targets this directory-backed layout.
 - **Directory rename on title change**: When a post's title changes, the directory is renamed to match the new slug. A symlink is created at the old path pointing to the new directory, preserving old URLs.
 - **Directories** under `posts/` are for disk organization only — they have no effect on labels or metadata.
 

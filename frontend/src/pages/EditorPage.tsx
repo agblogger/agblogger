@@ -53,6 +53,7 @@ export default function EditorPage() {
   const [effectiveFilePath, setEffectiveFilePath] = useState<string | null>(
     isNew ? null : filePath,
   )
+  const showFileStrip = effectiveFilePath === null || effectiveFilePath.endsWith('/index.md')
   useCodeBlockEnhance(previewRef, renderedPreview)
 
   const autoSaveKey = isNew ? 'agblogger:draft:new' : `agblogger:draft:${filePath}`
@@ -437,15 +438,17 @@ export default function EditorPage() {
         )}
       </div>
 
-      <div className="mb-4">
-        <FileStrip
-          filePath={effectiveFilePath}
-          body={body}
-          onBodyChange={setBody}
-          onInsertAtCursor={handleInsertAtCursor}
-          disabled={saving}
-        />
-      </div>
+      {showFileStrip && (
+        <div className="mb-4">
+          <FileStrip
+            filePath={effectiveFilePath}
+            body={body}
+            onBodyChange={setBody}
+            onInsertAtCursor={handleInsertAtCursor}
+            disabled={saving}
+          />
+        </div>
+      )}
 
       <div className="flex lg:hidden mb-4 border-b border-border">
         <button
