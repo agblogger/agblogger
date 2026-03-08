@@ -215,6 +215,30 @@ class TestPageIdErrorMessage:
         assert "lowercase" in detail or "a-z" in detail or "alphanumeric" in detail
 
 
+class TestTimezoneValidation:
+    """Admin site settings reject invalid timezone strings."""
+
+    @pytest.mark.asyncio
+    async def test_invalid_timezone_rejected(self, client: AsyncClient) -> None:
+        token = await login(client)
+        resp = await client.put(
+            "/api/admin/site",
+            json={"title": "Blog", "timezone": "Not/A/Timezone"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_valid_timezone_accepted(self, client: AsyncClient) -> None:
+        token = await login(client)
+        resp = await client.put(
+            "/api/admin/site",
+            json={"title": "Blog", "timezone": "America/New_York"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+
+
 class TestCrosspostSchemaLimits:
     """Crosspost schemas enforce max_length constraints."""
 

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, model_validator
+import zoneinfo
+
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class SiteSettingsUpdate(BaseModel):
@@ -12,6 +14,15 @@ class SiteSettingsUpdate(BaseModel):
     description: str = Field(default="", max_length=1000)
     default_author: str = Field(default="", max_length=100)
     timezone: str = Field(default="UTC", max_length=100)
+
+    @field_validator("timezone")
+    @classmethod
+    def validate_timezone(cls, v: str) -> str:
+        try:
+            zoneinfo.ZoneInfo(v)
+        except (KeyError, ValueError) as err:
+            raise ValueError(f"Invalid timezone: {v}") from err
+        return v
 
 
 class SiteSettingsResponse(BaseModel):
