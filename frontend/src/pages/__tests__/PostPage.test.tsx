@@ -5,13 +5,15 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-import { fetchPost, deletePost } from '@/api/posts'
+import { fetchPost, deletePost, updatePost, fetchPostForEdit } from '@/api/posts'
 import type { UserResponse, PostDetail } from '@/api/client'
 import { MockHTTPError } from '@/test/MockHTTPError'
 
 vi.mock('@/api/posts', () => ({
   fetchPost: vi.fn(),
   deletePost: vi.fn(),
+  updatePost: vi.fn(),
+  fetchPostForEdit: vi.fn(),
 }))
 
 vi.mock('@/api/client', async () => {
@@ -47,6 +49,8 @@ import PostPage from '../PostPage'
 
 const mockFetchPost = vi.mocked(fetchPost)
 const mockDeletePost = vi.mocked(deletePost)
+const mockUpdatePost = vi.mocked(updatePost)
+const mockFetchPostForEdit = vi.mocked(fetchPostForEdit)
 
 const postDetail: PostDetail = {
   id: 1,
@@ -60,6 +64,20 @@ const postDetail: PostDetail = {
   labels: [],
   rendered_html: '<p>Content here</p>',
   content: 'Content here',
+}
+
+const draftPost: PostDetail = {
+  id: 2,
+  file_path: 'posts/2026-03-08-draft/index.md',
+  title: 'My Draft',
+  author: 'Admin',
+  created_at: '2026-03-08 10:00:00+00:00',
+  modified_at: '2026-03-08 10:00:00+00:00',
+  is_draft: true,
+  rendered_excerpt: '<p>Draft excerpt</p>',
+  labels: ['tech'],
+  rendered_html: '<p>Draft content</p>',
+  content: null,
 }
 
 let navigatedTo: string | number | null = null
@@ -91,6 +109,8 @@ describe('PostPage', () => {
     navigatedTo = null
     mockFetchPost.mockReset()
     mockDeletePost.mockReset()
+    mockUpdatePost.mockReset()
+    mockFetchPostForEdit.mockReset()
   })
 
   it('renders table of contents component', async () => {
@@ -299,5 +319,86 @@ describe('PostPage', () => {
     // Both header ShareButton and bottom ShareBar render Share buttons
     const shareButtons = screen.getAllByRole('button', { name: 'Share this post' })
     expect(shareButtons.length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('shows draft badge and publish button for draft post when authenticated', async () => {
+    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null, is_admin: true }
+    mockFetchPost.mockResolvedValue(draftPost)
+    renderPostPage('/post/posts/2026-03-08-draft/index.md')
+
+    await waitFor(() => {
+      expect(screen.getByText('My Draft')).toBeInTheDocument()
+    })
+    expect(screen.getByText('Draft')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /publish/i })).toBeInTheDocument()
+  })
+
+  it('does not show draft badge or publish button for published post', async () => {
+    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null, is_admin: true }
+    mockFetchPost.mockResolvedValue(postDetail)
+    renderPostPage()
+
+    await waitFor(() => {
+      expect(screen.getByText('Hello World')).toBeInTheDocument()
+    })
+    expect(screen.queryByRole('button', { name: /publish/i })).not.toBeInTheDocument()
+  })
+
+  it('does not show draft badge or publish button for unauthenticated user', async () => {
+    mockFetchPost.mockResolvedValue(draftPost)
+    renderPostPage('/post/posts/2026-03-08-draft/index.md')
+
+    await waitFor(() => {
+      expect(screen.getByText('My Draft')).toBeInTheDocument()
+    })
+    expect(screen.queryByRole('button', { name: /publish/i })).not.toBeInTheDocument()
+  })
+
+  it('publish button calls update API with is_draft false', async () => {
+    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null, is_admin: true }
+    mockFetchPost.mockResolvedValue(draftPost)
+    mockFetchPostForEdit.mockResolvedValue({
+      file_path: 'posts/2026-03-08-draft/index.md',
+      title: 'My Draft',
+      body: 'Draft content.\n',
+      labels: ['tech'],
+      is_draft: true,
+      created_at: '2026-03-08 10:00:00+00:00',
+      modified_at: '2026-03-08 10:00:00+00:00',
+      author: 'Admin',
+    })
+    const publishedPost = { ...draftPost, is_draft: false }
+    mockUpdatePost.mockResolvedValue(publishedPost)
+    renderPostPage('/post/posts/2026-03-08-draft/index.md')
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /publish/i })).toBeInTheDocument()
+    })
+    await userEvent.click(screen.getByRole('button', { name: /publish/i }))
+
+    await waitFor(() => {
+      expect(mockUpdatePost).toHaveBeenCalledWith(
+        'posts/2026-03-08-draft/index.md',
+        expect.objectContaining({ is_draft: false }),
+      )
+    })
+  })
+
+  it('publish button is disabled during API call', async () => {
+    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null, is_admin: true }
+    mockFetchPost.mockResolvedValue(draftPost)
+    mockFetchPostForEdit.mockImplementation(
+      () => new Promise(() => {}),
+    )
+    renderPostPage('/post/posts/2026-03-08-draft/index.md')
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /publish/i })).toBeInTheDocument()
+    })
+    await userEvent.click(screen.getByRole('button', { name: /publish/i }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /publish/i })).toBeDisabled()
+    })
   })
 })
