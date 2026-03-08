@@ -27,23 +27,40 @@ describe('ShareBar', () => {
     })
   })
 
-  it('renders all platform share buttons', () => {
+  it('renders share, email, and copy link buttons directly', () => {
     render(<ShareBar {...defaultProps} />)
-    expect(screen.getByLabelText('Share on Bluesky')).toBeInTheDocument()
-    expect(screen.getByLabelText('Share on Mastodon')).toBeInTheDocument()
-    expect(screen.getByLabelText('Share on X')).toBeInTheDocument()
-    expect(screen.getByLabelText('Share on Facebook')).toBeInTheDocument()
-    expect(screen.getByLabelText('Share on LinkedIn')).toBeInTheDocument()
-    expect(screen.getByLabelText('Share on Reddit')).toBeInTheDocument()
+    expect(screen.getByLabelText('Share this post')).toBeInTheDocument()
     expect(screen.getByLabelText('Share via email')).toBeInTheDocument()
     expect(screen.getByLabelText('Copy link')).toBeInTheDocument()
   })
 
-  it('opens share URL in new tab when platform button is clicked', async () => {
+  it('does not show platform buttons directly', () => {
+    render(<ShareBar {...defaultProps} />)
+    expect(screen.queryByLabelText('Share on Bluesky')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Share on X')).not.toBeInTheDocument()
+  })
+
+  it('opens dropdown with all platforms when share button is clicked', async () => {
+    const user = userEvent.setup()
+    render(<ShareBar {...defaultProps} />)
+
+    await user.click(screen.getByLabelText('Share this post'))
+
+    expect(screen.getByLabelText('Share on Bluesky')).toBeInTheDocument()
+    expect(screen.getByLabelText('Share on Facebook')).toBeInTheDocument()
+    expect(screen.getByLabelText('Share on Hacker News')).toBeInTheDocument()
+    expect(screen.getByLabelText('Share on LinkedIn')).toBeInTheDocument()
+    expect(screen.getByLabelText('Share on Mastodon')).toBeInTheDocument()
+    expect(screen.getByLabelText('Share on Reddit')).toBeInTheDocument()
+    expect(screen.getByLabelText('Share on X')).toBeInTheDocument()
+  })
+
+  it('opens share URL in new tab from dropdown', async () => {
     const windowOpen = vi.spyOn(window, 'open').mockReturnValue(null)
     const user = userEvent.setup()
     render(<ShareBar {...defaultProps} />)
 
+    await user.click(screen.getByLabelText('Share this post'))
     await user.click(screen.getByLabelText('Share on Bluesky'))
 
     expect(windowOpen).toHaveBeenCalledWith(
@@ -54,21 +71,23 @@ describe('ShareBar', () => {
     windowOpen.mockRestore()
   })
 
-  it('shows mastodon instance prompt when mastodon button clicked and no saved instance', async () => {
+  it('shows mastodon instance prompt from dropdown when no saved instance', async () => {
     const user = userEvent.setup()
     render(<ShareBar {...defaultProps} />)
 
+    await user.click(screen.getByLabelText('Share this post'))
     await user.click(screen.getByLabelText('Share on Mastodon'))
 
     expect(screen.getByPlaceholderText('mastodon.social')).toBeInTheDocument()
   })
 
-  it('shares to mastodon directly when instance is saved in localStorage', async () => {
+  it('shares to mastodon directly from dropdown when instance is saved', async () => {
     storage.set('agblogger:mastodon-instance', 'hachyderm.io')
     const windowOpen = vi.spyOn(window, 'open').mockReturnValue(null)
     const user = userEvent.setup()
     render(<ShareBar {...defaultProps} />)
 
+    await user.click(screen.getByLabelText('Share this post'))
     await user.click(screen.getByLabelText('Share on Mastodon'))
 
     expect(windowOpen).toHaveBeenCalledWith(
@@ -79,12 +98,13 @@ describe('ShareBar', () => {
     windowOpen.mockRestore()
   })
 
-  it('shows mastodon prompt when saved instance in localStorage is invalid', async () => {
+  it('shows mastodon prompt from dropdown when saved instance is invalid', async () => {
     storage.set('agblogger:mastodon-instance', 'evil.com/phishing')
     const windowOpen = vi.spyOn(window, 'open').mockReturnValue(null)
     const user = userEvent.setup()
     render(<ShareBar {...defaultProps} />)
 
+    await user.click(screen.getByLabelText('Share this post'))
     await user.click(screen.getByLabelText('Share on Mastodon'))
 
     expect(windowOpen).not.toHaveBeenCalled()
@@ -92,7 +112,7 @@ describe('ShareBar', () => {
     windowOpen.mockRestore()
   })
 
-  it('copies link and shows feedback on copy button click', async () => {
+  it('copies link and shows feedback on direct copy button click', async () => {
     Object.defineProperty(navigator, 'clipboard', {
       value: { writeText: vi.fn().mockResolvedValue(undefined) },
       writable: true,
@@ -108,7 +128,6 @@ describe('ShareBar', () => {
     })
   })
 
-  // Issue #3: copy failure should show feedback
   it('shows failure feedback when copy fails', async () => {
     vi.spyOn(shareUtils, 'copyToClipboard').mockResolvedValue(false)
     const user = userEvent.setup()
@@ -121,52 +140,7 @@ describe('ShareBar', () => {
     })
   })
 
-  it('shows native share button when navigator.share is available', () => {
-    Object.defineProperty(navigator, 'share', {
-      value: vi.fn(),
-      writable: true,
-      configurable: true,
-    })
-    render(<ShareBar {...defaultProps} />)
-    expect(screen.getByLabelText('Share via device')).toBeInTheDocument()
-  })
-
-  it('hides native share button when navigator.share is unavailable', () => {
-    Object.defineProperty(navigator, 'share', {
-      value: undefined,
-      writable: true,
-      configurable: true,
-    })
-    render(<ShareBar {...defaultProps} />)
-    expect(screen.queryByLabelText('Share via device')).not.toBeInTheDocument()
-  })
-
-  // Issue #2: unhandled rejection from native share non-AbortError
-  it('does not fire unhandledrejection when native share rejects with non-AbortError', async () => {
-    const typeError = new TypeError('Invalid share data')
-    Object.defineProperty(navigator, 'share', {
-      value: vi.fn().mockRejectedValue(typeError),
-      writable: true,
-      configurable: true,
-    })
-
-    const unhandledHandler = vi.fn()
-    window.addEventListener('unhandledrejection', unhandledHandler)
-
-    const user = userEvent.setup()
-    render(<ShareBar {...defaultProps} />)
-
-    await user.click(screen.getByLabelText('Share via device'))
-
-    // Give the microtask queue time to settle
-    await new Promise((r) => setTimeout(r, 50))
-
-    expect(unhandledHandler).not.toHaveBeenCalled()
-    window.removeEventListener('unhandledrejection', unhandledHandler)
-  })
-
-  // Issue #13: email share button
-  it('opens email share link with mailto', async () => {
+  it('opens email share link with mailto from direct button', async () => {
     const windowOpen = vi.spyOn(window, 'open').mockReturnValue(null)
     const user = userEvent.setup()
     render(<ShareBar {...defaultProps} />)
@@ -178,5 +152,21 @@ describe('ShareBar', () => {
       '_self',
     )
     windowOpen.mockRestore()
+  })
+
+  it('closes dropdown when clicking outside', async () => {
+    const user = userEvent.setup()
+    render(
+      <div>
+        <ShareBar {...defaultProps} />
+        <span>outside</span>
+      </div>,
+    )
+
+    await user.click(screen.getByLabelText('Share this post'))
+    expect(screen.getByLabelText('Share on Bluesky')).toBeInTheDocument()
+
+    await user.click(screen.getByText('outside'))
+    expect(screen.queryByLabelText('Share on Bluesky')).not.toBeInTheDocument()
   })
 })

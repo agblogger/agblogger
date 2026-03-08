@@ -1,57 +1,59 @@
+import { useEffect, useRef, useState } from 'react'
 import { Check, Link, Mail, Share2, X as XIcon } from 'lucide-react'
 
-import PlatformIcon from '@/components/crosspost/PlatformIcon'
-
-import MastodonSharePrompt from './MastodonSharePrompt'
+import ShareDropdownContent from './ShareDropdownContent'
 import type { ShareProps } from './shareTypes'
-import { canNativeShare, SHARE_PLATFORMS } from './shareUtils'
 import { useShareHandlers } from './useShareHandlers'
 
 export default function ShareBar({ title, author, url }: ShareProps) {
-  const {
-    shareText,
-    copied,
-    copyFailed,
-    showMastodonPrompt,
-    setShowMastodonPrompt,
-    handlePlatformClick,
-    handleEmailClick,
-    handleCopy,
-    handleNativeShare,
-  } = useShareHandlers(title, author, url)
+  const [showDropdown, setShowDropdown] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+
+  const { copied, copyFailed, handleEmailClick, handleCopy } = useShareHandlers(
+    title,
+    author,
+    url,
+  )
+
+  useEffect(() => {
+    if (!showDropdown) return
+    function handleClickOutside(e: MouseEvent) {
+      if (dropdownRef.current !== null && !dropdownRef.current.contains(e.target as Node)) {
+        setShowDropdown(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showDropdown])
 
   return (
     <div className="mt-10 border-t border-border pt-6">
       <div className="flex flex-wrap items-center gap-1">
-        {canNativeShare() && (
+        <div className="relative" ref={dropdownRef}>
           <div className="tooltip-wrap">
             <button
-              onClick={() => {
-                handleNativeShare().catch(() => {})
-              }}
-              aria-label="Share via device"
+              onClick={() => setShowDropdown((prev) => !prev)}
+              aria-label="Share this post"
               className="rounded-lg p-2 text-muted transition-colors hover:bg-paper-warm hover:text-ink"
             >
               <Share2 size={18} />
             </button>
             <span role="tooltip">Share</span>
           </div>
-        )}
 
-        {SHARE_PLATFORMS.map((platform) => (
-          <div key={platform.id} className="tooltip-wrap">
-            <button
-              onClick={() => {
-                handlePlatformClick(platform.id)
-              }}
-              aria-label={platform.label}
-              className="rounded-lg p-2 text-muted transition-colors hover:bg-paper-warm hover:text-ink"
-            >
-              <PlatformIcon platform={platform.id} size={18} />
-            </button>
-            <span role="tooltip">{platform.label}</span>
-          </div>
-        ))}
+          {showDropdown && (
+            <div className="animate-fade-in absolute bottom-full left-0 z-40 mb-2 min-w-[200px] rounded-xl border border-border bg-paper p-2 shadow-lg">
+              <ShareDropdownContent
+                title={title}
+                author={author}
+                url={url}
+                onClose={() => setShowDropdown(false)}
+              />
+            </div>
+          )}
+        </div>
 
         <div className="tooltip-wrap">
           <button
@@ -82,23 +84,16 @@ export default function ShareBar({ title, author, url }: ShareProps) {
         </div>
 
         {copied && (
-          <span className="animate-fade-in text-xs font-medium text-green-600 dark:text-green-400">Copied!</span>
+          <span className="animate-fade-in text-xs font-medium text-green-600 dark:text-green-400">
+            Copied!
+          </span>
         )}
         {copyFailed && (
-          <span className="animate-fade-in text-xs font-medium text-red-600 dark:text-red-400">Copy failed</span>
+          <span className="animate-fade-in text-xs font-medium text-red-600 dark:text-red-400">
+            Copy failed
+          </span>
         )}
       </div>
-
-      {showMastodonPrompt && (
-        <div className="mt-3">
-          <MastodonSharePrompt
-            shareText={shareText}
-            onClose={() => {
-              setShowMastodonPrompt(false)
-            }}
-          />
-        </div>
-      )}
     </div>
   )
 }

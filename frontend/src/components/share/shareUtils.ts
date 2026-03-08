@@ -4,12 +4,12 @@ const HOSTNAME_RE =
 
 export const SHARE_PLATFORMS = [
   { id: 'bluesky', label: 'Share on Bluesky' },
-  { id: 'mastodon', label: 'Share on Mastodon' },
-  { id: 'x', label: 'Share on X' },
   { id: 'facebook', label: 'Share on Facebook' },
-  { id: 'linkedin', label: 'Share on LinkedIn' },
-  { id: 'reddit', label: 'Share on Reddit' },
   { id: 'hackernews', label: 'Share on Hacker News' },
+  { id: 'linkedin', label: 'Share on LinkedIn' },
+  { id: 'mastodon', label: 'Share on Mastodon' },
+  { id: 'reddit', label: 'Share on Reddit' },
+  { id: 'x', label: 'Share on X' },
 ] as const
 
 export function getShareText(title: string, author: string | null, url: string): string {

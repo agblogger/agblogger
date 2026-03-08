@@ -233,7 +233,9 @@ describe('PostPage', () => {
     await waitFor(() => {
       expect(screen.getByText('Hello World')).toBeInTheDocument()
     })
-    expect(screen.getByRole('button', { name: 'Share this post' })).toBeInTheDocument()
+    // Header ShareButton + bottom ShareBar both have "Share this post" buttons
+    const shareButtons = screen.getAllByRole('button', { name: 'Share this post' })
+    expect(shareButtons.length).toBeGreaterThanOrEqual(2)
   })
 
   it('renders share bar for unauthenticated users', async () => {
@@ -243,7 +245,9 @@ describe('PostPage', () => {
     await waitFor(() => {
       expect(screen.getByText('Hello World')).toBeInTheDocument()
     })
-    expect(screen.getByRole('button', { name: 'Share on Bluesky' })).toBeInTheDocument()
+    // Bottom share bar shows Share, Email, and Copy Link directly (platforms are in dropdown)
+    const shareButtons = screen.getAllByRole('button', { name: 'Share this post' })
+    expect(shareButtons.length).toBeGreaterThanOrEqual(2) // header + bar
     expect(screen.getByRole('button', { name: 'Share via email' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Copy link' })).toBeInTheDocument()
   })
@@ -292,7 +296,8 @@ describe('PostPage', () => {
     await waitFor(() => {
       expect(screen.getByText('Hello World')).toBeInTheDocument()
     })
-    expect(screen.getByRole('button', { name: 'Share this post' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Share on Bluesky' })).toBeInTheDocument()
+    // Both header ShareButton and bottom ShareBar render Share buttons
+    const shareButtons = screen.getAllByRole('button', { name: 'Share this post' })
+    expect(shareButtons.length).toBeGreaterThanOrEqual(2)
   })
 })
