@@ -25,6 +25,8 @@ from backend.models.user import User
 from backend.schemas.admin import (
     AdminPageConfig,
     AdminPagesResponse,
+    DisplayNameResponse,
+    DisplayNameUpdate,
     PageCreate,
     PageOrderUpdate,
     PageUpdate,
@@ -40,6 +42,7 @@ from backend.services.admin_service import (
     update_page,
     update_page_order,
     update_site_settings,
+    update_user_display_name,
 )
 from backend.services.auth_service import hash_password, revoke_user_credentials, verify_password
 from backend.services.datetime_service import format_iso, now_utc
@@ -213,6 +216,37 @@ async def delete_page_endpoint(
             logger.error("Failed to delete page %s: %s", page_id, exc)
             raise HTTPException(status_code=500, detail="Failed to delete page") from exc
         set_git_warning(response, await git_service.try_commit(f"Delete page: {page_id}"))
+
+
+@router.put("/display-name", response_model=DisplayNameResponse)
+async def update_display_name(
+    body: DisplayNameUpdate,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    content_manager: Annotated[ContentManager, Depends(get_content_manager)],
+    git_service: Annotated[GitService, Depends(get_git_service)],
+    content_write_lock: Annotated[AsyncWriteLock, Depends(get_content_write_lock)],
+    user: Annotated[User, Depends(require_admin)],
+) -> DisplayNameResponse:
+    """Update the current user's display name and retroactively update all their posts."""
+    display_name = body.display_name.strip() or None
+    async with content_write_lock:
+        try:
+            result = await update_user_display_name(
+                session,
+                content_manager,
+                user=user,
+                display_name=display_name,
+            )
+        except OSError as exc:
+            logger.error("Failed to update display name: %s", exc)
+            raise HTTPException(
+                status_code=500, detail="Failed to update display name"
+            ) from exc
+        set_git_warning(
+            response, await git_service.try_commit("Update author display name")
+        )
+        return DisplayNameResponse(display_name=result)
 
 
 _PASSWORD_CHANGE_MAX_FAILURES = 5

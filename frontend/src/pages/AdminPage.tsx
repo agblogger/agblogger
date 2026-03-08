@@ -140,6 +140,7 @@ export default function AdminPage() {
       {activeTab === 'settings' && (
         <SiteSettingsSection
           initialSettings={siteSettings}
+          initialDisplayName={user.display_name ?? user.username}
           busy={busy}
           onSaving={setSiteSaving}
           onSavedSettings={setSiteSettings}

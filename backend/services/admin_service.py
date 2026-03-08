@@ -5,15 +5,21 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
+from sqlalchemy import select, update
+
 from backend.exceptions import BuiltinPageError
 from backend.filesystem.toml_manager import (
     PageConfig,
     SiteConfig,
     write_site_config,
 )
+from backend.models.post import PostCache
 
 if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
     from backend.filesystem.content_manager import ContentManager
+    from backend.models.user import User
 
 BUILTIN_PAGE_IDS = {"timeline", "labels"}
 logger = logging.getLogger(__name__)
@@ -193,3 +199,50 @@ def update_page_order(cm: ContentManager, pages: list[PageConfig]) -> None:
     updated = cfg.with_pages(pages)
     write_site_config(cm.content_dir, updated)
     cm.reload_config()
+
+
+async def update_user_display_name(
+    session: AsyncSession,
+    cm: ContentManager,
+    *,
+    user: User,
+    display_name: str | None,
+) -> str | None:
+    """Update a user's display name and retroactively update all their posts.
+
+    Updates the author field in both the database cache and on-disk markdown files
+    for all posts where author_username matches the user's username.
+    """
+    from backend.services.datetime_service import format_iso, now_utc
+
+    user.display_name = display_name
+    user.updated_at = format_iso(now_utc())
+    session.add(user)
+
+    # The display value to write into post author fields
+    author_value = display_name or user.username
+
+    # Update all posts in the DB cache
+    await session.execute(
+        update(PostCache)
+        .where(PostCache.author_username == user.username)
+        .values(author=author_value)
+    )
+
+    # Update all posts on disk
+    stmt = select(PostCache.file_path).where(PostCache.author_username == user.username)
+    result = await session.execute(stmt)
+    file_paths = [row[0] for row in result.all()]
+
+    for file_path in file_paths:
+        try:
+            post_data = cm.read_post(file_path)
+            if post_data is None:
+                continue
+            post_data.author = author_value
+            cm.write_post(file_path, post_data)
+        except (OSError, ValueError) as exc:
+            logger.error("Failed to update author in post %s: %s", file_path, exc)
+
+    await session.commit()
+    return display_name

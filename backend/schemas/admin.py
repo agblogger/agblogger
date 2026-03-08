@@ -78,6 +78,18 @@ class PageOrderUpdate(BaseModel):
     pages: list[PageOrderItem]
 
 
+class DisplayNameUpdate(BaseModel):
+    """Request to update user display name."""
+
+    display_name: str = Field(default="", max_length=100)
+
+
+class DisplayNameResponse(BaseModel):
+    """Response after updating display name."""
+
+    display_name: str | None
+
+
 class PasswordChange(BaseModel):
     """Request to change admin password."""
 

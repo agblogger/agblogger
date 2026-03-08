@@ -22,6 +22,7 @@ const mockUpdateAdminPage = vi.fn()
 const mockUpdateAdminPageOrder = vi.fn()
 const mockDeleteAdminPage = vi.fn()
 const mockChangeAdminPassword = vi.fn()
+const mockUpdateDisplayName = vi.fn()
 
 vi.mock('@/api/admin', () => ({
   fetchAdminSiteSettings: (...args: unknown[]) => mockFetchAdminSiteSettings(...args) as unknown,
@@ -32,6 +33,7 @@ vi.mock('@/api/admin', () => ({
   updateAdminPageOrder: (...args: unknown[]) => mockUpdateAdminPageOrder(...args) as unknown,
   deleteAdminPage: (...args: unknown[]) => mockDeleteAdminPage(...args) as unknown,
   changeAdminPassword: (...args: unknown[]) => mockChangeAdminPassword(...args) as unknown,
+  updateDisplayName: (...args: unknown[]) => mockUpdateDisplayName(...args) as unknown,
 }))
 
 vi.mock('@/hooks/useKatex', () => ({
@@ -86,6 +88,7 @@ function renderAdmin() {
 function setupLoadSuccess() {
   mockFetchAdminSiteSettings.mockResolvedValue(defaultSettings)
   mockFetchAdminPages.mockResolvedValue({ pages: defaultPages })
+  mockUpdateDisplayName.mockResolvedValue({ display_name: 'Admin' })
 }
 
 async function switchToTab(user: ReturnType<typeof userEvent.setup>, tabName: string) {
@@ -175,7 +178,7 @@ describe('AdminPage', () => {
       expect(screen.getByLabelText('Title *')).toHaveValue('My Blog')
     })
     expect(screen.getByLabelText('Description')).toHaveValue('A test blog')
-    expect(screen.getByLabelText('Default Author')).toHaveValue('Admin')
+    expect(screen.getByLabelText('Name')).toHaveValue('Admin')
     expect(screen.getByLabelText('Timezone')).toHaveValue('UTC')
   })
 
@@ -210,7 +213,7 @@ describe('AdminPage', () => {
     await user.click(screen.getByRole('button', { name: /save settings/i }))
 
     await waitFor(() => {
-      expect(screen.getByText('Site settings saved.')).toBeInTheDocument()
+      expect(screen.getByText('Settings saved.')).toBeInTheDocument()
     })
   })
 
@@ -229,7 +232,7 @@ describe('AdminPage', () => {
     await user.click(screen.getByRole('button', { name: /save settings/i }))
 
     await waitFor(() => {
-      expect(screen.getByText('Site settings saved.')).toBeInTheDocument()
+      expect(screen.getByText('Settings saved.')).toBeInTheDocument()
     })
 
     await switchToTab(user, 'Pages')
@@ -871,7 +874,7 @@ describe('AdminPage', () => {
     resolveSave?.({ ...defaultSettings, title: 'New Title' })
 
     await waitFor(() => {
-      expect(screen.getByText('Site settings saved.')).toBeInTheDocument()
+      expect(screen.getByText('Settings saved.')).toBeInTheDocument()
     })
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Pages' })).toBeEnabled()
