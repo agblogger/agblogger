@@ -20,8 +20,16 @@ DEFAULT_ENV_FILE = ".env.production"
 DEFAULT_CADDYFILE = "Caddyfile.production"
 DEFAULT_NO_CADDY_COMPOSE_FILE = "docker-compose.nocaddy.yml"
 DEFAULT_CADDY_PUBLIC_COMPOSE_FILE = "docker-compose.caddy-public.yml"
+SCAN_IMAGE_TAG = "agblogger-deploy-scan:latest"
 PUBLIC_BIND_IP = ".".join(("0", "0", "0", "0"))
 LOCALHOST_BIND_IP = "127.0.0.1"
+
+GENERATED_CONFIG_FILES = [
+    DEFAULT_ENV_FILE,
+    DEFAULT_CADDYFILE,
+    DEFAULT_NO_CADDY_COMPOSE_FILE,
+    DEFAULT_CADDY_PUBLIC_COMPOSE_FILE,
+]
 
 
 class DeployError(RuntimeError):
@@ -49,6 +57,7 @@ class DeployConfig:
     host_bind_ip: str
     caddy_config: CaddyConfig | None
     caddy_public: bool
+    expose_docs: bool
 
 
 @dataclass(frozen=True)
@@ -57,6 +66,9 @@ class DeployResult:
 
     env_path: Path
     commands: dict[str, str]
+
+
+# ── Content builders ─────────────────────────────────────────────────
 
 
 def parse_csv_list(raw: str) -> list[str]:
@@ -91,20 +103,36 @@ def build_env_content(config: DeployConfig) -> str:
         "HOST=0.0.0.0",
         "PORT=8000",
         "DEBUG=false",
-        "EXPOSE_DOCS=false",
+        f"EXPOSE_DOCS={'true' if config.expose_docs else 'false'}",
         f"TRUSTED_HOSTS={_list_to_env_json(config.trusted_hosts)}",
         f"TRUSTED_PROXY_IPS={_list_to_env_json(config.trusted_proxy_ips)}",
         "AUTH_ENFORCE_LOGIN_ORIGIN=true",
+        "AUTH_SELF_REGISTRATION=false",
+        "AUTH_INVITES_ENABLED=true",
+        "AUTH_LOGIN_MAX_FAILURES=5",
+        "AUTH_RATE_LIMIT_WINDOW_SECONDS=300",
     ]
     return "\n".join(lines) + "\n"
 
 
 def build_caddyfile_content(config: CaddyConfig) -> str:
-    """Build Caddyfile content for HTTPS reverse proxy."""
+    """Build Caddyfile content for HTTPS reverse proxy with request body limits."""
     global_block = f"{{\n    email {config.email}\n}}\n\n" if config.email else ""
     return (
         f"{global_block}"
         f"{config.domain} {{\n"
+        "    @postUpload path /api/posts/upload\n"
+        "    request_body @postUpload {\n"
+        "        max_size 55MB\n"
+        "    }\n\n"
+        "    @postAssets path_regexp post_assets ^/api/posts/.+/assets$\n"
+        "    request_body @postAssets {\n"
+        "        max_size 55MB\n"
+        "    }\n\n"
+        "    @syncCommit path /api/sync/commit\n"
+        "    request_body @syncCommit {\n"
+        "        max_size 100MB\n"
+        "    }\n\n"
         "    reverse_proxy agblogger:8000\n\n"
         "    # Static asset caching\n"
         "    header /assets/* {\n"
@@ -160,6 +188,9 @@ def build_caddy_public_compose_override_content() -> str:
     return 'services:\n  caddy:\n    ports:\n      - "80:80"\n      - "443:443"\n'
 
 
+# ── Compose helpers ──────────────────────────────────────────────────
+
+
 def build_lifecycle_commands(
     use_caddy: bool,
     caddy_public: bool,
@@ -180,6 +211,9 @@ def build_lifecycle_commands(
         "stop": f"{base} down",
         "status": f"{base} ps",
     }
+
+
+# ── Validation ───────────────────────────────────────────────────────
 
 
 def _validate_config(config: DeployConfig) -> None:
@@ -219,8 +253,64 @@ def check_prerequisites(project_dir: Path) -> None:
     subprocess.run(["/usr/bin/env", "docker", "compose", "version"], cwd=project_dir, check=True)
 
 
-def _scan_generated_image_with_trivy(project_dir: Path) -> None:
-    """Build and scan a deploy image with Trivy."""
+# ── File management ──────────────────────────────────────────────────
+
+
+def backup_file(path: Path) -> Path | None:
+    """Create a .bak backup of a file if it exists. Returns backup path or None."""
+    if not path.exists():
+        return None
+    backup_path = path.with_suffix(path.suffix + ".bak")
+    shutil.copy2(path, backup_path)
+    return backup_path
+
+
+def backup_existing_configs(project_dir: Path) -> list[str]:
+    """Back up existing generated config files. Returns list of informational messages."""
+    messages: list[str] = []
+    for filename in GENERATED_CONFIG_FILES:
+        path = project_dir / filename
+        backup = backup_file(path)
+        if backup is not None:
+            messages.append(f"Backed up {path.name} to {backup.name}")
+    return messages
+
+
+def write_config_files(config: DeployConfig, project_dir: Path) -> None:
+    """Write deployment config files and clean up stale alternatives."""
+    env_path = project_dir / DEFAULT_ENV_FILE
+    env_path.write_text(build_env_content(config), encoding="utf-8")
+    with suppress(OSError):
+        env_path.chmod(0o600)
+
+    stale_files: list[str] = []
+
+    if config.caddy_config is not None:
+        caddyfile_path = project_dir / DEFAULT_CADDYFILE
+        caddyfile_path.write_text(build_caddyfile_content(config.caddy_config), encoding="utf-8")
+        stale_files.append(DEFAULT_NO_CADDY_COMPOSE_FILE)
+        if config.caddy_public:
+            override_path = project_dir / DEFAULT_CADDY_PUBLIC_COMPOSE_FILE
+            override_path.write_text(
+                build_caddy_public_compose_override_content(), encoding="utf-8"
+            )
+        else:
+            stale_files.append(DEFAULT_CADDY_PUBLIC_COMPOSE_FILE)
+    else:
+        no_caddy_path = project_dir / DEFAULT_NO_CADDY_COMPOSE_FILE
+        no_caddy_path.write_text(build_direct_compose_content(), encoding="utf-8")
+        stale_files.append(DEFAULT_CADDY_PUBLIC_COMPOSE_FILE)
+
+    for name in stale_files:
+        with suppress(FileNotFoundError):
+            (project_dir / name).unlink()
+
+
+# ── Build and scan ───────────────────────────────────────────────────
+
+
+def build_and_scan(project_dir: Path) -> None:
+    """Build the Docker image and scan with Trivy before deployment."""
     subprocess.run(
         ["/usr/bin/env", "docker", "build", "--tag", "agblogger-deploy-scan:latest", "."],
         cwd=project_dir,
@@ -244,81 +334,28 @@ def _scan_generated_image_with_trivy(project_dir: Path) -> None:
     )
 
 
-def deploy(config: DeployConfig, project_dir: Path) -> DeployResult:
-    """Write deployment config and run docker compose deployment."""
-    if not (project_dir / "docker-compose.yml").exists():
-        raise FileNotFoundError(f"Missing docker-compose.yml in {project_dir}")
-
-    _validate_config(config)
-    trivy_available = shutil.which("trivy") is not None
-    if trivy_available:
-        subprocess.run(["/usr/bin/env", "trivy", "--version"], cwd=project_dir, check=True)
-    else:
-        print(
-            "Warning: Trivy is not installed or not available on PATH; skipping Docker image scan.",
-            file=sys.stderr,
+def _run_compose_up(config: DeployConfig, project_dir: Path) -> None:
+    """Start containers via docker compose with the correct file arguments."""
+    if config.caddy_config is not None and config.caddy_public:
+        subprocess.run(
+            [
+                "/usr/bin/env",
+                "docker",
+                "compose",
+                "--env-file",
+                ".env.production",
+                "-f",
+                "docker-compose.yml",
+                "-f",
+                "docker-compose.caddy-public.yml",
+                "up",
+                "-d",
+                "--build",
+            ],
+            cwd=project_dir,
+            check=True,
         )
-
-    env_path = project_dir / DEFAULT_ENV_FILE
-    env_path.write_text(build_env_content(config), encoding="utf-8")
-    with suppress(OSError):
-        env_path.chmod(0o600)
-
-    if config.caddy_config is not None:
-        caddyfile_path = project_dir / DEFAULT_CADDYFILE
-        caddyfile_path.write_text(build_caddyfile_content(config.caddy_config), encoding="utf-8")
-        with suppress(FileNotFoundError):
-            (project_dir / DEFAULT_NO_CADDY_COMPOSE_FILE).unlink()
-        if config.caddy_public:
-            caddy_public_override_path = project_dir / DEFAULT_CADDY_PUBLIC_COMPOSE_FILE
-            caddy_public_override_path.write_text(
-                build_caddy_public_compose_override_content(),
-                encoding="utf-8",
-            )
-            subprocess.run(
-                [
-                    "/usr/bin/env",
-                    "docker",
-                    "compose",
-                    "--env-file",
-                    ".env.production",
-                    "-f",
-                    "docker-compose.yml",
-                    "-f",
-                    "docker-compose.caddy-public.yml",
-                    "up",
-                    "-d",
-                    "--build",
-                ],
-                cwd=project_dir,
-                check=True,
-            )
-            if trivy_available:
-                _scan_generated_image_with_trivy(project_dir)
-        else:
-            with suppress(FileNotFoundError):
-                (project_dir / DEFAULT_CADDY_PUBLIC_COMPOSE_FILE).unlink()
-            subprocess.run(
-                [
-                    "/usr/bin/env",
-                    "docker",
-                    "compose",
-                    "--env-file",
-                    ".env.production",
-                    "up",
-                    "-d",
-                    "--build",
-                ],
-                cwd=project_dir,
-                check=True,
-            )
-            if trivy_available:
-                _scan_generated_image_with_trivy(project_dir)
-    else:
-        no_caddy_path = project_dir / DEFAULT_NO_CADDY_COMPOSE_FILE
-        no_caddy_path.write_text(build_direct_compose_content(), encoding="utf-8")
-        with suppress(FileNotFoundError):
-            (project_dir / DEFAULT_CADDY_PUBLIC_COMPOSE_FILE).unlink()
+    elif config.caddy_config is None:
         subprocess.run(
             [
                 "/usr/bin/env",
@@ -335,16 +372,110 @@ def deploy(config: DeployConfig, project_dir: Path) -> DeployResult:
             cwd=project_dir,
             check=True,
         )
-        if trivy_available:
-            _scan_generated_image_with_trivy(project_dir)
+    else:
+        subprocess.run(
+            [
+                "/usr/bin/env",
+                "docker",
+                "compose",
+                "--env-file",
+                ".env.production",
+                "up",
+                "-d",
+                "--build",
+            ],
+            cwd=project_dir,
+            check=True,
+        )
+
+
+# ── Deploy orchestration ────────────────────────────────────────────
+
+
+def deploy(config: DeployConfig, project_dir: Path) -> DeployResult:
+    """Write deployment config, build, scan, and start containers."""
+    if not (project_dir / "docker-compose.yml").exists():
+        raise FileNotFoundError(f"Missing docker-compose.yml in {project_dir}")
+
+    _validate_config(config)
+
+    trivy_available = shutil.which("trivy") is not None
+    if trivy_available:
+        subprocess.run(["/usr/bin/env", "trivy", "--version"], cwd=project_dir, check=True)
+    else:
+        print(
+            "Warning: Trivy is not installed or not available on PATH; skipping Docker image scan.",
+            file=sys.stderr,
+        )
+
+    backup_messages = backup_existing_configs(project_dir)
+    for msg in backup_messages:
+        print(msg)
+
+    write_config_files(config, project_dir)
+
+    if trivy_available:
+        build_and_scan(project_dir)
+
+    _run_compose_up(config, project_dir)
 
     return DeployResult(
-        env_path=env_path,
+        env_path=project_dir / DEFAULT_ENV_FILE,
         commands=build_lifecycle_commands(
             use_caddy=config.caddy_config is not None,
             caddy_public=config.caddy_public,
         ),
     )
+
+
+# ── Dry run ──────────────────────────────────────────────────────────
+
+
+def _mask_secrets(config: DeployConfig) -> DeployConfig:
+    """Return a copy of config with secrets replaced by placeholders for display."""
+    placeholder = "*" * 8
+    return DeployConfig(
+        secret_key=placeholder,
+        admin_username=config.admin_username,
+        admin_password=placeholder,
+        trusted_hosts=config.trusted_hosts,
+        trusted_proxy_ips=config.trusted_proxy_ips,
+        host_port=config.host_port,
+        host_bind_ip=config.host_bind_ip,
+        caddy_config=config.caddy_config,
+        caddy_public=config.caddy_public,
+        expose_docs=config.expose_docs,
+    )
+
+
+def dry_run(config: DeployConfig) -> None:
+    """Print generated config files without writing or deploying."""
+    _validate_config(config)
+
+    masked = _mask_secrets(config)
+
+    print(f"=== {DEFAULT_ENV_FILE} ===")
+    print(build_env_content(masked))
+
+    if config.caddy_config is not None:
+        print(f"=== {DEFAULT_CADDYFILE} ===")
+        print(build_caddyfile_content(config.caddy_config))
+        if config.caddy_public:
+            print(f"=== {DEFAULT_CADDY_PUBLIC_COMPOSE_FILE} ===")
+            print(build_caddy_public_compose_override_content())
+    else:
+        print(f"=== {DEFAULT_NO_CADDY_COMPOSE_FILE} ===")
+        print(build_direct_compose_content())
+
+    use_caddy = config.caddy_config is not None
+    commands = build_lifecycle_commands(use_caddy=use_caddy, caddy_public=config.caddy_public)
+    print("=== Lifecycle commands ===")
+    print(f"  Start:  {commands['start']}")
+    print(f"  Stop:   {commands['stop']}")
+    print(f"  Status: {commands['status']}")
+
+
+# ── Interactive prompts ──────────────────────────────────────────────
 
 
 def _prompt_non_empty(prompt: str, default: str | None = None) -> str:
@@ -371,11 +502,6 @@ def _prompt_yes_no(prompt: str, default: bool) -> bool:
         if value in {"n", "no"}:
             return False
         print("Please answer yes or no.")
-
-
-def _prompt_public_exposure(prompt: str, default: bool) -> bool:
-    """Prompt whether ports should be reachable from other machines."""
-    return _prompt_yes_no(prompt, default=default)
 
 
 def _prompt_host_port(default: int = DEFAULT_HOST_PORT) -> int:
@@ -424,7 +550,6 @@ def _prompt_password() -> str:
 def collect_config() -> DeployConfig:
     """Collect interactive production settings from the user."""
     print("Enter production configuration values for your blog server.")
-    print("Trusted hosts are the public domains or IPs people will use to access your blog.")
     secret_key = _prompt_secret_key()
     admin_username = _prompt_non_empty("Admin username", default="admin")
     admin_password = _prompt_password()
@@ -445,15 +570,20 @@ def collect_config() -> DeployConfig:
         caddy_domain = _prompt_non_empty("Public domain for your blog (example: blog.example.com)")
         caddy_email = input("Email for TLS certificate notices (optional, recommended): ").strip()
         caddy_config = CaddyConfig(domain=caddy_domain, email=caddy_email or None)
-        caddy_public = _prompt_public_exposure(
+        caddy_public = _prompt_yes_no(
             "Expose Caddy ports 80/443 publicly so your site is Internet-reachable?",
             default=True,
         )
         host_bind_ip = LOCALHOST_BIND_IP
+        print(
+            "\nNote: Ensure your domain's DNS A/AAAA record points to this server"
+            " before starting. Caddy needs to reach Let's Encrypt to provision"
+            " TLS certificates.\n"
+        )
     else:
         host_bind_ip = (
             PUBLIC_BIND_IP
-            if _prompt_public_exposure(
+            if _prompt_yes_no(
                 "Expose AgBlogger directly on the Internet (without Caddy)?",
                 default=True,
             )
@@ -464,7 +594,8 @@ def collect_config() -> DeployConfig:
     trusted_hosts: list[str] = []
     while not trusted_hosts:
         raw_hosts = input(
-            "Public hostnames or IPs allowed to reach this server (comma-separated): "
+            "Hostnames/IPs clients will use to reach your blog"
+            " (comma-separated, validates the Host header): "
         ).strip()
         trusted_hosts = parse_csv_list(raw_hosts)
         if caddy_config and caddy_config.domain not in trusted_hosts:
@@ -473,6 +604,11 @@ def collect_config() -> DeployConfig:
             print("Provide at least one trusted host.")
 
     proxy_ips = parse_csv_list(input("Trusted proxy IPs (comma-separated, optional): ").strip())
+
+    expose_docs = _prompt_yes_no(
+        "Expose API documentation at /docs? (usually only for development)",
+        default=False,
+    )
 
     return DeployConfig(
         secret_key=secret_key,
@@ -484,12 +620,56 @@ def collect_config() -> DeployConfig:
         host_bind_ip=host_bind_ip,
         caddy_config=caddy_config,
         caddy_public=caddy_public,
+        expose_docs=expose_docs,
     )
+
+
+# ── Non-interactive config from CLI arguments ────────────────────────
+
+
+def config_from_args(args: argparse.Namespace) -> DeployConfig:
+    """Build DeployConfig from CLI arguments for non-interactive mode."""
+    secret_key = args.secret_key or secrets.token_urlsafe(64)
+    if not args.admin_username:
+        raise DeployError("--admin-username is required in non-interactive mode")
+    if not args.admin_password:
+        raise DeployError("--admin-password is required in non-interactive mode")
+    if not args.trusted_hosts:
+        raise DeployError("--trusted-hosts is required in non-interactive mode")
+
+    caddy_config: CaddyConfig | None = None
+    caddy_public = False
+    if args.caddy_domain:
+        caddy_config = CaddyConfig(domain=args.caddy_domain, email=args.caddy_email)
+        caddy_public = args.caddy_public
+        host_bind_ip = LOCALHOST_BIND_IP
+    else:
+        host_bind_ip = PUBLIC_BIND_IP if args.bind_public else LOCALHOST_BIND_IP
+
+    trusted_hosts = parse_csv_list(args.trusted_hosts)
+    if caddy_config and caddy_config.domain not in trusted_hosts:
+        trusted_hosts.append(caddy_config.domain)
+
+    return DeployConfig(
+        secret_key=secret_key,
+        admin_username=args.admin_username,
+        admin_password=args.admin_password,
+        trusted_hosts=trusted_hosts,
+        trusted_proxy_ips=parse_csv_list(args.trusted_proxy_ips) if args.trusted_proxy_ips else [],
+        host_port=args.host_port,
+        host_bind_ip=host_bind_ip,
+        caddy_config=caddy_config,
+        caddy_public=caddy_public,
+        expose_docs=args.expose_docs,
+    )
+
+
+# ── CLI entry point ──────────────────────────────────────────────────
 
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Interactive end-to-end production deployment for AgBlogger.",
+        description="Production deployment helper for AgBlogger.",
     )
     parser.add_argument(
         "--project-dir",
@@ -497,17 +677,75 @@ def _parse_args() -> argparse.Namespace:
         default=Path.cwd(),
         help="Project directory containing docker-compose.yml (default: current directory).",
     )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print generated config files without writing or deploying.",
+    )
+    parser.add_argument(
+        "--non-interactive",
+        action="store_true",
+        help="Run without interactive prompts; requires all config via CLI arguments.",
+    )
+
+    config_group = parser.add_argument_group("configuration")
+    config_group.add_argument("--secret-key", help="JWT signing key (auto-generated if omitted).")
+    config_group.add_argument("--admin-username", help="Initial admin username.")
+    config_group.add_argument("--admin-password", help="Initial admin password.")
+    config_group.add_argument(
+        "--caddy-domain",
+        help="Enable Caddy HTTPS with this domain. Omit to expose AgBlogger directly.",
+    )
+    config_group.add_argument("--caddy-email", help="Email for TLS certificate notifications.")
+    config_group.add_argument(
+        "--caddy-public",
+        action="store_true",
+        default=False,
+        help="Expose Caddy ports 80/443 publicly (default: localhost only).",
+    )
+    config_group.add_argument(
+        "--trusted-hosts",
+        help="Comma-separated hostnames/IPs for Host header validation.",
+    )
+    config_group.add_argument(
+        "--trusted-proxy-ips",
+        help="Comma-separated trusted proxy IPs (optional).",
+    )
+    config_group.add_argument(
+        "--host-port",
+        type=int,
+        default=DEFAULT_HOST_PORT,
+        help=f"Host port for AgBlogger (default: {DEFAULT_HOST_PORT}).",
+    )
+    config_group.add_argument(
+        "--bind-public",
+        action="store_true",
+        default=False,
+        help="Bind to 0.0.0.0 instead of 127.0.0.1 (only for non-Caddy mode).",
+    )
+    config_group.add_argument(
+        "--expose-docs",
+        action="store_true",
+        default=False,
+        help="Expose API documentation at /docs (default: disabled).",
+    )
+
     return parser.parse_args()
 
 
 def main() -> None:
-    """Run interactive deployment workflow."""
+    """Run deployment workflow."""
     args = _parse_args()
     project_dir = args.project_dir.resolve()
 
     try:
+        config = config_from_args(args) if args.non_interactive else collect_config()
+
+        if args.dry_run:
+            dry_run(config)
+            return
+
         check_prerequisites(project_dir)
-        config = collect_config()
         result = deploy(config=config, project_dir=project_dir)
     except (DeployError, FileNotFoundError) as exc:
         print(f"Deployment failed: {exc}")
