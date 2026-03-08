@@ -19,6 +19,9 @@ let mockIsLoggingOut = false
 const mockLogout = vi.fn()
 let mockTheme: 'light' | 'dark' = 'light'
 const mockToggleTheme = vi.fn()
+let mockPanelState = 'closed'
+let mockActiveFilterCount = 0
+const mockTogglePanel = vi.fn()
 
 vi.mock('@/stores/siteStore', () => ({
   useSiteStore: (selector: (s: { config: SiteConfigResponse | null }) => unknown) =>
@@ -42,6 +45,19 @@ vi.mock('@/stores/themeStore', () => ({
     selector({ theme: mockTheme, toggleTheme: mockToggleTheme }),
 }))
 
+vi.mock('@/stores/filterPanelStore', () => ({
+  useFilterPanelStore: (selector: (s: {
+    panelState: string
+    activeFilterCount: number
+    togglePanel: () => void
+  }) => unknown) =>
+    selector({
+      panelState: mockPanelState,
+      activeFilterCount: mockActiveFilterCount,
+      togglePanel: mockTogglePanel,
+    }),
+}))
+
 import Header from '../Header'
 
 function renderHeader(path = '/') {
@@ -57,6 +73,8 @@ describe('Header', () => {
     mockUser = null
     mockIsLoggingOut = false
     mockTheme = 'light'
+    mockPanelState = 'closed'
+    mockActiveFilterCount = 0
     vi.clearAllMocks()
   })
 
@@ -227,5 +245,47 @@ describe('Header', () => {
 
     const themeButtons = screen.getAllByLabelText('Toggle theme')
     expect(themeButtons.some((btn) => btn.getAttribute('title') === 'Theme: dark')).toBe(true)
+  })
+
+  it('shows filter icon on timeline page', () => {
+    renderHeader('/')
+    expect(screen.getByLabelText('Toggle filters')).toBeInTheDocument()
+  })
+
+  it('hides filter icon on non-timeline pages', () => {
+    renderHeader('/labels')
+    expect(screen.queryByLabelText('Toggle filters')).not.toBeInTheDocument()
+  })
+
+  it('hides filter icon on search page', () => {
+    renderHeader('/search')
+    expect(screen.queryByLabelText('Toggle filters')).not.toBeInTheDocument()
+  })
+
+  it('shows active filter count badge', () => {
+    mockActiveFilterCount = 3
+    renderHeader('/')
+    expect(screen.getByText('3')).toBeInTheDocument()
+  })
+
+  it('does not show badge when no active filters', () => {
+    mockActiveFilterCount = 0
+    renderHeader('/')
+    // Filter button exists but no badge
+    expect(screen.getByLabelText('Toggle filters')).toBeInTheDocument()
+    expect(screen.queryByText('0')).not.toBeInTheDocument()
+  })
+
+  it('calls togglePanel when filter icon is clicked', async () => {
+    renderHeader('/')
+    await userEvent.click(screen.getByLabelText('Toggle filters'))
+    expect(mockTogglePanel).toHaveBeenCalledTimes(1)
+  })
+
+  it('filter icon has active style when panel is open', () => {
+    mockPanelState = 'open'
+    renderHeader('/')
+    const btn = screen.getByLabelText('Toggle filters')
+    expect(btn.className).toContain('text-accent')
   })
 })

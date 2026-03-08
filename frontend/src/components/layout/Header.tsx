@@ -1,9 +1,10 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { Search, LogIn, LogOut, PenLine, Settings, Menu, X, Sun, Moon } from 'lucide-react'
+import { Search, LogIn, LogOut, PenLine, Settings, Menu, X, Sun, Moon, Filter } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useSiteStore } from '@/stores/siteStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useThemeStore } from '@/stores/themeStore'
+import { useFilterPanelStore } from '@/stores/filterPanelStore'
 
 export default function Header() {
   const location = useLocation()
@@ -14,6 +15,9 @@ export default function Header() {
   const isLoggingOut = useAuthStore((s) => s.isLoggingOut)
   const theme = useThemeStore((s) => s.theme)
   const toggleTheme = useThemeStore((s) => s.toggleTheme)
+  const panelState = useFilterPanelStore((s) => s.panelState)
+  const activeFilterCount = useFilterPanelStore((s) => s.activeFilterCount)
+  const togglePanel = useFilterPanelStore((s) => s.togglePanel)
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -40,6 +44,7 @@ export default function Header() {
   const pages = config?.pages ?? []
   const siteTitle = config?.title ?? 'AgBlogger'
   const ThemeIcon = theme === 'dark' ? Moon : Sun
+  const isTimeline = location.pathname === '/'
 
   function handleSearch(e: React.FormEvent) {
     e.preventDefault()
@@ -104,6 +109,28 @@ export default function Header() {
                 title="Search (/)"
               >
                 <Search size={18} />
+              </button>
+            )}
+
+            {isTimeline && (
+              <button
+                onClick={togglePanel}
+                className={`p-2 rounded-lg transition-colors ${
+                  panelState === 'open'
+                    ? 'text-accent bg-accent/10'
+                    : 'text-muted hover:text-ink hover:bg-paper-warm'
+                }`}
+                aria-label="Toggle filters"
+                title="Filters"
+              >
+                <div className="relative">
+                  <Filter size={18} />
+                  {activeFilterCount > 0 && (
+                    <span className="absolute -top-1.5 -right-2 bg-accent text-white text-[9px] font-mono min-w-[16px] h-4 flex items-center justify-center px-1 rounded-full leading-none">
+                      {activeFilterCount}
+                    </span>
+                  )}
+                </div>
               </button>
             )}
 
@@ -239,6 +266,27 @@ export default function Header() {
           </nav>
 
           <div className="flex items-center gap-3 pt-2 border-t border-border/50">
+            {isTimeline && (
+              <button
+                onClick={() => { closeMobileMenu(); togglePanel() }}
+                className={`p-2 rounded-lg transition-colors ${
+                  panelState === 'open'
+                    ? 'text-accent bg-accent/10'
+                    : 'text-muted hover:text-ink hover:bg-paper-warm'
+                }`}
+                aria-label="Toggle filters"
+                title="Filters"
+              >
+                <div className="relative">
+                  <Filter size={18} />
+                  {activeFilterCount > 0 && (
+                    <span className="absolute -top-1.5 -right-2 bg-accent text-white text-[9px] font-mono min-w-[16px] h-4 flex items-center justify-center px-1 rounded-full leading-none">
+                      {activeFilterCount}
+                    </span>
+                  )}
+                </div>
+              </button>
+            )}
             <button
               onClick={toggleTheme}
               className="p-2 text-muted hover:text-ink transition-colors rounded-lg hover:bg-paper-warm"
