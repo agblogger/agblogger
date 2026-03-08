@@ -5,6 +5,26 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { LabelResponse } from '@/api/client'
 import FilterPanel, { EMPTY_FILTER, type FilterState } from '../FilterPanel'
 
+let mockPanelState: 'closed' | 'open' | 'closing' = 'closed'
+const mockClosePanel = vi.fn()
+const mockOnAnimationEnd = vi.fn()
+const mockSetActiveFilterCount = vi.fn()
+
+vi.mock('@/stores/filterPanelStore', () => ({
+  useFilterPanelStore: (selector: (s: {
+    panelState: string
+    closePanel: () => void
+    onAnimationEnd: () => void
+    setActiveFilterCount: (n: number) => void
+  }) => unknown) =>
+    selector({
+      panelState: mockPanelState,
+      closePanel: mockClosePanel,
+      onAnimationEnd: mockOnAnimationEnd,
+      setActiveFilterCount: mockSetActiveFilterCount,
+    }),
+}))
+
 const mockFetchLabels = vi.fn()
 
 vi.mock('@/api/labels', () => ({
@@ -28,30 +48,21 @@ describe('FilterPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockFetchLabels.mockResolvedValue(allLabels)
+    mockPanelState = 'closed'
   })
 
-  it('renders Filters button', async () => {
+  it('does not render a toggle button', async () => {
     await renderPanel()
-    expect(screen.getByText('Filters')).toBeInTheDocument()
+    expect(screen.queryByText('Filters')).not.toBeInTheDocument()
   })
 
-  it('opens panel on click', async () => {
-    const user = userEvent.setup()
+  it('shows panel contents when panelState is open', async () => {
+    mockPanelState = 'open'
     await renderPanel()
-
-    await user.click(screen.getByText('Filters'))
 
     await waitFor(() => {
       expect(screen.getByPlaceholderText('Search labels...')).toBeInTheDocument()
     })
-  })
-
-  it('shows active filter count badge', async () => {
-    const filter: FilterState = { ...EMPTY_FILTER, labels: ['swe', 'cs'], author: 'Admin' }
-    await renderPanel(filter)
-
-    // 3 active: 2 labels + 1 author (panel label list also renders post_count 3, so use selector)
-    expect(screen.getByText('3', { selector: '.rounded-full' })).toBeInTheDocument()
   })
 
   it('shows filter chips when panel is closed', async () => {
@@ -72,10 +83,9 @@ describe('FilterPanel', () => {
   })
 
   it('filters labels by search', async () => {
+    mockPanelState = 'open'
     const user = userEvent.setup()
     await renderPanel()
-
-    await user.click(screen.getByText('Filters'))
 
     await waitFor(() => {
       expect(screen.getByText('#swe')).toBeInTheDocument()
@@ -90,10 +100,9 @@ describe('FilterPanel', () => {
   })
 
   it('filters labels by name case-insensitively', async () => {
+    mockPanelState = 'open'
     const user = userEvent.setup()
     await renderPanel()
-
-    await user.click(screen.getByText('Filters'))
 
     await waitFor(() => {
       expect(screen.getByText('#swe')).toBeInTheDocument()
@@ -106,11 +115,10 @@ describe('FilterPanel', () => {
   })
 
   it('toggles label selection', async () => {
+    mockPanelState = 'open'
     const onChange = vi.fn()
     const user = userEvent.setup()
     await renderPanel(EMPTY_FILTER, onChange)
-
-    await user.click(screen.getByText('Filters'))
 
     await waitFor(() => {
       expect(screen.getByText('#swe')).toBeInTheDocument()
@@ -122,12 +130,11 @@ describe('FilterPanel', () => {
   })
 
   it('removes label from filter', async () => {
+    mockPanelState = 'open'
     const onChange = vi.fn()
     const user = userEvent.setup()
     const filter: FilterState = { ...EMPTY_FILTER, labels: ['swe'] }
     await renderPanel(filter, onChange)
-
-    await user.click(screen.getByText('Filters'))
 
     await waitFor(() => {
       expect(screen.getByText('#swe')).toBeInTheDocument()
@@ -139,11 +146,10 @@ describe('FilterPanel', () => {
   })
 
   it('toggles label mode OR/AND', async () => {
+    mockPanelState = 'open'
     const onChange = vi.fn()
     const user = userEvent.setup()
     await renderPanel(EMPTY_FILTER, onChange)
-
-    await user.click(screen.getByText('Filters'))
 
     await waitFor(() => {
       expect(screen.getByText('AND')).toBeInTheDocument()
@@ -155,11 +161,10 @@ describe('FilterPanel', () => {
   })
 
   it('updates author filter', async () => {
+    mockPanelState = 'open'
     const onChange = vi.fn()
     const user = userEvent.setup()
     await renderPanel(EMPTY_FILTER, onChange)
-
-    await user.click(screen.getByText('Filters'))
 
     await waitFor(() => {
       expect(screen.getByPlaceholderText('Filter by author...')).toBeInTheDocument()
@@ -184,10 +189,9 @@ describe('FilterPanel', () => {
   })
 
   it('shows "No matching labels" when search has no results', async () => {
+    mockPanelState = 'open'
     const user = userEvent.setup()
     await renderPanel()
-
-    await user.click(screen.getByText('Filters'))
 
     await waitFor(() => {
       expect(screen.getByPlaceholderText('Search labels...')).toBeInTheDocument()
@@ -199,10 +203,9 @@ describe('FilterPanel', () => {
   })
 
   it('closes panel via Close button', async () => {
+    mockPanelState = 'open'
     const user = userEvent.setup()
     await renderPanel()
-
-    await user.click(screen.getByText('Filters'))
 
     await waitFor(() => {
       expect(screen.getByText('Close')).toBeInTheDocument()
@@ -210,41 +213,14 @@ describe('FilterPanel', () => {
 
     await user.click(screen.getByText('Close'))
 
-    // Panel should enter 'closing' state
-    const panel = document.querySelector('[data-state]')
-    expect(panel).toHaveAttribute('data-state', 'closing')
-  })
-
-  it('reopens panel when clicking Filters during closing animation', async () => {
-    const user = userEvent.setup()
-    await renderPanel()
-
-    // Open
-    await user.click(screen.getByText('Filters'))
-    await waitFor(() => {
-      expect(screen.getByText('Close')).toBeInTheDocument()
-    })
-
-    // Start closing
-    await user.click(screen.getByText('Close'))
-
-    // Panel should be in 'closing' state (data-state attribute)
-    const panel = document.querySelector('[data-state]')
-    expect(panel).toHaveAttribute('data-state', 'closing')
-
-    // Click Filters again during closing animation
-    await user.click(screen.getByText('Filters'))
-
-    // Panel should reopen
-    expect(panel).toHaveAttribute('data-state', 'open')
+    expect(mockClosePanel).toHaveBeenCalled()
   })
 
   it('updates from date', async () => {
+    mockPanelState = 'open'
     const onChange = vi.fn()
     const user = userEvent.setup()
     await renderPanel(EMPTY_FILTER, onChange)
-
-    await user.click(screen.getByText('Filters'))
 
     await waitFor(() => {
       const dateInputs = document.querySelectorAll('input[type="date"]')
@@ -302,13 +278,11 @@ describe('FilterPanel', () => {
   })
 
   it('clears all filters from inside panel', async () => {
+    mockPanelState = 'open'
     const onChange = vi.fn()
     const user = userEvent.setup()
     const filter: FilterState = { labels: ['swe'], labelMode: 'or', author: 'Admin', fromDate: '', toDate: '' }
     await renderPanel(filter, onChange)
-
-    // Open the panel
-    await user.click(screen.getByText('Filters'))
 
     await waitFor(() => {
       // There should be a "Clear all" inside the panel
@@ -321,5 +295,13 @@ describe('FilterPanel', () => {
     await user.click(clearButtons[clearButtons.length - 1]!)
 
     expect(onChange).toHaveBeenCalledWith(EMPTY_FILTER)
+  })
+
+  it('calls setActiveFilterCount with correct count', async () => {
+    const filter: FilterState = { ...EMPTY_FILTER, labels: ['swe', 'cs'], author: 'Admin', fromDate: '2026-01-01' }
+    await renderPanel(filter)
+
+    // 2 labels + 1 author + 1 fromDate = 4
+    expect(mockSetActiveFilterCount).toHaveBeenCalledWith(4)
   })
 })

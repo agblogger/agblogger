@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Filter, X, Calendar, User, Tag, ChevronDown, ChevronUp } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { X, Calendar, User, Tag } from 'lucide-react'
 import { fetchLabels } from '@/api/labels'
+import { useFilterPanelStore } from '@/stores/filterPanelStore'
 import type { LabelResponse } from '@/api/client'
 
 export interface FilterState {
@@ -24,10 +25,12 @@ interface FilterPanelProps {
   onChange: (f: FilterState) => void
 }
 
-type PanelState = 'closed' | 'open' | 'closing'
-
 export default function FilterPanel({ value, onChange }: FilterPanelProps) {
-  const [panelState, setPanelState] = useState<PanelState>('closed')
+  const panelState = useFilterPanelStore((s) => s.panelState)
+  const closePanel = useFilterPanelStore((s) => s.closePanel)
+  const onAnimationEnd = useFilterPanelStore((s) => s.onAnimationEnd)
+  const setActiveFilterCount = useFilterPanelStore((s) => s.setActiveFilterCount)
+
   const [allLabels, setAllLabels] = useState<LabelResponse[]>([])
   const [labelSearch, setLabelSearch] = useState('')
 
@@ -37,25 +40,14 @@ export default function FilterPanel({ value, onChange }: FilterPanelProps) {
     fetchLabels().then(setAllLabels).catch(console.error)
   }, [])
 
-  function togglePanel() {
-    if (panelState === 'closed' || panelState === 'closing') {
-      setPanelState('open')
-    } else {
-      setPanelState('closing')
-    }
-  }
-
-  function closePanel() {
-    if (panelState === 'open') {
-      setPanelState('closing')
-    }
-  }
-
-  const handleAnimationEnd = useCallback(() => {
-    if (panelState === 'closing') {
-      setPanelState('closed')
-    }
-  }, [panelState])
+  useEffect(() => {
+    const count =
+      value.labels.length +
+      (value.author ? 1 : 0) +
+      (value.fromDate ? 1 : 0) +
+      (value.toDate ? 1 : 0)
+    setActiveFilterCount(count)
+  }, [value.labels.length, value.author, value.fromDate, value.toDate, setActiveFilterCount])
 
   const hasActive =
     value.labels.length > 0 || value.author !== '' || value.fromDate !== '' || value.toDate !== ''
@@ -83,22 +75,6 @@ export default function FilterPanel({ value, onChange }: FilterPanelProps) {
 
   return (
     <div className="mb-6">
-      {/* Toggle bar */}
-      <button
-        onClick={togglePanel}
-        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors
-          ${hasActive ? 'bg-accent/10 text-accent' : 'text-muted hover:text-ink hover:bg-paper-warm'}`}
-      >
-        <Filter size={14} />
-        <span>Filters</span>
-        {hasActive && (
-          <span className="bg-accent text-white text-[10px] font-mono px-1.5 py-0.5 rounded-full leading-none">
-            {value.labels.length + (value.author ? 1 : 0) + (value.fromDate ? 1 : 0) + (value.toDate ? 1 : 0)}
-          </span>
-        )}
-        {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-      </button>
-
       {/* Active filter chips (always visible) */}
       {hasActive && !expanded && (
         <div className="flex items-center gap-2 mt-2 flex-wrap">
@@ -139,7 +115,7 @@ export default function FilterPanel({ value, onChange }: FilterPanelProps) {
       <div
         className="filter-panel-grid mt-3"
         data-state={panelState}
-        onAnimationEnd={handleAnimationEnd}
+        onAnimationEnd={onAnimationEnd}
       >
         <div className="filter-panel-inner">
           <div className="p-4 border border-border rounded-xl bg-paper-warm/40 space-y-5">
