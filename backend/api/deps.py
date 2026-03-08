@@ -11,6 +11,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.config import Settings
+from backend.exceptions import TokenExpiredError
 from backend.filesystem.content_manager import ContentManager
 from backend.models.user import User
 from backend.services.auth_service import authenticate_personal_access_token, decode_access_token
@@ -122,7 +123,14 @@ async def get_current_user(
 
     # PATs are supported for Bearer credentials only.
     if credentials is not None:
-        return await authenticate_personal_access_token(session, token_value)
+        try:
+            return await authenticate_personal_access_token(session, token_value)
+        except TokenExpiredError:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token expired",
+                headers={"WWW-Authenticate": "Bearer"},
+            ) from None
     return None
 
 

@@ -62,8 +62,10 @@ class TestPATLastUsedAt:
 
 class TestPATAuthentication:
     async def test_expired_pat_is_auto_revoked(self, session):
-        """An expired PAT should be auto-revoked and return None."""
+        """An expired PAT should be auto-revoked and raise TokenExpiredError."""
         from datetime import timedelta
+
+        from backend.exceptions import TokenExpiredError
 
         now = format_iso(now_utc())
         user = User(
@@ -86,8 +88,8 @@ class TestPATAuthentication:
         pat.expires_at = format_iso(now_utc() - timedelta(days=1))
         await session.commit()
 
-        result = await authenticate_personal_access_token(session, token_value)
-        assert result is None
+        with pytest.raises(TokenExpiredError):
+            await authenticate_personal_access_token(session, token_value)
 
         # Verify it was auto-revoked
         await session.refresh(pat)

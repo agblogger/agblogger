@@ -615,6 +615,101 @@ class TestPasswordRotation:
         assert pat_me_resp.status_code == 401
 
 
+class TestLoginErrorMessage:
+    @pytest.mark.asyncio
+    async def test_wrong_password_returns_generic_credentials_error(
+        self, client: AsyncClient
+    ) -> None:
+        """Login failure must not reveal whether the username or password was wrong."""
+        resp = await client.post(
+            "/api/auth/login",
+            json={"username": "admin", "password": "wrong-password"},
+        )
+        assert resp.status_code == 401
+        detail = resp.json()["detail"]
+        assert "username" not in detail.lower()
+        assert "password" not in detail.lower()
+        assert detail == "Invalid credentials"
+
+    @pytest.mark.asyncio
+    async def test_wrong_username_returns_generic_credentials_error(
+        self, client: AsyncClient
+    ) -> None:
+        """Login failure for nonexistent user must not reveal the user doesn't exist."""
+        resp = await client.post(
+            "/api/auth/login",
+            json={"username": "nonexistent", "password": "admin123"},
+        )
+        assert resp.status_code == 401
+        detail = resp.json()["detail"]
+        assert "username" not in detail.lower()
+        assert "password" not in detail.lower()
+        assert detail == "Invalid credentials"
+
+    @pytest.mark.asyncio
+    async def test_token_login_wrong_password_returns_generic_credentials_error(
+        self, client: AsyncClient
+    ) -> None:
+        """Token-login failure must use the same generic error message."""
+        resp = await client.post(
+            "/api/auth/token-login",
+            json={"username": "admin", "password": "wrong-password"},
+        )
+        assert resp.status_code == 401
+        assert resp.json()["detail"] == "Invalid credentials"
+
+
+class TestExpiredPATErrorMessage:
+    @pytest.mark.asyncio
+    async def test_expired_pat_returns_token_expired_message(self, client: AsyncClient) -> None:
+        """An expired PAT should return 401 with a message indicating the token expired."""
+        from datetime import timedelta
+
+        from httpx import ASGITransport
+        from sqlalchemy import select
+
+        from backend.models.user import PersonalAccessToken
+        from backend.services.datetime_service import format_iso, now_utc
+
+        # Create a PAT via the API
+        token_resp = await client.post(
+            "/api/auth/token-login",
+            json={"username": "admin", "password": "admin123"},
+        )
+        access_token = token_resp.json()["access_token"]
+
+        pat_resp = await client.post(
+            "/api/auth/pats",
+            json={"name": "expiry-test", "expires_days": 30},
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        assert pat_resp.status_code == 201
+        pat_token = pat_resp.json()["token"]
+        pat_id = pat_resp.json()["id"]
+
+        # Manually expire the PAT via direct DB access
+        transport = client._transport
+        assert isinstance(transport, ASGITransport)
+        app = transport.app
+        state = getattr(app, "state", None)
+        assert state is not None
+        session_factory = state.session_factory
+        async with session_factory() as session:
+            stmt = select(PersonalAccessToken).where(PersonalAccessToken.id == pat_id)
+            result = await session.execute(stmt)
+            pat = result.scalar_one()
+            pat.expires_at = format_iso(now_utc() - timedelta(days=1))
+            await session.commit()
+
+        # Now try to use the expired PAT
+        me_resp = await client.get(
+            "/api/auth/me",
+            headers={"Authorization": f"Bearer {pat_token}"},
+        )
+        assert me_resp.status_code == 401
+        assert me_resp.json()["detail"] == "Token expired"
+
+
 class TestTokenLoginRateLimiting:
     @pytest.mark.asyncio
     async def test_token_login_rate_limited_after_max_failures(self, client: AsyncClient) -> None:

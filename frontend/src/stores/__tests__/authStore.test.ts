@@ -78,7 +78,7 @@ describe('authStore', () => {
       mockApiLogin.mockRejectedValue(new MockHTTPError(401))
 
       await expect(useAuthStore.getState().login('bad', 'creds')).rejects.toThrow('Login failed')
-      expect(useAuthStore.getState().error).toBe('Invalid username or password')
+      expect(useAuthStore.getState().error).toBe('Invalid credentials')
     })
 
     it('generic error shows generic message', async () => {

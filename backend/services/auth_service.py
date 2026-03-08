@@ -13,6 +13,7 @@ import jwt
 from jwt import InvalidTokenError
 from sqlalchemy import delete, select, update
 
+from backend.exceptions import TokenExpiredError
 from backend.models.user import InviteCode, PersonalAccessToken, RefreshToken, User
 from backend.services.datetime_service import format_iso, now_utc
 from backend.services.key_derivation import derive_access_token_key
@@ -347,7 +348,7 @@ async def authenticate_personal_access_token(
         if expires is None or expires <= now_utc():
             pat.revoked_at = format_iso(now_utc())
             await session.commit()
-            return None
+            raise TokenExpiredError("Personal access token expired")
 
     user = await session.get(User, pat.user_id)
     if user is None:

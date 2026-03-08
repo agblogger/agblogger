@@ -73,9 +73,9 @@ describe('LoginPage', () => {
   })
 
   it('displays error from store', () => {
-    mockError = 'Invalid username or password'
+    mockError = 'Invalid credentials'
     renderLogin()
-    expect(screen.getByText('Invalid username or password')).toBeInTheDocument()
+    expect(screen.getByText('Invalid credentials')).toBeInTheDocument()
   })
 
   it('shows loading state', () => {
@@ -86,13 +86,13 @@ describe('LoginPage', () => {
   })
 
   it('clears error when user types', async () => {
-    mockError = 'Invalid username or password'
+    mockError = 'Invalid credentials'
     renderLogin()
-    expect(screen.getByText('Invalid username or password')).toBeInTheDocument()
+    expect(screen.getByText('Invalid credentials')).toBeInTheDocument()
 
     await userEvent.type(screen.getByLabelText(/Username/), 'a')
 
-    expect(screen.queryByText('Invalid username or password')).not.toBeInTheDocument()
+    expect(screen.queryByText('Invalid credentials')).not.toBeInTheDocument()
   })
 
   it('shows required indicators on username and password', () => {

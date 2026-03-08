@@ -30,7 +30,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     } catch (err) {
       const message =
         err instanceof HTTPError && err.response.status === 401
-          ? 'Invalid username or password'
+          ? 'Invalid credentials'
           : 'Login failed. Please try again.'
       set({ error: message, isLoading: false })
       throw new Error('Login failed')

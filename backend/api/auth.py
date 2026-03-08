@@ -191,7 +191,7 @@ async def _authenticate_login_request(
         )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid username or password",
+            detail="Invalid credentials",
         )
 
     limiter.clear(client_key)
