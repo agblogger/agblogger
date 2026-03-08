@@ -134,6 +134,7 @@ DEP002 = [
     "hypothesis",
     "pytest-asyncio",
     "pytest-cov",
+    "pytest-xdist",
     "ruff",
     "mypy",
     "basedpyright",

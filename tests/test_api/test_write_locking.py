@@ -8,8 +8,6 @@ from unittest.mock import patch
 
 import pytest
 
-pytestmark = pytest.mark.slow
-
 from backend.config import Settings
 from tests.conftest import create_test_client
 
@@ -18,6 +16,8 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from httpx import AsyncClient
+
+pytestmark = pytest.mark.slow
 
 
 class _CountingLock:

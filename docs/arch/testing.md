@@ -13,7 +13,7 @@ Tests live under `tests/` with shared fixtures in `conftest.py` (tmp content dir
 
 Configuration in `pyproject.toml`: `asyncio_mode = "auto"`, coverage via `pytest-cov`, `fail_under = 80` with branch coverage enabled.
 
-Slow tests which take more than 1s to run should be marked @pytest.mark.slow.
+Slow backend tests which take more than 1s to run should be marked @pytest.mark.slow. If a fixture setup takes more than 1s, the entire group of tests using that fixture should be marked @pytest.mark.slow.
 
 Property-based testing is implemented with Hypothesis for high-invariant backend logic:
 - sync plan classification and symmetry invariants

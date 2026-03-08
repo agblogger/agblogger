@@ -21,7 +21,7 @@ zap_baseline_minutes := env("ZAP_BASELINE_MINUTES", "")
 zap_full_minutes := env("ZAP_FULL_MINUTES", "")
 
 # Run all static analysis checks (no tests)
-check-static: check-backend-static check-frontend-static check-vulture check-semgrep check-trivy
+check-static: check-backend-static check-frontend-static check-vulture check-trivy
     @echo "\n✓ Static checks passed"
 
 # Run all test suites, excluding slow tests (pass coverage=true for coverage reports)
@@ -37,7 +37,7 @@ check: check-static (test "true")
 # Run full frontend vulnerability audit (including dev dependencies)
 check-audit-full:
     @echo "\n── Frontend: full vulnerability audit (including dev dependencies) ──"
-    cd frontend && npm audit --audit-level=high
+    cd frontend && npm audit
 
 # Run Checkov against container build/deploy manifests
 checkov:
@@ -60,7 +60,7 @@ check-gitleaks-full:
     gitleaks detect --source . --config "$cfg_file" --no-banner --verbose
 
 # Run extra checks not covered by `check`
-check-extra: check-audit-full checkov check-gitleaks check-codeql test-backend-slow
+check-extra: check-audit-full checkov check-gitleaks check-codeql check-semgrep test-backend-slow
     @echo "\n── Snyk: open source dependency scan ──"
     snyk test frontend
     @echo "\n✓ Extra checks passed"
