@@ -37,11 +37,10 @@ from backend.models.post import PostCache
 from backend.models.user import User
 from backend.pandoc.renderer import render_markdown, render_markdown_excerpt, rewrite_relative_urls
 from backend.schemas.post import (
-    PostCreate,
     PostDetail,
     PostEditResponse,
     PostListResponse,
-    PostUpdate,
+    PostSave,
     SearchResult,
 )
 from backend.services.datetime_service import format_iso, now_utc
@@ -458,7 +457,7 @@ async def get_post_endpoint(
 
 @router.post("", response_model=PostDetail, status_code=201)
 async def create_post_endpoint(
-    body: PostCreate,
+    body: PostSave,
     response: Response,
     session: Annotated[AsyncSession, Depends(get_session)],
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
@@ -542,7 +541,7 @@ async def create_post_endpoint(
 @router.put("/{file_path:path}", response_model=PostDetail)
 async def update_post_endpoint(
     file_path: str,
-    body: PostUpdate,
+    body: PostSave,
     response: Response,
     session: Annotated[AsyncSession, Depends(get_session)],
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],

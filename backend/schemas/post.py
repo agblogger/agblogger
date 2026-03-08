@@ -40,31 +40,8 @@ class PostEditResponse(BaseModel):
     author: str | None = None
 
 
-class PostCreate(BaseModel):
-    """Request to create a new post."""
-
-    title: str = Field(
-        min_length=1,
-        max_length=500,
-        description="Post title",
-    )
-    body: str = Field(
-        min_length=1,
-        max_length=500_000,
-        description="Markdown body without front matter",
-    )
-    labels: list[str] = Field(default_factory=list)
-    is_draft: bool = False
-
-    @field_validator("title", mode="before")
-    @classmethod
-    def strip_title(cls, v: str) -> str:
-        _ = cls
-        return v.strip()
-
-
-class PostUpdate(BaseModel):
-    """Request to update an existing post."""
+class PostSave(BaseModel):
+    """Request body for creating or updating a post."""
 
     title: str = Field(
         min_length=1,
