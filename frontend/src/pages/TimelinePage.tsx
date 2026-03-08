@@ -81,7 +81,7 @@ export default function TimelinePage() {
         setLoading(false)
       }
     })()
-  }, [searchParams, retryCount])
+  }, [searchParams, retryCount, user])
 
   function goToPage(p: number) {
     const params = new URLSearchParams(searchParams)

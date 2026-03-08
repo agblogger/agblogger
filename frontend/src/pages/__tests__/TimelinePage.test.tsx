@@ -22,12 +22,12 @@ vi.mock('@/api/client', async () => {
   return { default: {}, HTTPError: MockHTTPError }
 })
 
-let mockUser: UserResponse | null = null
-
-vi.mock('@/stores/authStore', () => ({
-  useAuthStore: (selector: (s: { user: UserResponse | null }) => unknown) =>
-    selector({ user: mockUser }),
-}))
+vi.mock('@/stores/authStore', async () => {
+  const { create } = await import('zustand')
+  return {
+    useAuthStore: create<{ user: UserResponse | null }>(() => ({ user: null })),
+  }
+})
 
 const mockNavigate = vi.fn()
 vi.mock('react-router-dom', async () => {
@@ -35,7 +35,12 @@ vi.mock('react-router-dom', async () => {
   return { ...actual, useNavigate: () => mockNavigate }
 })
 
+import { useAuthStore } from '@/stores/authStore'
 import TimelinePage from '../TimelinePage'
+
+function setMockUser(user: UserResponse | null) {
+  useAuthStore.setState({ user })
+}
 
 const mockFetchPosts = vi.mocked(fetchPosts)
 const mockUploadPost = vi.mocked(uploadPost)
@@ -100,7 +105,7 @@ describe('TimelinePage', () => {
     mockFetchPosts.mockReset()
     mockUploadPost.mockReset()
     mockNavigate.mockReset()
-    mockUser = null
+    setMockUser(null)
   })
 
   it('shows skeleton cards during loading', async () => {
@@ -177,7 +182,7 @@ describe('TimelinePage', () => {
   })
 
   it('shows "Write your first post" CTA for authenticated user with no posts', async () => {
-    mockUser = { id: 1, username: 'admin', email: 'a@t.com', display_name: null, is_admin: true }
+    setMockUser({ id: 1, username: 'admin', email: 'a@t.com', display_name: null, is_admin: true })
     mockFetchPosts.mockResolvedValue({ ...postsResponse, posts: [], total: 0 })
     renderTimeline()
 
@@ -187,6 +192,51 @@ describe('TimelinePage', () => {
     const cta = screen.getByRole('link', { name: 'Write your first post' })
     expect(cta).toBeInTheDocument()
     expect(cta).toHaveAttribute('href', '/editor/new')
+  })
+
+  it('re-fetches posts when user logs out', async () => {
+    setMockUser({ id: 1, username: 'admin', email: 'a@t.com', display_name: null, is_admin: true })
+    const withDraft: PostListResponse = {
+      posts: [
+        {
+          id: 1, file_path: 'posts/hello.md', title: 'Hello World',
+          author: 'Admin', created_at: '2026-02-01 12:00:00+00:00',
+          modified_at: '2026-02-01 12:00:00+00:00', is_draft: false,
+          rendered_excerpt: '<p>First post</p>', labels: [],
+        },
+        {
+          id: 2, file_path: 'posts/my-draft/index.md', title: 'My Draft',
+          author: 'Admin', created_at: '2026-02-02 12:00:00+00:00',
+          modified_at: '2026-02-02 12:00:00+00:00', is_draft: true,
+          rendered_excerpt: '<p>Draft</p>', labels: [],
+        },
+      ],
+      total: 2, page: 1, per_page: 10, total_pages: 1,
+    }
+    mockFetchPosts.mockResolvedValue(withDraft)
+    renderTimeline()
+
+    await waitFor(() => {
+      expect(screen.getByText('My Draft')).toBeInTheDocument()
+    })
+    expect(mockFetchPosts).toHaveBeenCalledTimes(1)
+
+    // Simulate logout: backend now returns only published posts
+    const withoutDraft: PostListResponse = {
+      posts: [withDraft.posts[0]],
+      total: 1, page: 1, per_page: 10, total_pages: 1,
+    }
+    mockFetchPosts.mockResolvedValue(withoutDraft)
+
+    act(() => {
+      setMockUser(null)
+    })
+
+    await waitFor(() => {
+      expect(mockFetchPosts).toHaveBeenCalledTimes(2)
+    })
+    expect(screen.queryByText('My Draft')).not.toBeInTheDocument()
+    expect(screen.getByText('Hello World')).toBeInTheDocument()
   })
 
   // === Pagination ===
@@ -213,7 +263,7 @@ describe('TimelinePage', () => {
   // === Upload buttons ===
 
   it('shows upload buttons when authenticated', async () => {
-    mockUser = { id: 1, username: 'admin', email: 'a@t.com', display_name: null, is_admin: true }
+    setMockUser({ id: 1, username: 'admin', email: 'a@t.com', display_name: null, is_admin: true })
     mockFetchPosts.mockResolvedValue(postsResponse)
     renderTimeline()
 
@@ -224,7 +274,7 @@ describe('TimelinePage', () => {
   })
 
   it('hides upload buttons when not authenticated', async () => {
-    mockUser = null
+    setMockUser(null)
     mockFetchPosts.mockResolvedValue(postsResponse)
     renderTimeline()
 
@@ -259,7 +309,7 @@ describe('TimelinePage', () => {
   // === Upload functionality ===
 
   it('successful upload navigates to post', async () => {
-    mockUser = { id: 1, username: 'admin', email: 'a@t.com', display_name: null, is_admin: true }
+    setMockUser({ id: 1, username: 'admin', email: 'a@t.com', display_name: null, is_admin: true })
     mockFetchPosts.mockResolvedValue(postsResponse)
     mockUploadPost.mockResolvedValue({
       id: 3, file_path: 'posts/uploaded.md', title: 'Uploaded',
@@ -286,7 +336,7 @@ describe('TimelinePage', () => {
   })
 
   it('shows 413 error for large file upload', async () => {
-    mockUser = { id: 1, username: 'admin', email: 'a@t.com', display_name: null, is_admin: true }
+    setMockUser({ id: 1, username: 'admin', email: 'a@t.com', display_name: null, is_admin: true })
     mockFetchPosts.mockResolvedValue(postsResponse)
     mockUploadPost.mockRejectedValue(
       new (MockHTTPError as unknown as new (s: number) => Error)(413),
@@ -306,7 +356,7 @@ describe('TimelinePage', () => {
   })
 
   it('shows title prompt for 422 no_title error', async () => {
-    mockUser = { id: 1, username: 'admin', email: 'a@t.com', display_name: null, is_admin: true }
+    setMockUser({ id: 1, username: 'admin', email: 'a@t.com', display_name: null, is_admin: true })
     mockFetchPosts.mockResolvedValue(postsResponse)
     mockUploadPost.mockRejectedValue(
       new (MockHTTPError as unknown as new (s: number, body?: string) => Error)(
@@ -328,7 +378,7 @@ describe('TimelinePage', () => {
   })
 
   it('submits title prompt and uploads', async () => {
-    mockUser = { id: 1, username: 'admin', email: 'a@t.com', display_name: null, is_admin: true }
+    setMockUser({ id: 1, username: 'admin', email: 'a@t.com', display_name: null, is_admin: true })
     mockFetchPosts.mockResolvedValue(postsResponse)
     mockUploadPost
       .mockRejectedValueOnce(
@@ -364,7 +414,7 @@ describe('TimelinePage', () => {
   })
 
   it('cancels title prompt dialog', async () => {
-    mockUser = { id: 1, username: 'admin', email: 'a@t.com', display_name: null, is_admin: true }
+    setMockUser({ id: 1, username: 'admin', email: 'a@t.com', display_name: null, is_admin: true })
     mockFetchPosts.mockResolvedValue(postsResponse)
     mockUploadPost.mockRejectedValue(
       new (MockHTTPError as unknown as new (s: number, body?: string) => Error)(
@@ -391,7 +441,7 @@ describe('TimelinePage', () => {
   })
 
   it('shows upload error message', async () => {
-    mockUser = { id: 1, username: 'admin', email: 'a@t.com', display_name: null, is_admin: true }
+    setMockUser({ id: 1, username: 'admin', email: 'a@t.com', display_name: null, is_admin: true })
     mockFetchPosts.mockResolvedValue(postsResponse)
     mockUploadPost.mockRejectedValue(new Error('Network'))
     renderTimeline()
@@ -409,7 +459,7 @@ describe('TimelinePage', () => {
   })
 
   it('shows 401 upload error', async () => {
-    mockUser = { id: 1, username: 'admin', email: 'a@t.com', display_name: null, is_admin: true }
+    setMockUser({ id: 1, username: 'admin', email: 'a@t.com', display_name: null, is_admin: true })
     mockFetchPosts.mockResolvedValue(postsResponse)
     mockUploadPost.mockRejectedValue(
       new (MockHTTPError as unknown as new (s: number) => Error)(401),
