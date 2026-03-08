@@ -123,6 +123,38 @@ class TestPostUpload:
         assert (post_dir / "photo.png").exists()
 
     @pytest.mark.asyncio
+    async def test_upload_single_non_index_md_file_succeeds(
+        self, client: AsyncClient, upload_settings: Settings
+    ) -> None:
+        """A single .md file (not named index.md) should still work for file upload."""
+        token = await login(client)
+        md_content = "---\ntitle: Single File\n---\nBody\n"
+        resp = await client.post(
+            "/api/posts/upload",
+            files={"files": ("my-post.md", md_content.encode(), "text/markdown")},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 201
+        assert "index.md" in resp.json()["file_path"]
+
+    @pytest.mark.asyncio
+    async def test_upload_folder_without_index_md_returns_422(self, client: AsyncClient) -> None:
+        """Directory upload with .md file that is not index.md should be rejected."""
+        token = await login(client)
+        md_content = "---\ntitle: Bad Folder\n---\nBody\n"
+        png_bytes = b"\x89PNG\r\n\x1a\n" + b"\x00" * 50
+        resp = await client.post(
+            "/api/posts/upload",
+            files=[
+                ("files", ("post.md", md_content.encode(), "text/markdown")),
+                ("files", ("photo.png", png_bytes, "image/png")),
+            ],
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 422
+        assert "index.md" in resp.json()["detail"]
+
+    @pytest.mark.asyncio
     async def test_upload_no_markdown_returns_422(self, client: AsyncClient) -> None:
         token = await login(client)
         resp = await client.post(
