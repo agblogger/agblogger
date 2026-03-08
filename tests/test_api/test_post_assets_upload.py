@@ -282,3 +282,102 @@ class TestListAssets:
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 404
+
+
+class TestDeleteAsset:
+    @pytest.mark.asyncio
+    async def test_delete_asset(
+        self, client: AsyncClient, app_settings: Settings
+    ) -> None:
+        """Upload a file, verify it exists on disk, delete it, verify 204 and gone."""
+        token = await _login(client)
+        file_content = b"fake image data"
+
+        # Upload an asset
+        upload_resp = await client.post(
+            "/api/posts/posts/hello.md/assets",
+            files=[("files", ("photo.png", file_content, "image/png"))],
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert upload_resp.status_code == 200
+
+        # Verify it exists on disk
+        asset_path = app_settings.content_dir / "posts" / "photo.png"
+        assert asset_path.exists()
+
+        # Delete the asset
+        resp = await client.delete(
+            "/api/posts/posts/hello.md/assets/photo.png",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 204
+
+        # Verify it's gone from disk
+        assert not asset_path.exists()
+
+    @pytest.mark.asyncio
+    async def test_delete_nonexistent_asset(self, client: AsyncClient) -> None:
+        """DELETE for asset that doesn't exist returns 404."""
+        token = await _login(client)
+
+        resp = await client.delete(
+            "/api/posts/posts/hello.md/assets/nonexistent.png",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_delete_asset_requires_auth(self, client: AsyncClient) -> None:
+        """DELETE without auth returns 401."""
+        resp = await client.delete(
+            "/api/posts/posts/hello.md/assets/photo.png",
+        )
+        assert resp.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_cannot_delete_index_md(self, client: AsyncClient) -> None:
+        """DELETE index.md returns 400."""
+        token = await _login(client)
+
+        # Create a post-per-directory post
+        create_resp = await client.post(
+            "/api/posts",
+            json={"title": "Directory Post", "body": "Some content here."},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert create_resp.status_code == 201
+        created_file_path = create_resp.json()["file_path"]
+
+        # Try to delete index.md
+        resp = await client.delete(
+            f"/api/posts/{created_file_path}/assets/index.md",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_cannot_delete_hidden_file(self, client: AsyncClient) -> None:
+        """DELETE .gitkeep returns 400."""
+        token = await _login(client)
+
+        resp = await client.delete(
+            "/api/posts/posts/hello.md/assets/.gitkeep",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_delete_asset_path_traversal(self, client: AsyncClient) -> None:
+        """DELETE with path traversal components is rejected.
+
+        Slash-based traversal (..%2F) is handled at the routing/framework level.
+        Backslash traversal is caught by _validate_asset_filename → 400.
+        """
+        token = await _login(client)
+
+        # Backslash traversal: caught by _validate_asset_filename → 400
+        resp = await client.delete(
+            "/api/posts/posts/hello.md/assets/..%5C..%5Cindex.toml",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 400

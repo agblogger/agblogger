@@ -480,6 +480,53 @@ async def list_assets(
     return AssetListResponse(assets=assets)
 
 
+def _validate_asset_filename(filename: str) -> None:
+    """Validate an asset filename for safety."""
+    if not filename or filename.startswith(".") or "/" in filename or "\\" in filename:
+        raise HTTPException(status_code=400, detail=f"Invalid filename: {filename}")
+    if filename == "index.md":
+        raise HTTPException(status_code=400, detail="Cannot modify the post content file")
+    cleaned = FilePath(filename).name
+    if cleaned != filename:
+        raise HTTPException(status_code=400, detail=f"Invalid filename: {filename}")
+
+
+@router.delete("/{file_path:path}/assets/{filename}", status_code=204)
+async def delete_asset(
+    file_path: str,
+    filename: str,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    content_manager: Annotated[ContentManager, Depends(get_content_manager)],
+    git_service: Annotated[GitService, Depends(get_git_service)],
+    content_write_lock: Annotated[AsyncWriteLock, Depends(get_content_write_lock)],
+    _user: Annotated[User, Depends(require_admin)],
+) -> None:
+    """Delete a single asset file from a post's directory."""
+    _validate_asset_filename(filename)
+
+    async with content_write_lock:
+        stmt = select(PostCache).where(PostCache.file_path == file_path)
+        result = await session.execute(stmt)
+        if result.scalar_one_or_none() is None:
+            raise HTTPException(status_code=404, detail="Post not found")
+
+        asset_path = (content_manager.content_dir / file_path).parent / filename
+        if not asset_path.is_file():
+            raise HTTPException(status_code=404, detail="Asset not found")
+
+        try:
+            asset_path.unlink()
+        except OSError as exc:
+            logger.error("Failed to delete asset %s: %s", asset_path, exc)
+            raise HTTPException(status_code=500, detail="Failed to delete asset") from exc
+
+        set_git_warning(
+            response,
+            await git_service.try_commit(f"Delete asset {filename} from {file_path}"),
+        )
+
+
 @router.get("/{file_path:path}", response_model=PostDetail)
 async def get_post_endpoint(
     file_path: str,
