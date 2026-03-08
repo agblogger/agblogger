@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Save, ArrowLeft, Upload, Eye } from 'lucide-react'
+import { Save, ArrowLeft, Eye } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 
-import { fetchPostForEdit, createPost, updatePost, uploadAssets } from '@/api/posts'
+import { fetchPostForEdit, createPost, updatePost } from '@/api/posts'
 import { fetchSocialAccounts } from '@/api/crosspost'
 import type { SocialAccount } from '@/api/crosspost'
 import { HTTPError } from '@/api/client'
@@ -20,6 +20,7 @@ import LabelInput from '@/components/editor/LabelInput'
 import MarkdownToolbar from '@/components/editor/MarkdownToolbar'
 import { actions as toolbarActions } from '@/components/editor/toolbarActions'
 import { wrapSelection } from '@/components/editor/wrapSelection'
+import FileStrip from '@/components/editor/FileStrip'
 
 export default function EditorPage() {
   const { '*': filePath } = useParams()
@@ -37,7 +38,6 @@ export default function EditorPage() {
   const [modifiedAt, setModifiedAt] = useState<string | null>(null)
   const [loading, setLoading] = useState(!isNew)
   const [saving, setSaving] = useState(false)
-  const [uploading, setUploading] = useState(false)
   const [preview, setPreview] = useState<string | null>(null)
   const [previewError, setPreviewError] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -45,12 +45,14 @@ export default function EditorPage() {
   const previewRequestRef = useRef(0)
   const previewRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
   const [accounts, setAccounts] = useState<SocialAccount[]>([])
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([])
   const [showCrossPostDialog, setShowCrossPostDialog] = useState(false)
   const [mobileTab, setMobileTab] = useState<'edit' | 'preview'>('edit')
   const [savedFilePath, setSavedFilePath] = useState<string | null>(null)
+  const [effectiveFilePath, setEffectiveFilePath] = useState<string | null>(
+    isNew ? null : filePath ?? null,
+  )
   useCodeBlockEnhance(previewRef, renderedPreview)
 
   const autoSaveKey = isNew ? 'agblogger:draft:new' : `agblogger:draft:${filePath}`
@@ -156,11 +158,13 @@ export default function EditorPage() {
         result = await updatePost(filePath, { title, body, labels, is_draft: isDraft })
       }
       markSaved()
+      setSavedFilePath(result.file_path)
+      setEffectiveFilePath(result.file_path)
+      if (isNew) {
+        void navigate(`/editor/${result.file_path}`, { replace: true })
+      }
       if (selectedPlatforms.length > 0) {
-        setSavedFilePath(result.file_path)
         setShowCrossPostDialog(true)
-      } else {
-        void navigate(`/post/${result.file_path}`)
       }
     } catch (err) {
       if (err instanceof HTTPError) {
@@ -188,60 +192,17 @@ export default function EditorPage() {
     }
   }
 
-  async function handleFileUpload(files: FileList | File[]) {
-    if (filePath === undefined || isNew) return
-    const fileArray = Array.from(files)
-    if (fileArray.length === 0) return
-
-    setUploading(true)
-    setError(null)
-    try {
-      const result = await uploadAssets(filePath, fileArray)
-      // Insert markdown at cursor
-      const textarea = textareaRef.current
-      if (textarea) {
-        const pos = textarea.selectionStart
-        const insertions = result.uploaded.map((name) => {
-          const ext = name.split('.').pop()?.toLowerCase() ?? ''
-          const isImage = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'avif'].includes(ext)
-          return isImage ? `![${name}](${name})` : `[${name}](${name})`
-        })
-        const insertText = insertions.join('\n') + '\n\n'
-        const before = body.slice(0, pos)
-        const after = body.slice(pos)
-        setBody(before + insertText + after)
-      }
-    } catch (err) {
-      if (err instanceof HTTPError) {
-        if (err.response.status === 413) {
-          setError('File too large. Maximum size is 10 MB.')
-        } else {
-          setError('Failed to upload file. Please try again.')
-        }
-      } else {
-        setError('Failed to upload file.')
-      }
-    } finally {
-      setUploading(false)
-    }
-  }
-
-  function handleDrop(e: React.DragEvent<HTMLTextAreaElement>) {
-    e.preventDefault()
-    if (e.dataTransfer.files.length > 0) {
-      void handleFileUpload(e.dataTransfer.files)
-    }
-  }
-
-  function handleDragOver(e: React.DragEvent<HTMLTextAreaElement>) {
-    e.preventDefault()
-  }
-
   function handleCrossPostClose() {
     setShowCrossPostDialog(false)
-    if (savedFilePath !== null) {
-      void navigate(`/post/${savedFilePath}`)
-    }
+  }
+
+  function handleInsertAtCursor(text: string) {
+    const textarea = textareaRef.current
+    if (!textarea) return
+    const pos = textarea.selectionStart
+    const before = body.slice(0, pos)
+    const after = body.slice(pos)
+    setBody(before + text + after)
   }
 
   function formatDate(iso: string): string {
@@ -335,15 +296,33 @@ export default function EditorPage() {
           {isDirty && <span className="text-muted text-sm">*</span>}
         </div>
 
-        <button
-          onClick={() => void handleSave()}
-          disabled={saving || !title.trim()}
-          className="flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium
-                   bg-accent text-white rounded-lg hover:bg-accent-light disabled:opacity-50 transition-colors"
-        >
-          <Save size={14} />
-          {saving ? 'Saving...' : 'Save'}
-        </button>
+        <div className="flex items-center gap-2">
+          {effectiveFilePath !== null && (
+            <button
+              onClick={() => {
+                if (isDirty && !window.confirm('You have unsaved changes. Leave without saving?'))
+                  return
+                void navigate(`/post/${effectiveFilePath}`)
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium
+                       text-muted border border-border rounded-lg
+                       hover:text-ink hover:bg-paper-warm
+                       disabled:opacity-50 transition-colors"
+            >
+              <Eye size={14} />
+              View post
+            </button>
+          )}
+          <button
+            onClick={() => void handleSave()}
+            disabled={saving || !title.trim()}
+            className="flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium
+                     bg-accent text-white rounded-lg hover:bg-accent-light disabled:opacity-50 transition-colors"
+          >
+            <Save size={14} />
+            {saving ? 'Saving...' : 'Save'}
+          </button>
+        </div>
       </div>
 
       {error !== null && (
@@ -457,38 +436,15 @@ export default function EditorPage() {
         )}
       </div>
 
-      <input
-        ref={fileInputRef}
-        type="file"
-        multiple
-        className="hidden"
-        onChange={(e) => {
-          if (e.target.files) {
-            void handleFileUpload(e.target.files)
-          }
-          e.target.value = ''
-        }}
-      />
-
-      {!isNew && filePath && (
-        <div className="mb-4 flex items-center gap-2">
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={saving || uploading}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium
-                     text-muted border border-border rounded-lg
-                     hover:text-ink hover:bg-paper-warm
-                     disabled:opacity-50 transition-colors"
-          >
-            <Upload size={14} />
-            {uploading ? 'Uploading...' : 'Upload files'}
-          </button>
-          {uploading && (
-            <span className="text-xs text-muted">Uploading...</span>
-          )}
-          <span className="text-xs text-muted">Max 10 MB per file</span>
-        </div>
-      )}
+      <div className="mb-4">
+        <FileStrip
+          filePath={effectiveFilePath}
+          body={body}
+          onBodyChange={setBody}
+          onInsertAtCursor={handleInsertAtCursor}
+          disabled={saving}
+        />
+      </div>
 
       <div className="flex lg:hidden mb-4 border-b border-border">
         <button
@@ -521,16 +477,14 @@ export default function EditorPage() {
             textareaRef={textareaRef}
             value={body}
             onChange={setBody}
-            disabled={saving || uploading}
+            disabled={saving}
           />
           <textarea
             ref={textareaRef}
             value={body}
             onChange={(e) => setBody(e.target.value)}
             onKeyDown={handleEditorKeyDown}
-            onDrop={handleDrop}
-            onDragOver={handleDragOver}
-            disabled={saving || uploading}
+            disabled={saving}
             className="w-full h-full min-h-[60vh] p-4 bg-paper-warm border border-border rounded-lg
                      font-mono text-sm leading-relaxed text-ink resize-none
                      focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/20

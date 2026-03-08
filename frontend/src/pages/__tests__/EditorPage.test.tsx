@@ -32,6 +32,9 @@ vi.mock('@/api/posts', () => ({
   createPost: vi.fn(),
   updatePost: vi.fn(),
   uploadAssets: vi.fn(),
+  fetchPostAssets: vi.fn().mockResolvedValue({ assets: [] }),
+  deletePostAsset: vi.fn(),
+  renamePostAsset: vi.fn(),
 }))
 
 vi.mock('@/api/client', async () => {
@@ -304,6 +307,9 @@ describe('EditorPage', () => {
         is_draft: false,
       })
     })
+
+    // Editor stays visible (save-and-stay behavior)
+    expect(screen.getByLabelText(/Title/)).toHaveValue('My Title')
   })
 
   it('updates existing post on save', async () => {
@@ -333,6 +339,9 @@ describe('EditorPage', () => {
         is_draft: false,
       })
     })
+
+    // Editor stays visible (save-and-stay behavior)
+    expect(screen.getByLabelText(/Title/)).toHaveValue('Existing Post')
   })
 
   it('shows 401 save error', async () => {
@@ -623,42 +632,77 @@ describe('EditorPage', () => {
     })
   })
 
-  it('inserts image markdown with blank line separator after upload', async () => {
-    const { uploadAssets } = await import('@/api/posts')
-    const mockUpload = vi.mocked(uploadAssets)
-    mockUpload.mockResolvedValue({ uploaded: ['photo.png'] })
-    mockFetchPostForEdit.mockResolvedValue(editResponse)
-
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    try {
-      renderEditor('/editor/posts/existing.md')
-
-      await waitFor(() => {
-        expect(screen.getByLabelText(/Title/)).toHaveValue('Existing Post')
-      })
-
-      // Find the hidden file input and trigger upload
-      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
-      expect(fileInput).toBeTruthy()
-
-      const file = new File(['test'], 'photo.png', { type: 'image/png' })
-      Object.defineProperty(fileInput, 'files', { value: [file], writable: false })
-      fileInput.dispatchEvent(new Event('change', { bubbles: true }))
-
-      await waitFor(() => {
-        expect(mockUpload).toHaveBeenCalled()
-      })
-
-      // Verify the inserted text uses double newline for blank line separation
-      await waitFor(() => {
-        const textareas = document.querySelectorAll('textarea')
-        const bodyTextarea = textareas[0]!
-        // The inserted markdown should have \n\n (blank line) after the image
-        expect(bodyTextarea.value).toContain('![photo.png](photo.png)\n\n')
-      })
-    } finally {
-      spy.mockRestore()
+  it('stays on editor after saving new post', async () => {
+    const mockCreatePost = vi.mocked(createPost)
+    const savedPost: PostDetail = {
+      id: 1, file_path: 'posts/2026-03-08-my-title/index.md',
+      title: 'My Title', author: 'jane', created_at: '2026-03-08 12:00:00+00:00',
+      modified_at: '2026-03-08 12:00:00+00:00', is_draft: false,
+      rendered_excerpt: '', rendered_html: '<p>Hello</p>', content: 'Hello', labels: [],
     }
+    mockCreatePost.mockResolvedValue(savedPost)
+    // After save-and-stay navigates to /editor/<file_path>, EditorPage re-mounts
+    // and calls fetchPostForEdit for the new path
+    mockFetchPostForEdit.mockResolvedValue({
+      file_path: 'posts/2026-03-08-my-title/index.md',
+      title: 'My Title', body: '', labels: [], is_draft: false,
+      created_at: '2026-03-08 12:00:00+00:00',
+      modified_at: '2026-03-08 12:00:00+00:00',
+      author: 'jane',
+    })
+    const user = userEvent.setup()
+    renderEditor('/editor/new')
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Title/)).toBeInTheDocument()
+    })
+
+    await user.type(screen.getByLabelText(/Title/), 'My Title')
+    await user.click(screen.getByRole('button', { name: /save/i }))
+
+    // Should stay on editor (Title input still visible)
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Title/)).toHaveValue('My Title')
+    })
+    // View post button should now be visible
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /view post/i })).toBeInTheDocument()
+    })
+  })
+
+  it('shows View Post button only after save', async () => {
+    renderEditor('/editor/new')
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Title/)).toBeInTheDocument()
+    })
+    expect(screen.queryByRole('button', { name: /view post/i })).not.toBeInTheDocument()
+  })
+
+  it('shows View Post button for existing post', async () => {
+    mockFetchPostForEdit.mockResolvedValue(editResponse)
+    renderEditor('/editor/posts/existing.md')
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Title/)).toHaveValue('Existing Post')
+    })
+    expect(screen.getByRole('button', { name: /view post/i })).toBeInTheDocument()
+  })
+
+  it('shows FileStrip for existing post', async () => {
+    mockFetchPostForEdit.mockResolvedValue(editResponse)
+    renderEditor('/editor/posts/existing.md')
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Title/)).toHaveValue('Existing Post')
+    })
+    // FileStrip header should show "Files" (empty assets from mock)
+    expect(screen.getByText('Files')).toBeInTheDocument()
+  })
+
+  it('shows save-first message for new post FileStrip', async () => {
+    renderEditor('/editor/new')
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Title/)).toBeInTheDocument()
+    })
+    expect(screen.getByText(/save.*to start adding files/i)).toBeInTheDocument()
   })
 
   it('shows preview unavailable when preview API fails', async () => {
@@ -710,7 +754,7 @@ describe('EditorPage', () => {
     expect(titleLabel).toBeInTheDocument()
   })
 
-  it('shows upload file size limit', async () => {
+  it('shows FileStrip with Files header for existing post', async () => {
     mockFetchPostForEdit.mockResolvedValue(editResponse)
     renderEditor('/editor/posts/existing.md')
 
@@ -718,7 +762,7 @@ describe('EditorPage', () => {
       expect(screen.getByLabelText(/Title/)).toHaveValue('Existing Post')
     })
 
-    expect(screen.getByText(/max 10 MB/i)).toBeInTheDocument()
+    expect(screen.getByText('Files')).toBeInTheDocument()
   })
 
   it('shows 422 with field/message detail as field-prefixed error', async () => {
