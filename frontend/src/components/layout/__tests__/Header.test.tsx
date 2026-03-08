@@ -17,8 +17,8 @@ const siteConfig: SiteConfigResponse = {
 let mockUser: UserResponse | null = null
 let mockIsLoggingOut = false
 const mockLogout = vi.fn()
-let mockMode: 'light' | 'dark' | 'system' = 'system'
-const mockToggleMode = vi.fn()
+let mockTheme: 'light' | 'dark' = 'light'
+const mockToggleTheme = vi.fn()
 
 vi.mock('@/stores/siteStore', () => ({
   useSiteStore: (selector: (s: { config: SiteConfigResponse | null }) => unknown) =>
@@ -36,10 +36,10 @@ vi.mock('@/stores/authStore', () => ({
 
 vi.mock('@/stores/themeStore', () => ({
   useThemeStore: (selector: (s: {
-    mode: 'light' | 'dark' | 'system'
-    toggleMode: () => void
+    theme: 'light' | 'dark'
+    toggleTheme: () => void
   }) => unknown) =>
-    selector({ mode: mockMode, toggleMode: mockToggleMode }),
+    selector({ theme: mockTheme, toggleTheme: mockToggleTheme }),
 }))
 
 import Header from '../Header'
@@ -56,7 +56,7 @@ describe('Header', () => {
   beforeEach(() => {
     mockUser = null
     mockIsLoggingOut = false
-    mockMode = 'system'
+    mockTheme = 'light'
     vi.clearAllMocks()
   })
 
@@ -218,11 +218,11 @@ describe('Header', () => {
     expect(themeButtons.length).toBeGreaterThanOrEqual(1)
 
     await userEvent.click(themeButtons[0]!)
-    expect(mockToggleMode).toHaveBeenCalledTimes(1)
+    expect(mockToggleTheme).toHaveBeenCalledTimes(1)
   })
 
   it('shows correct theme tooltip', () => {
-    mockMode = 'dark'
+    mockTheme = 'dark'
     renderHeader()
 
     const themeButtons = screen.getAllByLabelText('Toggle theme')

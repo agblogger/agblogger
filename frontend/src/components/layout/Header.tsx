@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { Search, LogIn, LogOut, PenLine, Settings, Menu, X, Sun, Moon, Monitor } from 'lucide-react'
+import { Search, LogIn, LogOut, PenLine, Settings, Menu, X, Sun, Moon } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useSiteStore } from '@/stores/siteStore'
 import { useAuthStore } from '@/stores/authStore'
@@ -12,8 +12,8 @@ export default function Header() {
   const user = useAuthStore((s) => s.user)
   const logout = useAuthStore((s) => s.logout)
   const isLoggingOut = useAuthStore((s) => s.isLoggingOut)
-  const mode = useThemeStore((s) => s.mode)
-  const toggleMode = useThemeStore((s) => s.toggleMode)
+  const theme = useThemeStore((s) => s.theme)
+  const toggleTheme = useThemeStore((s) => s.toggleTheme)
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -39,7 +39,7 @@ export default function Header() {
 
   const pages = config?.pages ?? []
   const siteTitle = config?.title ?? 'AgBlogger'
-  const ThemeIcon = mode === 'dark' ? Moon : mode === 'light' ? Sun : Monitor
+  const ThemeIcon = theme === 'dark' ? Moon : Sun
 
   function handleSearch(e: React.FormEvent) {
     e.preventDefault()
@@ -108,9 +108,9 @@ export default function Header() {
             )}
 
             <button
-              onClick={toggleMode}
+              onClick={toggleTheme}
               className="p-2 text-muted hover:text-ink transition-colors rounded-lg hover:bg-paper-warm"
-              title={`Theme: ${mode}`}
+              title={`Theme: ${theme}`}
               aria-label="Toggle theme"
             >
               <ThemeIcon size={18} />
@@ -240,9 +240,9 @@ export default function Header() {
 
           <div className="flex items-center gap-3 pt-2 border-t border-border/50">
             <button
-              onClick={toggleMode}
+              onClick={toggleTheme}
               className="p-2 text-muted hover:text-ink transition-colors rounded-lg hover:bg-paper-warm"
-              title={`Theme: ${mode}`}
+              title={`Theme: ${theme}`}
               aria-label="Toggle theme"
             >
               <ThemeIcon size={18} />

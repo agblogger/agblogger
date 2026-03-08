@@ -1,73 +1,66 @@
 import { create } from 'zustand'
 
-type ThemeMode = 'light' | 'dark' | 'system'
+type Theme = 'light' | 'dark'
 
 interface ThemeState {
-  mode: ThemeMode
-  resolvedTheme: 'light' | 'dark'
-  toggleMode: () => void
+  theme: Theme
+  toggleTheme: () => void
   init: () => () => void
 }
 
 const STORAGE_KEY = 'agblogger:theme'
 
-const CYCLE: Record<ThemeMode, ThemeMode> = {
-  system: 'light',
-  light: 'dark',
-  dark: 'system',
-}
-
-function getSystemTheme(): 'light' | 'dark' {
+function getSystemTheme(): Theme {
   if (typeof window === 'undefined') return 'light'
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
 
-function resolveTheme(mode: ThemeMode): 'light' | 'dark' {
-  return mode === 'system' ? getSystemTheme() : mode
-}
-
-function applyTheme(resolved: 'light' | 'dark') {
+function applyTheme(theme: Theme) {
   if (typeof document === 'undefined') return
-  document.documentElement.classList.toggle('dark', resolved === 'dark')
+  document.documentElement.classList.toggle('dark', theme === 'dark')
 }
 
 export const useThemeStore = create<ThemeState>((set, get) => ({
-  mode: 'system',
-  resolvedTheme: 'light',
+  theme: 'light',
 
-  toggleMode: () => {
-    const next = CYCLE[get().mode]
-    const resolved = resolveTheme(next)
+  toggleTheme: () => {
+    const next: Theme = get().theme === 'light' ? 'dark' : 'light'
     try {
-      localStorage.setItem(STORAGE_KEY, next)
+      if (next === getSystemTheme()) {
+        localStorage.removeItem(STORAGE_KEY)
+      } else {
+        localStorage.setItem(STORAGE_KEY, next)
+      }
     } catch {
       // Silently ignore — private browsing or quota exceeded
     }
-    applyTheme(resolved)
-    set({ mode: next, resolvedTheme: resolved })
+    applyTheme(next)
+    set({ theme: next })
   },
 
   init: () => {
-    let stored: ThemeMode | null
+    let stored: string | null
     try {
-      stored = localStorage.getItem(STORAGE_KEY) as ThemeMode | null
+      stored = localStorage.getItem(STORAGE_KEY)
     } catch {
       stored = null
     }
-    const mode: ThemeMode = stored === 'light' || stored === 'dark' || stored === 'system'
-      ? stored
-      : 'system'
-    const resolved = resolveTheme(mode)
-    applyTheme(resolved)
-    set({ mode, resolvedTheme: resolved })
+    const theme: Theme = stored === 'light' || stored === 'dark' ? stored : getSystemTheme()
+    applyTheme(theme)
+    set({ theme })
 
     const mql = window.matchMedia('(prefers-color-scheme: dark)')
     const handler = () => {
-      const current = get().mode
-      if (current === 'system') {
-        const newResolved = getSystemTheme()
-        applyTheme(newResolved)
-        set({ resolvedTheme: newResolved })
+      let hasStored: boolean
+      try {
+        hasStored = localStorage.getItem(STORAGE_KEY) !== null
+      } catch {
+        hasStored = false
+      }
+      if (!hasStored) {
+        const newTheme = getSystemTheme()
+        applyTheme(newTheme)
+        set({ theme: newTheme })
       }
     }
     mql.addEventListener('change', handler)

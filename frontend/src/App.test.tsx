@@ -29,8 +29,8 @@ vi.mock('@/stores/authStore', () => ({
 }))
 
 vi.mock('@/stores/themeStore', () => ({
-  useThemeStore: (selector: (s: { mode: string; resolvedTheme: string; toggleMode: () => void; init: () => void }) => unknown) =>
-    selector({ mode: 'system', resolvedTheme: 'light', toggleMode: vi.fn(), init: vi.fn() }),
+  useThemeStore: (selector: (s: { theme: string; toggleTheme: () => void; init: () => void }) => unknown) =>
+    selector({ theme: 'light', toggleTheme: vi.fn(), init: vi.fn() }),
 }))
 
 vi.mock('@/api/posts', () => ({

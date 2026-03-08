@@ -28,7 +28,7 @@ const fakeLocalStorage = {
 } as Storage
 
 beforeEach(() => {
-  useThemeStore.setState({ mode: 'system', resolvedTheme: 'light' })
+  useThemeStore.setState({ theme: 'light' })
   document.documentElement.classList.remove('dark')
   darkMediaMatches = false
   listeners.length = 0
@@ -43,74 +43,96 @@ afterEach(() => {
 })
 
 describe('themeStore', () => {
-  it('initializes with system mode by default', () => {
+  it('initializes with system light theme by default', () => {
     useThemeStore.getState().init()
-    expect(useThemeStore.getState().mode).toBe('system')
+    expect(useThemeStore.getState().theme).toBe('light')
+    expect(document.documentElement.classList.contains('dark')).toBe(false)
   })
 
-  it('reads stored mode from localStorage', () => {
-    storage['agblogger:theme'] = 'dark'
-    useThemeStore.getState().init()
-    expect(useThemeStore.getState().mode).toBe('dark')
-    expect(useThemeStore.getState().resolvedTheme).toBe('dark')
-    expect(document.documentElement.classList.contains('dark')).toBe(true)
-  })
-
-  it('toggles system → light → dark → system', () => {
-    useThemeStore.getState().init()
-    expect(useThemeStore.getState().mode).toBe('system')
-
-    useThemeStore.getState().toggleMode()
-    expect(useThemeStore.getState().mode).toBe('light')
-    expect(storage['agblogger:theme']).toBe('light')
-
-    useThemeStore.getState().toggleMode()
-    expect(useThemeStore.getState().mode).toBe('dark')
-    expect(document.documentElement.classList.contains('dark')).toBe(true)
-
-    useThemeStore.getState().toggleMode()
-    expect(useThemeStore.getState().mode).toBe('system')
-  })
-
-  it('resolves system mode based on prefers-color-scheme', () => {
+  it('initializes with system dark theme when prefers-color-scheme is dark', () => {
     darkMediaMatches = true
     useThemeStore.getState().init()
-    expect(useThemeStore.getState().resolvedTheme).toBe('dark')
+    expect(useThemeStore.getState().theme).toBe('dark')
     expect(document.documentElement.classList.contains('dark')).toBe(true)
   })
 
-  it('reacts to system theme changes when in system mode', () => {
+  it('reads stored theme from localStorage', () => {
+    storage['agblogger:theme'] = 'dark'
     useThemeStore.getState().init()
-    expect(useThemeStore.getState().resolvedTheme).toBe('light')
+    expect(useThemeStore.getState().theme).toBe('dark')
+    expect(document.documentElement.classList.contains('dark')).toBe(true)
+  })
+
+  it('toggles light → dark → light', () => {
+    useThemeStore.getState().init()
+    expect(useThemeStore.getState().theme).toBe('light')
+
+    useThemeStore.getState().toggleTheme()
+    expect(useThemeStore.getState().theme).toBe('dark')
+    expect(document.documentElement.classList.contains('dark')).toBe(true)
+
+    useThemeStore.getState().toggleTheme()
+    expect(useThemeStore.getState().theme).toBe('light')
+    expect(document.documentElement.classList.contains('dark')).toBe(false)
+  })
+
+  it('saves to localStorage only when choice differs from system theme', () => {
+    // System is light
+    useThemeStore.getState().init()
+
+    // Toggle to dark (differs from system) → should save
+    useThemeStore.getState().toggleTheme()
+    expect(storage['agblogger:theme']).toBe('dark')
+
+    // Toggle back to light (matches system) → should remove
+    useThemeStore.getState().toggleTheme()
+    expect(storage['agblogger:theme']).toBeUndefined()
+  })
+
+  it('removes localStorage when toggling back to system default', () => {
+    darkMediaMatches = true // system is dark
+    useThemeStore.getState().init()
+
+    // Toggle to light (differs from system) → should save
+    useThemeStore.getState().toggleTheme()
+    expect(storage['agblogger:theme']).toBe('light')
+
+    // Toggle back to dark (matches system) → should remove
+    useThemeStore.getState().toggleTheme()
+    expect(storage['agblogger:theme']).toBeUndefined()
+  })
+
+  it('reacts to system theme changes when no stored preference', () => {
+    useThemeStore.getState().init()
+    expect(useThemeStore.getState().theme).toBe('light')
 
     darkMediaMatches = true
     for (const listener of listeners) listener()
-    expect(useThemeStore.getState().resolvedTheme).toBe('dark')
+    expect(useThemeStore.getState().theme).toBe('dark')
   })
 
-  it('ignores system theme changes when not in system mode', () => {
+  it('ignores system theme changes when user has stored preference', () => {
     storage['agblogger:theme'] = 'light'
     useThemeStore.getState().init()
 
     darkMediaMatches = true
     for (const listener of listeners) listener()
-    expect(useThemeStore.getState().resolvedTheme).toBe('light')
+    expect(useThemeStore.getState().theme).toBe('light')
   })
 
-  it('ignores invalid localStorage values', () => {
+  it('ignores invalid localStorage values and uses system theme', () => {
     storage['agblogger:theme'] = 'invalid'
     useThemeStore.getState().init()
-    expect(useThemeStore.getState().mode).toBe('system')
+    expect(useThemeStore.getState().theme).toBe('light')
   })
 
-  it('falls back to system mode when localStorage.getItem throws', () => {
+  it('falls back to system theme when localStorage.getItem throws', () => {
     const throwingStorage = Object.create(fakeLocalStorage) as Storage
     throwingStorage.getItem = () => { throw new DOMException('blocked', 'SecurityError') }
     vi.stubGlobal('localStorage', throwingStorage)
 
     useThemeStore.getState().init()
-    expect(useThemeStore.getState().mode).toBe('system')
-    expect(useThemeStore.getState().resolvedTheme).toBe('light')
+    expect(useThemeStore.getState().theme).toBe('light')
   })
 
   it('returns a cleanup function from init that removes the MQL listener', () => {
@@ -125,16 +147,16 @@ describe('themeStore', () => {
     expect(removeSpy).toHaveBeenCalledWith('change', expect.any(Function))
   })
 
-  it('still updates state when localStorage.setItem throws in toggleMode', () => {
+  it('still updates state when localStorage throws in toggleTheme', () => {
     const throwingStorage = Object.create(fakeLocalStorage) as Storage
     throwingStorage.setItem = () => { throw new DOMException('quota exceeded', 'QuotaExceededError') }
+    throwingStorage.removeItem = () => { throw new DOMException('quota exceeded', 'QuotaExceededError') }
     vi.stubGlobal('localStorage', throwingStorage)
 
     useThemeStore.getState().init()
-    expect(useThemeStore.getState().mode).toBe('system')
+    expect(useThemeStore.getState().theme).toBe('light')
 
-    // Should not throw and should still update the state
-    expect(() => useThemeStore.getState().toggleMode()).not.toThrow()
-    expect(useThemeStore.getState().mode).toBe('light')
+    expect(() => useThemeStore.getState().toggleTheme()).not.toThrow()
+    expect(useThemeStore.getState().theme).toBe('dark')
   })
 })
