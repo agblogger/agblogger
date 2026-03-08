@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
+from unittest.mock import patch
 
 import pytest
 
@@ -729,3 +730,17 @@ def test_config_from_args_raises_on_missing_trusted_hosts() -> None:
 
     with pytest.raises(DeployError, match="--trusted-hosts"):
         config_from_args(args)
+
+
+# ── chmod warning on write_config_files ───────────────────────────────
+
+
+def test_write_config_files_warns_on_chmod_failure(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = _make_config()
+    with patch("pathlib.Path.chmod", side_effect=OSError("permission denied")):
+        write_config_files(config, tmp_path)
+    captured = capsys.readouterr()
+    assert "Warning" in captured.err
+    assert ".env.production" in captured.err

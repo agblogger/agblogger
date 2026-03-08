@@ -56,6 +56,15 @@ class TestConfigFilePermissions:
         mode = config_path.stat().st_mode & 0o777
         assert mode == 0o600
 
+    def test_chmod_failure_prints_warning(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        with patch("pathlib.Path.chmod", side_effect=OSError("permission denied")):
+            save_config(tmp_path, {"server": "https://example.com"})
+        captured = capsys.readouterr()
+        assert "Warning" in captured.err
+        assert "chmod" in captured.err.lower() or "permission" in captured.err.lower()
+
 
 class TestInitDoesNotStorePat:
     def test_pat_not_persisted_in_config(
@@ -394,6 +403,48 @@ class TestLoginInteractive:
 
 
 # ── Status formatting regression ─────────────────────────────────────
+
+
+# ── Config load error handling ────────────────────────────────────────
+
+
+class TestLoadConfigErrorHandling:
+    def test_corrupted_json_exits_gracefully(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        config_path = tmp_path / CONFIG_FILE
+        config_path.write_text("{invalid json!!", encoding="utf-8")
+        with pytest.raises(SystemExit) as exc_info:
+            load_config(tmp_path)
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        assert "Error" in captured.out
+        assert CONFIG_FILE in captured.out
+
+    def test_unreadable_config_exits_gracefully(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        config_path = tmp_path / CONFIG_FILE
+        config_path.write_bytes(b"\x80\x81\x82\x83")
+        with pytest.raises(SystemExit) as exc_info:
+            load_config(tmp_path)
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        assert "Error" in captured.out
+
+    def test_os_error_exits_gracefully(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        config_path = tmp_path / CONFIG_FILE
+        config_path.write_text("{}", encoding="utf-8")
+        with (
+            patch.object(type(config_path), "read_text", side_effect=OSError("disk failure")),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            load_config(tmp_path)
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        assert "Error" in captured.out
 
 
 class TestStatusFormattingRegression:

@@ -2,8 +2,10 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { Paperclip, ChevronDown, ChevronUp, Plus } from 'lucide-react'
 import { HTTPError } from '@/api/client'
 import type { AssetInfo } from '@/api/client'
+import { parseErrorDetail } from '@/api/parseError'
 import { fetchPostAssets, deletePostAsset, renamePostAsset, uploadAssets } from '@/api/posts'
 import FileCard from './FileCard'
+import { rewriteMarkdownAssetReferences } from './markdownAssetReferences'
 
 interface FileStripProps {
   filePath: string | null
@@ -35,7 +37,8 @@ export default function FileStrip({
       setError(null)
     } catch (err) {
       if (err instanceof HTTPError) {
-        setError(`Failed to load assets: ${String(err.response.status)}`)
+        const detail = await parseErrorDetail(err.response, 'Failed to load assets')
+        setError(detail)
       } else {
         setError('Failed to load assets')
       }
@@ -83,7 +86,8 @@ export default function FileStrip({
       await loadAssets()
     } catch (err) {
       if (err instanceof HTTPError) {
-        setError(`Failed to delete: ${String(err.response.status)}`)
+        const detail = await parseErrorDetail(err.response, 'Failed to delete file')
+        setError(detail)
       } else {
         setError('Failed to delete file')
       }
@@ -97,12 +101,13 @@ export default function FileStrip({
     setError(null)
     try {
       await renamePostAsset(resolvedPath, oldName, newName)
-      const updatedBody = body.replaceAll(oldName, newName)
+      const updatedBody = rewriteMarkdownAssetReferences(body, oldName, newName)
       onBodyChange(updatedBody)
       await loadAssets()
     } catch (err) {
       if (err instanceof HTTPError) {
-        setError(`Failed to rename: ${String(err.response.status)}`)
+        const detail = await parseErrorDetail(err.response, 'Failed to rename file')
+        setError(detail)
       } else {
         setError('Failed to rename file')
       }
@@ -121,7 +126,8 @@ export default function FileStrip({
       await loadAssets()
     } catch (err) {
       if (err instanceof HTTPError) {
-        setError(`Failed to upload: ${String(err.response.status)}`)
+        const detail = await parseErrorDetail(err.response, 'Failed to upload files')
+        setError(detail)
       } else {
         setError('Failed to upload files')
       }

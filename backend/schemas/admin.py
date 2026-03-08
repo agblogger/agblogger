@@ -83,6 +83,12 @@ class DisplayNameUpdate(BaseModel):
 
     display_name: str = Field(default="", max_length=100)
 
+    @field_validator("display_name", mode="before")
+    @classmethod
+    def strip_display_name(cls, v: str) -> str:
+        _ = cls
+        return v.strip()
+
 
 class DisplayNameResponse(BaseModel):
     """Response after updating display name."""

@@ -46,12 +46,17 @@ export default function SiteSettingsSection({
     setSiteError(null)
     setSiteSuccess(null)
     try {
-      const [updated] = await Promise.all([
-        updateAdminSiteSettings(siteSettings),
-        updateDisplayName(displayName),
-      ])
+      const updated = await updateAdminSiteSettings(siteSettings)
       setSiteSettings(updated)
       onSavedSettings(updated)
+      try {
+        await updateDisplayName(displayName)
+      } catch (dnErr) {
+        console.error('Failed to update display name:', dnErr)
+        setSiteError('Settings saved, but failed to update display name.')
+        useSiteStore.getState().fetchConfig().catch((err: unknown) => { console.warn('Failed to refresh site config', err) })
+        return
+      }
       setSiteSuccess('Settings saved.')
       const user = useAuthStore.getState().user
       if (user) {

@@ -8,7 +8,7 @@ interface FileCardProps {
   onInsert: (name: string, isImage: boolean) => void
   onDelete: (name: string) => void
   onRename: (oldName: string, newName: string) => void
-  disabled?: boolean
+  disabled: boolean
 }
 
 function getAssetDir(filePath: string): string {
@@ -64,7 +64,7 @@ export default function FileCard({
   }
 
   function handleCopyName() {
-    void navigator.clipboard.writeText(asset.name)
+    void navigator.clipboard.writeText(asset.name).catch(() => undefined)
     closeMenu()
   }
 

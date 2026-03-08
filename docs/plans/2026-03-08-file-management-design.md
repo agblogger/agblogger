@@ -37,7 +37,7 @@ Before first save, FileStrip shows "Save to start adding files" with upload disa
 
 ### View Post Button
 
-A "View post" button in the editor toolbar, visible only after the post has been saved at least once. If the editor has unsaved changes, shows a dialog: "You have unsaved changes. Save before viewing?" with Save & View / View without saving / Cancel.
+A "View post" button in the editor toolbar, visible only after the post has been saved at least once. If the editor has unsaved changes, a `window.confirm` prompt asks "You have unsaved changes. Leave without saving?" — OK navigates to the post view, Cancel stays on the editor.
 
 ### Backend API
 
@@ -45,9 +45,9 @@ Three new endpoints:
 
 - `GET /api/posts/{file_path}/assets` — Returns `{ assets: [{ name, size, is_image }] }`. Reads post directory, excludes `index.md` and hidden files.
 - `DELETE /api/posts/{file_path}/assets/{filename}` — Deletes file from disk, commits to git. Returns 204.
-- `PATCH /api/posts/{file_path}/assets/{filename}` — Body: `{ "new_name": "..." }`. Validates filename, renames on disk, commits to git. Returns `{ name }`. Does not update markdown body (handled client-side).
+- `PATCH /api/posts/{file_path}/assets/{filename}` — Body: `{ "new_name": "..." }`. Validates filename, renames on disk, commits to git. Returns `{ name, size, is_image }`. Does not update markdown body (handled client-side).
 
-All endpoints require auth and respect draft access control.
+All endpoints require admin authentication.
 
 ### Frontend Components
 

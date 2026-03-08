@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
+from unittest.mock import patch
 
 import pytest
 
@@ -201,16 +202,56 @@ class TestListAssets:
         assert data["assets"] == []
 
     @pytest.mark.asyncio
+    async def test_list_assets_flat_file_post_returns_empty(
+        self, client: AsyncClient, app_settings: Settings
+    ) -> None:
+        """Flat-file posts (not in per-post directory) must return empty asset list.
+
+        Regression: for posts/hello.md, post_file.parent is the entire posts/
+        directory. Without the flat-file check, iterating posts/ would expose
+        other posts as 'assets'.
+        """
+        token = await _login(client)
+
+        # Create a second flat-file post so there are multiple files in posts/
+        posts_dir = app_settings.content_dir / "posts"
+        (posts_dir / "other.md").write_text(
+            "---\ntitle: Other Post\ncreated_at: 2026-02-03 10:00:00+00\n"
+            "author: Admin\nlabels: []\n---\n\nOther content.\n"
+        )
+        # Also place a non-md file in posts/ to simulate a stray file
+        (posts_dir / "stray-image.png").write_bytes(b"fake png data")
+
+        resp = await client.get(
+            "/api/posts/posts/hello.md/assets",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        # Flat-file posts don't support co-located assets — must be empty
+        assert data["assets"] == [], f"Flat-file post should have no assets, got: {data['assets']}"
+
+    @pytest.mark.asyncio
     async def test_list_assets_after_upload(
         self, client: AsyncClient, app_settings: Settings
     ) -> None:
-        """Upload a file, then GET assets returns it with name/size/is_image."""
+        """Upload a file to a directory-style post, then GET assets returns it."""
         token = await _login(client)
         file_content = b"fake image data"
 
+        # Create a directory-style post (only these support co-located assets)
+        create_resp = await client.post(
+            "/api/posts",
+            json={"title": "Asset Test Post", "body": "Some content."},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert create_resp.status_code == 201
+        created_file_path = create_resp.json()["file_path"]
+
         # Upload an asset
         upload_resp = await client.post(
-            "/api/posts/posts/hello.md/assets",
+            f"/api/posts/{created_file_path}/assets",
             files=[("files", ("photo.png", file_content, "image/png"))],
             headers={"Authorization": f"Bearer {token}"},
         )
@@ -218,7 +259,7 @@ class TestListAssets:
 
         # List assets
         resp = await client.get(
-            "/api/posts/posts/hello.md/assets",
+            f"/api/posts/{created_file_path}/assets",
             headers={"Authorization": f"Bearer {token}"},
         )
 
@@ -495,3 +536,51 @@ class TestRenameAsset:
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_rename_returns_valid_response_when_stat_fails_after_rename(
+        self, client: AsyncClient, app_settings: Settings
+    ) -> None:
+        """Regression: if stat() fails after a successful rename, the endpoint
+        should not return 500. The rename already happened — the old filename
+        is gone, so retrying would fail. The endpoint should use a fallback size.
+        """
+        token = await _login(client)
+        file_content = b"fake image data"
+
+        # Upload an asset
+        upload_resp = await client.post(
+            "/api/posts/posts/hello.md/assets",
+            files=[("files", ("old.png", file_content, "image/png"))],
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert upload_resp.status_code == 200
+
+        # Patch Path.stat to raise OSError (simulating a transient filesystem issue)
+        original_stat = type(app_settings.content_dir).stat
+
+        def _broken_stat(self: Path) -> Any:
+            if self.name == "new.png":
+                raise OSError("simulated stat failure")
+            return original_stat(self)
+
+        with patch.object(type(app_settings.content_dir), "stat", _broken_stat):
+            resp = await client.patch(
+                "/api/posts/posts/hello.md/assets/old.png",
+                json={"new_name": "new.png"},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+
+        # Should succeed — size was captured before the rename
+        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+        data = resp.json()
+        assert data["name"] == "new.png"
+        assert data["is_image"] is True
+        # Size should be the original file size (captured before rename)
+        assert data["size"] == len(file_content)
+
+        # Verify the rename actually happened
+        old_path = app_settings.content_dir / "posts" / "old.png"
+        new_path = app_settings.content_dir / "posts" / "new.png"
+        assert not old_path.exists()
+        assert new_path.exists()

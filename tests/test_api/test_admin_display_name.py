@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+from unittest.mock import patch
 
 import pytest
 
 from backend.config import Settings
+from backend.schemas.admin import DisplayNameUpdate
 from tests.conftest import create_test_client
 
 if TYPE_CHECKING:
@@ -14,6 +16,8 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from httpx import AsyncClient
+
+    from backend.filesystem.frontmatter import PostData
 
 
 @pytest.fixture
@@ -139,6 +143,10 @@ class TestUpdateDisplayName:
         content = post_file.read_text(encoding="utf-8")
         assert "author: Updated Author" in content
 
+        settings_resp = await client.get("/api/admin/site", headers=headers)
+        assert settings_resp.status_code == 200
+        assert settings_resp.json()["default_author"] == "Updated Author"
+
     @pytest.mark.asyncio
     async def test_does_not_update_other_users_posts(
         self, client: AsyncClient, app_settings: Settings
@@ -172,3 +180,149 @@ class TestUpdateDisplayName:
         # Verify other user's post was NOT updated on disk
         other_content = (other_post_dir / "index.md").read_text(encoding="utf-8")
         assert "author: Other Author" in other_content
+
+    @pytest.mark.asyncio
+    async def test_returns_error_and_rolls_back_when_post_rewrite_fails(
+        self, client: AsyncClient, app_settings: Settings
+    ) -> None:
+        token = await _login(client)
+        headers = {"Authorization": f"Bearer {token}"}
+
+        create_resp = await client.post(
+            "/api/posts",
+            json={
+                "title": "Rollback Post",
+                "body": "Hello world",
+                "labels": [],
+                "is_draft": False,
+            },
+            headers=headers,
+        )
+        assert create_resp.status_code == 201
+        file_path = create_resp.json()["file_path"]
+        post_file = app_settings.content_dir / file_path
+        original_content = post_file.read_text(encoding="utf-8")
+
+        from backend.filesystem.content_manager import ContentManager
+
+        original_write_post = ContentManager.write_post
+
+        def failing_write_post(self: ContentManager, rel_path: str, post_data: PostData) -> None:
+            if rel_path == file_path:
+                raise OSError("disk full")
+            original_write_post(self, rel_path, post_data)
+
+        with patch.object(ContentManager, "write_post", new=failing_write_post):
+            resp = await client.put(
+                "/api/admin/display-name",
+                json={"display_name": "Updated Author"},
+                headers=headers,
+            )
+
+        assert resp.status_code == 500
+        detail = resp.json()["detail"]
+        assert file_path in detail
+
+        me_resp = await client.get("/api/auth/me", headers=headers)
+        assert me_resp.status_code == 200
+        assert me_resp.json()["display_name"] == "Admin"
+
+        post_resp = await client.get(f"/api/posts/{file_path}", headers=headers)
+        assert post_resp.status_code == 200
+        assert post_resp.json()["author"] == "Admin"
+
+        assert post_file.read_text(encoding="utf-8") == original_content
+
+    @pytest.mark.asyncio
+    async def test_partial_file_failure_rolls_back_all_changes(
+        self, client: AsyncClient, app_settings: Settings
+    ) -> None:
+        """When one of multiple post files fails to update, all changes roll back."""
+        token = await _login(client)
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # Create two posts
+        resp1 = await client.post(
+            "/api/posts",
+            json={"title": "Post One", "body": "Content one", "labels": [], "is_draft": False},
+            headers=headers,
+        )
+        assert resp1.status_code == 201
+        file_path1 = resp1.json()["file_path"]
+
+        resp2 = await client.post(
+            "/api/posts",
+            json={"title": "Post Two", "body": "Content two", "labels": [], "is_draft": False},
+            headers=headers,
+        )
+        assert resp2.status_code == 201
+        file_path2 = resp2.json()["file_path"]
+
+        post_file1 = app_settings.content_dir / file_path1
+        post_file2 = app_settings.content_dir / file_path2
+        original1 = post_file1.read_text(encoding="utf-8")
+        original2 = post_file2.read_text(encoding="utf-8")
+
+        from backend.filesystem.content_manager import ContentManager
+
+        original_write_post = ContentManager.write_post
+
+        def failing_write_post(self: ContentManager, rel_path: str, post_data: PostData) -> None:
+            # Only the second post fails
+            if rel_path == file_path2:
+                raise OSError("permission denied")
+            original_write_post(self, rel_path, post_data)
+
+        with patch.object(ContentManager, "write_post", new=failing_write_post):
+            resp = await client.put(
+                "/api/admin/display-name",
+                json={"display_name": "New Name"},
+                headers=headers,
+            )
+
+        assert resp.status_code == 500
+        detail = resp.json()["detail"]
+        # The response should identify which file(s) failed
+        assert file_path2 in detail
+
+        # DB should be rolled back - user display name unchanged
+        me_resp = await client.get("/api/auth/me", headers=headers)
+        assert me_resp.status_code == 200
+        assert me_resp.json()["display_name"] == "Admin"
+
+        # Both posts should have original author in DB cache
+        post1_resp = await client.get(f"/api/posts/{file_path1}", headers=headers)
+        assert post1_resp.status_code == 200
+        assert post1_resp.json()["author"] == "Admin"
+
+        post2_resp = await client.get(f"/api/posts/{file_path2}", headers=headers)
+        assert post2_resp.status_code == 200
+        assert post2_resp.json()["author"] == "Admin"
+
+        # Disk files should be unchanged
+        assert post_file1.read_text(encoding="utf-8") == original1
+        assert post_file2.read_text(encoding="utf-8") == original2
+
+
+class TestDisplayNameUpdateSchema:
+    """Tests for DisplayNameUpdate schema validation."""
+
+    def test_strips_leading_whitespace(self) -> None:
+        schema = DisplayNameUpdate(display_name="  Alice")
+        assert schema.display_name == "Alice"
+
+    def test_strips_trailing_whitespace(self) -> None:
+        schema = DisplayNameUpdate(display_name="Alice  ")
+        assert schema.display_name == "Alice"
+
+    def test_strips_surrounding_whitespace(self) -> None:
+        schema = DisplayNameUpdate(display_name="  Alice  ")
+        assert schema.display_name == "Alice"
+
+    def test_whitespace_only_becomes_empty(self) -> None:
+        schema = DisplayNameUpdate(display_name="   ")
+        assert schema.display_name == ""
+
+    def test_no_whitespace_unchanged(self) -> None:
+        schema = DisplayNameUpdate(display_name="Alice")
+        assert schema.display_name == "Alice"

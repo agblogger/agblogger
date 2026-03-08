@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select, update
@@ -19,6 +20,7 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from backend.filesystem.content_manager import ContentManager
+    from backend.filesystem.frontmatter import PostData
     from backend.models.user import User
 
 BUILTIN_PAGE_IDS = {"timeline", "labels"}
@@ -43,8 +45,25 @@ def update_site_settings(
     updated = SiteConfig(
         title=title,
         description=description,
-        default_author=default_author,
+        default_author=cfg.default_author,
         timezone=timezone,
+        pages=cfg.pages,
+    )
+    write_site_config(cm.content_dir, updated)
+    cm.reload_config()
+    return cm.site_config
+
+
+def sync_site_default_author(cm: ContentManager, *, default_author: str) -> SiteConfig:
+    """Persist the system-managed default author when it changes."""
+    cfg = cm.site_config
+    if cfg.default_author == default_author:
+        return cfg
+    updated = SiteConfig(
+        title=cfg.title,
+        description=cfg.description,
+        default_author=default_author,
+        timezone=cfg.timezone,
         pages=cfg.pages,
     )
     write_site_config(cm.content_dir, updated)
@@ -215,34 +234,80 @@ async def update_user_display_name(
     """
     from backend.services.datetime_service import format_iso, now_utc
 
+    author_value = display_name or user.username
+    stmt = select(PostCache.file_path).where(PostCache.author_username == user.username)
+    result = await session.execute(stmt)
+    file_paths = [row[0] for row in result.all()]
+
+    original_posts: dict[str, PostData] = {}
+    updated_posts: dict[str, PostData] = {}
+    for file_path in file_paths:
+        post_data = cm.read_post(file_path)
+        if post_data is None:
+            msg = f"Failed to load post for display-name migration: {file_path}"
+            logger.error(msg)
+            raise OSError(msg)
+        original_posts[file_path] = post_data
+        updated_posts[file_path] = replace(post_data, author=author_value)
+
+    written_paths: list[str] = []
+    current_path: str | None = None
+    try:
+        for current_path, post_data in updated_posts.items():
+            cm.write_post(current_path, post_data)
+            written_paths.append(current_path)
+        current_path = None
+        sync_site_default_author(cm, default_author=author_value)
+    except OSError as exc:
+        failed_path = current_path if current_path not in written_paths else None
+        for written_path in reversed(written_paths):
+            original_post = original_posts.get(written_path)
+            if original_post is None:
+                continue
+            try:
+                cm.write_post(written_path, original_post)
+            except OSError as rollback_exc:
+                logger.error(
+                    "Failed to rollback display-name migration for post %s: %s",
+                    written_path,
+                    rollback_exc,
+                )
+        if failed_path is not None:
+            msg = f"Failed to update author in {failed_path}: {exc}"
+        else:
+            msg = f"Failed to update site config: {exc}"
+        raise OSError(msg) from exc
+
     user.display_name = display_name
     user.updated_at = format_iso(now_utc())
     session.add(user)
 
-    # The display value to write into post author fields
-    author_value = display_name or user.username
-
-    # Update all posts in the DB cache
     await session.execute(
         update(PostCache)
         .where(PostCache.author_username == user.username)
         .values(author=author_value)
     )
 
-    # Update all posts on disk
-    stmt = select(PostCache.file_path).where(PostCache.author_username == user.username)
-    result = await session.execute(stmt)
-    file_paths = [row[0] for row in result.all()]
-
-    for file_path in file_paths:
-        try:
-            post_data = cm.read_post(file_path)
-            if post_data is None:
-                continue
-            post_data.author = author_value
-            cm.write_post(file_path, post_data)
-        except (OSError, ValueError) as exc:
-            logger.error("Failed to update author in post %s: %s", file_path, exc)
-
     await session.commit()
     return display_name
+
+
+async def sync_default_author_from_admin(
+    session: AsyncSession,
+    cm: ContentManager,
+    *,
+    admin_username: str,
+) -> SiteConfig:
+    """Ensure the system-managed default author matches the sole editing admin."""
+    from backend.models.user import User
+
+    result = await session.execute(
+        select(User.username, User.display_name).where(User.is_admin.is_(True)).order_by(User.id)
+    )
+    admins = result.all()
+    if len(admins) != 1:
+        return cm.site_config
+    username, display_name = admins[0]
+    if username != admin_username:
+        return cm.site_config
+    return sync_site_default_author(cm, default_author=display_name or username)

@@ -8,7 +8,6 @@ import hashlib
 import json
 import os
 import sys
-from contextlib import suppress
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -112,7 +111,11 @@ def load_config(dir_path: Path) -> dict[str, str]:
     config_path = dir_path / CONFIG_FILE
     if not config_path.exists():
         return {}
-    config: dict[str, str] = json.loads(config_path.read_text())
+    try:
+        config: dict[str, str] = json.loads(config_path.read_text())
+    except (json.JSONDecodeError, UnicodeDecodeError, OSError) as exc:
+        print(f"Error: Could not read {CONFIG_FILE}: {exc}")
+        sys.exit(1)
     return config
 
 
@@ -120,8 +123,13 @@ def save_config(dir_path: Path, config: dict[str, str]) -> None:
     """Save sync config to file and restrict permissions to owner-only."""
     config_path = dir_path / CONFIG_FILE
     config_path.write_text(json.dumps(config, indent=2))
-    with suppress(OSError):
+    try:
         config_path.chmod(0o600)
+    except OSError as exc:
+        print(
+            f"Warning: Could not set restrictive permissions on {CONFIG_FILE}: {exc}",
+            file=sys.stderr,
+        )
 
 
 # ── Plan helpers ─────────────────────────────────────────────────────

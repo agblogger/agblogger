@@ -4,7 +4,8 @@ import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import type { AssetInfo } from '@/api/client'
-import { fetchPostAssets, deletePostAsset } from '@/api/posts'
+import { HTTPError } from '@/api/client'
+import { fetchPostAssets, deletePostAsset, renamePostAsset, uploadAssets } from '@/api/posts'
 import FileStrip from '../FileStrip'
 
 vi.mock('@/api/posts', () => ({
@@ -21,6 +22,8 @@ vi.mock('@/api/client', async () => {
 
 const mockFetchPostAssets = vi.mocked(fetchPostAssets)
 const mockDeletePostAsset = vi.mocked(deletePostAsset)
+const mockRenamePostAsset = vi.mocked(renamePostAsset)
+const httpErrorOptions = {} as ConstructorParameters<typeof HTTPError>[2]
 
 const sampleAssets: AssetInfo[] = [
   { name: 'photo.png', size: 1024, is_image: true },
@@ -149,5 +152,221 @@ describe('FileStrip', () => {
         'photo.png',
       )
     })
+  })
+
+  it('only rewrites markdown asset destinations when renaming', async () => {
+    mockFetchPostAssets.mockResolvedValue({
+      assets: [{ name: 'photo.png', size: 1024, is_image: true }],
+    })
+    mockRenamePostAsset.mockResolvedValue({ name: 'poster.png', size: 1024, is_image: true })
+    const user = userEvent.setup()
+    const onBodyChange = vi.fn()
+
+    renderStrip({
+      body: [
+        'Plain photo.png text',
+        '![cover](photo.png)',
+        '[download](photo.png)',
+        '`photo.png` in code',
+        'my-photo.png',
+      ].join('\n'),
+      onBodyChange,
+    })
+
+    await user.click(screen.getByText(/Files/))
+
+    await waitFor(() => {
+      expect(screen.getByText('photo.png')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByLabelText('menu'))
+    await user.click(screen.getByText('Rename'))
+
+    const input = screen.getByRole('textbox')
+    await user.clear(input)
+    await user.type(input, 'poster.png')
+    await user.tab()
+
+    await waitFor(() => {
+      expect(mockRenamePostAsset).toHaveBeenCalledWith(
+        'posts/2026-03-08-test/index.md',
+        'photo.png',
+        'poster.png',
+      )
+    })
+    expect(onBodyChange).toHaveBeenCalledWith(
+      [
+        'Plain photo.png text',
+        '![cover](poster.png)',
+        '[download](poster.png)',
+        '`photo.png` in code',
+        'my-photo.png',
+      ].join('\n'),
+    )
+  })
+
+  it('does not corrupt filenames that contain the renamed name as a substring', async () => {
+    mockFetchPostAssets.mockResolvedValue({
+      assets: [{ name: 'a.png', size: 512, is_image: true }],
+    })
+    mockRenamePostAsset.mockResolvedValue({ name: 'b.png', size: 512, is_image: true })
+    const user = userEvent.setup()
+    const onBodyChange = vi.fn()
+
+    renderStrip({
+      body: [
+        '![alt](a.png)',
+        '[text](a.png)',
+        '![banana](banana.png)',
+        'I ate a.png banana.png',
+      ].join('\n'),
+      onBodyChange,
+    })
+
+    await user.click(screen.getByText(/Files/))
+
+    await waitFor(() => {
+      expect(screen.getByText('a.png')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByLabelText('menu'))
+    await user.click(screen.getByText('Rename'))
+
+    const input = screen.getByRole('textbox')
+    await user.clear(input)
+    await user.type(input, 'b.png')
+    await user.tab()
+
+    await waitFor(() => {
+      expect(mockRenamePostAsset).toHaveBeenCalledWith(
+        'posts/2026-03-08-test/index.md',
+        'a.png',
+        'b.png',
+      )
+    })
+    expect(onBodyChange).toHaveBeenCalledWith(
+      [
+        '![alt](b.png)',
+        '[text](b.png)',
+        '![banana](banana.png)',
+        'I ate a.png banana.png',
+      ].join('\n'),
+    )
+  })
+
+  it('shows backend error detail instead of raw status code on rename failure', async () => {
+    mockFetchPostAssets.mockResolvedValue({
+      assets: [{ name: 'photo.png', size: 1024, is_image: true }],
+    })
+    const errorResponse = new Response(JSON.stringify({ detail: 'File already exists' }), {
+      status: 409,
+      statusText: 'Conflict',
+    })
+    mockRenamePostAsset.mockRejectedValue(
+      new HTTPError(errorResponse, new Request('http://test'), httpErrorOptions),
+    )
+    const user = userEvent.setup()
+
+    renderStrip()
+
+    await user.click(screen.getByText(/Files/))
+
+    await waitFor(() => {
+      expect(screen.getByText('photo.png')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByLabelText('menu'))
+    await user.click(screen.getByText('Rename'))
+
+    const input = screen.getByRole('textbox')
+    await user.clear(input)
+    await user.type(input, 'other.png')
+    await user.tab()
+
+    await waitFor(() => {
+      expect(screen.getByText('File already exists')).toBeInTheDocument()
+    })
+    // Ensure the raw status code is NOT shown
+    expect(screen.queryByText(/409/)).not.toBeInTheDocument()
+  })
+
+  it('shows backend error detail instead of raw status code on delete failure', async () => {
+    mockFetchPostAssets.mockResolvedValue({
+      assets: [{ name: 'photo.png', size: 1024, is_image: true }],
+    })
+    const errorResponse = new Response(JSON.stringify({ detail: 'Asset is protected' }), {
+      status: 403,
+      statusText: 'Forbidden',
+    })
+    mockDeletePostAsset.mockRejectedValue(
+      new HTTPError(errorResponse, new Request('http://test'), httpErrorOptions),
+    )
+    const user = userEvent.setup()
+
+    renderStrip({ body: 'No references here' })
+
+    await user.click(screen.getByText(/Files/))
+
+    await waitFor(() => {
+      expect(screen.getByText('photo.png')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByLabelText('menu'))
+    await user.click(screen.getByText('Delete'))
+
+    await waitFor(() => {
+      expect(screen.getByText('Asset is protected')).toBeInTheDocument()
+    })
+    expect(screen.queryByText(/403/)).not.toBeInTheDocument()
+  })
+
+  it('shows backend error detail instead of raw status code on load failure', async () => {
+    const errorResponse = new Response(JSON.stringify({ detail: 'Post not found' }), {
+      status: 404,
+      statusText: 'Not Found',
+    })
+    mockFetchPostAssets.mockRejectedValue(
+      new HTTPError(errorResponse, new Request('http://test'), httpErrorOptions),
+    )
+    const user = userEvent.setup()
+
+    renderStrip()
+
+    await user.click(screen.getByText(/Files/))
+
+    await waitFor(() => {
+      expect(screen.getByText('Post not found')).toBeInTheDocument()
+    })
+    expect(screen.queryByText(/404/)).not.toBeInTheDocument()
+  })
+
+  it('shows backend error detail instead of raw status code on upload failure', async () => {
+    mockFetchPostAssets.mockResolvedValue({ assets: [] })
+    const errorResponse = new Response(JSON.stringify({ detail: 'File too large' }), {
+      status: 413,
+      statusText: 'Payload Too Large',
+    })
+    vi.mocked(uploadAssets).mockRejectedValue(
+      new HTTPError(errorResponse, new Request('http://test'), httpErrorOptions),
+    )
+    const user = userEvent.setup()
+
+    renderStrip()
+
+    await user.click(screen.getByText(/Files/))
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Upload file')).toBeInTheDocument()
+    })
+
+    // Create a mock file and trigger upload
+    const file = new File(['content'], 'big.png', { type: 'image/png' })
+    const uploadInput = document.querySelector('input[type="file"]') as HTMLInputElement
+    await user.upload(uploadInput, file)
+
+    await waitFor(() => {
+      expect(screen.getByText('File too large')).toBeInTheDocument()
+    })
+    expect(screen.queryByText(/413/)).not.toBeInTheDocument()
   })
 })

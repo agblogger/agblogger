@@ -215,11 +215,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         app.state.x_oauth_state = OAuthStateStore(ttl_seconds=600)
         app.state.facebook_oauth_state = OAuthStateStore(ttl_seconds=600)
 
+        from backend.services.admin_service import sync_default_author_from_admin
         from backend.services.auth_service import ensure_admin_user
 
         try:
             async with session_factory() as session:
                 await ensure_admin_user(session, settings)
+                await sync_default_author_from_admin(
+                    session,
+                    content_manager,
+                    admin_username=settings.admin_username,
+                )
         except Exception as exc:
             logger.critical("Failed to ensure admin user: %s", exc)
             raise
@@ -507,7 +513,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             content={"detail": "Data integrity error"},
         )
 
-    from backend.exceptions import ExternalServiceError, InternalServerError
+    from backend.exceptions import ExternalServiceError, InternalServerError, TokenExpiredError
+
+    @app.exception_handler(TokenExpiredError)
+    async def token_expired_handler(request: Request, exc: TokenExpiredError) -> JSONResponse:
+        logger.warning(
+            "TokenExpiredError in %s %s: %s",
+            request.method,
+            request.url.path,
+            exc,
+        )
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "Token expired"},
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     @app.exception_handler(InternalServerError)
     async def internal_server_error_handler(

@@ -138,7 +138,8 @@ export default function EditorPage() {
           setPreview(resp.html)
           setPreviewError(false)
         }
-      } catch {
+      } catch (err) {
+        console.error('Preview failed:', err)
         if (previewRequestRef.current === requestId) {
           setPreviewError(true)
         }

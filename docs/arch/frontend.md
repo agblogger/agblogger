@@ -32,9 +32,13 @@ The `useEditorAutoSave` hook (`hooks/useEditorAutoSave.ts`) provides crash recov
 The `FileStrip` component (`components/editor/FileStrip.tsx`) provides inline asset management within the editor, positioned between the metadata bar and the editor/preview split:
 
 - **Collapsible strip**: Header shows paperclip icon + file count; expands to show `FileCard` grid with thumbnails (images) or file-type icons
-- **Operations**: Upload (via hidden file input), delete (with confirmation if file is referenced in body), rename (with auto-update of markdown references), insert markdown at cursor, copy filename
+- **Operations**: Upload (via hidden file input), delete (with confirmation if file is referenced in body), rename (with auto-update limited to markdown link/image destinations that reference the renamed asset), insert markdown at cursor, copy filename
 - **Save-and-stay flow**: New posts stay on the editor after save (URL replaces to `/editor/{file_path}`); a "View post" button appears once saved
 - **Backend endpoints**: `GET /api/posts/{file_path}/assets` (list), `DELETE .../assets/{filename}` (delete), `PATCH .../assets/{filename}` (rename)
+
+## Admin Settings
+
+The admin settings tab exposes the editable site-level fields (`title`, `description`, `timezone`) plus the current admin user's display name. It does not expose `site.default_author` directly; in the single-editor model, the backend keeps that value synchronized to the sole admin user's display name or username.
 
 ## State Management
 

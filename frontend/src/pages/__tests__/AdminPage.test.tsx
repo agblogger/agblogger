@@ -63,6 +63,9 @@ vi.mock('react-router-dom', async () => {
 })
 
 import AdminPage from '../AdminPage'
+import api from '@/api/client'
+
+const mockApiPost = vi.mocked(api.post)
 
 const defaultSettings: AdminSiteSettings = {
   title: 'My Blog',
@@ -89,6 +92,9 @@ function setupLoadSuccess() {
   mockFetchAdminSiteSettings.mockResolvedValue(defaultSettings)
   mockFetchAdminPages.mockResolvedValue({ pages: defaultPages })
   mockUpdateDisplayName.mockResolvedValue({ display_name: 'Admin' })
+  mockApiPost.mockReturnValue({
+    json: () => Promise.resolve({ html: '<p>Preview</p>' }),
+  } as ReturnType<typeof api.post>)
 }
 
 async function switchToTab(user: ReturnType<typeof userEvent.setup>, tabName: string) {
@@ -182,6 +188,17 @@ describe('AdminPage', () => {
     expect(screen.getByLabelText('Timezone')).toHaveValue('UTC')
   })
 
+  it('does not display the default author field', async () => {
+    setupLoadSuccess()
+    renderAdmin()
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Title *')).toHaveValue('My Blog')
+    })
+
+    expect(screen.queryByLabelText('Default author')).not.toBeInTheDocument()
+  })
+
   it('validates title is required before saving site settings', async () => {
     setupLoadSuccess()
     const user = userEvent.setup()
@@ -261,6 +278,43 @@ describe('AdminPage', () => {
     await waitFor(() => {
       expect(screen.getByText('Failed to save settings. The server may be unavailable.')).toBeInTheDocument()
     })
+  })
+
+  it('reports display name failure specifically when site settings succeed but display name fails', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    setupLoadSuccess()
+    mockUpdateAdminSiteSettings.mockResolvedValue({ ...defaultSettings, title: 'My Blog' })
+    mockUpdateDisplayName.mockRejectedValue(new Error('display name fail'))
+    const user = userEvent.setup()
+    renderAdmin()
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Title *')).toHaveValue('My Blog')
+    })
+
+    await user.click(screen.getByRole('button', { name: /save settings/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/display name/i)).toBeInTheDocument()
+    })
+  })
+
+  it('does not call updateDisplayName when updateAdminSiteSettings fails', async () => {
+    setupLoadSuccess()
+    mockUpdateAdminSiteSettings.mockRejectedValue(new Error('site fail'))
+    const user = userEvent.setup()
+    renderAdmin()
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Title *')).toHaveValue('My Blog')
+    })
+
+    await user.click(screen.getByRole('button', { name: /save settings/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/failed to save/i)).toBeInTheDocument()
+    })
+    expect(mockUpdateDisplayName).not.toHaveBeenCalled()
   })
 
   // === Pages Management ===

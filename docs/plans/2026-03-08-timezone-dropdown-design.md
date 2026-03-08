@@ -19,7 +19,7 @@ Replace the plain text input for timezone in the admin panel with a searchable c
 
 ## Data Flow
 
-No backend schema changes — the stored value remains a plain IANA timezone string. The combobox is purely a frontend UX improvement over the current text input.
+No backend schema changes — the stored value remains a plain IANA timezone string. The combobox is purely a frontend UX improvement over the current text input. A `field_validator` was added to the backend `SiteSettingsUpdate` schema to reject invalid timezone strings with a 422 response.
 
 ## Backend Validation
 

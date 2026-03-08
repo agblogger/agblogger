@@ -280,8 +280,13 @@ def write_config_files(config: DeployConfig, project_dir: Path) -> None:
     """Write deployment config files and clean up stale alternatives."""
     env_path = project_dir / DEFAULT_ENV_FILE
     env_path.write_text(build_env_content(config), encoding="utf-8")
-    with suppress(OSError):
+    try:
         env_path.chmod(0o600)
+    except OSError as exc:
+        print(
+            f"Warning: Could not set restrictive permissions on {DEFAULT_ENV_FILE}: {exc}",
+            file=sys.stderr,
+        )
 
     stale_files: list[str] = []
 

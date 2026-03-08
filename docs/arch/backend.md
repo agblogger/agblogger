@@ -28,7 +28,7 @@ On startup, the lifespan handler:
 8. Initializes the `ContentManager`.
 9. Initializes the `GitService` (creates a git repo in the content directory if one doesn't exist).
 10. Loads or creates the AT Protocol OAuth ES256 keypair (`content/.atproto-oauth-key.json`) and initializes OAuth state stores for Bluesky, Mastodon, X, and Facebook on `app.state`.
-11. Creates the admin user if it doesn't exist.
+11. Creates the admin user if it doesn't exist, then synchronizes `site.default_author` to that sole admin user's current display name (falling back to username) when the install has exactly one admin.
 12. Starts the pandoc server (`PandocServer`) and initializes the renderer. Pandoc is a
     required dependency — if startup fails, the server aborts with a critical log message.
 13. Rebuilds the full database cache from the filesystem.
@@ -69,7 +69,7 @@ All content-mutating API endpoints (post create/update/delete, admin page CRUD, 
 | `sync` | `/api/sync` | Bidirectional sync protocol (admin-only) |
 | `crosspost` | `/api/crosspost` | Social account management, cross-posting, Bluesky/Mastodon/X/Facebook OAuth flows |
 | `render` | `/api/render` | Server-side Pandoc preview for the editor |
-| `admin` | `/api/admin` | Site settings, page management, password change (admin-only) |
+| `admin` | `/api/admin` | Site settings, page management, display name, password change (admin-only) |
 | `content` | `/api/content` | File serving for post assets and shared assets with canonical-path draft authorization |
 | `health` | `/api/health` | Health check with DB verification |
 

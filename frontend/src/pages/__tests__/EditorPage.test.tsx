@@ -706,6 +706,7 @@ describe('EditorPage', () => {
   })
 
   it('shows preview unavailable when preview API fails', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
     const user = userEvent.setup()
     const mockApi = (await import('@/api/client')).default
     const mockPost = vi.mocked(mockApi.post)

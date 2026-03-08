@@ -17,6 +17,7 @@ function renderCard(overrides: Partial<Parameters<typeof FileCard>[0]> = {}) {
     onInsert: vi.fn(),
     onDelete: vi.fn(),
     onRename: vi.fn(),
+    disabled: false,
     ...overrides,
   }
   const result = render(createElement(FileCard, props))
@@ -86,6 +87,39 @@ describe('FileCard', () => {
     await user.keyboard('{Enter}')
 
     expect(onRename).toHaveBeenCalledWith('photo.png', 'newname.png')
+  })
+
+  it('does not produce unhandled rejection when clipboard.writeText fails', async () => {
+    const user = userEvent.setup()
+    const originalClipboard = navigator.clipboard
+    const unhandledRejections: PromiseRejectionEvent[] = []
+    const handler = (e: PromiseRejectionEvent) => { unhandledRejections.push(e) }
+    window.addEventListener('unhandledrejection', handler)
+
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: vi.fn().mockRejectedValue(new Error('clipboard unavailable')) },
+      writable: true,
+      configurable: true,
+    })
+
+    renderCard({ disabled: false })
+
+    await user.click(screen.getByLabelText('menu'))
+    await user.click(screen.getByText('Copy name'))
+
+    // Allow microtasks to settle
+    await new Promise((r) => setTimeout(r, 50))
+
+    // Menu should close even when clipboard fails
+    expect(screen.queryByText('Copy name')).not.toBeInTheDocument()
+    expect(unhandledRejections).toHaveLength(0)
+
+    window.removeEventListener('unhandledrejection', handler)
+    Object.defineProperty(navigator, 'clipboard', {
+      value: originalClipboard,
+      writable: true,
+      configurable: true,
+    })
   })
 
   it('cancels rename with Escape', async () => {

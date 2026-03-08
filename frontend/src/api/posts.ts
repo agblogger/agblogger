@@ -13,12 +13,12 @@ export interface PostListParams {
   per_page?: number
   label?: string
   labels?: string
-  labelMode?: string
+  labelMode?: 'or' | 'and'
   author?: string
   from?: string
   to?: string
-  sort?: string
-  order?: string
+  sort?: 'created_at' | 'modified_at' | 'title' | 'author'
+  order?: 'asc' | 'desc'
 }
 
 export async function fetchPosts(params: PostListParams = {}): Promise<PostListResponse> {

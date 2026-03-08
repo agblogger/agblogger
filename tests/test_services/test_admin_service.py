@@ -64,7 +64,32 @@ class TestUpdateSiteSettings:
 
         reloaded = parse_site_config(cm.content_dir)
         assert reloaded.title == "New Title"
-        assert reloaded.default_author == "Author"
+        assert reloaded.default_author == ""
+
+    def test_preserves_system_managed_default_author(self, content_dir: Path) -> None:
+        (content_dir / "index.toml").write_text(
+            "[site]\n"
+            'title = "Test Blog"\n'
+            'description = ""\n'
+            'default_author = "Admin"\n'
+            'timezone = "UTC"\n\n'
+            "[[pages]]\n"
+            'id = "timeline"\n'
+            'title = "Posts"\n',
+            encoding="utf-8",
+        )
+        cm = ContentManager(content_dir=content_dir)
+
+        update_site_settings(
+            cm,
+            title="Changed",
+            description="Updated description",
+            default_author="Someone Else",
+            timezone="US/Eastern",
+        )
+
+        reloaded = parse_site_config(content_dir)
+        assert reloaded.default_author == "Admin"
 
     def test_preserves_pages(self, cm: ContentManager) -> None:
         update_site_settings(cm, title="Changed", description="", default_author="", timezone="UTC")

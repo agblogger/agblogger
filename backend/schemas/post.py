@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field, field_validator
 
+from backend.schemas.label import LABEL_ID_PATTERN
+
 
 class PostSummary(BaseModel):
     """Post summary for timeline listing."""
@@ -62,6 +64,17 @@ class PostSave(BaseModel):
         _ = cls
         return v.strip()
 
+    @field_validator("labels")
+    @classmethod
+    def validate_labels(cls, v: list[str]) -> list[str]:
+        """Each label must be a valid label ID (lowercase alphanumeric with hyphens)."""
+        _ = cls
+        for label in v:
+            if not LABEL_ID_PATTERN.match(label):
+                msg = f"Invalid label {label!r}: must match pattern '^[a-z0-9][a-z0-9-]*$'"
+                raise ValueError(msg)
+        return v
+
 
 class PostListResponse(BaseModel):
     """Paginated post list response."""
@@ -87,8 +100,8 @@ class SearchResult(BaseModel):
 class AssetInfo(BaseModel):
     """Info about a single asset file."""
 
-    name: str
-    size: int
+    name: str = Field(min_length=1)
+    size: int = Field(ge=0)
     is_image: bool
 
 

@@ -174,6 +174,7 @@ async def create_test_client(settings: Settings) -> AsyncGenerator[AsyncClient]:
     from backend.models.base import Base
     from backend.pandoc.renderer import close_renderer, init_renderer
     from backend.pandoc.server import PandocServer
+    from backend.services.admin_service import sync_default_author_from_admin
     from backend.services.auth_service import ensure_admin_user
     from backend.services.cache_service import rebuild_cache
 
@@ -238,6 +239,11 @@ async def create_test_client(settings: Settings) -> AsyncGenerator[AsyncClient]:
 
         async with session_factory() as session:
             await ensure_admin_user(session, settings)
+            await sync_default_author_from_admin(
+                session,
+                content_manager,
+                admin_username=settings.admin_username,
+            )
 
         test_port = 13100 + os.getpid() % 900
         if not _pandoc_server_broken:

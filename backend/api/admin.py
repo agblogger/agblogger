@@ -229,7 +229,7 @@ async def update_display_name(
     user: Annotated[User, Depends(require_admin)],
 ) -> DisplayNameResponse:
     """Update the current user's display name and retroactively update all their posts."""
-    display_name = body.display_name.strip() or None
+    display_name = body.display_name or None
     async with content_write_lock:
         try:
             result = await update_user_display_name(
@@ -240,7 +240,9 @@ async def update_display_name(
             )
         except OSError as exc:
             logger.error("Failed to update display name: %s", exc)
-            raise HTTPException(status_code=500, detail="Failed to update display name") from exc
+            raise HTTPException(
+                status_code=500, detail=f"Failed to update display name: {exc}"
+            ) from exc
         set_git_warning(response, await git_service.try_commit("Update author display name"))
         return DisplayNameResponse(display_name=result)
 

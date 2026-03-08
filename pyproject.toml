@@ -2,8 +2,7 @@
 name = "agblogger"
 version = "0.1.0"
 description = "A markdown-first blogging platform with bidirectional sync, label DAG, and cross-posting"
-requires-python = ">=3.13"
-# Developed on Python 3.14; 3.13 is the minimum supported version
+requires-python = ">=3.14"
 license = "MIT"
 authors = [{ name = "Lukasz Czajka" }]
 

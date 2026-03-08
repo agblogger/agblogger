@@ -50,7 +50,7 @@ The filesystem is the canonical store for all content. The database is entirely 
 
 The `content/` directory is **not version-controlled** (it is in `.gitignore`). On startup, `ensure_content_dir()` in `backend/main.py` backfills a minimal scaffold (`index.toml`, `labels.toml`, `posts/`) whenever entries are missing, even if `content/` already exists.
 
-Content lives in the `content/` directory:
+Example `content/` directory:
 
 ```
 content/
@@ -116,7 +116,7 @@ Descendant queries use recursive CTEs in SQLite, enabling a "show me all posts i
 
 ### TOML Configuration
 
-`content/index.toml` defines site-level settings (title, timezone, default author, page navigation). `content/labels.toml` defines the label hierarchy. Both are read at startup and on cache rebuild.
+`content/index.toml` defines site-level settings (title, timezone, page navigation, and a system-managed `default_author`). `content/labels.toml` defines the label hierarchy. Both are read at startup and on cache rebuild.
 
 ## Key Design Decisions
 

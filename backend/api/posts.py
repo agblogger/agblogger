@@ -459,6 +459,12 @@ async def list_assets(
         raise HTTPException(status_code=404, detail="Post not found")
 
     post_file = content_manager.content_dir / file_path
+    # Flat-file posts (e.g. posts/hello.md) don't have a per-post directory,
+    # so they cannot have co-located assets. Only directory-style posts
+    # (where the file is index.md inside a per-post directory) support assets.
+    if post_file.name != "index.md":
+        return AssetListResponse(assets=[])
+
     post_dir = post_file.parent
     post_filename = post_file.name
     assets: list[AssetInfo] = []
@@ -559,6 +565,13 @@ async def rename_asset(
         if new_path.exists():
             raise HTTPException(status_code=409, detail="A file with that name already exists")
 
+        # Capture file size before rename — after rename, the old path is gone
+        # and stat on the new path could fail due to transient filesystem issues.
+        try:
+            file_size = old_path.stat().st_size
+        except OSError:
+            file_size = 0
+
         try:
             old_path.rename(new_path)
         except OSError as exc:
@@ -575,7 +588,7 @@ async def rename_asset(
         ext = new_path.suffix.lstrip(".").lower()
         return AssetInfo(
             name=body.new_name,
-            size=new_path.stat().st_size,
+            size=file_size,
             is_image=ext in _IMAGE_EXTENSIONS,
         )
 
