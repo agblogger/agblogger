@@ -14,7 +14,7 @@ Uses `createBrowserRouter` (data router) with `RouterProvider` for full react-ro
 | `/labels` | LabelsPage | Label list/graph with segmented control toggle (auth: graph edge create/delete) |
 | `/labels/:labelId` | LabelPostsPage | Posts filtered by label |
 | `/labels/:labelId/settings` | LabelSettingsPage | Label names, parents, delete (admin-only mutations) |
-| `/editor/*` | EditorPage | Structured metadata bar + split-pane markdown editor |
+| `/editor/*` | EditorPage | Structured metadata bar, collapsible file strip, split-pane markdown editor |
 | `/admin` | AdminPage | Admin panel: site settings, pages, password, social accounts (admin required) |
 
 ## Editor Auto-Save
@@ -26,6 +26,15 @@ The `useEditorAutoSave` hook (`hooks/useEditorAutoSave.ts`) provides crash recov
 - **Navigation blocking**: `useBlocker` shows a native `window.confirm` dialog for in-app SPA navigation; `beforeunload` covers tab close and page refresh
 - **Draft recovery**: On editor mount, detects stale drafts and shows a banner with Restore/Discard options
 - **Enabled gating**: The hook accepts an `enabled` parameter; for existing posts it activates only after loading completes, preventing false dirty state during data fetch
+
+## File Management Strip
+
+The `FileStrip` component (`components/editor/FileStrip.tsx`) provides inline asset management within the editor, positioned between the metadata bar and the editor/preview split:
+
+- **Collapsible strip**: Header shows paperclip icon + file count; expands to show `FileCard` grid with thumbnails (images) or file-type icons
+- **Operations**: Upload (via hidden file input), delete (with confirmation if file is referenced in body), rename (with auto-update of markdown references), insert markdown at cursor, copy filename
+- **Save-and-stay flow**: New posts stay on the editor after save (URL replaces to `/editor/{file_path}`); a "View post" button appears once saved
+- **Backend endpoints**: `GET /api/posts/{file_path}/assets` (list), `DELETE .../assets/{filename}` (delete), `PATCH .../assets/{filename}` (rename)
 
 ## State Management
 
