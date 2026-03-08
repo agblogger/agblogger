@@ -60,8 +60,6 @@ async def _empty_string() -> str:
 
 router = APIRouter(prefix="/api/posts", tags=["posts"])
 
-_DB_COMMIT_ERRORS = (OperationalError, IntegrityError)
-
 _FTS_DELETE_SQL = text(
     "INSERT INTO posts_fts(posts_fts, rowid, title, content) "
     "VALUES ('delete', :rowid, :title, :content)"
@@ -127,28 +125,19 @@ async def _delete_post_fts(
         )
 
 
-async def _render_post(content: str, file_path: str) -> tuple[str, str]:
-    """Render excerpt and full HTML for a post in parallel, with URL rewriting.
+async def _render_raw(content: str) -> tuple[str, str]:
+    """Render excerpt and full HTML via Pandoc in parallel (no URL rewriting).
 
-    Returns (rendered_excerpt, rendered_html).
+    Returns (raw_excerpt, raw_html).  Call ``rewrite_relative_urls`` on each
+    result once the final ``file_path`` is known.
     """
     md_excerpt = generate_markdown_excerpt(content)
 
-    async def _render_excerpt() -> str:
-        if not md_excerpt:
-            return ""
-        raw = await render_markdown_excerpt(md_excerpt)
-        return rewrite_relative_urls(raw, file_path)
-
-    async def _render_html() -> str:
-        raw = await render_markdown(content)
-        return rewrite_relative_urls(raw, file_path)
-
-    rendered_excerpt, rendered_html = await asyncio.gather(
-        _render_excerpt(),
-        _render_html(),
+    raw_excerpt, raw_html = await asyncio.gather(
+        render_markdown_excerpt(md_excerpt) if md_excerpt else _empty_string(),
+        render_markdown(content),
     )
-    return rendered_excerpt, rendered_html
+    return raw_excerpt, raw_html
 
 
 def _build_post_detail(
@@ -293,11 +282,21 @@ async def upload_post(
         post_data.author = user.display_name or user.username
     post_data.author_username = user.username
 
+    # Render via Pandoc before acquiring lock (the slow part)
+    try:
+        raw_excerpt, raw_html = await _render_raw(post_data.content)
+    except (RuntimeError, OSError) as exc:
+        logger.error("Pandoc rendering failed during upload: %s", exc)
+        raise HTTPException(status_code=502, detail="Markdown rendering failed") from exc
+
     async with content_write_lock:
         posts_dir = content_manager.content_dir / "posts"
         post_path = generate_post_path(post_data.title, posts_dir)
         file_path = str(post_path.relative_to(content_manager.content_dir))
         post_data.file_path = file_path
+
+        rendered_excerpt = rewrite_relative_urls(raw_excerpt, file_path)
+        rendered_html = rewrite_relative_urls(raw_html, file_path)
 
         # Write asset files to directory
         post_dir = post_path.parent
@@ -309,17 +308,6 @@ async def upload_post(
             dest = post_dir / FilePath(name).name
             dest.write_bytes(data)
             written_assets.append(dest)
-
-        # Catch pandoc rendering failures and clean up assets
-        try:
-            rendered_excerpt, rendered_html = await _render_post(post_data.content, file_path)
-        except (RuntimeError, OSError) as exc:
-            logger.error("Pandoc rendering failed during upload of %s: %s", file_path, exc)
-            for asset in written_assets:
-                asset.unlink(missing_ok=True)
-            if post_dir.exists() and not any(post_dir.iterdir()):
-                post_dir.rmdir()
-            raise HTTPException(status_code=502, detail="Markdown rendering failed") from exc
 
         serialized = serialize_post(post_data)
         post = PostCache(
@@ -396,6 +384,24 @@ async def upload_assets(
     _user: Annotated[User, Depends(require_admin)],
 ) -> dict[str, list[str]]:
     """Upload asset files to a post's directory."""
+    # Read all upload data before acquiring lock to avoid holding lock during I/O
+    asset_data: list[tuple[str, bytes]] = []
+    total_size = 0
+    for upload_file in files:
+        content = await upload_file.read()
+        if len(content) > _MAX_UPLOAD_SIZE:
+            raise HTTPException(
+                status_code=413,
+                detail=f"File too large: {upload_file.filename}",
+            )
+        total_size += len(content)
+        if total_size > _MAX_TOTAL_UPLOAD_SIZE:
+            raise HTTPException(status_code=413, detail="Total upload size exceeds 50 MB limit")
+        filename = FilePath(upload_file.filename or "upload").name
+        if not filename or filename.startswith("."):
+            raise HTTPException(status_code=400, detail=f"Invalid filename: {upload_file.filename}")
+        asset_data.append((filename, content))
+
     async with content_write_lock:
         # Verify post exists
         stmt = select(PostCache).where(PostCache.file_path == file_path)
@@ -406,27 +412,11 @@ async def upload_assets(
 
         post_dir = (content_manager.content_dir / file_path).parent
         uploaded: list[str] = []
-        total_size = 0
-
-        for upload_file in files:
-            content = await upload_file.read()
-            if len(content) > _MAX_UPLOAD_SIZE:
-                raise HTTPException(
-                    status_code=413,
-                    detail=f"File too large: {upload_file.filename}",
-                )
-            total_size += len(content)
-            if total_size > _MAX_TOTAL_UPLOAD_SIZE:
-                raise HTTPException(status_code=413, detail="Total upload size exceeds 50 MB limit")
-            filename = FilePath(upload_file.filename or "upload").name
-            if not filename or filename.startswith("."):
-                raise HTTPException(
-                    status_code=400, detail=f"Invalid filename: {upload_file.filename}"
-                )
+        for filename, data in asset_data:
             dest = post_dir / filename
             # Handle filesystem errors during asset write
             try:
-                dest.write_bytes(content)
+                dest.write_bytes(data)
             except OSError as exc:
                 logger.error("Failed to write asset %s: %s", dest, exc)
                 raise HTTPException(
@@ -477,6 +467,13 @@ async def create_post_endpoint(
     user: Annotated[User, Depends(require_admin)],
 ) -> PostDetail:
     """Create a new post."""
+    # Render via Pandoc before acquiring lock (the slow part)
+    try:
+        raw_excerpt, raw_html = await _render_raw(body.body)
+    except (RuntimeError, OSError) as exc:
+        logger.error("Pandoc rendering failed for new post: %s", exc)
+        raise HTTPException(status_code=502, detail="Markdown rendering failed") from exc
+
     async with content_write_lock:
         posts_dir = content_manager.content_dir / "posts"
         post_path = generate_post_path(body.title, posts_dir)
@@ -502,12 +499,8 @@ async def create_post_endpoint(
             file_path=file_path,
         )
 
-        # Catch pandoc rendering failures
-        try:
-            rendered_excerpt, rendered_html = await _render_post(post_data.content, file_path)
-        except (RuntimeError, OSError) as exc:
-            logger.error("Pandoc rendering failed for new post %s: %s", file_path, exc)
-            raise HTTPException(status_code=502, detail="Markdown rendering failed") from exc
+        rendered_excerpt = rewrite_relative_urls(raw_excerpt, file_path)
+        rendered_html = rewrite_relative_urls(raw_html, file_path)
 
         serialized = serialize_post(post_data)
         post = PostCache(
@@ -558,6 +551,14 @@ async def update_post_endpoint(
     user: Annotated[User, Depends(require_admin)],
 ) -> PostDetail:
     """Update an existing post."""
+    # Render via Pandoc before acquiring lock (the slow part).
+    # URL rewriting happens inside the lock once the final file_path is known.
+    try:
+        raw_rendered_excerpt, raw_rendered_html = await _render_raw(body.body)
+    except (RuntimeError, OSError) as exc:
+        logger.error("Pandoc rendering failed for post %s: %s", file_path, exc)
+        raise HTTPException(status_code=502, detail="Markdown rendering failed") from exc
+
     endpoint_warnings: list[str] = []
     async with content_write_lock:
         stmt = select(PostCache).where(PostCache.file_path == file_path)
@@ -598,19 +599,6 @@ async def update_post_endpoint(
         )
 
         serialized = serialize_post(post_data)
-        md_excerpt = generate_markdown_excerpt(post_data.content)
-
-        # Render excerpt and full HTML in parallel; catch pandoc failures.
-        # Unlike create/upload, we keep the raw HTML before URL rewriting
-        # because a title-change rename may require re-rewriting with the new path.
-        try:
-            raw_rendered_excerpt, raw_rendered_html = await asyncio.gather(
-                render_markdown_excerpt(md_excerpt) if md_excerpt else _empty_string(),
-                render_markdown(post_data.content),
-            )
-        except (RuntimeError, OSError) as exc:
-            logger.error("Pandoc rendering failed for post %s: %s", file_path, exc)
-            raise HTTPException(status_code=502, detail="Markdown rendering failed") from exc
         rendered_excerpt = rewrite_relative_urls(raw_rendered_excerpt, file_path)
         rendered_html = rewrite_relative_urls(raw_rendered_html, file_path)
 
@@ -719,7 +707,7 @@ async def update_post_endpoint(
 
         try:
             await session.commit()
-        except _DB_COMMIT_ERRORS as exc:
+        except (OperationalError, IntegrityError) as exc:
             logger.error("DB commit failed for post update %s: %s", file_path, exc)
             if needs_rename and new_dir is not None and old_dir is not None and new_dir.exists():
                 try:

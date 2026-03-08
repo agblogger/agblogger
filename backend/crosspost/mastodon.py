@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 import httpx
 
 from backend.crosspost.base import CrossPostContent, CrossPostResult
-from backend.crosspost.http_utils import parse_json_object, require_str_field
+from backend.crosspost.http_utils import get_str_field, parse_json_object, require_str_field
 from backend.crosspost.ssrf import ssrf_safe_client
 from backend.exceptions import ExternalServiceError
 
@@ -108,8 +108,7 @@ async def exchange_mastodon_oauth_token(
         )
 
     hostname = urlparse(validated_url).hostname or ""
-    acct_value = verify_data.get("acct")
-    acct = acct_value if isinstance(acct_value, str) else ""
+    acct = get_str_field(verify_data, "acct")
     return {
         "access_token": access_token,
         "instance_url": validated_url,
@@ -188,8 +187,7 @@ class MastodonCrossPoster:
                     return False
                 data = parse_json_object(resp, context="Mastodon verify credentials endpoint")
                 self._account_id = str(data.get("id", ""))
-                acct_value = data.get("acct")
-                self._username = acct_value if isinstance(acct_value, str) else ""
+                self._username = get_str_field(data, "acct")
                 return True
             except (httpx.HTTPError, ValueError) as exc:
                 logger.warning("Mastodon auth response parse error: %s", exc)
@@ -225,10 +223,9 @@ class MastodonCrossPoster:
                         error=f"Mastodon API error: {resp.status_code} {resp.text}",
                     )
                 data = parse_json_object(resp, context="Mastodon statuses endpoint")
-                url_value = data.get("url")
                 return CrossPostResult(
                     platform_id=str(data.get("id", "")),
-                    url=url_value if isinstance(url_value, str) else "",
+                    url=get_str_field(data, "url"),
                     success=True,
                 )
             except (httpx.HTTPError, ValueError) as exc:

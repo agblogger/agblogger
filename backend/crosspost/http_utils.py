@@ -50,3 +50,12 @@ def require_str_field(
         msg = f"{context} response missing {field}"
         raise cls(msg)
     return value
+
+
+def get_str_field(data: dict[str, Any], field: str, default: str = "") -> str:
+    """Extract an optional string field from a dict.
+
+    Returns *default* if the field is missing or not a string.
+    """
+    value = data.get(field)
+    return value if isinstance(value, str) else default

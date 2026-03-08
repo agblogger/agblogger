@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 
 import pytest
@@ -170,23 +170,21 @@ class TestWriteLockSerialization:
     @pytest.mark.asyncio
     async def test_concurrent_creates_are_serialized(self, client: AsyncClient) -> None:
         """Two concurrent post creates should not overlap execution."""
-        from backend.api import posts as posts_mod
+        from backend.filesystem.content_manager import ContentManager
 
         token = await _login(client)
         headers = {"Authorization": f"Bearer {token}"}
 
         execution_log: list[str] = []
-        real_render = posts_mod._render_post
+        real_write = ContentManager.write_post
 
-        async def _tracking_render(content: str, file_path: str) -> tuple[str, str]:
-            name = "A" if "Body A" in content else "B"
+        def _tracking_write(self: ContentManager, file_path: str, post_data: Any) -> None:
+            name = "A" if "Body A" in post_data.content else "B"
             execution_log.append(f"start:{name}")
-            await asyncio.sleep(0.05)
-            result: tuple[str, str] = await real_render(content, file_path)
+            real_write(self, file_path, post_data)
             execution_log.append(f"end:{name}")
-            return result
 
-        with patch.object(posts_mod, "_render_post", new=_tracking_render):
+        with patch.object(ContentManager, "write_post", new=_tracking_write):
             results = await asyncio.gather(
                 client.post(
                     "/api/posts",

@@ -7,7 +7,7 @@ import logging
 import httpx
 
 from backend.crosspost.base import CrossPostContent, CrossPostResult
-from backend.crosspost.http_utils import parse_json_object, require_str_field
+from backend.crosspost.http_utils import get_str_field, parse_json_object, require_str_field
 from backend.exceptions import ExternalServiceError
 
 logger = logging.getLogger(__name__)
@@ -91,8 +91,7 @@ async def exchange_x_oauth_token(
             context="X token endpoint",
             error_cls=XOAuthTokenError,
         )
-        refresh_token_value = token_data.get("refresh_token", "")
-        refresh_token = refresh_token_value if isinstance(refresh_token_value, str) else ""
+        refresh_token = get_str_field(token_data, "refresh_token")
 
         user_resp = await http_client.get(
             "https://api.x.com/2/users/me",

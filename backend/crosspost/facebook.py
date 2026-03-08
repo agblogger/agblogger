@@ -7,7 +7,7 @@ import logging
 import httpx
 
 from backend.crosspost.base import CrossPostContent, CrossPostResult
-from backend.crosspost.http_utils import parse_json_object, require_str_field
+from backend.crosspost.http_utils import get_str_field, parse_json_object, require_str_field
 from backend.exceptions import ExternalServiceError
 
 logger = logging.getLogger(__name__)
@@ -192,8 +192,7 @@ class FacebookCrossPoster:
                         error=f"Facebook API error: {resp.status_code} {resp.text}",
                     )
                 data = parse_json_object(resp, context="Facebook feed endpoint")
-                post_id_value = data.get("id")
-                post_id = post_id_value if isinstance(post_id_value, str) else ""
+                post_id = get_str_field(data, "id")
                 post_url = f"https://www.facebook.com/{post_id}" if post_id else ""
                 return CrossPostResult(platform_id=post_id, url=post_url, success=True)
             except (httpx.HTTPError, ValueError) as exc:

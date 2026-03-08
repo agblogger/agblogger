@@ -21,6 +21,7 @@ from cryptography.hazmat.primitives.serialization import (
 
 from backend.crosspost.atproto_oauth import create_dpop_proof
 from backend.crosspost.base import CrossPostContent, CrossPostResult
+from backend.crosspost.http_utils import get_str_field, parse_json_object
 from backend.crosspost.ssrf import ssrf_safe_client
 
 logger = logging.getLogger(__name__)
@@ -302,15 +303,16 @@ class BlueskyCrossPoster:
                     success=False,
                     error=f"Bluesky API error: {resp.status_code} {resp.text}",
                 )
-            data = resp.json()
-            rkey = data.get("uri", "").split("/")[-1]
+            data = parse_json_object(resp, context="Bluesky createRecord endpoint")
+            uri = get_str_field(data, "uri")
+            rkey = uri.split("/")[-1]
             post_url = f"https://bsky.app/profile/{auth.handle}/post/{rkey}" if rkey else ""
             return CrossPostResult(
-                platform_id=data.get("uri", ""),
+                platform_id=uri,
                 url=post_url,
                 success=True,
             )
-        except httpx.HTTPError as exc:
+        except (httpx.HTTPError, ValueError) as exc:
             logger.exception("Bluesky post HTTP error")
             return CrossPostResult(
                 platform_id="",
