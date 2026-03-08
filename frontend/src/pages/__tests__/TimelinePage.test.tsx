@@ -223,7 +223,7 @@ describe('TimelinePage', () => {
 
     // Simulate logout: backend now returns only published posts
     const withoutDraft: PostListResponse = {
-      posts: [withDraft.posts[0]],
+      posts: [withDraft.posts[0]!],
       total: 1, page: 1, per_page: 10, total_pages: 1,
     }
     mockFetchPosts.mockResolvedValue(withoutDraft)
