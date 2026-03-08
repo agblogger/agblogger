@@ -43,23 +43,14 @@ export default function ShareButton({ title, author, url }: ShareButtonProps) {
     }
   }, [showDropdown, setShowMastodonPrompt])
 
-  async function handleClick() {
-    if (canNativeShare()) {
-      try {
-        await handleNativeShare()
-      } catch (err) {
-        console.warn('Native share failed, falling back to dropdown:', err)
-        setShowDropdown(true)
-      }
-    } else {
-      setShowDropdown((prev) => !prev)
-    }
+  function handleClick() {
+    setShowDropdown((prev) => !prev)
   }
 
   return (
     <div className="relative" ref={dropdownRef}>
       <button
-        onClick={() => void handleClick()}
+        onClick={handleClick}
         aria-label="Share this post"
         className="flex items-center gap-1 text-muted transition-colors hover:text-ink"
         title="Share this post"

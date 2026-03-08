@@ -24,7 +24,7 @@ zap_full_minutes := env("ZAP_FULL_MINUTES", "")
 check-static: check-backend-static check-frontend-static check-vulture check-semgrep check-trivy
     @echo "\n✓ Static checks passed"
 
-# Run all test suites (pass coverage=true for coverage reports)
+# Run all test suites, excluding slow tests (pass coverage=true for coverage reports)
 test coverage="false":
     just test-backend "{{ coverage }}"
     just test-frontend "{{ coverage }}"

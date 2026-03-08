@@ -62,6 +62,7 @@ Always start a dev server with `just start` (unsanboxed). Remember to stop a run
 - Structure: `tests/test_<category>/test_<module>.py`; `Test` prefix classes; descriptive `test_<what>()` functions
 - All tests are async (`asyncio_mode = "auto"`); fixtures in `conftest.py` with async generators
 - API tests use `httpx.AsyncClient` with `ASGITransport`; plain `assert` statements
+- Slow tests which take more than 1s to run should be marked @pytest.mark.slow
 
 ### Frontend (Vitest)
 
