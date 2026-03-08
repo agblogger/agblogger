@@ -286,9 +286,7 @@ class TestListAssets:
 
 class TestDeleteAsset:
     @pytest.mark.asyncio
-    async def test_delete_asset(
-        self, client: AsyncClient, app_settings: Settings
-    ) -> None:
+    async def test_delete_asset(self, client: AsyncClient, app_settings: Settings) -> None:
         """Upload a file, verify it exists on disk, delete it, verify 204 and gone."""
         token = await _login(client)
         file_content = b"fake image data"
@@ -385,9 +383,7 @@ class TestDeleteAsset:
 
 class TestRenameAsset:
     @pytest.mark.asyncio
-    async def test_rename_asset(
-        self, client: AsyncClient, app_settings: Settings
-    ) -> None:
+    async def test_rename_asset(self, client: AsyncClient, app_settings: Settings) -> None:
         """Upload old.png, PATCH rename to new.png, verify old gone and new exists."""
         token = await _login(client)
         file_content = b"fake image data"
