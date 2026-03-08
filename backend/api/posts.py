@@ -37,6 +37,8 @@ from backend.models.post import PostCache
 from backend.models.user import User
 from backend.pandoc.renderer import render_markdown, render_markdown_excerpt, rewrite_relative_urls
 from backend.schemas.post import (
+    AssetInfo,
+    AssetListResponse,
     PostDetail,
     PostEditResponse,
     PostListResponse,
@@ -252,11 +254,17 @@ async def upload_post(
     if not md_files:
         raise HTTPException(status_code=422, detail="No markdown file found in upload")
 
-    # Prefer index.md
-    md_file = next(
+    is_directory_upload = len(file_data) > 1
+    index_md = next(
         ((name, data) for name, data in md_files if name == "index.md"),
-        md_files[0],
+        None,
     )
+    if is_directory_upload and index_md is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Directory upload must contain an index.md file",
+        )
+    md_file = index_md if index_md is not None else md_files[0]
     md_filename, md_bytes = md_file
 
     # Validate UTF-8 encoding
@@ -433,6 +441,45 @@ async def upload_assets(
         return {"uploaded": uploaded}
 
 
+_IMAGE_EXTENSIONS = frozenset({"png", "jpg", "jpeg", "gif", "webp", "svg", "avif"})
+
+
+@router.get("/{file_path:path}/assets", response_model=AssetListResponse)
+async def list_assets(
+    file_path: str,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    content_manager: Annotated[ContentManager, Depends(get_content_manager)],
+    _user: Annotated[User, Depends(require_admin)],
+) -> AssetListResponse:
+    """List asset files in a post's directory."""
+    stmt = select(PostCache).where(PostCache.file_path == file_path)
+    result = await session.execute(stmt)
+    if result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=404, detail="Post not found")
+
+    post_file = content_manager.content_dir / file_path
+    post_dir = post_file.parent
+    post_filename = post_file.name
+    assets: list[AssetInfo] = []
+    try:
+        for entry in sorted(post_dir.iterdir()):
+            if entry.name == post_filename or entry.name.startswith(".") or not entry.is_file():
+                continue
+            ext = entry.suffix.lstrip(".").lower()
+            assets.append(
+                AssetInfo(
+                    name=entry.name,
+                    size=entry.stat().st_size,
+                    is_image=ext in _IMAGE_EXTENSIONS,
+                )
+            )
+    except OSError as exc:
+        logger.error("Failed to list assets for %s: %s", file_path, exc)
+        raise HTTPException(status_code=500, detail="Failed to list assets") from exc
+
+    return AssetListResponse(assets=assets)
+
+
 @router.get("/{file_path:path}", response_model=PostDetail)
 async def get_post_endpoint(
     file_path: str,
@@ -582,6 +629,11 @@ async def update_post_endpoint(
             author_username = existing.author_username
 
         now = now_utc()
+
+        # Draft → published transition: update created_at to publish time
+        if existing.is_draft and not body.is_draft:
+            created_at = now
+
         title = body.title
 
         post_data = PostData(
@@ -651,6 +703,7 @@ async def update_post_endpoint(
         existing.title = title
         existing.author = author
         existing.author_username = author_username
+        existing.created_at = created_at
         existing.modified_at = now
         existing.is_draft = body.is_draft
         existing.content_hash = hash_content(serialized)

@@ -82,3 +82,17 @@ class SearchResult(BaseModel):
     rendered_excerpt: str | None = None
     created_at: str
     rank: float = 0.0
+
+
+class AssetInfo(BaseModel):
+    """Info about a single asset file."""
+
+    name: str
+    size: int
+    is_image: bool
+
+
+class AssetListResponse(BaseModel):
+    """Response for listing post assets."""
+
+    assets: list[AssetInfo]

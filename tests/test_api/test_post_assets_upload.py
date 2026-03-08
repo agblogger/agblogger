@@ -1,4 +1,4 @@
-"""Tests for POST /api/posts/{file_path}/assets endpoint."""
+"""Tests for POST /api/posts/{file_path}/assets and GET /api/posts/{file_path}/assets endpoints."""
 
 from __future__ import annotations
 
@@ -183,3 +183,102 @@ class TestUploadAssets:
         # Directory components should be stripped, only filename kept
         assert data["uploaded"] == ["photo.png"]
         assert (app_settings.content_dir / "posts" / "photo.png").exists()
+
+
+class TestListAssets:
+    @pytest.mark.asyncio
+    async def test_list_assets_empty(self, client: AsyncClient) -> None:
+        """GET assets for a post with no assets returns 200 with empty list."""
+        token = await _login(client)
+
+        resp = await client.get(
+            "/api/posts/posts/hello.md/assets",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["assets"] == []
+
+    @pytest.mark.asyncio
+    async def test_list_assets_after_upload(
+        self, client: AsyncClient, app_settings: Settings
+    ) -> None:
+        """Upload a file, then GET assets returns it with name/size/is_image."""
+        token = await _login(client)
+        file_content = b"fake image data"
+
+        # Upload an asset
+        upload_resp = await client.post(
+            "/api/posts/posts/hello.md/assets",
+            files=[("files", ("photo.png", file_content, "image/png"))],
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert upload_resp.status_code == 200
+
+        # List assets
+        resp = await client.get(
+            "/api/posts/posts/hello.md/assets",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["assets"]) == 1
+        asset = data["assets"][0]
+        assert asset["name"] == "photo.png"
+        assert asset["size"] == len(file_content)
+        assert asset["is_image"] is True
+
+    @pytest.mark.asyncio
+    async def test_list_assets_excludes_index_md(
+        self, client: AsyncClient, app_settings: Settings
+    ) -> None:
+        """Create a post-per-directory post, upload asset, index.md not in results."""
+        token = await _login(client)
+
+        # Create a post via API (creates post-per-directory)
+        create_resp = await client.post(
+            "/api/posts",
+            json={"title": "Directory Post", "body": "Some content here."},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert create_resp.status_code == 201
+        created_file_path = create_resp.json()["file_path"]
+
+        # Upload an asset to the new post
+        upload_resp = await client.post(
+            f"/api/posts/{created_file_path}/assets",
+            files=[("files", ("diagram.svg", b"<svg></svg>", "image/svg+xml"))],
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert upload_resp.status_code == 200
+
+        # List assets — index.md should NOT appear
+        resp = await client.get(
+            f"/api/posts/{created_file_path}/assets",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        names = [a["name"] for a in data["assets"]]
+        assert "index.md" not in names
+        assert "diagram.svg" in names
+
+    @pytest.mark.asyncio
+    async def test_list_assets_requires_auth(self, client: AsyncClient) -> None:
+        """GET without auth returns 401."""
+        resp = await client.get("/api/posts/posts/hello.md/assets")
+        assert resp.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_list_assets_nonexistent_post(self, client: AsyncClient) -> None:
+        """GET for nonexistent post returns 404."""
+        token = await _login(client)
+
+        resp = await client.get(
+            "/api/posts/posts/nonexistent.md/assets",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 404
