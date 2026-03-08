@@ -40,7 +40,7 @@ agblogger/
 - **Backend:** FastAPI + async SQLAlchemy (SQLite/`aiosqlite`), Alembic, Pandoc-based Markdown rendering, JWT+bcrypt auth, and git-based content versioning/sync with semantic front matter merges.
 - **Frontend:** React 19 + Vite + TypeScript, TailwindCSS, Zustand, KaTeX, and graph visualization via `@xyflow/react` + Dagre; textarea editor with server-side Pandoc preview.
 - **Testing:** Pytest + Vitest for functional tests, mutation testing via mutmut (backend) and StrykerJS (frontend), plus Dockerized OWASP ZAP baseline/full DAST scans driven by `just` commands.
-- **Infra/runtime:** Requires Pandoc and git, uses `uv` for Python deps, and supports Docker/Compose with optional Caddy reverse proxy.
+- **Infra/runtime:** Requires Pandoc and git, packages the backend as a server-only wheel for Docker deployment, and supports Docker/Compose with optional Caddy reverse proxy.
 
 ## Core Concepts
 

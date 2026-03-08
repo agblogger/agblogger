@@ -6,8 +6,16 @@ RUN npm ci --production=false
 COPY frontend/ ./
 RUN npm run build
 
-# ── Stage 2: Production image ───────────────────────────────────────
-FROM python:3.13-slim
+# ── Stage 2: Build server wheel ──────────────────────────────────────
+FROM python:3.14-slim AS server-wheel-build
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+WORKDIR /app
+COPY packaging/server/pyproject.toml /app/server-src/pyproject.toml
+COPY backend/ /app/server-src/backend/
+RUN uv build --wheel /app/server-src --out-dir /tmp/dist
+
+# ── Stage 3: Production image ───────────────────────────────────────
+FROM python:3.14-slim
 
 # Install pandoc from GitHub releases (pinned version with +server support)
 ARG PANDOC_VERSION=3.8.3
@@ -28,16 +36,10 @@ RUN useradd --create-home --shell /bin/bash agblogger
 
 WORKDIR /app
 
-# Install Python dependencies
-COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev --no-editable
-
-# Copy backend code
-COPY backend/ ./backend/
-COPY cli/ ./cli/
-
-# Copy Alembic config
-COPY alembic.ini ./
+# Install server wheel
+COPY --from=server-wheel-build /tmp/dist/ /tmp/dist/
+RUN uv pip install --system /tmp/dist/agblogger_server-*.whl \
+    && rm -rf /tmp/dist
 
 # Copy built frontend
 COPY --from=frontend-build /app/frontend/dist ./frontend/dist
@@ -52,6 +54,8 @@ VOLUME /data/db
 ENV CONTENT_DIR=/data/content
 ENV DATABASE_URL=sqlite+aiosqlite:///data/db/agblogger.db
 ENV FRONTEND_DIR=/app/frontend/dist
+ENV HOST=0.0.0.0
+ENV PORT=8000
 
 EXPOSE 8000
 
@@ -61,4 +65,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 
 USER agblogger
 
-CMD ["uv", "run", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["agblogger-server"]
