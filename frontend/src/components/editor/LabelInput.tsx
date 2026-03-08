@@ -46,7 +46,7 @@ export default function LabelInput({ value, onChange, disabled }: LabelInputProp
     (l) => !value.includes(l.id) && l.id.toLowerCase().includes(query.toLowerCase()),
   )
 
-  const trimmed = query.trim().toLowerCase()
+  const trimmed = query.trim().toLowerCase().replace(/^#/, '')
   const exactMatch = allLabels.some((l) => l.id === trimmed)
   const showCreate = trimmed.length > 0 && !exactMatch && !value.includes(trimmed)
 

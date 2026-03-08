@@ -387,6 +387,26 @@ describe('LabelInput', () => {
     })
   })
 
+  it('strips leading # from user input when creating label', async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    const newLabel: LabelResponse = {
+      id: 'abba', names: ['abba'], is_implicit: false,
+      parents: [], children: [], post_count: 0,
+    }
+    mockCreateLabel.mockResolvedValueOnce(newLabel)
+    await renderLabelInput({ onChange })
+
+    const input = screen.getByRole('combobox')
+    await user.type(input, '#abba')
+    await user.keyboard('{Enter}')
+
+    await waitFor(() => {
+      expect(mockCreateLabel).toHaveBeenCalledWith({ id: 'abba' })
+    })
+    expect(onChange).toHaveBeenCalledWith(['abba'])
+  })
+
   it('ArrowUp wraps around to last item', async () => {
     const user = userEvent.setup()
     const onChange = vi.fn()
