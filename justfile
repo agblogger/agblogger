@@ -323,6 +323,12 @@ build-cli:
         --exclude-module sqlite3 \
         cli/sync_client.py
 
+# Install the CLI client to prefix/bin (default: ~/.local/bin)
+install prefix="$HOME/.local": build-cli
+    mkdir -p "{{ prefix }}/bin"
+    cp dist/cli/agblogger-sync "{{ prefix }}/bin/agblogger-sync"
+    @echo "✓ Installed agblogger-sync to {{ prefix }}/bin/"
+
 # ── Deployment ──────────────────────────────────────────────
 
 deploy:
