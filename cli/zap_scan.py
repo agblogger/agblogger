@@ -22,6 +22,7 @@ LOCAL_CADDY_PROJECT_NAME = "agblogger-caddy-local"
 LOCAL_CADDY_ENV_FILENAME = "caddy-local.env"
 LOCAL_CADDY_COMPOSE_OVERRIDE = "docker-compose.caddy-local.yml"
 LOCAL_CADDY_STARTUP_TIMEOUT_SECONDS = 120.0
+ZAP_HOOK_PATH = PurePosixPath("cli") / "zap_hooks.py"
 
 ScanMode = Literal["baseline", "full"]
 
@@ -67,6 +68,8 @@ def build_docker_command(
             f"{project_dir}:/zap/wrk:rw",
             image,
             script_name,
+            "--hook",
+            str(ZAP_HOOK_PATH),
             "-t",
             target_url,
             "-j",
@@ -81,9 +84,18 @@ def build_docker_command(
             str(reports["xml"]),
         ]
     )
+    if scan_mode == "baseline":
+        # Force the legacy baseline runner so the hook-based scope hardening stays active.
+        command.append("--autooff")
     if minutes is not None:
         command.extend(["-m", str(minutes)])
     return command
+
+
+def clear_report_artifacts(report_dir: Path) -> None:
+    """Remove stale report files so each ZAP run writes fresh artifacts."""
+    for name in ("report.html", "report.md", "report.json", "report.xml"):
+        (report_dir / name).unlink(missing_ok=True)
 
 
 async def _run_command(command: list[str], cwd: Path) -> int:
@@ -246,6 +258,7 @@ def run_zap_scan(
     reports = _report_paths(scan_mode)
     report_dir = project_dir / reports["dir"]
     report_dir.mkdir(parents=True, exist_ok=True)
+    clear_report_artifacts(report_dir)
     env_file = write_local_caddy_env(localdir)
 
     healthy = local_caddy_profile_health(caddy_port)

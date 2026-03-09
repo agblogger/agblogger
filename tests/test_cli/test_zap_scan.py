@@ -36,6 +36,9 @@ def test_build_docker_command_for_baseline_scan_on_macos(tmp_path: Path) -> None
     assert f"{tmp_path}:/zap/wrk:rw" in command
     assert DEFAULT_ZAP_IMAGE in command
     assert "zap-baseline.py" in command
+    assert "--autooff" in command
+    assert "--hook" in command
+    assert command[command.index("--hook") + 1] == "cli/zap_hooks.py"
     assert "-j" in command
     assert "-I" in command
     assert command[command.index("-t") + 1] == "http://host.docker.internal:8080/"
@@ -60,6 +63,9 @@ def test_build_docker_command_for_full_scan_on_linux_adds_host_gateway(
     add_host_index = command.index("--add-host")
     assert command[add_host_index + 1] == "host.docker.internal:host-gateway"
     assert "zap-full-scan.py" in command
+    assert "--autooff" not in command
+    assert "--hook" in command
+    assert command[command.index("--hook") + 1] == "cli/zap_hooks.py"
     assert command[command.index("-m") + 1] == "4"
     assert "reports/zap/full/report.html" in command
     assert "reports/zap/full/report.md" in command
@@ -128,6 +134,41 @@ class TestRunZapScan:
         _command, cwd = run_calls[0]
         assert cwd == tmp_path
         assert (tmp_path / "reports" / "zap" / "baseline").is_dir()
+
+    def test_run_zap_scan_clears_stale_reports_before_running(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        report_dir = tmp_path / "reports" / "zap" / "full"
+        report_dir.mkdir(parents=True)
+        for name in ("report.html", "report.md", "report.json", "report.xml"):
+            (report_dir / name).write_text("stale", encoding="utf-8")
+
+        monkeypatch.setattr(
+            "cli.zap_scan.local_caddy_profile_health",
+            lambda _caddy_port: True,
+        )
+        monkeypatch.setattr("cli.zap_scan.run_command", lambda _command, _cwd: 0)
+        monkeypatch.setattr(
+            "cli.zap_scan.start_local_caddy_profile",
+            lambda *_args, **_kwargs: pytest.fail("start_local_caddy_profile should not be called"),
+        )
+        monkeypatch.setattr(
+            "cli.zap_scan.stop_local_caddy_profile",
+            lambda *_args, **_kwargs: pytest.fail("stop_local_caddy_profile should not be called"),
+        )
+
+        exit_code = run_zap_scan(
+            scan_mode="full",
+            project_dir=tmp_path,
+            localdir=tmp_path / ".local",
+            caddy_port=8080,
+            minutes=None,
+        )
+
+        assert exit_code == 0
+        assert sorted(path.name for path in report_dir.iterdir()) == []
 
     def test_run_zap_scan_reuses_healthy_dev_server(
         self,

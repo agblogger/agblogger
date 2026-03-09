@@ -8,7 +8,7 @@ Tests live under `tests/` with shared fixtures in `conftest.py` (tmp content dir
 - **`test_services/`** — Service-layer unit tests: auth, admin, sync, content manager, cross-posting, crypto, datetime, git, slug generation, rate limiting, SSRF protection, TOML/frontmatter parsing, cache rebuild resilience, and startup hardening.
 - **`test_labels/`** — Label DAG operations and label service tests.
 - **`test_rendering/`** — Pandoc integration, frontmatter parsing, HTML sanitization, URL rewriting, and dead-code checks.
-- **`test_cli/`** — CLI tools: sync client, deployment, dev server, mutation testing orchestration, ZAP scanning of the local Caddy-backed build profile, and path safety.
+- **`test_cli/`** — CLI tools: sync client, deployment, dev server, mutation testing orchestration, ZAP scanning of the local Caddy-backed build profile (including scoped hook-based hardening and stale-report cleanup), and path safety.
 - **`test_sync/`** — Sync client integration and frontmatter normalization.
 
 Configuration in `pyproject.toml`: `asyncio_mode = "auto"`, coverage via `pytest-cov`, `fail_under = 80` with branch coverage enabled.
