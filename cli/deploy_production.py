@@ -33,6 +33,7 @@ DEPLOY_MODE_REGISTRY = "registry"
 DEPLOY_MODE_TARBALL = "tarball"
 DEPLOY_MODES = {DEPLOY_MODE_LOCAL, DEPLOY_MODE_REGISTRY, DEPLOY_MODE_TARBALL}
 LOCAL_IMAGE_TAG = "agblogger:latest"
+AGBLOGGER_STATIC_IP = "172.30.0.3"
 CADDY_STATIC_IP = "172.30.0.2"
 COMPOSE_SUBNET = "172.30.0.0/24"
 # Constructed to avoid static-analysis tools flagging literal 0.0.0.0
@@ -264,9 +265,9 @@ def _agblogger_env_section() -> str:
     )
 
 
-def _agblogger_healthcheck_section() -> str:
+def _agblogger_healthcheck_section(*, include_network: bool = False) -> str:
     """Return the restart + healthcheck YAML block for agblogger services."""
-    return (
+    block = (
         "    restart: unless-stopped\n"
         "    healthcheck:\n"
         '      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]\n'
@@ -275,6 +276,13 @@ def _agblogger_healthcheck_section() -> str:
         "      start_period: 10s\n"
         "      retries: 3\n"
     )
+    if include_network:
+        block += (
+            "    networks:\n"
+            "      default:\n"
+            f"        ipv4_address: {AGBLOGGER_STATIC_IP}\n"
+        )
+    return block
 
 
 def _caddy_service_section() -> str:
@@ -345,7 +353,7 @@ def build_image_compose_content() -> str:
         "      - ./content:/data/content\n"
         "      - agblogger-db:/data/db\n"
         + _agblogger_env_section()
-        + _agblogger_healthcheck_section()
+        + _agblogger_healthcheck_section(include_network=True)
         + "\n"
         + _caddy_service_section()
         + "\n"

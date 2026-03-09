@@ -10,6 +10,7 @@ from unittest.mock import patch
 import pytest
 
 from cli.deploy_production import (
+    AGBLOGGER_STATIC_IP,
     CADDY_STATIC_IP,
     COMPOSE_SUBNET,
     DEFAULT_BUNDLE_DIR,
@@ -257,6 +258,7 @@ def test_build_image_compose_content_uses_required_image_reference() -> None:
 def test_build_image_compose_content_includes_caddy_network() -> None:
     content = build_image_compose_content()
     assert f"ipv4_address: {CADDY_STATIC_IP}" in content
+    assert f"ipv4_address: {AGBLOGGER_STATIC_IP}" in content
     assert "subnet: 172.30.0.0/24" in content
 
 
