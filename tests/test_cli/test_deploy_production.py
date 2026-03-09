@@ -1182,6 +1182,43 @@ def test_build_caddyfile_content_html_cache_matches_all_depths() -> None:
 # ── error message includes command ────────────────────────────────────
 
 
+def test_main_checks_docker_before_config_collection(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Issue 2: Docker check should run before interactive config collection."""
+    from cli.deploy_production import main
+
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "deploy",
+            "--non-interactive",
+            "--project-dir",
+            str(tmp_path),
+            "--admin-username",
+            "admin",
+            "--admin-password",
+            "strong-password!",
+            "--trusted-hosts",
+            "example.com",
+        ],
+    )
+    monkeypatch.setattr("cli.deploy_production.shutil.which", lambda _name: None)
+
+    def _must_not_be_called(_args: object) -> None:
+        raise AssertionError("config_from_args should not be called when Docker is missing")
+
+    monkeypatch.setattr("cli.deploy_production.config_from_args", _must_not_be_called)
+
+    with pytest.raises(SystemExit, match="1"):
+        main()
+
+    captured = capsys.readouterr()
+    assert "Docker is not installed" in captured.out
+
+
 def test_main_subprocess_error_includes_command(
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
@@ -1220,3 +1257,77 @@ def test_main_subprocess_error_includes_command(
     captured = capsys.readouterr()
     assert "docker" in captured.out
     assert "exit code 1" in captured.out
+
+
+# ── Issue 1: $ escaping in env values ─────────────────────────────────
+
+
+def test_quote_env_value_escapes_dollar_signs() -> None:
+    """Dollar signs must be escaped to prevent Docker Compose variable expansion."""
+    from cli.deploy_production import _quote_env_value
+
+    assert _quote_env_value("my$ecret") == '"my\\$ecret"'
+
+
+def test_quote_env_value_escapes_backslash_dollar_combination() -> None:
+    from cli.deploy_production import _quote_env_value
+
+    assert _quote_env_value("a\\$b") == '"a\\\\\\$b"'
+
+
+def test_build_env_content_escapes_dollar_in_password() -> None:
+    config = DeployConfig(
+        secret_key="x" * 64,
+        admin_username="admin",
+        admin_password="pass$word",
+        trusted_hosts=["example.com"],
+        trusted_proxy_ips=[],
+        host_port=8000,
+        host_bind_ip=PUBLIC_BIND_IP,
+        caddy_config=None,
+        caddy_public=False,
+        expose_docs=False,
+    )
+
+    content = build_env_content(config)
+    assert 'ADMIN_PASSWORD="pass\\$word"' in content
+
+
+# ── Issue 3: logs lifecycle command ──────────────────────────────────
+
+
+def test_build_lifecycle_commands_includes_logs() -> None:
+    commands = build_lifecycle_commands(
+        deployment_mode=DEPLOY_MODE_LOCAL,
+        use_caddy=True,
+        caddy_public=False,
+    )
+    assert "logs" in commands
+    assert "logs -f" in commands["logs"]
+
+
+# ── Issue 4: Caddy domain rejects IP addresses ──────────────────────
+
+
+def test_validate_config_rejects_ipv4_as_caddy_domain() -> None:
+    from cli.deploy_production import _validate_config
+
+    config = _make_config(
+        caddy_config=CaddyConfig(domain="127.0.0.1", email=None),
+        host_bind_ip=LOCALHOST_BIND_IP,
+    )
+
+    with pytest.raises(DeployError, match="valid public hostname"):
+        _validate_config(config)
+
+
+def test_validate_config_rejects_public_ipv4_as_caddy_domain() -> None:
+    from cli.deploy_production import _validate_config
+
+    config = _make_config(
+        caddy_config=CaddyConfig(domain="93.184.216.34", email=None),
+        host_bind_ip=LOCALHOST_BIND_IP,
+    )
+
+    with pytest.raises(DeployError, match="valid public hostname"):
+        _validate_config(config)

@@ -49,6 +49,9 @@ RUN uv pip install --system /tmp/dist/agblogger_server-*.whl \
 # Copy built frontend
 COPY --from=frontend-build /app/frontend/dist ./frontend/dist
 
+# Copy version file for runtime version detection
+COPY VERSION ./
+
 # Create data directories
 RUN mkdir -p /data/content /data/db && chown -R agblogger:agblogger /data
 

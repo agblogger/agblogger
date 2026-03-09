@@ -114,8 +114,13 @@ def _list_to_env_json(values: list[str]) -> str:
 
 
 def _quote_env_value(value: str) -> str:
-    """Quote scalar env values so special characters stay intact."""
-    return json.dumps(value)
+    """Quote scalar env values so special characters stay intact.
+
+    Uses json.dumps for baseline escaping (backslashes, quotes, control chars),
+    then escapes ``$`` as ``\\$`` so Docker Compose's godotenv parser does not
+    interpret dollar signs as variable references.
+    """
+    return json.dumps(value).replace("$", "\\$")
 
 
 def _run_command(
@@ -399,6 +404,7 @@ def build_lifecycle_commands(
         "start": f"{base} up -d",
         "stop": f"{base} down",
         "status": f"{base} ps",
+        "logs": f"{base} logs -f",
     }
     if deployment_mode == DEPLOY_MODE_REGISTRY:
         commands["pull"] = f"{base} pull"
@@ -433,7 +439,10 @@ def _validate_config(config: DeployConfig) -> None:
     if config.host_bind_ip not in {LOCALHOST_BIND_IP, PUBLIC_BIND_IP}:
         raise DeployError(f"HOST_BIND_IP must be either {LOCALHOST_BIND_IP} or {PUBLIC_BIND_IP}")
     if config.caddy_config is not None:
-        if "." not in config.caddy_config.domain or " " in config.caddy_config.domain:
+        domain = config.caddy_config.domain
+        parts = domain.split(".")
+        is_ipv4 = len(parts) == 4 and all(p.isdigit() for p in parts)
+        if "." not in domain or " " in domain or is_ipv4:
             raise DeployError("Caddy domain must be a valid public hostname")
         if config.caddy_config.email and "@" not in config.caddy_config.email:
             raise DeployError("Caddy contact email must contain '@'")
@@ -840,6 +849,7 @@ def dry_run(config: DeployConfig) -> None:
     print(f"  Start:  {commands['start']}")
     print(f"  Stop:   {commands['stop']}")
     print(f"  Status: {commands['status']}")
+    print(f"  Logs:   {commands['logs']}")
 
 
 # ── Interactive prompts ──────────────────────────────────────────────
@@ -973,8 +983,8 @@ def collect_config() -> DeployConfig:
         host_bind_ip = (
             PUBLIC_BIND_IP
             if _prompt_yes_no(
-                "Expose AgBlogger directly on the Internet (without Caddy)?",
-                default=True,
+                "Expose AgBlogger directly on the Internet (without Caddy, no TLS)?",
+                default=False,
             )
             else LOCALHOST_BIND_IP
         )
@@ -1179,6 +1189,9 @@ def main() -> None:
     project_dir = args.project_dir.resolve()
 
     try:
+        if not args.dry_run and shutil.which("docker") is None:
+            raise DeployError("Docker is not installed or not available on PATH")
+
         config = config_from_args(args) if args.non_interactive else collect_config()
 
         if args.dry_run:
@@ -1210,6 +1223,7 @@ def main() -> None:
     print(f"  Start:  {result.commands['start']}")
     print(f"  Stop:   {result.commands['stop']}")
     print(f"  Status: {result.commands['status']}")
+    print(f"  Logs:   {result.commands['logs']}")
     if config.deployment_mode == DEPLOY_MODE_LOCAL:
         if config.caddy_config is not None:
             print(f"Open the app at: https://{config.caddy_config.domain}/login")
