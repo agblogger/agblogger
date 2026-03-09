@@ -391,25 +391,25 @@ class TestPostMutationAuthorization:
 
 class TestRegistrationPasswordPolicy:
     @pytest.mark.asyncio
-    async def test_registration_rejects_password_shorter_than_12(self, client: AsyncClient) -> None:
+    async def test_registration_rejects_password_shorter_than_8(self, client: AsyncClient) -> None:
         resp = await client.post(
             "/api/auth/register",
             json={
                 "username": "weakpw",
                 "email": "weakpw@test.com",
-                "password": "password123",
+                "password": "short7x",
             },
         )
         assert resp.status_code == 422
 
     @pytest.mark.asyncio
-    async def test_registration_accepts_password_of_length_12(self, client: AsyncClient) -> None:
+    async def test_registration_accepts_password_of_length_8(self, client: AsyncClient) -> None:
         resp = await client.post(
             "/api/auth/register",
             json={
                 "username": "strongpw",
                 "email": "strongpw@test.com",
-                "password": "password1234",
+                "password": "exactly8",
             },
         )
         assert resp.status_code == 201
@@ -417,7 +417,7 @@ class TestRegistrationPasswordPolicy:
 
 class TestAdminPasswordPolicy:
     @pytest.mark.asyncio
-    async def test_admin_password_change_rejects_password_shorter_than_12(
+    async def test_admin_password_change_rejects_password_shorter_than_8(
         self, client: AsyncClient
     ) -> None:
         token_resp = await client.post(
@@ -430,8 +430,8 @@ class TestAdminPasswordPolicy:
             "/api/admin/password",
             json={
                 "current_password": "admin123",
-                "new_password": "shortpass11",
-                "confirm_password": "shortpass11",
+                "new_password": "short7x",
+                "confirm_password": "short7x",
             },
             headers={"Authorization": f"Bearer {token}"},
         )

@@ -31,6 +31,7 @@ from cli.deploy_production import (
     DeployError,
     _build_remote_readme_content,
     _is_valid_caddy_domain,
+    _read_version,
     backup_existing_configs,
     backup_file,
     build_caddy_public_compose_override_content,
@@ -228,6 +229,14 @@ def test_build_caddyfile_content_includes_request_body_limits() -> None:
     assert "@postAssets path_regexp post_assets ^/api/posts/.+/assets$" in content
     assert "@syncCommit path /api/sync/commit" in content
     assert "max_size 100MB" in content
+
+
+def test_build_caddyfile_content_enables_hsts_for_https_deployments() -> None:
+    caddy = CaddyConfig(domain="blog.example.com", email=None)
+    content = build_caddyfile_content(caddy)
+
+    assert "Strict-Transport-Security" in content
+    assert 'max-age=31536000' in content
 
 
 # ── build_direct_compose_content ─────────────────────────────────────
@@ -1680,3 +1689,136 @@ class TestCommandTimeout:
         monkeypatch.setattr("cli.deploy_production.subprocess.run", fake_run)
         _run_command(["echo", "hello"], tmp_path, timeout=42)
         assert captured_kwargs["timeout"] == 42
+
+
+class TestWaitForHealthyWithCaddy:
+    """Health poll should also check Caddy container status when Caddy is enabled."""
+
+    def test_waits_for_caddy_when_caddy_enabled(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        from cli.deploy_production import _wait_for_healthy
+
+        call_count = 0
+
+        def fake_run(command: list[str], **_kwargs: object) -> SimpleNamespace:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                # Caddy hasn't started yet (depends_on waits for agblogger healthy)
+                return SimpleNamespace(
+                    returncode=0,
+                    stdout="agblogger: Up 10 seconds (healthy)\n",
+                )
+            return SimpleNamespace(
+                returncode=0,
+                stdout="agblogger: Up 15 seconds (healthy)\ncaddy: Up 8 seconds\n",
+            )
+
+        monkeypatch.setattr("cli.deploy_production.subprocess.run", fake_run)
+        monkeypatch.setattr("cli.deploy_production.time.sleep", lambda _s: None)
+
+        config = _make_config(
+            caddy_config=CaddyConfig(domain="blog.example.com", email=None),
+            host_bind_ip=LOCALHOST_BIND_IP,
+        )
+        _wait_for_healthy(config, tmp_path, timeout=30, interval=1)
+
+        captured = capsys.readouterr()
+        assert "All services healthy" in captured.out
+        assert call_count == 2
+
+    def test_times_out_when_caddy_fails(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        from cli.deploy_production import _wait_for_healthy
+
+        call_counter = 0
+
+        def fake_monotonic() -> float:
+            nonlocal call_counter
+            call_counter += 1
+            return float(call_counter * 100)
+
+        def fake_run(command: list[str], **_kwargs: object) -> SimpleNamespace:
+            return SimpleNamespace(
+                returncode=0,
+                stdout="agblogger: Up 10 seconds (healthy)\n",
+            )
+
+        monkeypatch.setattr("cli.deploy_production.subprocess.run", fake_run)
+        monkeypatch.setattr("cli.deploy_production.time.sleep", lambda _s: None)
+        monkeypatch.setattr("cli.deploy_production.time.monotonic", fake_monotonic)
+
+        config = _make_config(
+            caddy_config=CaddyConfig(domain="blog.example.com", email=None),
+            host_bind_ip=LOCALHOST_BIND_IP,
+        )
+        _wait_for_healthy(config, tmp_path, timeout=10, interval=1)
+
+        captured = capsys.readouterr()
+        assert "All services healthy" not in captured.out
+        assert "timed out" in captured.err
+
+    def test_skips_caddy_check_when_caddy_disabled(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        from cli.deploy_production import _wait_for_healthy
+
+        def fake_run(command: list[str], **_kwargs: object) -> SimpleNamespace:
+            return SimpleNamespace(
+                returncode=0,
+                stdout="agblogger: Up 10 seconds (healthy)\n",
+            )
+
+        monkeypatch.setattr("cli.deploy_production.subprocess.run", fake_run)
+        monkeypatch.setattr("cli.deploy_production.time.sleep", lambda _s: None)
+
+        config = _make_config()
+        _wait_for_healthy(config, tmp_path, timeout=30, interval=1)
+
+        captured = capsys.readouterr()
+        assert "All services healthy" in captured.out
+
+
+class TestDryRunLocalCaddyNonPublic:
+    """Dry run should note existing docker-compose.yml for local+caddy (non-public) mode."""
+
+    def test_dry_run_local_caddy_non_public_notes_existing_compose(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        config = _make_config(
+            caddy_config=CaddyConfig(domain="blog.example.com", email=None),
+            caddy_public=False,
+            host_bind_ip=LOCALHOST_BIND_IP,
+        )
+        dry_run(config)
+
+        captured = capsys.readouterr().out
+        assert "Using existing docker-compose.yml" in captured
+        assert "=== Caddyfile.production ===" in captured
+        assert f"=== {DEFAULT_CADDY_PUBLIC_COMPOSE_FILE} ===" not in captured
+
+    def test_dry_run_local_caddy_public_does_not_note_existing_compose(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        config = _make_config(
+            caddy_config=CaddyConfig(domain="blog.example.com", email=None),
+            caddy_public=True,
+            host_bind_ip=LOCALHOST_BIND_IP,
+        )
+        dry_run(config)
+
+        captured = capsys.readouterr().out
+        assert "Using existing docker-compose.yml" in captured
+        assert "=== Caddyfile.production ===" in captured
+        assert f"=== {DEFAULT_CADDY_PUBLIC_COMPOSE_FILE} ===" in captured
+
+
+class TestReadVersion:
+    """--version flag reads from VERSION file."""
+
+    def test_reads_version_from_file(self) -> None:
+        version = _read_version()
+        assert version != ""
+        assert version != "unknown"

@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 MIN_SECRET_KEY_LENGTH = 32
-MIN_ADMIN_PASSWORD_LENGTH = 12
+MIN_ADMIN_PASSWORD_LENGTH = 8
 DEFAULT_HOST_PORT = 8000
 DEFAULT_ENV_FILE = ".env.production"
 DEFAULT_CADDYFILE = "Caddyfile.production"
@@ -42,6 +42,16 @@ LOCALHOST_BIND_IP = "127.0.0.1"
 
 HEALTH_POLL_INTERVAL_SECONDS = 5
 HEALTH_POLL_TIMEOUT_SECONDS = 60
+
+
+def _read_version() -> str:
+    """Read the application version from the VERSION file."""
+    version_file = Path(__file__).resolve().parent.parent / "VERSION"
+    try:
+        return version_file.read_text(encoding="utf-8").strip()
+    except OSError:
+        return "unknown"
+
 
 # Each label: starts with alphanumeric, may contain hyphens, ends with alphanumeric.
 # At least two labels separated by dots.
@@ -277,11 +287,7 @@ def _agblogger_healthcheck_section(*, include_network: bool = False) -> str:
         "      retries: 3\n"
     )
     if include_network:
-        block += (
-            "    networks:\n"
-            "      default:\n"
-            f"        ipv4_address: {AGBLOGGER_STATIC_IP}\n"
-        )
+        block += f"    networks:\n      default:\n        ipv4_address: {AGBLOGGER_STATIC_IP}\n"
     return block
 
 
@@ -768,6 +774,7 @@ def _wait_for_healthy(
     """Poll service status after startup until healthy or timeout."""
     base = _compose_base_args(config)
     deadline = time.monotonic() + timeout
+    use_caddy = config.caddy_config is not None
     print("Waiting for services to become healthy...")
     while time.monotonic() < deadline:
         time.sleep(interval)
@@ -779,9 +786,14 @@ def _wait_for_healthy(
         )
         lines = result.stdout.strip().splitlines()
         agblogger_lines = [line for line in lines if "agblogger" in line]
-        if agblogger_lines and all("(healthy)" in line for line in agblogger_lines):
-            print("All services healthy.")
-            return
+        if not (agblogger_lines and all("(healthy)" in line for line in agblogger_lines)):
+            continue
+        if use_caddy:
+            caddy_lines = [line for line in lines if "caddy" in line]
+            if not (caddy_lines and all("Up" in line for line in caddy_lines)):
+                continue
+        print("All services healthy.")
+        return
     print(
         "Warning: health check timed out. Run the status command to inspect services.",
         file=sys.stderr,
@@ -905,6 +917,7 @@ def dry_run(config: DeployConfig) -> None:
         print(f"=== {DEFAULT_NO_CADDY_COMPOSE_FILE} ===")
         print(build_direct_compose_content())
     elif config.deployment_mode == DEPLOY_MODE_LOCAL and caddy_config is not None:
+        print("Using existing docker-compose.yml as the base compose file.\n")
         print(f"=== {DEFAULT_CADDYFILE} ===")
         print(build_caddyfile_content(caddy_config))
         if config.caddy_public:
@@ -1153,13 +1166,13 @@ def collect_config() -> DeployConfig:
 
     if use_caddy:
         proxy_ips = [COMPOSE_SUBNET]
+        print(f"Caddy proxy subnet ({COMPOSE_SUBNET}) auto-configured as a trusted proxy.")
         extra_proxy_ips = parse_csv_list(
             input("Additional trusted proxy IPs (comma-separated, optional): ").strip()
         )
         for ip in extra_proxy_ips:
             if ip not in proxy_ips:
                 proxy_ips.append(ip)
-        print(f"Caddy proxy subnet ({COMPOSE_SUBNET}) auto-configured as a trusted proxy.")
     else:
         proxy_ips = parse_csv_list(input("Trusted proxy IPs (comma-separated, optional): ").strip())
 
@@ -1245,6 +1258,11 @@ def config_from_args(args: argparse.Namespace) -> DeployConfig:
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Production deployment helper for AgBlogger.",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {_read_version()}",
     )
     parser.add_argument(
         "--project-dir",

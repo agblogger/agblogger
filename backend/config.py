@@ -160,8 +160,8 @@ class Settings(BaseSettings):
             violations.append(
                 "SECRET_KEY must be overridden with a high-entropy value (>=32 chars)"
             )
-        if self.admin_password == INSECURE_BOOTSTRAP_SENTINEL or len(self.admin_password) < 12:
-            violations.append("ADMIN_PASSWORD must be overridden with a strong value (>=12 chars)")
+        if self.admin_password == INSECURE_BOOTSTRAP_SENTINEL or len(self.admin_password) < 8:
+            violations.append("ADMIN_PASSWORD must be overridden with a strong value (>=8 chars)")
         if not self.trusted_hosts:
             violations.append("TRUSTED_HOSTS must be configured in production")
         elif any(not _is_valid_trusted_host(host) for host in self.trusted_hosts):

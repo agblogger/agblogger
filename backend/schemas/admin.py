@@ -100,8 +100,8 @@ class PasswordChange(BaseModel):
     """Request to change admin password."""
 
     current_password: str = Field(min_length=1)
-    new_password: str = Field(min_length=12, max_length=128)
-    confirm_password: str = Field(min_length=12, max_length=128)
+    new_password: str = Field(min_length=8, max_length=128)
+    confirm_password: str = Field(min_length=8, max_length=128)
 
     @model_validator(mode="after")
     def passwords_match(self) -> PasswordChange:

@@ -204,7 +204,7 @@ base-uri 'self'; form-action 'self'; frame-ancestors 'none'
 
 `Settings.validate_runtime_security()` in `backend/config.py` enforces:
 - `SECRET_KEY` not default and >= 32 characters
-- `ADMIN_PASSWORD` not default and >= 12 characters
+- `ADMIN_PASSWORD` not default and >= 8 characters
 - `TRUSTED_HOSTS` non-empty and not a catch-all wildcard
 - `BLUESKY_CLIENT_URL`, when set, is a canonical `https://` origin
 

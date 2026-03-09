@@ -92,7 +92,7 @@ Draft posts and their co-located assets are visible only to their author. Owners
 
 ### Password Rotation
 
-Admin password changes require a minimum length of 12 characters and revoke all stored refresh tokens and personal access tokens for that user. This ensures password rotation invalidates long-lived credentials instead of only changing the bcrypt hash.
+Admin password changes require a minimum length of 8 characters and revoke all stored refresh tokens and personal access tokens for that user. This ensures password rotation invalidates long-lived credentials instead of only changing the bcrypt hash.
 
 ## Content Security Policy (CSP)
 
@@ -232,7 +232,7 @@ The renderer catches `httpx.NetworkError` (covers `ConnectError`, `ReadError`, `
 `Settings.validate_runtime_security()` (`backend/config.py`) runs on startup (called from `backend/main.py:lifespan()`). In non-debug mode, it enforces:
 
 - `SECRET_KEY` must not be the dev sentinel and must be >= 32 characters
-- `ADMIN_PASSWORD` must not be the bootstrap sentinel and must be >= 12 characters
+- `ADMIN_PASSWORD` must not be the bootstrap sentinel and must be >= 8 characters
 - `TRUSTED_HOSTS` must be configured and must not use a catch-all wildcard (`*`); explicit hosts and narrow `*.example.com` patterns are allowed
 - `BLUESKY_CLIENT_URL`, when configured, must be a canonical `https://` origin without path, query, fragment, or userinfo
 

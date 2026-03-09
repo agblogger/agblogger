@@ -11,7 +11,7 @@
 - **Refresh tokens**: Long-lived (7 days), cryptographically random 48-byte strings. Only SHA-256 hashes are stored in DB. Refresh rotates tokens and revokes the old one.
 - **PATs (Personal Access Tokens)**: Long-lived random tokens (hashed in DB) for CLI/API automation via Bearer auth.
 - **Passwords**: bcrypt hashed.
-- **Password rotation**: Admin password changes require at least 12 characters and revoke all stored refresh tokens and personal access tokens for that user.
+- **Password rotation**: Admin password changes require at least 8 characters and revoke all stored refresh tokens and personal access tokens for that user.
 - **Logout**: `POST /api/auth/logout` revokes refresh token (if present) and clears auth cookies.
 - **Trusted proxy handling**: `X-Forwarded-For` is only trusted when the direct peer IP is in `TRUSTED_PROXY_IPS`; otherwise the socket peer IP is used for rate-limit keys.
 
