@@ -6,7 +6,7 @@ set -e
 # the non-root agblogger user from writing to them.
 if [ "$(id -u)" = "0" ]; then
     mkdir -p /data/content /data/db
-    chown agblogger:agblogger /data/content /data/db
+    chown -R agblogger:agblogger /data/content /data/db
     exec gosu agblogger "$@"
 fi
 

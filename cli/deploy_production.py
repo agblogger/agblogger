@@ -6,10 +6,12 @@ import argparse
 import getpass
 import json
 import os
+import re
 import secrets
 import shutil
 import subprocess
 import sys
+import time
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
@@ -36,6 +38,16 @@ COMPOSE_SUBNET = "172.30.0.0/24"
 # Constructed to avoid static-analysis tools flagging literal 0.0.0.0
 PUBLIC_BIND_IP = ".".join(("0", "0", "0", "0"))
 LOCALHOST_BIND_IP = "127.0.0.1"
+
+HEALTH_POLL_INTERVAL_SECONDS = 5
+HEALTH_POLL_TIMEOUT_SECONDS = 60
+
+# Each label: starts with alphanumeric, may contain hyphens, ends with alphanumeric.
+# At least two labels separated by dots.
+_DOMAIN_RE = re.compile(
+    r"^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?"
+    r"(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)+$"
+)
 
 GENERATED_CONFIG_FILES = [
     DEFAULT_ENV_FILE,
@@ -204,7 +216,10 @@ def build_caddyfile_content(config: CaddyConfig) -> str:
 
 
 def _is_valid_trusted_host(host: str) -> bool:
-    """Return True for explicit hosts and narrow subdomain wildcards."""
+    """Return True for explicit hosts and narrow subdomain wildcards.
+
+    NOTE: Duplicated in backend/config.py — update both if validation logic changes.
+    """
     candidate = host.strip()
     if not candidate or candidate == "*":
         return False
@@ -442,8 +457,8 @@ def _validate_config(config: DeployConfig) -> None:
         domain = config.caddy_config.domain
         parts = domain.split(".")
         is_ipv4 = len(parts) == 4 and all(p.isdigit() for p in parts)
-        if "." not in domain or " " in domain or is_ipv4:
-            raise DeployError("Caddy domain must be a valid public hostname")
+        if is_ipv4 or not _DOMAIN_RE.match(domain):
+            raise DeployError(f"Caddy domain must be a valid public hostname (got {domain!r})")
         if config.caddy_config.email and "@" not in config.caddy_config.email:
             raise DeployError("Caddy contact email must contain '@'")
     if config.caddy_public and config.caddy_config is None:
@@ -588,6 +603,7 @@ def _build_remote_readme_content(config: DeployConfig, commands: dict[str, str])
             "Management commands:",
             f"- Stop: {commands['stop']}",
             f"- Status: {commands['status']}",
+            f"- Logs: {commands['logs']}",
         ]
     )
     return "\n".join(lines) + "\n"
@@ -641,11 +657,13 @@ def write_bundle_files(config: DeployConfig, bundle_dir: Path) -> None:
 
 def build_image(project_dir: Path, image_tag: str) -> None:
     """Build a Docker image with the requested tag."""
+    print(f"Building Docker image ({image_tag})...")
     _run_docker(project_dir, ["build", "--tag", image_tag, "."])
 
 
 def scan_image(project_dir: Path, image_tag: str) -> None:
     """Scan a Docker image with Trivy."""
+    print(f"Scanning image with Trivy ({image_tag})...")
     _run_trivy(
         project_dir,
         [
@@ -669,11 +687,13 @@ def build_and_scan(project_dir: Path, image_tag: str) -> None:
 
 def push_image(project_dir: Path, image_tag: str) -> None:
     """Push a Docker image to a registry."""
+    print(f"Pushing image to registry ({image_tag})...")
     _run_docker(project_dir, ["push", image_tag])
 
 
 def save_image_tarball(project_dir: Path, image_tag: str, tarball_path: Path) -> None:
     """Export a Docker image to a tarball."""
+    print(f"Saving image tarball ({tarball_path.name})...")
     tarball_path.parent.mkdir(parents=True, exist_ok=True)
     _run_docker(project_dir, ["save", "--output", str(tarball_path), image_tag])
 
@@ -703,9 +723,39 @@ def _compose_build_command(config: DeployConfig) -> list[str]:
     return [*_compose_base_args(config), "build"]
 
 
+def _wait_for_healthy(
+    config: DeployConfig,
+    project_dir: Path,
+    timeout: int = HEALTH_POLL_TIMEOUT_SECONDS,
+    interval: int = HEALTH_POLL_INTERVAL_SECONDS,
+) -> None:
+    """Poll service status after startup until healthy or timeout."""
+    base = _compose_base_args(config)
+    deadline = time.monotonic() + timeout
+    print("Waiting for services to become healthy...")
+    while time.monotonic() < deadline:
+        time.sleep(interval)
+        result = subprocess.run(
+            ["docker", *base, "ps", "--format", "{{.Service}}: {{.Status}}"],
+            cwd=project_dir,
+            capture_output=True,
+            text=True,
+        )
+        lines = result.stdout.strip().splitlines()
+        if lines and all("(healthy)" in line for line in lines if "agblogger" in line):
+            print("All services healthy.")
+            return
+    print(
+        "Warning: health check timed out. Run the status command to inspect services.",
+        file=sys.stderr,
+    )
+
+
 def _run_compose_up(config: DeployConfig, project_dir: Path, *, build: bool = True) -> None:
     """Start containers via docker compose with the correct file arguments."""
+    print("Starting containers...")
     _run_docker(project_dir, _compose_up_command(config, build=build))
+    _wait_for_healthy(config, project_dir)
 
 
 # ── Deploy orchestration ────────────────────────────────────────────
@@ -735,6 +785,7 @@ def deploy(config: DeployConfig, project_dir: Path) -> DeployResult:
         write_config_files(config, project_dir)
 
         if trivy_available:
+            print(f"Building Docker image ({LOCAL_IMAGE_TAG})...")
             _run_docker(project_dir, _compose_build_command(config))
             scan_image(project_dir, LOCAL_IMAGE_TAG)
             _run_compose_up(config, project_dir, build=False)
@@ -852,6 +903,30 @@ def dry_run(config: DeployConfig) -> None:
     print(f"  Logs:   {commands['logs']}")
 
 
+# ── Config summary ───────────────────────────────────────────────────
+
+
+def print_config_summary(config: DeployConfig) -> None:
+    """Print a human-readable summary of the deployment configuration."""
+    print("\n=== Deployment configuration ===")
+    print(f"  Mode:            {config.deployment_mode}")
+    print(f"  Admin user:      {config.admin_username}")
+    print(f"  Trusted hosts:   {', '.join(config.trusted_hosts)}")
+    if config.caddy_config is not None:
+        print(f"  Caddy domain:    {config.caddy_config.domain}")
+        print(f"  Caddy email:     {config.caddy_config.email or '(none)'}")
+        print(f"  Caddy public:    {'yes' if config.caddy_public else 'no'}")
+    else:
+        print("  Caddy:           disabled")
+        print(f"  Bind address:    {config.host_bind_ip}:{config.host_port}")
+    if config.trusted_proxy_ips:
+        print(f"  Trusted proxies: {', '.join(config.trusted_proxy_ips)}")
+    if config.image_ref:
+        print(f"  Image ref:       {config.image_ref}")
+    print(f"  Expose API docs: {'yes' if config.expose_docs else 'no'}")
+    print()
+
+
 # ── Interactive prompts ──────────────────────────────────────────────
 
 
@@ -946,7 +1021,9 @@ def collect_config() -> DeployConfig:
     image_ref: str | None = None
     tarball_filename = DEFAULT_IMAGE_TARBALL
     if deployment_mode in {DEPLOY_MODE_REGISTRY, DEPLOY_MODE_TARBALL}:
-        image_ref = _prompt_non_empty("Container image reference")
+        image_ref = _prompt_non_empty(
+            "Container image reference (e.g., ghcr.io/yourname/agblogger:v1.0)"
+        )
         if deployment_mode == DEPLOY_MODE_TARBALL:
             tarball_filename = _prompt_non_empty(
                 "Tarball filename",
@@ -1197,6 +1274,12 @@ def main() -> None:
         if args.dry_run:
             dry_run(config)
             return
+
+        if not args.non_interactive:
+            print_config_summary(config)
+            if not _prompt_yes_no("Proceed with deployment?", default=True):
+                print("Deployment cancelled.")
+                return
 
         check_prerequisites(project_dir)
         result = deploy(config=config, project_dir=project_dir)

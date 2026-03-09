@@ -17,7 +17,10 @@ _SQLITE_RELATIVE_URL_PREFIXES = ("sqlite+aiosqlite:///", "sqlite:///")
 
 
 def _is_valid_trusted_host(host: str) -> bool:
-    """Return True for explicit hosts and narrow subdomain wildcards."""
+    """Return True for explicit hosts and narrow subdomain wildcards.
+
+    NOTE: Duplicated in cli/deploy_production.py — update both if validation logic changes.
+    """
     candidate = host.strip()
     if not candidate or candidate == "*":
         return False

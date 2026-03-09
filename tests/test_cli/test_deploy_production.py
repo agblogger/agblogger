@@ -42,6 +42,7 @@ from cli.deploy_production import (
     deploy,
     dry_run,
     parse_csv_list,
+    print_config_summary,
     write_config_files,
 )
 
@@ -78,7 +79,11 @@ def _make_config(
 
 
 def _stub_subprocess(monkeypatch: pytest.MonkeyPatch) -> list[tuple[list[str], Path, bool]]:
-    """Stub subprocess.run and return a list that captures all calls."""
+    """Stub subprocess.run and return a list that captures all calls.
+
+    Also stubs ``_wait_for_healthy`` to a no-op so deploy tests do not
+    need to account for health-poll subprocess calls.
+    """
     commands: list[tuple[list[str], Path, bool]] = []
 
     def fake_run(command: list[str], cwd: Path, check: bool) -> SimpleNamespace:
@@ -86,6 +91,7 @@ def _stub_subprocess(monkeypatch: pytest.MonkeyPatch) -> list[tuple[list[str], P
         return SimpleNamespace(returncode=0)
 
     monkeypatch.setattr("cli.deploy_production.subprocess.run", fake_run)
+    monkeypatch.setattr("cli.deploy_production._wait_for_healthy", lambda *_a, **_kw: None)
     return commands
 
 
@@ -1331,3 +1337,172 @@ def test_validate_config_rejects_public_ipv4_as_caddy_domain() -> None:
 
     with pytest.raises(DeployError, match="valid public hostname"):
         _validate_config(config)
+
+
+# ── Tighter domain validation ────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "domain",
+    [
+        "foo..bar",
+        ".leading-dot.com",
+        "trailing-dot.com.",
+        "-hyphen-start.com",
+        "hyphen-end-.com",
+        "single",
+        "has space.com",
+        "",
+    ],
+)
+def test_validate_config_rejects_invalid_caddy_domains(domain: str) -> None:
+    from cli.deploy_production import _validate_config
+
+    config = _make_config(
+        caddy_config=CaddyConfig(domain=domain, email=None),
+        host_bind_ip=LOCALHOST_BIND_IP,
+    )
+
+    with pytest.raises(DeployError, match="valid public hostname"):
+        _validate_config(config)
+
+
+@pytest.mark.parametrize(
+    "domain",
+    [
+        "blog.example.com",
+        "my-blog.example.com",
+        "a.b.c.d.example.com",
+        "example.co.uk",
+    ],
+)
+def test_validate_config_accepts_valid_caddy_domains(domain: str) -> None:
+    from cli.deploy_production import _validate_config
+
+    config = _make_config(
+        caddy_config=CaddyConfig(domain=domain, email=None),
+        host_bind_ip=LOCALHOST_BIND_IP,
+    )
+    _validate_config(config)
+
+
+# ── DEPLOY-REMOTE.md includes logs command ───────────────────────────
+
+
+def test_remote_readme_includes_logs_command() -> None:
+    from cli.deploy_production import _build_remote_readme_content
+
+    config = _make_config(
+        caddy_config=CaddyConfig(domain="blog.example.com", email=None),
+        host_bind_ip=LOCALHOST_BIND_IP,
+        deployment_mode=DEPLOY_MODE_REGISTRY,
+        image_ref="ghcr.io/example/agblogger:latest",
+    )
+    commands = build_lifecycle_commands(
+        deployment_mode=DEPLOY_MODE_REGISTRY,
+        use_caddy=True,
+        caddy_public=False,
+    )
+
+    content = _build_remote_readme_content(config, commands)
+
+    assert "Logs:" in content
+    assert "logs -f" in content
+
+
+# ── Health poll ──────────────────────────────────────────────────────
+
+
+def test_wait_for_healthy_returns_when_service_healthy(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from cli.deploy_production import _wait_for_healthy
+
+    call_count = 0
+
+    def fake_run(command: list[str], **_kwargs: object) -> SimpleNamespace:
+        nonlocal call_count
+        call_count += 1
+        return SimpleNamespace(returncode=0, stdout="agblogger: Up 10 seconds (healthy)\n")
+
+    monkeypatch.setattr("cli.deploy_production.subprocess.run", fake_run)
+    monkeypatch.setattr("cli.deploy_production.time.sleep", lambda _s: None)
+
+    config = _make_config()
+    _wait_for_healthy(config, tmp_path, timeout=30, interval=1)
+
+    assert call_count >= 1
+
+
+def test_wait_for_healthy_warns_on_timeout(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from cli.deploy_production import _wait_for_healthy
+
+    # Simulate time passing quickly so the poll times out
+    call_counter = 0
+
+    def fake_monotonic() -> float:
+        nonlocal call_counter
+        call_counter += 1
+        return float(call_counter * 100)
+
+    def fake_run(command: list[str], **_kwargs: object) -> SimpleNamespace:
+        return SimpleNamespace(returncode=0, stdout="agblogger: Up 3 seconds (starting)\n")
+
+    monkeypatch.setattr("cli.deploy_production.subprocess.run", fake_run)
+    monkeypatch.setattr("cli.deploy_production.time.sleep", lambda _s: None)
+    monkeypatch.setattr("cli.deploy_production.time.monotonic", fake_monotonic)
+
+    config = _make_config()
+    _wait_for_healthy(config, tmp_path, timeout=10, interval=1)
+
+    captured = capsys.readouterr()
+    assert "timed out" in captured.err
+
+
+# ── Config summary ───────────────────────────────────────────────────
+
+
+def test_print_config_summary_shows_key_fields(capsys: pytest.CaptureFixture[str]) -> None:
+    config = _make_config(
+        caddy_config=CaddyConfig(domain="blog.example.com", email="ops@example.com"),
+        caddy_public=True,
+        host_bind_ip=LOCALHOST_BIND_IP,
+    )
+
+    print_config_summary(config)
+
+    captured = capsys.readouterr().out
+    assert "local" in captured
+    assert "blog.example.com" in captured
+    assert "ops@example.com" in captured
+    assert "admin" in captured
+    assert "yes" in captured
+
+
+def test_print_config_summary_shows_no_caddy(capsys: pytest.CaptureFixture[str]) -> None:
+    config = _make_config()
+
+    print_config_summary(config)
+
+    captured = capsys.readouterr().out
+    assert "disabled" in captured
+    assert f"{PUBLIC_BIND_IP}:8000" in captured
+
+
+# ── Deploy progress messages ─────────────────────────────────────────
+
+
+def test_deploy_prints_progress_messages(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    (tmp_path / "docker-compose.yml").write_text("services: {}\n", encoding="utf-8")
+    _stub_subprocess(monkeypatch)
+    _stub_no_trivy(monkeypatch)
+
+    config = _make_config()
+    deploy(config=config, project_dir=tmp_path)
+
+    captured = capsys.readouterr().out
+    assert "Starting containers" in captured
