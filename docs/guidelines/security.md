@@ -139,6 +139,10 @@ The content file endpoint (`backend/api/content.py:_validate_path()`) uses four 
 
 Add regression tests for traversal attempts: `../etc/passwd`, `posts/../../etc/passwd`, symlink escapes.
 
+### Sync path boundaries
+
+Sync endpoints must stay narrower than the raw content root. Preserve the managed sync surface in `backend/services/sync_service.py` and `backend/api/sync.py`: `index.toml`, `labels.toml`, top-level `.md` pages, and all non-hidden files recursively under `posts/`. Hidden files and private application state must remain unreachable through sync APIs.
+
 ### Pydantic validation
 
 All API request bodies use Pydantic schemas. When adding new endpoints:
@@ -196,7 +200,8 @@ base-uri 'self'; form-action 'self'; frame-ancestors 'none'
 `Settings.validate_runtime_security()` in `backend/config.py` enforces:
 - `SECRET_KEY` not default and >= 32 characters
 - `ADMIN_PASSWORD` not default and >= 12 characters
-- `TRUSTED_HOSTS` non-empty
+- `TRUSTED_HOSTS` non-empty and not a catch-all wildcard
+- `BLUESKY_CLIENT_URL`, when set, is a canonical `https://` origin
 
 Do not bypass these outside explicit debug/test scenarios. Do not weaken the thresholds.
 

@@ -1585,7 +1585,7 @@ class TestSyncSecurity:
             ],
             headers={"Authorization": f"Bearer {token}"},
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 403
 
     @pytest.mark.asyncio
     async def test_sync_commit_requires_auth(self, client: AsyncClient) -> None:
@@ -1611,7 +1611,7 @@ class TestSyncSecurity:
             data={"metadata": metadata},
             headers={"Authorization": f"Bearer {token}"},
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 403
 
 
 class TestAdmin:

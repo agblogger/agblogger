@@ -42,7 +42,7 @@ The deploy helper supports three deployment modes:
 In all modes the helper:
 
 1. Collects configuration interactively (secret key, admin credentials, deployment mode, Caddy/HTTPS setup, trusted hosts, API docs exposure).
-2. Validates all inputs (key length, password strength, domain format, port range).
+2. Validates all inputs (key length, password strength, trusted hosts without catch-all wildcards, domain format, port range).
 3. Backs up any existing generated config files (`.env.production.bak`, etc.) before overwriting.
 4. Writes `.env.production` (chmod 600), `Caddyfile.production`, and compose files as needed.
 5. Builds the Docker image and scans it with Trivy (if installed) before local deploy, registry push, or tarball export.
@@ -90,6 +90,8 @@ The generated `.env.production` includes locked-down production defaults:
 
 - `DEBUG=false`, `EXPOSE_DOCS` (configurable), `AUTH_ENFORCE_LOGIN_ORIGIN=true`
 - Auth hardening: `AUTH_SELF_REGISTRATION=false`, `AUTH_INVITES_ENABLED=true`, `AUTH_LOGIN_MAX_FAILURES=5`, `AUTH_RATE_LIMIT_WINDOW_SECONDS=300`
+
+If Bluesky cross-posting is enabled, set `BLUESKY_CLIENT_URL` to the public `https://` origin of the deployed app. Production startup rejects non-HTTPS values and URLs with paths, query strings, fragments, or userinfo.
 
 ### DNS prerequisite
 

@@ -10,6 +10,7 @@ from backend.services.sync_service import (
     ChangeType,
     FileEntry,
     compute_sync_plan,
+    is_sync_managed_path,
     scan_content_files,
 )
 
@@ -156,6 +157,10 @@ class TestComputeSyncPlan:
 
 
 class TestScanContentFiles:
+    def test_allows_nested_assets_inside_post_directories(self, tmp_path: Path) -> None:
+        assert is_sync_managed_path("posts/2026-02-02-hello-world/assets/photo.png")
+        assert is_sync_managed_path("posts/2026-02-02-hello-world/images/diagrams/arch.svg")
+
     def test_excludes_git_directory(self, tmp_path: Path) -> None:
         (tmp_path / "post.md").write_text("hello")
         git_dir = tmp_path / ".git"

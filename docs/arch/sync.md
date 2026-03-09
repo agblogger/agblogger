@@ -3,6 +3,17 @@
 Hash-based, three-way sync inspired by Unison. Both client and server maintain a **sync manifest** mapping `file_path → (SHA-256 hash, mtime, size)`.
 All `/api/sync/*` endpoints require an authenticated admin user.
 
+## Managed Sync Surface
+
+Sync does not expose or mutate every file under `content/`. The managed surface is intentionally limited to:
+
+- `index.toml`
+- `labels.toml`
+- Top-level `.md` pages such as `about.md`
+- All non-hidden files recursively under `posts/`, including co-located post assets and nested subfolders
+
+Hidden files are excluded everywhere, and private application state such as the AT Protocol OAuth keypair lives outside `content/` entirely.
+
 ## Sync Protocol
 
 ```

@@ -203,7 +203,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         from backend.crosspost.bluesky_oauth_state import OAuthStateStore
 
         try:
-            oauth_key_path = settings.content_dir / ".atproto-oauth-key.json"
+            oauth_key_path = settings.atproto_oauth_key_path()
             atproto_key, atproto_jwk = load_or_create_keypair(oauth_key_path)
             app.state.atproto_oauth_key = atproto_key
             app.state.atproto_oauth_jwk = atproto_jwk

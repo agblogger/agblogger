@@ -119,6 +119,38 @@ class TestSyncAuthorizationBoundary:
         )
         assert resp.status_code == 403
 
+    @pytest.mark.asyncio
+    async def test_admin_cannot_download_hidden_sync_secret_file(self, client: AsyncClient) -> None:
+        token = await _login(client, "admin", "admin123")
+
+        resp = await client.get(
+            "/api/sync/download/.atproto-oauth-key.json",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert resp.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_admin_cannot_overwrite_hidden_sync_secret_file(
+        self, client: AsyncClient
+    ) -> None:
+        token = await _login(client, "admin", "admin123")
+
+        resp = await client.post(
+            "/api/sync/commit",
+            data={"metadata": '{"deleted_files": [], "last_sync_commit": null}'},
+            files={
+                "files": (
+                    ".atproto-oauth-key.json",
+                    b'{"private_key_pem":"attacker","jwk":{"kid":"evil"}}',
+                    "application/json",
+                )
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert resp.status_code == 403
+
 
 class TestRenderedHtmlSanitization:
     @pytest.mark.asyncio

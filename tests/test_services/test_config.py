@@ -44,3 +44,17 @@ class TestCrosspostSettings:
         settings = Settings(secret_key="x" * 32, content_dir=tmp_path)
         assert settings.facebook_app_id == ""
         assert settings.facebook_app_secret == ""
+
+    def test_atproto_oauth_key_path_uses_private_dir_outside_content(self, tmp_path: Path) -> None:
+        content_dir = tmp_path / "content"
+        db_path = tmp_path / "db" / "agblogger.db"
+        settings = Settings(
+            secret_key="x" * 32,
+            content_dir=content_dir,
+            database_url=f"sqlite+aiosqlite:///{db_path}",
+        )
+
+        key_path = settings.atproto_oauth_key_path()
+
+        assert key_path == tmp_path / "db" / ".agblogger-secrets" / "atproto-oauth-key.json"
+        assert not key_path.is_relative_to(content_dir)

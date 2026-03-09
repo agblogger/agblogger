@@ -29,7 +29,7 @@ On startup, the lifespan handler:
 7. Ensures required scaffold entries in the content directory via `ensure_content_dir()`: creates `content/`, `content/posts/`, `content/index.toml`, and `content/labels.toml` when any of them are missing (without overwriting existing files).
 8. Initializes the `ContentManager`.
 9. Initializes the `GitService` (creates a git repo in the content directory if one doesn't exist).
-10. Loads or creates the AT Protocol OAuth ES256 keypair (`content/.atproto-oauth-key.json`) and initializes OAuth state stores for Bluesky, Mastodon, X, and Facebook on `app.state`.
+10. Loads or creates the AT Protocol OAuth ES256 keypair in a private state directory alongside the configured database (outside `content/`) and initializes OAuth state stores for Bluesky, Mastodon, X, and Facebook on `app.state`.
 11. Creates the admin user if it doesn't exist, then synchronizes `site.default_author` to that sole admin user's current display name (falling back to username) when the install has exactly one admin.
 12. Starts the pandoc server (`PandocServer`) and initializes the renderer. Pandoc is a
     required dependency — if startup fails, the server aborts with a critical log message.

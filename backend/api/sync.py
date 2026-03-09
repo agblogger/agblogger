@@ -28,6 +28,7 @@ from backend.services.sync_service import (
     FileEntry,
     compute_sync_plan,
     get_server_manifest,
+    is_sync_managed_path,
     merge_post_file,
     normalize_post_frontmatter,
     scan_content_files,
@@ -47,6 +48,8 @@ _MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10 MB
 def _resolve_safe_path(content_dir: Path, file_path: str) -> Path:
     """Resolve a file path within content_dir, raising 400 on traversal attempts."""
     target = file_path.lstrip("/")
+    if not is_sync_managed_path(target):
+        raise HTTPException(status_code=403, detail="Sync access to this path is not allowed")
     full_path = (content_dir / target).resolve()
     if not full_path.is_relative_to(content_dir.resolve()):
         raise HTTPException(status_code=400, detail="Invalid file path")

@@ -230,7 +230,8 @@ The renderer catches `httpx.NetworkError` (covers `ConnectError`, `ReadError`, `
 
 - `SECRET_KEY` must not be the dev sentinel and must be >= 32 characters
 - `ADMIN_PASSWORD` must not be the bootstrap sentinel and must be >= 12 characters
-- `TRUSTED_HOSTS` must be configured (non-empty)
+- `TRUSTED_HOSTS` must be configured and must not use a catch-all wildcard (`*`); explicit hosts and narrow `*.example.com` patterns are allowed
+- `BLUESKY_CLIENT_URL`, when configured, must be a canonical `https://` origin without path, query, fragment, or userinfo
 
 Violations crash the server immediately with a descriptive error.
 
@@ -270,6 +271,8 @@ The route handlers retain their existing per-file and per-request limits as a se
 ## Sync Integrity
 
 The bidirectional sync protocol (`backend/services/sync_service.py`) uses SHA-256 file hashing for change detection, making it immune to clock skew. Three-way comparison (client manifest, server manifest, server current state) detects conflicts including `CONFLICT` and `DELETE_MODIFY_CONFLICT`. Front matter merges use `git merge-file` for semantic three-way body merging. The content directory is backed by a git repository for full change history.
+
+Sync is intentionally limited to a managed content surface: `index.toml`, `labels.toml`, top-level `.md` pages, and all non-hidden files recursively under `posts/` (including co-located post assets and nested subfolders). Hidden files and private application state are excluded, and the AT Protocol OAuth keypair is stored outside `content/` so it cannot be reached through sync path handling.
 
 ## Static Analysis, Dependency Scanning, and DAST
 

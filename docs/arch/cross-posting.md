@@ -36,7 +36,7 @@ The flow:
 5. Bluesky redirects back to `GET /api/crosspost/bluesky/callback`
 6. Backend exchanges authorization code for DPoP-bound tokens, stores encrypted credentials in `SocialAccount`
 
-**Client identity**: An ES256 keypair is generated on first startup and stored at `{content_dir}/.atproto-oauth-key.json`. The public key is served in the client metadata document at `GET /api/crosspost/bluesky/client-metadata.json`. The `BLUESKY_CLIENT_URL` setting provides the public base URL used to construct the `client_id`.
+**Client identity**: An ES256 keypair is generated on first startup and stored in a private state directory alongside the configured database, outside `content/`. The public key is served in the client metadata document at `GET /api/crosspost/bluesky/client-metadata.json`. The `BLUESKY_CLIENT_URL` setting provides the public base URL used to construct the `client_id`, and production startup validation requires it to be a canonical `https://` origin when configured.
 
 **OAuth state**: Pending authorization flows are stored in an in-memory `OAuthStateStore` (`backend/crosspost/bluesky_oauth_state.py`) with a 10-minute TTL, keyed by the `state` parameter.
 

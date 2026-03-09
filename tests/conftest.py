@@ -228,7 +228,7 @@ async def create_test_client(settings: Settings) -> AsyncGenerator[AsyncClient]:
         else:
             from backend.crosspost.atproto_oauth import load_or_create_keypair
 
-            oauth_key_path = settings.content_dir / ".atproto-oauth-key.json"
+            oauth_key_path = settings.atproto_oauth_key_path()
             atproto_key, atproto_jwk = load_or_create_keypair(oauth_key_path)
         app.state.atproto_oauth_key = atproto_key
         app.state.atproto_oauth_jwk = atproto_jwk

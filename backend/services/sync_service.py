@@ -21,6 +21,9 @@ from backend.services.datetime_service import format_datetime, format_iso, now_u
 
 logger = logging.getLogger(__name__)
 
+_SYNC_ALLOWED_PREFIXES = ("posts/", "assets/")
+_SYNC_ALLOWED_TOP_LEVEL_FILES = frozenset({"index.toml", "labels.toml"})
+
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -72,6 +75,30 @@ class SyncPlan:
     no_change: list[str] = field(default_factory=list)
 
 
+def is_sync_managed_path(file_path: str) -> bool:
+    """Return True when the path belongs to the managed sync surface.
+
+    Sync is intentionally limited to canonical content files, not every file
+    stored under ``content/``. Hidden files such as OAuth key material are
+    excluded even though they may live under the same root.
+    """
+    normalized = file_path.strip().lstrip("/")
+    if not normalized:
+        return False
+
+    parts = [part for part in normalized.split("/") if part]
+    if not parts:
+        return False
+    if any(part in {".", ".."} or part.startswith(".") for part in parts):
+        return False
+
+    if normalized in _SYNC_ALLOWED_TOP_LEVEL_FILES:
+        return True
+    if len(parts) == 1 and normalized.endswith(".md"):
+        return True
+    return normalized.startswith(_SYNC_ALLOWED_PREFIXES)
+
+
 def hash_file(file_path: Path) -> str:
     """Compute SHA-256 hash of a file."""
     sha = hashlib.sha256()
@@ -91,6 +118,8 @@ def scan_content_files(content_dir: Path) -> dict[str, FileEntry]:
                 continue
             full = Path(root) / filename
             rel = str(full.relative_to(content_dir))
+            if not is_sync_managed_path(rel):
+                continue
             try:
                 stat = full.stat()
                 entries[rel] = FileEntry(

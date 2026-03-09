@@ -596,3 +596,34 @@ class TestStartupResilience:
             ctx = app.router.lifespan_context(app)
             with pytest.raises(RuntimeError, match="pandoc unavailable"):
                 await ctx.__aenter__()
+
+
+class TestRuntimeSecurityValidation:
+    def test_rejects_wildcard_trusted_hosts_in_production(self, tmp_path: Path) -> None:
+        settings = Settings(
+            secret_key="test-secret-key-min-32-characters-long",
+            admin_password="testpassword",
+            debug=False,
+            trusted_hosts=["*"],
+            frontend_dir=tmp_path / "no-frontend",
+        )
+
+        from backend.exceptions import InternalServerError
+
+        with pytest.raises(InternalServerError, match="TRUSTED_HOSTS"):
+            settings.validate_runtime_security()
+
+    def test_rejects_insecure_oauth_base_url_in_production(self, tmp_path: Path) -> None:
+        settings = Settings(
+            secret_key="test-secret-key-min-32-characters-long",
+            admin_password="testpassword",
+            debug=False,
+            trusted_hosts=["blog.example.com"],
+            bluesky_client_url="http://blog.example.com/app",
+            frontend_dir=tmp_path / "no-frontend",
+        )
+
+        from backend.exceptions import InternalServerError
+
+        with pytest.raises(InternalServerError, match="BLUESKY_CLIENT_URL"):
+            settings.validate_runtime_security()

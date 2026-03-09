@@ -189,7 +189,7 @@ class TestPathBoundaryProperties:
         try:
             resolved = _resolve_safe_path(content_dir, file_path)
         except HTTPException as exc:
-            assert exc.status_code == 400
+            assert exc.status_code in {400, 403}
         else:
             assert resolved.is_relative_to(content_dir.resolve())
 

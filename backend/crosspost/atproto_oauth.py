@@ -103,6 +103,8 @@ def load_or_create_keypair(
         jwk = cast("dict[str, str]", data["jwk"])
         return private_key, jwk
 
+    path.parent.mkdir(parents=True, exist_ok=True)
+
     if path.exists():
         try:
             return _load_existing()
