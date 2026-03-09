@@ -108,5 +108,7 @@ class TestTokenExpiredGlobalHandler:
         warning_messages = [
             record.message for record in caplog.records if record.levelno == logging.WARNING
         ]
-        assert any(message == "TokenExpiredError in GET /api/posts" for message in warning_messages)
+        assert any(
+            message == "Expired auth rejected for GET /api/posts" for message in warning_messages
+        )
         assert all("abc123secret" not in message for message in warning_messages)

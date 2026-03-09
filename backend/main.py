@@ -518,7 +518,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.exception_handler(TokenExpiredError)
     async def token_expired_handler(request: Request, exc: TokenExpiredError) -> JSONResponse:
-        logger.warning("TokenExpiredError in %s %s", request.method, request.url.path)
+        logger.warning("Expired auth rejected for %s %s", request.method, request.url.path)
         return JSONResponse(
             status_code=401,
             content={"detail": "Token expired"},
