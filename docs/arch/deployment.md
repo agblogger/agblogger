@@ -8,11 +8,15 @@ Multi-stage build:
 2. **Stage 2** (Python 3.14 slim builder): Builds a dedicated `agblogger-server` wheel from the `backend/` package only.
 3. **Stage 3** (Python 3.14 slim runtime): Installs Pandoc from GitHub releases (pinned version with `+server` support), copies uv from astral-sh image, installs the server wheel, copies `frontend/dist`, and runs as non-root `agblogger` user on port 8000. No CLI tools are shipped in the runtime image. The pandoc server runs as a child process of the application, started during app startup and stopped on shutdown.
 
-Volumes: `/data/content` (blog content) and `/data/db` (SQLite database).
+Volumes: `/data/content` (blog content) and `/data/db` (SQLite database). The containerized runtime uses an absolute SQLite URL rooted at `/data/db`, so the database file is created inside the mounted volume rather than under the application worktree.
 
 Health check: `curl -f http://localhost:8000/api/health`.
 
 `docker-compose.yml` is Caddy-first: AgBlogger is internal-only (`expose: 8000`), Caddy publishes `127.0.0.1:80:80` and `127.0.0.1:443:443`, and Caddy forwards to `agblogger:8000`.
+
+For local DAST, `docker-compose.caddy-local.yml` overrides the Caddy port mapping to `127.0.0.1:8080:80` and mounts `Caddyfile.local`, which serves both `localhost` and `host.docker.internal` over plain HTTP. The ZAP harness uses this local-only profile so scans exercise the packaged app behind Caddy without relying on production TLS or the Vite dev server.
+
+For manual deployment-style testing on a workstation, the same local Caddy-backed profile can be managed with `just start-caddy-local`, `just health-caddy-local`, and `just stop-caddy-local`. These commands preserve the existing Vite-based `just start`/`just stop`/`just health` workflow and provide a separate packaged-app path on `localhost`.
 
 For public Caddy deployment, the script generates `docker-compose.caddy-public.yml` that overrides Caddy ports to `80:80` and `443:443`.
 

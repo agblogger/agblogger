@@ -44,12 +44,20 @@ just start backend_port=9000 frontend_port=9173
 
 # Stop the dev server
 just stop
+
+# Start the packaged app behind local Caddy on http://localhost:8080
+just start-caddy-local
+
+# Check or stop the local Caddy-backed packaged app profile
+just health-caddy-local
+just stop-caddy-local
 ```
 
 `just setup` creates `.env` from `.env.example` only when `.env` is missing.
 
 This starts the backend at http://localhost:8000 and the frontend at http://localhost:5173 (proxying API calls to the backend). API docs are at http://localhost:8000/docs.
 `just start` now waits until both services are actually healthy before reporting success. If startup fails, inspect `.local/backend.log` and `.local/frontend.log`.
+`just start-caddy-local` starts the packaged frontend/backend stack behind Caddy on `http://localhost:8080` by default. Override the port with `LOCAL_CADDY_PORT` or `just start-caddy-local local_caddy_port=9080`.
 
 Default credentials: `admin` / `admin` (change via `.env`).
 Self-registration is disabled by default; create invite codes from the admin account.
@@ -123,7 +131,7 @@ just check-codeql
 just setup-codeql
 ```
 
-`just zap-baseline` and `just zap-full` use the official ZAP Docker image, auto-start the local dev server when needed, and write reports to `reports/zap/baseline/` or `reports/zap/full/`. By default they do not pass a ZAP time limit. If you want one, use a positional minute override like `just zap-full 5`, or set `ZAP_BASELINE_MINUTES` / `ZAP_FULL_MINUTES` in the environment.
+`just zap-baseline` and `just zap-full` use the official ZAP Docker image, auto-start a dedicated local Caddy-backed Docker Compose profile when needed, and write reports to `reports/zap/baseline/` or `reports/zap/full/`. That profile serves the built frontend through Caddy on `http://localhost:8080` by default, so ZAP scans the packaged app surface instead of the Vite dev server. Override the local scan port with `ZAP_CADDY_PORT` if needed. By default these commands do not pass a ZAP time limit. If you want one, use a positional minute override like `just zap-full 5`, or set `ZAP_BASELINE_MINUTES` / `ZAP_FULL_MINUTES` in the environment.
 
 ## Sync Client
 

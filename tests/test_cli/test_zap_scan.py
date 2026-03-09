@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 
-from cli.dev_server import DevServerState
 from cli.zap_scan import (
     DEFAULT_ZAP_IMAGE,
     build_docker_command,
@@ -27,7 +26,7 @@ def test_build_docker_command_for_baseline_scan_on_macos(tmp_path: Path) -> None
     command = build_docker_command(
         scan_mode="baseline",
         project_dir=tmp_path,
-        frontend_port=5173,
+        caddy_port=8080,
         minutes=None,
         system_name="Darwin",
     )
@@ -39,7 +38,7 @@ def test_build_docker_command_for_baseline_scan_on_macos(tmp_path: Path) -> None
     assert "zap-baseline.py" in command
     assert "-j" in command
     assert "-I" in command
-    assert command[command.index("-t") + 1] == "http://host.docker.internal:5173/"
+    assert command[command.index("-t") + 1] == "http://host.docker.internal:8080/"
     assert "-m" not in command
     assert "reports/zap/baseline/report.html" in command
     assert "reports/zap/baseline/report.md" in command
@@ -53,7 +52,7 @@ def test_build_docker_command_for_full_scan_on_linux_adds_host_gateway(
     command = build_docker_command(
         scan_mode="full",
         project_dir=tmp_path,
-        frontend_port=5173,
+        caddy_port=8080,
         minutes=4,
         system_name="Linux",
     )
@@ -68,63 +67,58 @@ def test_build_docker_command_for_full_scan_on_linux_adds_host_gateway(
     assert "reports/zap/full/report.xml" in command
 
 
-def _make_dev_server_state(localdir: Path) -> DevServerState:
-    return DevServerState(
-        backend_pid=123,
-        frontend_pid=456,
-        backend_port=8000,
-        frontend_port=5173,
-        backend_log=str(localdir / "backend.log"),
-        frontend_log=str(localdir / "frontend.log"),
-    )
-
-
 class TestRunZapScan:
     @pytest.fixture(autouse=True)
     def _stub_prerequisites(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr("cli.zap_scan.check_prerequisites", lambda _project_dir: None)
+        monkeypatch.setattr(
+            "cli.zap_scan.write_local_caddy_env",
+            lambda localdir: localdir / "zap-caddy.env",
+        )
 
-    def test_run_zap_scan_starts_and_stops_dev_server_when_needed(
+    def test_run_zap_scan_starts_and_stops_local_caddy_profile_when_needed(
         self,
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
     ) -> None:
         localdir = tmp_path / ".local"
-        state = _make_dev_server_state(localdir)
         run_calls: list[tuple[list[str], Path]] = []
         lifecycle_calls: list[str] = []
 
         monkeypatch.setattr(
-            "cli.zap_scan.health_dev_server",
-            lambda _localdir, _backend_port, _frontend_port: (False, 8000, 5173),
+            "cli.zap_scan.local_caddy_profile_health",
+            lambda _caddy_port: False,
         )
 
-        def fake_start_dev_server(
-            _localdir: Path,
-            _requested_backend_port: int,
-            _requested_frontend_port: int,
-        ) -> DevServerState:
+        def fake_start_local_caddy_profile(
+            _project_dir: Path,
+            _env_file: Path,
+            _caddy_port: int,
+        ) -> None:
             lifecycle_calls.append("start")
-            return state
 
         def fake_run_command(command: list[str], cwd: Path) -> int:
             run_calls.append((command, cwd))
             return 0
 
-        def fake_stop_dev_server(_localdir: Path) -> tuple[bool, str]:
+        def fake_stop_local_caddy_profile(_project_dir: Path, _env_file: Path) -> None:
             lifecycle_calls.append("stop")
-            return True, "stopped"
 
-        monkeypatch.setattr("cli.zap_scan.start_dev_server", fake_start_dev_server)
+        monkeypatch.setattr(
+            "cli.zap_scan.start_local_caddy_profile",
+            fake_start_local_caddy_profile,
+        )
         monkeypatch.setattr("cli.zap_scan.run_command", fake_run_command)
-        monkeypatch.setattr("cli.zap_scan.stop_dev_server", fake_stop_dev_server)
+        monkeypatch.setattr(
+            "cli.zap_scan.stop_local_caddy_profile",
+            fake_stop_local_caddy_profile,
+        )
 
         exit_code = run_zap_scan(
             scan_mode="baseline",
             project_dir=tmp_path,
             localdir=localdir,
-            backend_port=8000,
-            frontend_port=5173,
+            caddy_port=8080,
             minutes=None,
         )
 
@@ -140,25 +134,24 @@ class TestRunZapScan:
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
     ) -> None:
-        localdir = tmp_path / ".local"
         calls: list[str] = []
 
         monkeypatch.setattr(
-            "cli.zap_scan.health_dev_server",
-            lambda _localdir, _backend_port, _frontend_port: (True, 8000, 5173),
+            "cli.zap_scan.local_caddy_profile_health",
+            lambda _caddy_port: True,
         )
         monkeypatch.setattr(
-            "cli.zap_scan.start_dev_server",
-            lambda *_args, **_kwargs: pytest.fail("start_dev_server should not be called"),
+            "cli.zap_scan.start_local_caddy_profile",
+            lambda *_args, **_kwargs: pytest.fail("start_local_caddy_profile should not be called"),
         )
         monkeypatch.setattr(
-            "cli.zap_scan.stop_dev_server",
-            lambda *_args, **_kwargs: pytest.fail("stop_dev_server should not be called"),
+            "cli.zap_scan.stop_local_caddy_profile",
+            lambda *_args, **_kwargs: pytest.fail("stop_local_caddy_profile should not be called"),
         )
 
         def fake_run_command(command: list[str], cwd: Path) -> int:
             calls.append("run")
-            assert "http://host.docker.internal:5173/" in command
+            assert "http://host.docker.internal:8080/" in command
             assert cwd == tmp_path
             return 2
 
@@ -167,113 +160,47 @@ class TestRunZapScan:
         exit_code = run_zap_scan(
             scan_mode="full",
             project_dir=tmp_path,
-            localdir=localdir,
-            backend_port=8000,
-            frontend_port=5173,
+            localdir=tmp_path / ".local",
+            caddy_port=8080,
             minutes=None,
         )
 
         assert exit_code == 2
         assert calls == ["run"]
 
-    def test_run_zap_scan_recovers_from_stale_dev_server_state(
+    def test_run_zap_scan_stops_started_local_caddy_profile_on_failure(
         self,
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
     ) -> None:
         localdir = tmp_path / ".local"
-        state = _make_dev_server_state(localdir)
         lifecycle_calls: list[str] = []
 
         monkeypatch.setattr(
-            "cli.zap_scan.health_dev_server",
-            lambda _localdir, _backend_port, _frontend_port: (False, 8000, 5173),
+            "cli.zap_scan.local_caddy_profile_health",
+            lambda _caddy_port: False,
         )
-
-        start_attempts = 0
-
-        def fake_start_dev_server(
-            _localdir: Path,
-            _requested_backend_port: int,
-            _requested_frontend_port: int,
-        ) -> DevServerState:
-            nonlocal start_attempts
-            start_attempts += 1
-            lifecycle_calls.append(f"start-{start_attempts}")
-            if start_attempts == 1:
-                msg = "Dev server is already running (backend PID 123, frontend PID 456)"
-                raise RuntimeError(msg)
-            return state
-
-        def fake_stop_dev_server(_localdir: Path) -> tuple[bool, str]:
-            lifecycle_calls.append("stop")
-            return True, "stopped"
-
-        monkeypatch.setattr("cli.zap_scan.start_dev_server", fake_start_dev_server)
-        monkeypatch.setattr("cli.zap_scan.stop_dev_server", fake_stop_dev_server)
-        monkeypatch.setattr("cli.zap_scan.run_command", lambda _command, _cwd: 0)
-
-        exit_code = run_zap_scan(
-            scan_mode="baseline",
-            project_dir=tmp_path,
-            localdir=localdir,
-            backend_port=8000,
-            frontend_port=5173,
-            minutes=None,
-        )
-
-        assert exit_code == 0
-        assert lifecycle_calls == ["start-1", "stop", "start-2", "stop"]
-
-    def test_run_zap_scan_clears_state_when_stop_permission_is_denied(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-        tmp_path: Path,
-    ) -> None:
-        localdir = tmp_path / ".local"
-        state = _make_dev_server_state(localdir)
-        lifecycle_calls: list[str] = []
-
         monkeypatch.setattr(
-            "cli.zap_scan.health_dev_server",
-            lambda _localdir, _backend_port, _frontend_port: (False, 8000, 5173),
+            "cli.zap_scan.start_local_caddy_profile",
+            lambda _project_dir, _env_file, _caddy_port: lifecycle_calls.append("start"),
         )
-
-        start_attempts = 0
-
-        def fake_start_dev_server(
-            _localdir: Path,
-            _requested_backend_port: int,
-            _requested_frontend_port: int,
-        ) -> DevServerState:
-            nonlocal start_attempts
-            start_attempts += 1
-            lifecycle_calls.append(f"start-{start_attempts}")
-            if start_attempts == 1:
-                msg = "Dev server is already running (backend PID 123, frontend PID 456)"
-                raise RuntimeError(msg)
-            return state
-
-        def fake_stop_dev_server(_localdir: Path) -> tuple[bool, str]:
-            lifecycle_calls.append("stop")
-            raise PermissionError("not permitted")
-
-        monkeypatch.setattr("cli.zap_scan.start_dev_server", fake_start_dev_server)
-        monkeypatch.setattr("cli.zap_scan.stop_dev_server", fake_stop_dev_server)
         monkeypatch.setattr(
-            "cli.zap_scan.remove_state",
-            lambda _localdir: lifecycle_calls.append("clear"),
-        )
-        monkeypatch.setattr("cli.zap_scan.run_command", lambda _command, _cwd: 0)
-
-        exit_code = run_zap_scan(
-            scan_mode="baseline",
-            project_dir=tmp_path,
-            localdir=localdir,
-            backend_port=8000,
-            frontend_port=5173,
-            minutes=None,
+            "cli.zap_scan.stop_local_caddy_profile",
+            lambda _project_dir, _env_file: lifecycle_calls.append("stop"),
         )
 
-        assert exit_code == 0
-        assert lifecycle_calls == ["start-1", "stop", "clear", "start-2", "stop", "clear"]
+        def fake_run_command(_command: list[str], _cwd: Path) -> int:
+            raise RuntimeError("zap failed")
+
+        monkeypatch.setattr("cli.zap_scan.run_command", fake_run_command)
+
+        with pytest.raises(RuntimeError, match="zap failed"):
+            run_zap_scan(
+                scan_mode="baseline",
+                project_dir=tmp_path,
+                localdir=localdir,
+                caddy_port=8080,
+                minutes=None,
+            )
+
+        assert lifecycle_calls == ["start", "stop"]

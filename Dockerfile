@@ -52,7 +52,7 @@ VOLUME /data/content
 VOLUME /data/db
 
 ENV CONTENT_DIR=/data/content
-ENV DATABASE_URL=sqlite+aiosqlite:///data/db/agblogger.db
+ENV DATABASE_URL=sqlite+aiosqlite:////data/db/agblogger.db
 ENV FRONTEND_DIR=/app/frontend/dist
 ENV HOST=0.0.0.0
 ENV PORT=8000

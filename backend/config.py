@@ -12,7 +12,8 @@ from backend.exceptions import InternalServerError
 
 INSECURE_DEV_SENTINEL = "change-me-in-production"
 INSECURE_BOOTSTRAP_SENTINEL = "admin"
-_SQLITE_URL_PREFIXES = ("sqlite+aiosqlite:///", "sqlite:///")
+_SQLITE_ABSOLUTE_URL_PREFIXES = ("sqlite+aiosqlite:////", "sqlite:////")
+_SQLITE_RELATIVE_URL_PREFIXES = ("sqlite+aiosqlite:///", "sqlite:///")
 
 
 def _is_valid_trusted_host(host: str) -> bool:
@@ -42,7 +43,11 @@ def _is_valid_public_oauth_base_url(url: str) -> bool:
 
 def _sqlite_database_path(database_url: str) -> Path | None:
     """Return the configured SQLite database path when the URL uses SQLite."""
-    for prefix in _SQLITE_URL_PREFIXES:
+    for prefix in _SQLITE_ABSOLUTE_URL_PREFIXES:
+        if database_url.startswith(prefix):
+            raw_path = database_url.removeprefix(prefix)
+            return Path("/") / raw_path.lstrip("/")
+    for prefix in _SQLITE_RELATIVE_URL_PREFIXES:
         if database_url.startswith(prefix):
             raw_path = database_url.removeprefix(prefix)
             return Path(raw_path)

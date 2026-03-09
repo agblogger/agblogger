@@ -1,0 +1,36 @@
+http://localhost, http://host.docker.internal {
+    @postUpload path /api/posts/upload
+    request_body @postUpload {
+        max_size 55MB
+    }
+
+    @postAssets path_regexp post_assets ^/api/posts/.+/assets$
+    request_body @postAssets {
+        max_size 55MB
+    }
+
+    @syncCommit path /api/sync/commit
+    request_body @syncCommit {
+        max_size 100MB
+    }
+
+    reverse_proxy agblogger:8000
+
+    # Static asset caching
+    header /assets/* {
+        Cache-Control "public, max-age=31536000, immutable"
+    }
+
+    # HTML caching (short TTL for freshness)
+    header /*.html {
+        Cache-Control "public, max-age=60"
+    }
+
+    # API caching
+    header /api/* {
+        Cache-Control "no-cache"
+    }
+
+    # Compression
+    encode gzip zstd
+}

@@ -1,26 +1,27 @@
-"""Run OWASP ZAP packaged scans against the local AgBlogger dev server."""
+"""Run OWASP ZAP packaged scans against a local Caddy-served AgBlogger build."""
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import http.client
 import platform
 import shutil
 import sys
+import time
 from pathlib import Path, PurePosixPath
 from typing import Literal
+from urllib.parse import urlsplit
 
 from cli import repo_root
-from cli.dev_server import (
-    DevServerState,
-    health_dev_server,
-    remove_state,
-    start_dev_server,
-    stop_dev_server,
-    validate_port,
-)
+from cli.dev_server import validate_port
 
 DEFAULT_ZAP_IMAGE = "ghcr.io/zaproxy/zaproxy:stable"
+DEFAULT_LOCAL_CADDY_PORT = 8080
+LOCAL_CADDY_PROJECT_NAME = "agblogger-caddy-local"
+LOCAL_CADDY_ENV_FILENAME = "caddy-local.env"
+LOCAL_CADDY_COMPOSE_OVERRIDE = "docker-compose.caddy-local.yml"
+LOCAL_CADDY_STARTUP_TIMEOUT_SECONDS = 120.0
 
 ScanMode = Literal["baseline", "full"]
 
@@ -44,7 +45,7 @@ def build_docker_command(
     *,
     scan_mode: ScanMode,
     project_dir: Path,
-    frontend_port: int,
+    caddy_port: int,
     minutes: int | None,
     system_name: str | None = None,
     image: str = DEFAULT_ZAP_IMAGE,
@@ -54,7 +55,7 @@ def build_docker_command(
     current_system = system_name or platform.system()
 
     script_name = "zap-baseline.py" if scan_mode == "baseline" else "zap-full-scan.py"
-    target_url = f"http://host.docker.internal:{frontend_port}/"
+    target_url = f"http://host.docker.internal:{caddy_port}/"
     command = ["/usr/bin/env", "docker", "run", "--rm"]
 
     if current_system == "Linux":
@@ -109,34 +110,124 @@ def check_prerequisites(project_dir: Path) -> None:
     if docker_version != 0:
         raise ZapScanError("Failed to run 'docker --version'")
 
+    compose_version = run_command(["/usr/bin/env", "docker", "compose", "version"], project_dir)
+    if compose_version != 0:
+        raise ZapScanError("Failed to run 'docker compose version'")
 
-def _start_dev_server_for_scan(
-    localdir: Path, backend_port: int, frontend_port: int
-) -> DevServerState:
-    """Start the dev server, retrying once if stale state blocks startup."""
+
+def _local_caddy_env_path(localdir: Path) -> Path:
+    return localdir / LOCAL_CADDY_ENV_FILENAME
+
+
+def write_local_caddy_env(localdir: Path) -> Path:
+    """Write the local env file used by the dedicated Caddy-backed profile."""
+    localdir.mkdir(parents=True, exist_ok=True)
+    env_path = _local_caddy_env_path(localdir)
+    env_path.write_text(
+        "\n".join(
+            (
+                "SECRET_KEY=zap-local-secret-key-0123456789abcdef0123456789abcdef",
+                "ADMIN_USERNAME=admin",
+                "ADMIN_PASSWORD=zap-local-admin-password",
+                'TRUSTED_HOSTS=["localhost","127.0.0.1","host.docker.internal"]',
+                "TRUSTED_PROXY_IPS=[]",
+            )
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return env_path
+
+
+def build_local_caddy_compose_command(
+    *,
+    project_dir: Path,
+    env_file: Path,
+    args: list[str],
+) -> list[str]:
+    """Build the docker compose command for the local Caddy-backed profile."""
+    return [
+        "/usr/bin/env",
+        "docker",
+        "compose",
+        "-p",
+        LOCAL_CADDY_PROJECT_NAME,
+        "--env-file",
+        str(env_file),
+        "-f",
+        str(project_dir / "docker-compose.yml"),
+        "-f",
+        str(project_dir / LOCAL_CADDY_COMPOSE_OVERRIDE),
+        *args,
+    ]
+
+
+def _is_http_ready(url: str) -> bool:
+    """Return whether an HTTP endpoint responds successfully."""
+    parts = urlsplit(url)
+    if parts.hostname is None:
+        return False
+    port = parts.port
+    if port is None:
+        port = 443 if parts.scheme == "https" else 80
+    path = parts.path or "/"
+    if parts.query:
+        path = f"{path}?{parts.query}"
+
+    connection_cls = (
+        http.client.HTTPSConnection if parts.scheme == "https" else http.client.HTTPConnection
+    )
+    connection: http.client.HTTPConnection | http.client.HTTPSConnection | None = None
     try:
-        return start_dev_server(localdir, backend_port, frontend_port)
-    except RuntimeError as exc:
-        if "Dev server is already running" not in str(exc):
-            raise
-        print("Detected stale dev-server state, clearing it and retrying once...")
-        try:
-            _stopped, message = stop_dev_server(localdir)
-            print(message)
-        except PermissionError:
-            print("Unable to stop the recorded dev server; removing stale state and retrying...")
-            remove_state(localdir)
-        return start_dev_server(localdir, backend_port, frontend_port)
+        connection = connection_cls(parts.hostname, port, timeout=1.0)
+        connection.request("GET", path)
+        response = connection.getresponse()
+        return 200 <= response.status < 500
+    except OSError:
+        return False
+    finally:
+        if connection is not None:
+            connection.close()
 
 
-def _stop_dev_server_for_scan(localdir: Path) -> None:
-    """Stop the dev server started for a scan, tolerating cleanup permission issues."""
-    try:
-        _stopped, message = stop_dev_server(localdir)
-        print(message)
-    except PermissionError:
-        print("Unable to stop the dev server after the scan; removing recorded state instead...")
-        remove_state(localdir)
+def local_caddy_profile_health(caddy_port: int) -> bool:
+    """Return whether the local Caddy-backed profile is healthy."""
+    backend_ok = _is_http_ready(f"http://127.0.0.1:{caddy_port}/api/health")
+    frontend_ok = _is_http_ready(f"http://127.0.0.1:{caddy_port}/")
+    status = "✓ healthy" if backend_ok and frontend_ok else "✗ unreachable"
+    print(f"Caddy-backed app (:{caddy_port}): {status}")
+    return backend_ok and frontend_ok
+
+
+def start_local_caddy_profile(project_dir: Path, env_file: Path, caddy_port: int) -> None:
+    """Start the dedicated local Caddy-backed profile and wait for it to become healthy."""
+    up_command = build_local_caddy_compose_command(
+        project_dir=project_dir,
+        env_file=env_file,
+        args=["up", "-d", "--build"],
+    )
+    exit_code = run_command(up_command, project_dir)
+    if exit_code != 0:
+        raise ZapScanError("Failed to start local Caddy profile")
+
+    deadline = time.monotonic() + LOCAL_CADDY_STARTUP_TIMEOUT_SECONDS
+    while time.monotonic() < deadline:
+        if local_caddy_profile_health(caddy_port):
+            return
+        time.sleep(1.0)
+    raise ZapScanError("Timed out waiting for the local Caddy profile to become healthy")
+
+
+def stop_local_caddy_profile(project_dir: Path, env_file: Path) -> None:
+    """Stop the dedicated local Caddy-backed profile."""
+    down_command = build_local_caddy_compose_command(
+        project_dir=project_dir,
+        env_file=env_file,
+        args=["down", "-v", "--remove-orphans"],
+    )
+    exit_code = run_command(down_command, project_dir)
+    if exit_code != 0:
+        raise ZapScanError("Failed to stop local Caddy profile")
 
 
 def run_zap_scan(
@@ -144,11 +235,10 @@ def run_zap_scan(
     scan_mode: ScanMode,
     project_dir: Path,
     localdir: Path,
-    backend_port: int,
-    frontend_port: int,
+    caddy_port: int,
     minutes: int | None,
 ) -> int:
-    """Run a packaged ZAP scan against the frontend dev server."""
+    """Run a packaged ZAP scan against the local Caddy-served build."""
     if minutes is not None and minutes < 1:
         raise ValueError("minutes must be greater than zero")
 
@@ -156,36 +246,33 @@ def run_zap_scan(
     reports = _report_paths(scan_mode)
     report_dir = project_dir / reports["dir"]
     report_dir.mkdir(parents=True, exist_ok=True)
+    env_file = write_local_caddy_env(localdir)
 
-    healthy, actual_backend_port, actual_frontend_port = health_dev_server(
-        localdir, backend_port, frontend_port
-    )
-    started_dev_server = False
+    healthy = local_caddy_profile_health(caddy_port)
+    started_local_caddy_profile = False
 
     try:
         if not healthy:
-            print("Starting dev server for ZAP scan...")
-            state = _start_dev_server_for_scan(localdir, backend_port, frontend_port)
-            started_dev_server = True
-            actual_backend_port = state.backend_port
-            actual_frontend_port = state.frontend_port
+            print("Starting local Caddy profile for ZAP scan...")
+            start_local_caddy_profile(project_dir, env_file, caddy_port)
+            started_local_caddy_profile = True
 
         print(
             f"Running ZAP {scan_mode} scan against "
-            f"http://127.0.0.1:{actual_frontend_port}/ "
-            f"(backend :{actual_backend_port}, frontend :{actual_frontend_port})"
+            f"http://127.0.0.1:{caddy_port}/ "
+            f"(Caddy :{caddy_port})"
         )
         print(f"Writing ZAP reports to {report_dir}")
         command = build_docker_command(
             scan_mode=scan_mode,
             project_dir=project_dir,
-            frontend_port=actual_frontend_port,
+            caddy_port=caddy_port,
             minutes=minutes,
         )
         return run_command(command, project_dir)
     finally:
-        if started_dev_server:
-            _stop_dev_server_for_scan(localdir)
+        if started_local_caddy_profile:
+            stop_local_caddy_profile(project_dir, env_file)
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -197,8 +284,7 @@ def _build_parser() -> argparse.ArgumentParser:
         command_parser = subparsers.add_parser(command_name)
         command_parser.add_argument("--project-dir", type=Path, default=root)
         command_parser.add_argument("--localdir", type=Path, default=root / ".local")
-        command_parser.add_argument("--backend-port", default="8000")
-        command_parser.add_argument("--frontend-port", default="5173")
+        command_parser.add_argument("--caddy-port", default=str(DEFAULT_LOCAL_CADDY_PORT))
         command_parser.add_argument("--minutes", type=int)
 
     return parser
@@ -210,14 +296,12 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        backend_port = validate_port(args.backend_port)
-        frontend_port = validate_port(args.frontend_port)
+        caddy_port = validate_port(args.caddy_port)
         return run_zap_scan(
             scan_mode=args.command,
             project_dir=args.project_dir.resolve(),
             localdir=args.localdir.resolve(),
-            backend_port=backend_port,
-            frontend_port=frontend_port,
+            caddy_port=caddy_port,
             minutes=args.minutes,
         )
     except (ValueError, ZapScanError, RuntimeError) as exc:

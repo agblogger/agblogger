@@ -220,7 +220,7 @@ def build_direct_compose_content() -> str:
         "      - TRUSTED_HOSTS=${TRUSTED_HOSTS?Set TRUSTED_HOSTS}\n"
         "      - TRUSTED_PROXY_IPS=${TRUSTED_PROXY_IPS:-[]}\n"
         "      - CONTENT_DIR=/data/content\n"
-        "      - DATABASE_URL=sqlite+aiosqlite:///data/db/agblogger.db\n"
+        "      - DATABASE_URL=sqlite+aiosqlite:////data/db/agblogger.db\n"
         "    restart: unless-stopped\n"
         "    healthcheck:\n"
         '      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]\n'
@@ -251,7 +251,7 @@ def build_image_compose_content() -> str:
         "      - TRUSTED_HOSTS=${TRUSTED_HOSTS?Set TRUSTED_HOSTS}\n"
         "      - TRUSTED_PROXY_IPS=${TRUSTED_PROXY_IPS:-[]}\n"
         "      - CONTENT_DIR=/data/content\n"
-        "      - DATABASE_URL=sqlite+aiosqlite:///data/db/agblogger.db\n"
+        "      - DATABASE_URL=sqlite+aiosqlite:////data/db/agblogger.db\n"
         "    restart: unless-stopped\n"
         "    healthcheck:\n"
         '      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]\n'
@@ -296,7 +296,7 @@ def build_image_direct_compose_content() -> str:
         "      - TRUSTED_HOSTS=${TRUSTED_HOSTS?Set TRUSTED_HOSTS}\n"
         "      - TRUSTED_PROXY_IPS=${TRUSTED_PROXY_IPS:-[]}\n"
         "      - CONTENT_DIR=/data/content\n"
-        "      - DATABASE_URL=sqlite+aiosqlite:///data/db/agblogger.db\n"
+        "      - DATABASE_URL=sqlite+aiosqlite:////data/db/agblogger.db\n"
         "    restart: unless-stopped\n"
         "    healthcheck:\n"
         '      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]\n'

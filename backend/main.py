@@ -8,7 +8,6 @@ import logging
 import subprocess
 import sys
 from contextlib import asynccontextmanager
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import yaml
@@ -32,7 +31,7 @@ from backend.api.pages import router as pages_router
 from backend.api.posts import router as posts_router
 from backend.api.render import router as render_router
 from backend.api.sync import router as sync_router
-from backend.config import Settings
+from backend.config import Settings, _sqlite_database_path
 from backend.database import create_engine
 from backend.filesystem.content_manager import ContentManager
 from backend.models.base import Base
@@ -43,6 +42,7 @@ from backend.version import get_version
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Awaitable, Callable
+    from pathlib import Path
 
     from starlette.responses import Response
     from starlette.types import Message
@@ -129,11 +129,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     logger.info("Starting AgBlogger (debug=%s)", settings.debug)
     app.state.content_write_lock = asyncio.Lock()
     # Ensure SQLite database parent directory exists
-    db_url = settings.database_url
-    if db_url.startswith("sqlite"):
-        db_path = db_url.split("///", 1)[-1] if "///" in db_url else None
-        if db_path:
-            Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+    database_path = _sqlite_database_path(settings.database_url)
+    if database_path is not None:
+        database_path.parent.mkdir(parents=True, exist_ok=True)
 
     try:
         engine, session_factory = create_engine(settings)

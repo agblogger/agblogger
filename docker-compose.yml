@@ -13,7 +13,7 @@ services:
       - TRUSTED_HOSTS=${TRUSTED_HOSTS?Set TRUSTED_HOSTS}
       - TRUSTED_PROXY_IPS=${TRUSTED_PROXY_IPS:-[]}
       - CONTENT_DIR=/data/content
-      - DATABASE_URL=sqlite+aiosqlite:///data/db/agblogger.db
+      - DATABASE_URL=sqlite+aiosqlite:////data/db/agblogger.db
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]

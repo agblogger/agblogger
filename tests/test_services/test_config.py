@@ -7,7 +7,9 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pathlib import Path
 
-from backend.config import Settings
+from pathlib import Path
+
+from backend.config import Settings, _sqlite_database_path
 
 
 class TestSettings:
@@ -32,6 +34,11 @@ class TestSettings:
         assert test_settings.secret_key == "test-secret-key-with-at-least-32-characters"
         assert test_settings.debug is True
         assert test_settings.content_dir.exists()
+
+    def test_sqlite_database_path_preserves_absolute_container_paths(self) -> None:
+        assert _sqlite_database_path("sqlite+aiosqlite:////data/db/agblogger.db") == Path(
+            "/data/db/agblogger.db"
+        )
 
 
 class TestCrosspostSettings:

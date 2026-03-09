@@ -19,6 +19,8 @@ mutation_keep_artifacts := env("MUTATION_KEEP_ARTIFACTS", "false")
 mutmut_version := "3.4.0"
 zap_baseline_minutes := env("ZAP_BASELINE_MINUTES", "")
 zap_full_minutes := env("ZAP_FULL_MINUTES", "")
+zap_caddy_port := env("ZAP_CADDY_PORT", "8080")
+local_caddy_port := env("LOCAL_CADDY_PORT", "8080")
 
 # Run all static analysis checks (no tests)
 check-static: check-backend-static check-frontend-static check-vulture check-trivy
@@ -254,16 +256,15 @@ _zap mode env_minutes minutes:
     args=(
         --project-dir "{{ justfile_directory() }}"
         --localdir "{{ localdir }}"
-        --backend-port "{{ backend_port }}"
-        --frontend-port "{{ frontend_port }}"
+        --caddy-port "{{ zap_caddy_port }}"
     )
     if [ -n "$minutes_value" ]; then args+=(--minutes "$minutes_value"); fi
     python3 -m cli.zap_scan {{ mode }} "${args[@]}"
 
-# OWASP ZAP baseline DAST scan against the local frontend dev server.
+# OWASP ZAP baseline DAST scan against the local Caddy-served build.
 zap-baseline minutes="": (_zap "baseline" zap_baseline_minutes minutes)
 
-# OWASP ZAP full active DAST scan against the local frontend dev server.
+# OWASP ZAP full active DAST scan against the local Caddy-served build.
 zap-full minutes="": (_zap "full" zap_full_minutes minutes)
 
 zap: zap-baseline zap-full
@@ -356,6 +357,18 @@ stop:
 # Check if the dev server is healthy (backend API responds, frontend serves pages)
 health:
     python3 -m cli.dev_server health --localdir "{{ localdir }}" --backend-port "{{ backend_port }}" --frontend-port "{{ frontend_port }}"
+
+# Start the local Caddy-backed packaged app profile in the background
+start-caddy-local:
+    python3 -m cli.local_caddy start --localdir "{{ localdir }}" --caddy-port "{{ local_caddy_port }}"
+
+# Stop the local Caddy-backed packaged app profile
+stop-caddy-local:
+    python3 -m cli.local_caddy stop --localdir "{{ localdir }}"
+
+# Check if the local Caddy-backed packaged app profile is healthy
+health-caddy-local:
+    python3 -m cli.local_caddy health --caddy-port "{{ local_caddy_port }}"
 
 # Start backend and frontend in the foreground (Ctrl-C to stop). Do not use unless you're human.
 syncrun:
