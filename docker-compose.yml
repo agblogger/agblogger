@@ -2,6 +2,7 @@ services:
   agblogger:
     build: .
     image: agblogger:latest
+    user: root
     expose:
       - "8000"
     volumes:
@@ -40,7 +41,8 @@ services:
       - caddy-data:/data
       - caddy-config:/config
     depends_on:
-      - agblogger
+      agblogger:
+        condition: service_healthy
     restart: unless-stopped
     networks:
       default:

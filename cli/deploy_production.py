@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import asyncio
 import getpass
 import json
 import os
@@ -119,27 +118,22 @@ def _quote_env_value(value: str) -> str:
     return json.dumps(value)
 
 
-async def _run_command(
+def _run_command(
     command: list[str],
     project_dir: Path,
-) -> subprocess.CompletedProcess[None]:
+) -> subprocess.CompletedProcess[bytes]:
     """Run a CLI command in the project directory."""
-    return await asyncio.to_thread(
-        subprocess.run,
-        command,
-        cwd=project_dir,
-        check=True,
-    )
+    return subprocess.run(command, cwd=project_dir, check=True)
 
 
-def _run_docker(project_dir: Path, args: list[str]) -> subprocess.CompletedProcess[None]:
+def _run_docker(project_dir: Path, args: list[str]) -> subprocess.CompletedProcess[bytes]:
     """Run a Docker CLI command in the project directory."""
-    return asyncio.run(_run_command(["docker", *args], project_dir))
+    return _run_command(["docker", *args], project_dir)
 
 
-def _run_trivy(project_dir: Path, args: list[str]) -> subprocess.CompletedProcess[None]:
+def _run_trivy(project_dir: Path, args: list[str]) -> subprocess.CompletedProcess[bytes]:
     """Run a Trivy CLI command in the project directory."""
-    return asyncio.run(_run_command(["trivy", *args], project_dir))
+    return _run_command(["trivy", *args], project_dir)
 
 
 def build_env_content(config: DeployConfig) -> str:
@@ -190,7 +184,8 @@ def build_caddyfile_content(config: CaddyConfig) -> str:
         '        Cache-Control "public, max-age=31536000, immutable"\n'
         "    }\n\n"
         "    # HTML caching (short TTL for freshness)\n"
-        "    header /*.html {\n"
+        "    @html path_regexp \\.html$\n"
+        "    header @html {\n"
         '        Cache-Control "public, max-age=60"\n'
         "    }\n\n"
         "    # API caching\n"
@@ -260,7 +255,8 @@ def _caddy_service_section() -> str:
         "      - caddy-data:/data\n"
         "      - caddy-config:/config\n"
         "    depends_on:\n"
-        "      - agblogger\n"
+        "      agblogger:\n"
+        "        condition: service_healthy\n"
         "    restart: unless-stopped\n"
         "    networks:\n"
         "      default:\n"
@@ -287,6 +283,7 @@ def build_direct_compose_content() -> str:
         "  agblogger:\n"
         "    build: .\n"
         f"    image: {LOCAL_IMAGE_TAG}\n"
+        "    user: root\n"
         "    ports:\n"
         '      - "${HOST_BIND_IP:-127.0.0.1}:${HOST_PORT:-8000}:8000"\n'
         "    volumes:\n"
@@ -306,6 +303,7 @@ def build_image_compose_content() -> str:
         "services:\n"
         "  agblogger:\n"
         '    image: "${AGBLOGGER_IMAGE?Set AGBLOGGER_IMAGE}"\n'
+        "    user: root\n"
         "    expose:\n"
         '      - "8000"\n'
         "    volumes:\n"
@@ -331,6 +329,7 @@ def build_image_direct_compose_content() -> str:
         "services:\n"
         "  agblogger:\n"
         '    image: "${AGBLOGGER_IMAGE?Set AGBLOGGER_IMAGE}"\n'
+        "    user: root\n"
         "    ports:\n"
         '      - "${HOST_BIND_IP:-127.0.0.1}:${HOST_PORT:-8000}:8000"\n'
         "    volumes:\n"
@@ -362,7 +361,7 @@ def _compose_filenames(
         if use_caddy and caddy_public:
             return ["docker-compose.yml", DEFAULT_CADDY_PUBLIC_COMPOSE_FILE]
         if use_caddy:
-            return []
+            return ["docker-compose.yml"]
         return [DEFAULT_NO_CADDY_COMPOSE_FILE]
 
     if use_caddy and caddy_public:
@@ -1192,7 +1191,8 @@ def main() -> None:
         print(f"Deployment failed: {exc}")
         sys.exit(1)
     except subprocess.CalledProcessError as exc:
-        print(f"Deployment failed: command returned exit code {exc.returncode}")
+        cmd_str = " ".join(exc.cmd) if isinstance(exc.cmd, list) else str(exc.cmd)
+        print(f"Deployment failed (exit code {exc.returncode}): {cmd_str}")
         sys.exit(1)
     except KeyboardInterrupt:
         print("\nDeployment cancelled.")

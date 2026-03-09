@@ -19,6 +19,7 @@ FROM python:3.14-slim
 
 # Install pandoc from GitHub releases (pinned version with +server support)
 ARG PANDOC_VERSION=3.8.3
+ARG GOSU_VERSION=1.17
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl git \
     && ARCH=$(dpkg --print-architecture) \
@@ -26,6 +27,10 @@ RUN apt-get update \
        -o /tmp/pandoc.deb \
     && dpkg -i /tmp/pandoc.deb \
     && rm /tmp/pandoc.deb \
+    && curl -fsSL "https://github.com/tianon/gosu/releases/download/${GOSU_VERSION}/gosu-${ARCH}" \
+       -o /usr/local/bin/gosu \
+    && chmod +x /usr/local/bin/gosu \
+    && gosu --version \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv for fast dependency resolution
@@ -63,6 +68,9 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:8000/api/health || exit 1
 
+COPY docker-entrypoint.sh /usr/local/bin/
+
 USER agblogger
 
+ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["agblogger-server"]

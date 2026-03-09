@@ -6,13 +6,15 @@ Multi-stage build:
 
 1. **Stage 1** (Node 22 Alpine): `npm ci && npm run build` to produce `frontend/dist/`.
 2. **Stage 2** (Python 3.14 slim builder): Builds a dedicated `agblogger-server` wheel from the `backend/` package only.
-3. **Stage 3** (Python 3.14 slim runtime): Installs Pandoc from GitHub releases (pinned version with `+server` support), copies uv from astral-sh image, installs the server wheel, copies `frontend/dist`, and runs as non-root `agblogger` user on port 8000. No CLI tools are shipped in the runtime image. The pandoc server runs as a child process of the application, started during app startup and stopped on shutdown.
+3. **Stage 3** (Python 3.14 slim runtime): Installs Pandoc and gosu from GitHub releases, copies uv from astral-sh image, installs the server wheel, copies `frontend/dist`, and runs as non-root `agblogger` user on port 8000. No CLI tools are shipped in the runtime image. The pandoc server runs as a child process of the application, started during app startup and stopped on shutdown.
+
+A `docker-entrypoint.sh` script handles bind-mount permissions: when the container starts as root (the default in compose), the entrypoint fixes ownership of `/data/content` and `/data/db`, then drops privileges to the `agblogger` user via gosu before executing the CMD. This ensures the `content/` bind mount works out-of-the-box on Linux without manual permission setup. The Dockerfile retains `USER agblogger` for direct `docker run` usage and security scanning compliance.
 
 Volumes: `/data/content` (blog content) and `/data/db` (SQLite database). The containerized runtime uses an absolute SQLite URL rooted at `/data/db`, so the database file is created inside the mounted volume rather than under the application worktree.
 
 Health check: `curl -f http://localhost:8000/api/health`.
 
-`docker-compose.yml` is Caddy-first: AgBlogger is internal-only (`expose: 8000`), Caddy publishes `127.0.0.1:80:80` and `127.0.0.1:443:443`, and Caddy forwards to `agblogger:8000`. A custom Docker network (`172.30.0.0/24`) assigns Caddy a static IP (`172.30.0.2`) so the backend can trust `X-Forwarded-For` headers for accurate per-client rate limiting.
+`docker-compose.yml` is Caddy-first: AgBlogger is internal-only (`expose: 8000`), Caddy publishes `127.0.0.1:80:80` and `127.0.0.1:443:443`, and Caddy forwards to `agblogger:8000`. Caddy uses `depends_on` with `condition: service_healthy` so it doesn't accept traffic until AgBlogger passes its health check. A custom Docker network (`172.30.0.0/24`) assigns Caddy a static IP (`172.30.0.2`) so the backend can trust `X-Forwarded-For` headers for accurate per-client rate limiting. All compose files set `user: root` on the agblogger service so the entrypoint can fix bind-mount permissions before dropping to the non-root user.
 
 All compose files pass the full set of application environment variables (auth hardening, `EXPOSE_DOCS`, `DEBUG`, etc.) to the container via the `environment:` section with safe defaults. Compose-level variables (`HOST_BIND_IP`, `HOST_PORT`, `AGBLOGGER_IMAGE`) are interpolated from `.env.production` via `--env-file`.
 

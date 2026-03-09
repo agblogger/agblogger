@@ -94,6 +94,7 @@ select = [
 [tool.ruff.lint.per-file-ignores]
 "cli/**" = ["T201"]                # CLI tools need print statements
 "cli/release.py" = ["S603", "S607"]  # release automation shells out to vetted git/gh commands
+"cli/deploy_production.py" = ["S603"]  # deployment tool shells out to docker/trivy commands
 "backend/api/**" = ["TC", "B008"]  # FastAPI needs runtime type imports and Depends() defaults
 "backend/models/**" = ["RUF012", "TC003"]  # SQLAlchemy needs runtime types for Mapped[]
 "backend/pandoc/**" = ["S607"]     # pandoc is invoked by name

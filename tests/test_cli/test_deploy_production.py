@@ -284,9 +284,15 @@ def test_build_lifecycle_commands_for_default_caddy() -> None:
         use_caddy=True,
         caddy_public=False,
     )
-    assert commands["start"] == "docker compose --env-file .env.production up -d"
-    assert commands["stop"] == "docker compose --env-file .env.production down"
-    assert commands["status"] == "docker compose --env-file .env.production ps"
+    assert (
+        commands["start"] == "docker compose --env-file .env.production -f docker-compose.yml up -d"
+    )
+    assert (
+        commands["stop"] == "docker compose --env-file .env.production -f docker-compose.yml down"
+    )
+    assert (
+        commands["status"] == "docker compose --env-file .env.production -f docker-compose.yml ps"
+    )
 
 
 def test_build_lifecycle_commands_for_public_caddy_override() -> None:
@@ -575,7 +581,10 @@ def test_deploy_with_local_caddy_runs_base_compose(
 
     result = deploy(config=config, project_dir=tmp_path)
 
-    assert result.commands["start"] == "docker compose --env-file .env.production up -d"
+    assert (
+        result.commands["start"]
+        == "docker compose --env-file .env.production -f docker-compose.yml up -d"
+    )
     assert commands == [
         (
             [
@@ -583,6 +592,8 @@ def test_deploy_with_local_caddy_runs_base_compose(
                 "compose",
                 "--env-file",
                 ".env.production",
+                "-f",
+                "docker-compose.yml",
                 "up",
                 "-d",
                 "--build",
@@ -1140,3 +1151,72 @@ def test_config_from_args_reads_admin_password_from_env(
 
     config = config_from_args(args)
     assert config.admin_password == "env-password-123"
+
+
+# ── caddy depends_on with health condition ────────────────────────────
+
+
+def test_caddy_service_section_uses_service_healthy_condition() -> None:
+    content = build_image_compose_content()
+    assert "condition: service_healthy" in content
+
+
+def test_docker_compose_yml_caddy_depends_on_healthy() -> None:
+    from cli.deploy_production import _caddy_service_section
+
+    section = _caddy_service_section()
+    assert "condition: service_healthy" in section
+    assert "- agblogger" not in section
+
+
+# ── caddyfile HTML matcher ────────────────────────────────────────────
+
+
+def test_build_caddyfile_content_html_cache_matches_all_depths() -> None:
+    caddy = CaddyConfig(domain="blog.example.com", email=None)
+    content = build_caddyfile_content(caddy)
+    assert r"@html path_regexp \.html$" in content
+    assert "header @html" in content
+
+
+# ── error message includes command ────────────────────────────────────
+
+
+def test_main_subprocess_error_includes_command(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    import subprocess as sp
+
+    from cli.deploy_production import main
+
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "deploy",
+            "--non-interactive",
+            "--project-dir",
+            str(tmp_path),
+            "--admin-username",
+            "admin",
+            "--admin-password",
+            "strong-password!",
+            "--trusted-hosts",
+            "example.com",
+        ],
+    )
+    (tmp_path / "docker-compose.yml").write_text("services: {}\n", encoding="utf-8")
+    monkeypatch.setattr("cli.deploy_production.shutil.which", lambda _name: "/usr/bin/docker")
+
+    def fake_run(command: list[str], **_kwargs: object) -> None:
+        raise sp.CalledProcessError(returncode=1, cmd=command)
+
+    monkeypatch.setattr("cli.deploy_production.subprocess.run", fake_run)
+
+    with pytest.raises(SystemExit, match="1"):
+        main()
+
+    captured = capsys.readouterr()
+    assert "docker" in captured.out
+    assert "exit code 1" in captured.out
