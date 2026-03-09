@@ -6,6 +6,7 @@ is caught by a global handler and returns HTTP 401 with appropriate message.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, patch
 
@@ -87,3 +88,25 @@ class TestTokenExpiredGlobalHandler:
         assert resp.status_code == 401
         body = resp.json()
         assert "abc123secret" not in body["detail"]
+
+    async def test_token_expired_does_not_log_exception_message(
+        self, client: AsyncClient, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """TokenExpiredError logs should avoid exception text that may contain secrets."""
+        headers = await _login(client)
+        with (
+            patch(
+                "backend.api.posts.list_posts",
+                new_callable=AsyncMock,
+                side_effect=TokenExpiredError("Token abc123secret expired at 2026-01-01"),
+            ),
+            caplog.at_level(logging.WARNING, logger="backend.main"),
+        ):
+            resp = await client.get("/api/posts", headers=headers)
+
+        assert resp.status_code == 401
+        warning_messages = [
+            record.message for record in caplog.records if record.levelno == logging.WARNING
+        ]
+        assert any(message == "TokenExpiredError in GET /api/posts" for message in warning_messages)
+        assert all("abc123secret" not in message for message in warning_messages)

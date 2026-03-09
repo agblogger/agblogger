@@ -211,7 +211,7 @@ Exception handlers in `backend/main.py` catch unhandled errors at the framework 
 | `OperationalError` | 503 | "Database temporarily unavailable" |
 | `RequestValidationError` | 422 | Structured field-level errors |
 
-All handlers log the full exception with traceback server-side while returning only generic messages to clients. `InternalServerError` is used for errors whose details must never reach clients (decryption failures, config validation, infrastructure issues). `ValueError` is the only handler that forwards `str(exc)` to clients, reserved for business logic validation errors.
+Unhandled internal-error handlers log the full exception with traceback server-side while returning only generic messages to clients. Auth-expiry handling is narrower: the global `TokenExpiredError` handler logs only request metadata so token-like exception text cannot be written to logs. `InternalServerError` is used for errors whose details must never reach clients (decryption failures, config validation, infrastructure issues). `ValueError` is the only handler that forwards `str(exc)` to clients, reserved for business logic validation errors.
 
 ### Exception Type Conventions
 
