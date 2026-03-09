@@ -22,7 +22,8 @@ http://localhost, http://host.docker.internal {
     }
 
     # HTML caching (short TTL for freshness)
-    header /*.html {
+    @html path_regexp \.html$
+    header @html {
         Cache-Control "public, max-age=60"
     }
 

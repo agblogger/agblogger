@@ -28,6 +28,8 @@ from cli.deploy_production import (
     CaddyConfig,
     DeployConfig,
     DeployError,
+    _build_remote_readme_content,
+    _is_valid_caddy_domain,
     backup_existing_configs,
     backup_file,
     build_caddy_public_compose_override_content,
@@ -86,7 +88,7 @@ def _stub_subprocess(monkeypatch: pytest.MonkeyPatch) -> list[tuple[list[str], P
     """
     commands: list[tuple[list[str], Path, bool]] = []
 
-    def fake_run(command: list[str], cwd: Path, check: bool) -> SimpleNamespace:
+    def fake_run(command: list[str], cwd: Path, check: bool, **kwargs: object) -> SimpleNamespace:
         commands.append((command, cwd, check))
         return SimpleNamespace(returncode=0)
 
@@ -1506,3 +1508,173 @@ def test_deploy_prints_progress_messages(
 
     captured = capsys.readouterr().out
     assert "Starting containers" in captured
+
+
+# ── Review 4 fixes ──────────────────────────────────────────────────
+
+
+class TestWaitForHealthyVacuousTruth:
+    """Issue 1: _wait_for_healthy should not report success when agblogger is absent."""
+
+    def test_does_not_report_healthy_when_agblogger_absent(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        from cli.deploy_production import _wait_for_healthy
+
+        def fake_monotonic() -> float:
+            fake_monotonic.counter += 1  # type: ignore[attr-defined]
+            return float(fake_monotonic.counter * 100)  # type: ignore[attr-defined]
+
+        fake_monotonic.counter = 0  # type: ignore[attr-defined]
+
+        def fake_run(command: list[str], **_kwargs: object) -> SimpleNamespace:
+            return SimpleNamespace(returncode=0, stdout="caddy: Up 10 seconds\n")
+
+        monkeypatch.setattr("cli.deploy_production.subprocess.run", fake_run)
+        monkeypatch.setattr("cli.deploy_production.time.sleep", lambda _s: None)
+        monkeypatch.setattr("cli.deploy_production.time.monotonic", fake_monotonic)
+
+        config = _make_config()
+        _wait_for_healthy(config, tmp_path, timeout=10, interval=1)
+
+        captured = capsys.readouterr()
+        assert "All services healthy" not in captured.out
+        assert "timed out" in captured.err
+
+    def test_reports_healthy_when_agblogger_present_and_healthy(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        from cli.deploy_production import _wait_for_healthy
+
+        def fake_run(command: list[str], **_kwargs: object) -> SimpleNamespace:
+            return SimpleNamespace(
+                returncode=0,
+                stdout="agblogger: Up 10 seconds (healthy)\ncaddy: Up 10 seconds\n",
+            )
+
+        monkeypatch.setattr("cli.deploy_production.subprocess.run", fake_run)
+        monkeypatch.setattr("cli.deploy_production.time.sleep", lambda _s: None)
+
+        config = _make_config()
+        _wait_for_healthy(config, tmp_path, timeout=30, interval=1)
+
+        captured = capsys.readouterr()
+        assert "All services healthy" in captured.out
+
+
+class TestInlineDomainValidation:
+    """Issue 2: Inline validation for Caddy domain prompts."""
+
+    @pytest.mark.parametrize(
+        "domain",
+        ["127.0.0.1", "93.184.216.34", "single", "foo..bar", "-bad.com", ""],
+    )
+    def test_is_valid_caddy_domain_rejects_invalid(self, domain: str) -> None:
+        assert not _is_valid_caddy_domain(domain)
+
+    @pytest.mark.parametrize(
+        "domain",
+        ["blog.example.com", "my-blog.io", "a.b.c.d.example.com", "example.co.uk"],
+    )
+    def test_is_valid_caddy_domain_accepts_valid(self, domain: str) -> None:
+        assert _is_valid_caddy_domain(domain)
+
+
+class TestEnvContentCaddyComments:
+    """Issue 5: HOST_PORT/HOST_BIND_IP have clarifying comments in Caddy mode."""
+
+    def test_caddy_mode_adds_comment_to_host_port(self) -> None:
+        config = _make_config(
+            caddy_config=CaddyConfig(domain="blog.example.com", email=None),
+            host_bind_ip=LOCALHOST_BIND_IP,
+        )
+        content = build_env_content(config)
+        assert "HOST_PORT=8000  # Only used in no-Caddy mode" in content
+        assert "HOST_BIND_IP=127.0.0.1  # Only used in no-Caddy mode" in content
+
+    def test_no_caddy_mode_omits_comment(self) -> None:
+        config = _make_config()
+        content = build_env_content(config)
+        assert "HOST_PORT=8000\n" in content
+        assert "# Only used in no-Caddy mode" not in content
+
+
+class TestEnvContentBlueskyComment:
+    """Issue 7: Commented BLUESKY_CLIENT_URL in env file."""
+
+    def test_env_content_includes_bluesky_comment(self) -> None:
+        config = _make_config()
+        content = build_env_content(config)
+        assert "# BLUESKY_CLIENT_URL=" in content
+        assert "Uncomment to enable Bluesky cross-posting" in content
+
+
+class TestRemoteReadmeFormatting:
+    """Issue 6: DEPLOY-REMOTE.md steps use code blocks."""
+
+    def test_registry_readme_uses_code_blocks(self) -> None:
+        config = _make_config(
+            caddy_config=CaddyConfig(domain="blog.example.com", email=None),
+            host_bind_ip=LOCALHOST_BIND_IP,
+            deployment_mode=DEPLOY_MODE_REGISTRY,
+            image_ref="ghcr.io/example/agblogger:v1",
+        )
+        commands = build_lifecycle_commands(
+            deployment_mode=DEPLOY_MODE_REGISTRY,
+            use_caddy=True,
+            caddy_public=False,
+        )
+        content = _build_remote_readme_content(config, commands)
+        assert "```" in content
+        assert "Pull the image:" in content
+        assert "Start the services:" in content
+        assert "Verify the services are running:" in content
+        assert "## Management commands" in content
+
+    def test_tarball_readme_uses_code_blocks(self) -> None:
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1",
+        )
+        commands = build_lifecycle_commands(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            use_caddy=False,
+            caddy_public=False,
+        )
+        content = _build_remote_readme_content(config, commands)
+        assert "```" in content
+        assert "Load the image:" in content
+
+
+class TestCommandTimeout:
+    """Issue 4: subprocess calls have a timeout."""
+
+    def test_run_command_passes_timeout(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        from cli.deploy_production import COMMAND_TIMEOUT_SECONDS, _run_command
+
+        captured_kwargs: dict[str, object] = {}
+
+        def fake_run(command: list[str], **kwargs: object) -> SimpleNamespace:
+            captured_kwargs.update(kwargs)
+            return SimpleNamespace(returncode=0)
+
+        monkeypatch.setattr("cli.deploy_production.subprocess.run", fake_run)
+        _run_command(["echo", "hello"], tmp_path)
+        assert captured_kwargs["timeout"] == COMMAND_TIMEOUT_SECONDS
+
+    def test_run_command_accepts_custom_timeout(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        from cli.deploy_production import _run_command
+
+        captured_kwargs: dict[str, object] = {}
+
+        def fake_run(command: list[str], **kwargs: object) -> SimpleNamespace:
+            captured_kwargs.update(kwargs)
+            return SimpleNamespace(returncode=0)
+
+        monkeypatch.setattr("cli.deploy_production.subprocess.run", fake_run)
+        _run_command(["echo", "hello"], tmp_path, timeout=42)
+        assert captured_kwargs["timeout"] == 42
