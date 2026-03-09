@@ -266,6 +266,8 @@ zap-baseline minutes="": (_zap "baseline" zap_baseline_minutes minutes)
 # OWASP ZAP full active DAST scan against the local frontend dev server.
 zap-full minutes="": (_zap "full" zap_full_minutes minutes)
 
+zap: zap-baseline zap-full
+
 # ── CodeQL ────────────────────────────────────────────────────────
 
 # Create CodeQL databases for Python and JavaScript/TypeScript
