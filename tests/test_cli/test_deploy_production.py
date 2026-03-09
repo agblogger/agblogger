@@ -236,7 +236,7 @@ def test_build_caddyfile_content_enables_hsts_for_https_deployments() -> None:
     content = build_caddyfile_content(caddy)
 
     assert "Strict-Transport-Security" in content
-    assert 'max-age=31536000' in content
+    assert "max-age=31536000" in content
 
 
 # ── build_direct_compose_content ─────────────────────────────────────

@@ -125,7 +125,7 @@ Tarball mode also writes the exported image tarball into the bundle directory. T
 
 ## Production HTTPS
 
-When enabled in the deploy helper, Caddy is configured as a reverse proxy in front of AgBlogger with automatic Let's Encrypt TLS, static asset caching with `Cache-Control: immutable`, gzip/zstd compression, and request-body caps for multipart upload endpoints (`55 MB` for post upload/assets, `100 MB` for sync commit).
+When enabled in the deploy helper, Caddy is configured as a reverse proxy in front of AgBlogger with automatic Let's Encrypt TLS, HSTS (`Strict-Transport-Security: max-age=31536000`) on HTTPS responses, static asset caching with `Cache-Control: immutable`, gzip/zstd compression, and request-body caps for multipart upload endpoints (`55 MB` for post upload/assets, `100 MB` for sync commit). The local ZAP/DAST profile intentionally stays on plain HTTP and does not emit HSTS.
 
 ## Security scanning
 

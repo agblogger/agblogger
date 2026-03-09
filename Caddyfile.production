@@ -17,6 +17,10 @@ myblog.example.com {
         max_size 100MB
     }
 
+    header {
+        Strict-Transport-Security "max-age=31536000"
+    }
+
     reverse_proxy agblogger:8000
 
     # Static asset caching

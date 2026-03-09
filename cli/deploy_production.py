@@ -221,6 +221,9 @@ def build_caddyfile_content(config: CaddyConfig) -> str:
         "    request_body @syncCommit {\n"
         "        max_size 100MB\n"
         "    }\n\n"
+        "    header {\n"
+        '        Strict-Transport-Security "max-age=31536000"\n'
+        "    }\n\n"
         "    reverse_proxy agblogger:8000\n\n"
         "    # Static asset caching\n"
         "    header /assets/* {\n"

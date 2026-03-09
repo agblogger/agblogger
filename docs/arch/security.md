@@ -125,6 +125,8 @@ Applied by the `security_headers` middleware (`backend/main.py`) when `security_
 - `Permissions-Policy` — deny-by-default for unused browser features while explicitly allowing same-origin `clipboard-write`, `fullscreen`, and `web-share`
 - `Content-Security-Policy` — as described above
 
+For Caddy-backed HTTPS deployments, the reverse proxy also sets `Strict-Transport-Security: max-age=31536000` on TLS responses. HSTS is intentionally absent from the local HTTP-only DAST profile and from direct no-Caddy deployments, where TLS termination is outside the app.
+
 ## Middleware Stack
 
 Applied in `backend/main.py:create_app()`:
