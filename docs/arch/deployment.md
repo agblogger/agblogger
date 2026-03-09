@@ -12,7 +12,9 @@ Volumes: `/data/content` (blog content) and `/data/db` (SQLite database). The co
 
 Health check: `curl -f http://localhost:8000/api/health`.
 
-`docker-compose.yml` is Caddy-first: AgBlogger is internal-only (`expose: 8000`), Caddy publishes `127.0.0.1:80:80` and `127.0.0.1:443:443`, and Caddy forwards to `agblogger:8000`.
+`docker-compose.yml` is Caddy-first: AgBlogger is internal-only (`expose: 8000`), Caddy publishes `127.0.0.1:80:80` and `127.0.0.1:443:443`, and Caddy forwards to `agblogger:8000`. A custom Docker network (`172.30.0.0/24`) assigns Caddy a static IP (`172.30.0.2`) so the backend can trust `X-Forwarded-For` headers for accurate per-client rate limiting.
+
+All compose files pass the full set of application environment variables (auth hardening, `EXPOSE_DOCS`, `DEBUG`, etc.) to the container via the `environment:` section with safe defaults. Compose-level variables (`HOST_BIND_IP`, `HOST_PORT`, `AGBLOGGER_IMAGE`) are interpolated from `.env.production` via `--env-file`.
 
 For local DAST, `docker-compose.caddy-local.yml` overrides the Caddy port mapping to `127.0.0.1:8080:80` and mounts `Caddyfile.local`, which serves both `localhost` and `host.docker.internal` over plain HTTP. The ZAP harness uses this local-only profile so scans exercise the packaged app behind Caddy without relying on production TLS or the Vite dev server.
 
@@ -24,7 +26,7 @@ For deployments without Caddy, the deploy script generates `docker-compose.nocad
 
 For remote deployments that should not build on the target host, the deploy helper generates image-only compose files:
 
-- `docker-compose.image.yml` for the Caddy-first topology
+- `docker-compose.image.yml` for the Caddy-first topology (includes the custom network and Caddy static IP)
 - `docker-compose.image.nocaddy.yml` for direct AgBlogger exposure
 
 These files use `${AGBLOGGER_IMAGE}` instead of `build: .`, so the remote host only needs the image plus the generated deployment bundle.
@@ -39,19 +41,23 @@ uv run agblogger-deploy
 
 The deploy helper supports three deployment modes:
 
-1. **Local**: current behavior. Write production config in the repo, optionally scan the image with Trivy, then run `docker compose up -d --build` on the current machine.
+1. **Local**: Write production config in the repo, build via `docker compose build`, optionally scan the built image with Trivy, then start containers on the current machine.
 2. **Registry**: build locally, optionally scan locally, push the image to a registry, and write a self-contained bundle under `dist/deploy/` for the remote server.
 3. **Tarball**: build locally, optionally scan locally, export the image to a tarball, and write the same style of self-contained bundle under `dist/deploy/`.
 
 In all modes the helper:
 
 1. Collects configuration interactively (secret key, admin credentials, deployment mode, Caddy/HTTPS setup, trusted hosts, API docs exposure).
-2. Validates all inputs (key length, password strength, trusted hosts without catch-all wildcards, domain format, port range).
+2. Validates all inputs (key length, password strength, trusted host format, domain format, port range).
 3. Backs up any existing generated config files (`.env.production.bak`, etc.) before overwriting.
 4. Writes `.env.production` (chmod 600), `Caddyfile.production`, and compose files as needed.
-5. Builds the Docker image and scans it with Trivy (if installed) before local deploy, registry push, or tarball export.
+5. Builds the Docker image via `docker compose build` and scans the exact built image with Trivy (if installed) before deployment, registry push, or tarball export.
 6. Either starts local containers, pushes the image to a registry, or saves the image tarball depending on the selected mode.
 7. Prints lifecycle commands for the selected mode.
+
+### Caddy proxy auto-configuration
+
+When Caddy is enabled, the deploy helper automatically configures `TRUSTED_PROXY_IPS` with the compose network subnet (`172.30.0.0/24`). This ensures the backend trusts `X-Forwarded-For` headers from Caddy for per-client rate limiting. The backend supports both exact IP matching and CIDR ranges in `TRUSTED_PROXY_IPS`. No manual proxy IP configuration is needed.
 
 ### Non-interactive mode
 
@@ -70,7 +76,7 @@ uv run agblogger-deploy --non-interactive \
   --expose-docs
 ```
 
-The `--secret-key` flag is optional; one is auto-generated if omitted.
+The `--secret-key` flag is optional; one is auto-generated if omitted. The `--admin-password` can alternatively be set via the `ADMIN_PASSWORD` environment variable to avoid exposing it in process listings.
 
 For tarball mode, add `--deployment-mode tarball` and optionally `--tarball-filename agblogger-image.tar`.
 
@@ -119,4 +125,4 @@ When enabled in the deploy helper, Caddy is configured as a reverse proxy in fro
 
 ## Security scanning
 
-When Trivy is installed, the deploy helper builds the Docker image and scans it for vulnerabilities (MEDIUM/HIGH/CRITICAL severity) **before** starting containers. The scan uses `--exit-code 1` so deployment is aborted if vulnerabilities are found.
+When Trivy is installed, the deploy helper builds the Docker image via `docker compose build` and scans the exact built image (`agblogger:latest`) for vulnerabilities (MEDIUM/HIGH/CRITICAL severity) **before** starting containers. The scan uses `--exit-code 1` so deployment is aborted if vulnerabilities are found.

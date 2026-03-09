@@ -608,6 +608,36 @@ class TestRegistrationDisabled:
             assert "Registration is disabled" in resp.json()["detail"]
 
 
+class TestIsTrustedProxy:
+    def test_exact_ip_match(self) -> None:
+        from backend.api.auth import _is_trusted_proxy
+
+        assert _is_trusted_proxy("127.0.0.1", ["127.0.0.1"]) is True
+        assert _is_trusted_proxy("10.0.0.1", ["127.0.0.1"]) is False
+
+    def test_cidr_match(self) -> None:
+        from backend.api.auth import _is_trusted_proxy
+
+        assert _is_trusted_proxy("172.30.0.2", ["172.30.0.0/24"]) is True
+        assert _is_trusted_proxy("172.30.0.99", ["172.30.0.0/24"]) is True
+        assert _is_trusted_proxy("172.31.0.2", ["172.30.0.0/24"]) is False
+
+    def test_invalid_client_ip(self) -> None:
+        from backend.api.auth import _is_trusted_proxy
+
+        assert _is_trusted_proxy("not-an-ip", ["127.0.0.1"]) is False
+
+    def test_invalid_trusted_entry_is_skipped(self) -> None:
+        from backend.api.auth import _is_trusted_proxy
+
+        assert _is_trusted_proxy("127.0.0.1", ["bad-entry", "127.0.0.1"]) is True
+
+    def test_empty_list(self) -> None:
+        from backend.api.auth import _is_trusted_proxy
+
+        assert _is_trusted_proxy("127.0.0.1", []) is False
+
+
 class TestTrustedProxyForwarding:
     @pytest.fixture
     def trusted_proxy_settings(self, tmp_content_dir: Path, tmp_path: Path) -> Settings:

@@ -6,6 +6,7 @@ import argparse
 import asyncio
 import getpass
 import json
+import os
 import secrets
 import shutil
 import subprocess
@@ -30,7 +31,9 @@ DEPLOY_MODE_LOCAL = "local"
 DEPLOY_MODE_REGISTRY = "registry"
 DEPLOY_MODE_TARBALL = "tarball"
 DEPLOY_MODES = {DEPLOY_MODE_LOCAL, DEPLOY_MODE_REGISTRY, DEPLOY_MODE_TARBALL}
-SCAN_IMAGE_TAG = "agblogger-deploy-scan:latest"
+LOCAL_IMAGE_TAG = "agblogger:latest"
+CADDY_STATIC_IP = "172.30.0.2"
+COMPOSE_SUBNET = "172.30.0.0/24"
 # Constructed to avoid static-analysis tools flagging literal 0.0.0.0
 PUBLIC_BIND_IP = ".".join(("0", "0", "0", "0"))
 LOCALHOST_BIND_IP = "127.0.0.1"
@@ -148,8 +151,6 @@ def build_env_content(config: DeployConfig) -> str:
         f"ADMIN_PASSWORD={_quote_env_value(config.admin_password)}",
         f"HOST_PORT={config.host_port}",
         f"HOST_BIND_IP={config.host_bind_ip}",
-        "HOST=0.0.0.0",
-        "PORT=8000",
         "DEBUG=false",
         f"EXPOSE_DOCS={'true' if config.expose_docs else 'false'}",
         f"TRUSTED_HOSTS={_list_to_env_json(config.trusted_hosts)}",
@@ -202,17 +203,19 @@ def build_caddyfile_content(config: CaddyConfig) -> str:
     )
 
 
-def build_direct_compose_content() -> str:
-    """Build a no-Caddy compose file for direct AgBlogger exposure."""
+def _is_valid_trusted_host(host: str) -> bool:
+    """Return True for explicit hosts and narrow subdomain wildcards."""
+    candidate = host.strip()
+    if not candidate or candidate == "*":
+        return False
+    if "*" not in candidate:
+        return True
+    return candidate.startswith("*.") and candidate.count("*") == 1 and len(candidate) > 2
+
+
+def _agblogger_env_section() -> str:
+    """Return the environment YAML block shared across all compose files."""
     return (
-        "services:\n"
-        "  agblogger:\n"
-        "    build: .\n"
-        "    ports:\n"
-        '      - "${HOST_BIND_IP:-127.0.0.1}:${HOST_PORT:-8000}:8000"\n'
-        "    volumes:\n"
-        "      - ./content:/data/content\n"
-        "      - agblogger-db:/data/db\n"
         "    environment:\n"
         "      - SECRET_KEY=${SECRET_KEY?Set SECRET_KEY}\n"
         "      - ADMIN_USERNAME=${ADMIN_USERNAME?Set ADMIN_USERNAME}\n"
@@ -221,13 +224,77 @@ def build_direct_compose_content() -> str:
         "      - TRUSTED_PROXY_IPS=${TRUSTED_PROXY_IPS:-[]}\n"
         "      - CONTENT_DIR=/data/content\n"
         "      - DATABASE_URL=sqlite+aiosqlite:////data/db/agblogger.db\n"
+        "      - DEBUG=${DEBUG:-false}\n"
+        "      - EXPOSE_DOCS=${EXPOSE_DOCS:-false}\n"
+        "      - AUTH_ENFORCE_LOGIN_ORIGIN=${AUTH_ENFORCE_LOGIN_ORIGIN:-true}\n"
+        "      - AUTH_SELF_REGISTRATION=${AUTH_SELF_REGISTRATION:-false}\n"
+        "      - AUTH_INVITES_ENABLED=${AUTH_INVITES_ENABLED:-true}\n"
+        "      - AUTH_LOGIN_MAX_FAILURES=${AUTH_LOGIN_MAX_FAILURES:-5}\n"
+        "      - AUTH_RATE_LIMIT_WINDOW_SECONDS=${AUTH_RATE_LIMIT_WINDOW_SECONDS:-300}\n"
+    )
+
+
+def _agblogger_healthcheck_section() -> str:
+    """Return the restart + healthcheck YAML block for agblogger services."""
+    return (
         "    restart: unless-stopped\n"
         "    healthcheck:\n"
         '      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]\n'
         "      interval: 30s\n"
         "      timeout: 5s\n"
         "      start_period: 10s\n"
-        "      retries: 3\n\n"
+        "      retries: 3\n"
+    )
+
+
+def _caddy_service_section() -> str:
+    """Return the Caddy service YAML block with static proxy IP."""
+    return (
+        "  caddy:\n"
+        "    image: caddy:2\n"
+        "    ports:\n"
+        '      - "127.0.0.1:80:80"\n'
+        '      - "127.0.0.1:443:443"\n'
+        "    volumes:\n"
+        "      - ./Caddyfile.production:/etc/caddy/Caddyfile:ro\n"
+        "      - caddy-data:/data\n"
+        "      - caddy-config:/config\n"
+        "    depends_on:\n"
+        "      - agblogger\n"
+        "    restart: unless-stopped\n"
+        "    networks:\n"
+        "      default:\n"
+        f"        ipv4_address: {CADDY_STATIC_IP}\n"
+    )
+
+
+def _compose_network_block() -> str:
+    """Return the custom network YAML block for Caddy proxy IP."""
+    return (
+        "networks:\n"
+        "  default:\n"
+        "    driver: bridge\n"
+        "    ipam:\n"
+        "      config:\n"
+        f"        - subnet: {COMPOSE_SUBNET}\n"
+    )
+
+
+def build_direct_compose_content() -> str:
+    """Build a no-Caddy compose file for direct AgBlogger exposure."""
+    return (
+        "services:\n"
+        "  agblogger:\n"
+        "    build: .\n"
+        f"    image: {LOCAL_IMAGE_TAG}\n"
+        "    ports:\n"
+        '      - "${HOST_BIND_IP:-127.0.0.1}:${HOST_PORT:-8000}:8000"\n'
+        "    volumes:\n"
+        "      - ./content:/data/content\n"
+        "      - agblogger-db:/data/db\n"
+        + _agblogger_env_section()
+        + _agblogger_healthcheck_section()
+        + "\n"
         "volumes:\n"
         "  agblogger-db:\n"
     )
@@ -244,33 +311,13 @@ def build_image_compose_content() -> str:
         "    volumes:\n"
         "      - ./content:/data/content\n"
         "      - agblogger-db:/data/db\n"
-        "    environment:\n"
-        "      - SECRET_KEY=${SECRET_KEY?Set SECRET_KEY}\n"
-        "      - ADMIN_USERNAME=${ADMIN_USERNAME?Set ADMIN_USERNAME}\n"
-        "      - ADMIN_PASSWORD=${ADMIN_PASSWORD?Set ADMIN_PASSWORD}\n"
-        "      - TRUSTED_HOSTS=${TRUSTED_HOSTS?Set TRUSTED_HOSTS}\n"
-        "      - TRUSTED_PROXY_IPS=${TRUSTED_PROXY_IPS:-[]}\n"
-        "      - CONTENT_DIR=/data/content\n"
-        "      - DATABASE_URL=sqlite+aiosqlite:////data/db/agblogger.db\n"
-        "    restart: unless-stopped\n"
-        "    healthcheck:\n"
-        '      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]\n'
-        "      interval: 30s\n"
-        "      timeout: 5s\n"
-        "      start_period: 10s\n"
-        "      retries: 3\n\n"
-        "  caddy:\n"
-        "    image: caddy:2\n"
-        "    ports:\n"
-        '      - "127.0.0.1:80:80"\n'
-        '      - "127.0.0.1:443:443"\n'
-        "    volumes:\n"
-        "      - ./Caddyfile.production:/etc/caddy/Caddyfile:ro\n"
-        "      - caddy-data:/data\n"
-        "      - caddy-config:/config\n"
-        "    depends_on:\n"
-        "      - agblogger\n"
-        "    restart: unless-stopped\n\n"
+        + _agblogger_env_section()
+        + _agblogger_healthcheck_section()
+        + "\n"
+        + _caddy_service_section()
+        + "\n"
+        + _compose_network_block()
+        + "\n"
         "volumes:\n"
         "  agblogger-db:\n"
         "  caddy-data:\n"
@@ -289,21 +336,9 @@ def build_image_direct_compose_content() -> str:
         "    volumes:\n"
         "      - ./content:/data/content\n"
         "      - agblogger-db:/data/db\n"
-        "    environment:\n"
-        "      - SECRET_KEY=${SECRET_KEY?Set SECRET_KEY}\n"
-        "      - ADMIN_USERNAME=${ADMIN_USERNAME?Set ADMIN_USERNAME}\n"
-        "      - ADMIN_PASSWORD=${ADMIN_PASSWORD?Set ADMIN_PASSWORD}\n"
-        "      - TRUSTED_HOSTS=${TRUSTED_HOSTS?Set TRUSTED_HOSTS}\n"
-        "      - TRUSTED_PROXY_IPS=${TRUSTED_PROXY_IPS:-[]}\n"
-        "      - CONTENT_DIR=/data/content\n"
-        "      - DATABASE_URL=sqlite+aiosqlite:////data/db/agblogger.db\n"
-        "    restart: unless-stopped\n"
-        "    healthcheck:\n"
-        '      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]\n'
-        "      interval: 30s\n"
-        "      timeout: 5s\n"
-        "      start_period: 10s\n"
-        "      retries: 3\n\n"
+        + _agblogger_env_section()
+        + _agblogger_healthcheck_section()
+        + "\n"
         "volumes:\n"
         "  agblogger-db:\n"
     )
@@ -388,6 +423,12 @@ def _validate_config(config: DeployConfig) -> None:
         raise DeployError("ADMIN_USERNAME must not be empty")
     if not config.trusted_hosts:
         raise DeployError("TRUSTED_HOSTS must include at least one host")
+    for host in config.trusted_hosts:
+        if not _is_valid_trusted_host(host):
+            raise DeployError(
+                f"Invalid trusted host: {host!r}. "
+                "Use explicit hosts or '*.example.com' (no catch-all wildcards)."
+            )
     if not (1 <= config.host_port <= 65535):
         raise DeployError("HOST_PORT must be between 1 and 65535")
     if config.host_bind_ip not in {LOCALHOST_BIND_IP, PUBLIC_BIND_IP}:
@@ -514,27 +555,27 @@ def _build_remote_readme_content(config: DeployConfig, commands: dict[str, str])
     lines = [
         "# Remote deployment bundle",
         "",
-        "Copy this directory to the remote server, then run the commands below from there.",
+        "Copy this directory to the remote server, then run the commands below.",
+        "",
+        "Blog content is stored in `./content/` (created automatically on first start).",
         "",
     ]
+    step = 1
     if config.deployment_mode == DEPLOY_MODE_REGISTRY:
-        lines.extend(
-            [
-                "1. Authenticate the remote server to your container registry if needed.",
-                f"2. {commands['pull']}",
-                f"3. {commands['start']}",
-            ]
+        lines.append(
+            f"{step}. Authenticate the remote server to your container registry if needed."
         )
+        step += 1
+        lines.append(f"{step}. {commands['pull']}")
+        step += 1
     else:
-        lines.extend(
-            [
-                f"1. {commands['load']}",
-                f"2. {commands['start']}",
-            ]
-        )
+        lines.append(f"{step}. {commands['load']}")
+        step += 1
+    lines.append(f"{step}. {commands['start']}")
+    step += 1
+    lines.append(f"{step}. {commands['status']}")
     lines.extend(
         [
-            f"4. {commands['status']}",
             "",
             "Management commands:",
             f"- Stop: {commands['stop']}",
@@ -629,22 +670,34 @@ def save_image_tarball(project_dir: Path, image_tag: str, tarball_path: Path) ->
     _run_docker(project_dir, ["save", "--output", str(tarball_path), image_tag])
 
 
-def _compose_up_command(config: DeployConfig) -> list[str]:
-    """Build the docker compose up command for local deployments."""
-    command = ["compose", "--env-file", ".env.production"]
+def _compose_base_args(config: DeployConfig) -> list[str]:
+    """Build the shared docker compose CLI prefix for local deployments."""
+    args = ["compose", "--env-file", ".env.production"]
     for filename in _compose_filenames(
         DEPLOY_MODE_LOCAL,
         use_caddy=config.caddy_config is not None,
         caddy_public=config.caddy_public,
     ):
-        command.extend(["-f", filename])
-    command.extend(["up", "-d", "--build"])
+        args.extend(["-f", filename])
+    return args
+
+
+def _compose_up_command(config: DeployConfig, *, build: bool = True) -> list[str]:
+    """Build the docker compose up command for local deployments."""
+    command = [*_compose_base_args(config), "up", "-d"]
+    if build:
+        command.append("--build")
     return command
 
 
-def _run_compose_up(config: DeployConfig, project_dir: Path) -> None:
+def _compose_build_command(config: DeployConfig) -> list[str]:
+    """Build the docker compose build command for local deployments."""
+    return [*_compose_base_args(config), "build"]
+
+
+def _run_compose_up(config: DeployConfig, project_dir: Path, *, build: bool = True) -> None:
     """Start containers via docker compose with the correct file arguments."""
-    _run_docker(project_dir, _compose_up_command(config))
+    _run_docker(project_dir, _compose_up_command(config, build=build))
 
 
 # ── Deploy orchestration ────────────────────────────────────────────
@@ -674,9 +727,11 @@ def deploy(config: DeployConfig, project_dir: Path) -> DeployResult:
         write_config_files(config, project_dir)
 
         if trivy_available:
-            build_and_scan(project_dir, SCAN_IMAGE_TAG)
-
-        _run_compose_up(config, project_dir)
+            _run_docker(project_dir, _compose_build_command(config))
+            scan_image(project_dir, LOCAL_IMAGE_TAG)
+            _run_compose_up(config, project_dir, build=False)
+        else:
+            _run_compose_up(config, project_dir)
 
         return DeployResult(
             env_path=project_dir / DEFAULT_ENV_FILE,
@@ -938,7 +993,17 @@ def collect_config() -> DeployConfig:
         if not trusted_hosts:
             print("Provide at least one trusted host.")
 
-    proxy_ips = parse_csv_list(input("Trusted proxy IPs (comma-separated, optional): ").strip())
+    if use_caddy:
+        proxy_ips = [COMPOSE_SUBNET]
+        extra_proxy_ips = parse_csv_list(
+            input("Additional trusted proxy IPs (comma-separated, optional): ").strip()
+        )
+        for ip in extra_proxy_ips:
+            if ip not in proxy_ips:
+                proxy_ips.append(ip)
+        print(f"Caddy proxy subnet ({COMPOSE_SUBNET}) auto-configured as a trusted proxy.")
+    else:
+        proxy_ips = parse_csv_list(input("Trusted proxy IPs (comma-separated, optional): ").strip())
 
     expose_docs = _prompt_yes_no(
         "Expose API documentation at /docs? (usually only for development)",
@@ -971,8 +1036,11 @@ def config_from_args(args: argparse.Namespace) -> DeployConfig:
     secret_key = args.secret_key or secrets.token_urlsafe(64)
     if not args.admin_username:
         raise DeployError("--admin-username is required in non-interactive mode")
-    if not args.admin_password:
-        raise DeployError("--admin-password is required in non-interactive mode")
+    admin_password = args.admin_password or os.environ.get("ADMIN_PASSWORD", "")
+    if not admin_password:
+        raise DeployError(
+            "--admin-password is required (or set ADMIN_PASSWORD env var) in non-interactive mode"
+        )
     if not args.trusted_hosts:
         raise DeployError("--trusted-hosts is required in non-interactive mode")
     if args.deployment_mode in {DEPLOY_MODE_REGISTRY, DEPLOY_MODE_TARBALL} and not args.image_ref:
@@ -991,12 +1059,16 @@ def config_from_args(args: argparse.Namespace) -> DeployConfig:
     if caddy_config and caddy_config.domain not in trusted_hosts:
         trusted_hosts.append(caddy_config.domain)
 
+    trusted_proxy_ips = parse_csv_list(args.trusted_proxy_ips) if args.trusted_proxy_ips else []
+    if caddy_config is not None and COMPOSE_SUBNET not in trusted_proxy_ips:
+        trusted_proxy_ips.insert(0, COMPOSE_SUBNET)
+
     return DeployConfig(
         secret_key=secret_key,
         admin_username=args.admin_username,
-        admin_password=args.admin_password,
+        admin_password=admin_password,
         trusted_hosts=trusted_hosts,
-        trusted_proxy_ips=parse_csv_list(args.trusted_proxy_ips) if args.trusted_proxy_ips else [],
+        trusted_proxy_ips=trusted_proxy_ips,
         host_port=args.host_port,
         host_bind_ip=host_bind_ip,
         caddy_config=caddy_config,
@@ -1036,7 +1108,10 @@ def _parse_args() -> argparse.Namespace:
     config_group = parser.add_argument_group("configuration")
     config_group.add_argument("--secret-key", help="JWT signing key (auto-generated if omitted).")
     config_group.add_argument("--admin-username", help="Initial admin username.")
-    config_group.add_argument("--admin-password", help="Initial admin password.")
+    config_group.add_argument(
+        "--admin-password",
+        help="Initial admin password. Also accepted via ADMIN_PASSWORD env var.",
+    )
     config_group.add_argument(
         "--caddy-domain",
         help="Enable Caddy HTTPS with this domain. Omit to expose AgBlogger directly.",

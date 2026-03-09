@@ -89,11 +89,31 @@ def _clear_auth_cookies(response: Response) -> None:
     response.delete_cookie("csrf_token", path="/")
 
 
+def _is_trusted_proxy(client_ip: str, trusted_proxy_ips: list[str]) -> bool:
+    """Check if a client IP matches any trusted proxy entry (exact IP or CIDR range)."""
+    import ipaddress
+
+    try:
+        addr = ipaddress.ip_address(client_ip)
+    except ValueError:
+        return False
+    for entry in trusted_proxy_ips:
+        try:
+            if "/" in entry:
+                if addr in ipaddress.ip_network(entry, strict=False):
+                    return True
+            elif client_ip == entry:
+                return True
+        except ValueError:
+            continue
+    return False
+
+
 def _get_client_ip(request: Request) -> str:
     settings: Settings = request.app.state.settings
     client_host = request.client.host if request.client and request.client.host else "unknown"
     forwarded_for = request.headers.get("X-Forwarded-For")
-    if forwarded_for and client_host in settings.trusted_proxy_ips:
+    if forwarded_for and _is_trusted_proxy(client_host, settings.trusted_proxy_ips):
         return forwarded_for.split(",", maxsplit=1)[0].strip()
     if client_host:
         return client_host

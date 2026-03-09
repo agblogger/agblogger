@@ -1,6 +1,7 @@
 services:
   agblogger:
     build: .
+    image: agblogger:latest
     expose:
       - "8000"
     volumes:
@@ -14,6 +15,13 @@ services:
       - TRUSTED_PROXY_IPS=${TRUSTED_PROXY_IPS:-[]}
       - CONTENT_DIR=/data/content
       - DATABASE_URL=sqlite+aiosqlite:////data/db/agblogger.db
+      - DEBUG=${DEBUG:-false}
+      - EXPOSE_DOCS=${EXPOSE_DOCS:-false}
+      - AUTH_ENFORCE_LOGIN_ORIGIN=${AUTH_ENFORCE_LOGIN_ORIGIN:-true}
+      - AUTH_SELF_REGISTRATION=${AUTH_SELF_REGISTRATION:-false}
+      - AUTH_INVITES_ENABLED=${AUTH_INVITES_ENABLED:-true}
+      - AUTH_LOGIN_MAX_FAILURES=${AUTH_LOGIN_MAX_FAILURES:-5}
+      - AUTH_RATE_LIMIT_WINDOW_SECONDS=${AUTH_RATE_LIMIT_WINDOW_SECONDS:-300}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
@@ -34,6 +42,16 @@ services:
     depends_on:
       - agblogger
     restart: unless-stopped
+    networks:
+      default:
+        ipv4_address: 172.30.0.2
+
+networks:
+  default:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
 
 volumes:
   agblogger-db:

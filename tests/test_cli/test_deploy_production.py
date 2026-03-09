@@ -10,6 +10,8 @@ from unittest.mock import patch
 import pytest
 
 from cli.deploy_production import (
+    CADDY_STATIC_IP,
+    COMPOSE_SUBNET,
     DEFAULT_BUNDLE_DIR,
     DEFAULT_CADDY_PUBLIC_COMPOSE_FILE,
     DEFAULT_IMAGE_COMPOSE_FILE,
@@ -19,10 +21,10 @@ from cli.deploy_production import (
     DEPLOY_MODE_LOCAL,
     DEPLOY_MODE_REGISTRY,
     DEPLOY_MODE_TARBALL,
+    LOCAL_IMAGE_TAG,
     LOCALHOST_BIND_IP,
     MIN_SECRET_KEY_LENGTH,
     PUBLIC_BIND_IP,
-    SCAN_IMAGE_TAG,
     CaddyConfig,
     DeployConfig,
     DeployError,
@@ -136,8 +138,8 @@ def test_build_env_content_includes_required_production_values() -> None:
     assert 'ADMIN_USERNAME="admin"' in content
     assert 'ADMIN_PASSWORD="very-strong-password"' in content
     assert "DEBUG=false" in content
-    assert "HOST=0.0.0.0" in content
-    assert "PORT=8000" in content
+    assert "\nHOST=" not in content
+    assert "\nPORT=" not in content
     assert f"HOST_BIND_IP={PUBLIC_BIND_IP}" in content
     assert 'TRUSTED_HOSTS=["example.com","www.example.com"]' in content
     assert 'TRUSTED_PROXY_IPS=["172.16.0.1"]' in content
@@ -225,7 +227,17 @@ def test_build_caddyfile_content_includes_request_body_limits() -> None:
 def test_build_direct_compose_content_uses_host_bind_and_port() -> None:
     content = build_direct_compose_content()
     assert "${HOST_BIND_IP:-127.0.0.1}:${HOST_PORT:-8000}:8000" in content
+    assert f"image: {LOCAL_IMAGE_TAG}" in content
     assert "caddy:" not in content
+
+
+def test_build_direct_compose_content_passes_all_env_vars() -> None:
+    content = build_direct_compose_content()
+    assert "EXPOSE_DOCS=${EXPOSE_DOCS:-false}" in content
+    assert "DEBUG=${DEBUG:-false}" in content
+    assert "AUTH_ENFORCE_LOGIN_ORIGIN=${AUTH_ENFORCE_LOGIN_ORIGIN:-true}" in content
+    assert "AUTH_SELF_REGISTRATION=${AUTH_SELF_REGISTRATION:-false}" in content
+    assert "AUTH_LOGIN_MAX_FAILURES=${AUTH_LOGIN_MAX_FAILURES:-5}" in content
 
 
 def test_build_image_compose_content_uses_required_image_reference() -> None:
@@ -234,11 +246,24 @@ def test_build_image_compose_content_uses_required_image_reference() -> None:
     assert "build:" not in content
 
 
+def test_build_image_compose_content_includes_caddy_network() -> None:
+    content = build_image_compose_content()
+    assert f"ipv4_address: {CADDY_STATIC_IP}" in content
+    assert "subnet: 172.30.0.0/24" in content
+
+
+def test_build_image_compose_content_passes_all_env_vars() -> None:
+    content = build_image_compose_content()
+    assert "EXPOSE_DOCS=${EXPOSE_DOCS:-false}" in content
+    assert "AUTH_ENFORCE_LOGIN_ORIGIN=${AUTH_ENFORCE_LOGIN_ORIGIN:-true}" in content
+
+
 def test_build_image_direct_compose_content_uses_required_image_reference() -> None:
     content = build_image_direct_compose_content()
     assert "${AGBLOGGER_IMAGE?Set AGBLOGGER_IMAGE}" in content
     assert "build:" not in content
     assert "${HOST_BIND_IP:-127.0.0.1}:${HOST_PORT:-8000}:8000" in content
+    assert "ipv4_address" not in content
 
 
 # ── build_caddy_public_compose_override_content ──────────────────────
@@ -587,7 +612,19 @@ def test_deploy_runs_trivy_scan_before_compose_up(
 
     assert commands == [
         (["trivy", "--version"], tmp_path, True),
-        (["docker", "build", "--tag", SCAN_IMAGE_TAG, "."], tmp_path, True),
+        (
+            [
+                "docker",
+                "compose",
+                "--env-file",
+                ".env.production",
+                "-f",
+                "docker-compose.nocaddy.yml",
+                "build",
+            ],
+            tmp_path,
+            True,
+        ),
         (
             [
                 "trivy",
@@ -598,7 +635,7 @@ def test_deploy_runs_trivy_scan_before_compose_up(
                 "1",
                 "--severity",
                 "MEDIUM,HIGH,CRITICAL",
-                SCAN_IMAGE_TAG,
+                LOCAL_IMAGE_TAG,
             ],
             tmp_path,
             True,
@@ -613,7 +650,6 @@ def test_deploy_runs_trivy_scan_before_compose_up(
                 "docker-compose.nocaddy.yml",
                 "up",
                 "-d",
-                "--build",
             ],
             tmp_path,
             True,
@@ -803,7 +839,7 @@ def test_config_from_args_builds_config_with_caddy() -> None:
     assert config.caddy_public is True
     assert config.host_bind_ip == LOCALHOST_BIND_IP
     assert config.expose_docs is True
-    assert config.trusted_proxy_ips == ["10.0.0.1"]
+    assert config.trusted_proxy_ips == [COMPOSE_SUBNET, "10.0.0.1"]
 
 
 def test_config_from_args_auto_generates_secret_key() -> None:
@@ -875,7 +911,10 @@ def test_config_from_args_raises_on_missing_admin_username() -> None:
         config_from_args(args)
 
 
-def test_config_from_args_raises_on_missing_admin_password() -> None:
+def test_config_from_args_raises_on_missing_admin_password(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("ADMIN_PASSWORD", raising=False)
     args = argparse.Namespace(
         secret_key="s" * 64,
         admin_username="admin",
@@ -981,3 +1020,123 @@ def test_write_config_files_warns_on_chmod_failure(
     captured = capsys.readouterr()
     assert "Warning" in captured.err
     assert ".env.production" in captured.err
+
+
+# ── trusted host validation ──────────────────────────────────────────
+
+
+def test_validate_config_rejects_wildcard_trusted_host() -> None:
+    config = DeployConfig(
+        secret_key="x" * 64,
+        admin_username="admin",
+        admin_password="very-strong-password",
+        trusted_hosts=["*"],
+        trusted_proxy_ips=[],
+        host_port=8000,
+        host_bind_ip=PUBLIC_BIND_IP,
+        caddy_config=None,
+        caddy_public=False,
+        expose_docs=False,
+    )
+
+    with pytest.raises(DeployError, match="Invalid trusted host"):
+        from cli.deploy_production import _validate_config
+
+        _validate_config(config)
+
+
+def test_validate_config_accepts_subdomain_wildcard() -> None:
+    config = DeployConfig(
+        secret_key="x" * 64,
+        admin_username="admin",
+        admin_password="very-strong-password",
+        trusted_hosts=["*.example.com"],
+        trusted_proxy_ips=[],
+        host_port=8000,
+        host_bind_ip=PUBLIC_BIND_IP,
+        caddy_config=None,
+        caddy_public=False,
+        expose_docs=False,
+    )
+
+    from cli.deploy_production import _validate_config
+
+    _validate_config(config)
+
+
+# ── caddy proxy auto-config ──────────────────────────────────────────
+
+
+def test_config_from_args_auto_adds_caddy_proxy_subnet() -> None:
+    args = argparse.Namespace(
+        secret_key="s" * 64,
+        admin_username="admin",
+        admin_password="strong-password!",
+        caddy_domain="blog.example.com",
+        caddy_email=None,
+        caddy_public=False,
+        trusted_hosts="blog.example.com",
+        trusted_proxy_ips=None,
+        host_port=8000,
+        bind_public=False,
+        expose_docs=False,
+        deployment_mode=DEPLOY_MODE_LOCAL,
+        image_ref=None,
+        bundle_dir=DEFAULT_BUNDLE_DIR,
+        tarball_filename=DEFAULT_IMAGE_TARBALL,
+    )
+
+    config = config_from_args(args)
+    assert COMPOSE_SUBNET in config.trusted_proxy_ips
+
+
+def test_config_from_args_no_caddy_does_not_add_proxy_subnet() -> None:
+    args = argparse.Namespace(
+        secret_key="s" * 64,
+        admin_username="admin",
+        admin_password="strong-password!",
+        caddy_domain=None,
+        caddy_email=None,
+        caddy_public=False,
+        trusted_hosts="example.com",
+        trusted_proxy_ips=None,
+        host_port=8000,
+        bind_public=False,
+        expose_docs=False,
+        deployment_mode=DEPLOY_MODE_LOCAL,
+        image_ref=None,
+        bundle_dir=DEFAULT_BUNDLE_DIR,
+        tarball_filename=DEFAULT_IMAGE_TARBALL,
+    )
+
+    config = config_from_args(args)
+    assert config.trusted_proxy_ips == []
+
+
+# ── admin password env var fallback ──────────────────────────────────
+
+
+def test_config_from_args_reads_admin_password_from_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ADMIN_PASSWORD", "env-password-123")
+    args = argparse.Namespace(
+        secret_key="s" * 64,
+        admin_username="admin",
+        admin_password=None,
+        caddy_domain=None,
+        caddy_email=None,
+        caddy_public=False,
+        trusted_hosts="example.com",
+        trusted_proxy_ips=None,
+        host_port=8000,
+        bind_public=False,
+        expose_docs=False,
+        deployment_mode=DEPLOY_MODE_LOCAL,
+        image_ref=None,
+        bundle_dir=DEFAULT_BUNDLE_DIR,
+        tarball_filename=DEFAULT_IMAGE_TARBALL,
+    )
+
+    config = config_from_args(args)
+    assert config.admin_password == "env-password-123"

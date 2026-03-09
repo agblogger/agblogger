@@ -142,7 +142,7 @@ def write_local_caddy_env(localdir: Path) -> Path:
                 "ADMIN_USERNAME=admin",
                 "ADMIN_PASSWORD=zap-local-admin-password",
                 'TRUSTED_HOSTS=["localhost","127.0.0.1","host.docker.internal"]',
-                "TRUSTED_PROXY_IPS=[]",
+                'TRUSTED_PROXY_IPS=["172.30.0.0/24"]',
             )
         )
         + "\n",
