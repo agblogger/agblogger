@@ -24,12 +24,31 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_SQLITE_MAX_INTEGER = 2**63 - 1
+_MAX_API_PER_PAGE = 100
+MAX_SAFE_PAGE = (_SQLITE_MAX_INTEGER // _MAX_API_PER_PAGE) + 1
+
 
 async def _post_labels(session: AsyncSession, post_id: int) -> list[str]:
     """Get label IDs for a post."""
     stmt = select(PostLabelCache.label_id).where(PostLabelCache.post_id == post_id)
     result = await session.execute(stmt)
     return [r[0] for r in result.all()]
+
+
+def validate_pagination(page: int, per_page: int) -> None:
+    """Reject pagination inputs that would overflow SQLite LIMIT/OFFSET integers."""
+    if page < 1:
+        msg = "Page must be greater than or equal to 1"
+        raise ValueError(msg)
+    if per_page < 1:
+        msg = "per_page must be greater than or equal to 1"
+        raise ValueError(msg)
+
+    max_page = (_SQLITE_MAX_INTEGER // per_page) + 1
+    if page > max_page:
+        msg = f"Page is too large for per_page={per_page}; maximum supported page is {max_page}"
+        raise ValueError(msg)
 
 
 async def list_posts(
@@ -48,6 +67,8 @@ async def list_posts(
     order: str = "desc",
 ) -> PostListResponse:
     """List posts with pagination and filtering."""
+    validate_pagination(page, per_page)
+
     stmt = select(PostCache)
 
     if draft_owner_username:

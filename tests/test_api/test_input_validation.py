@@ -143,6 +143,32 @@ class TestSortOrderLabelModeValidation:
             assert resp.status_code == 200, f"labelMode={mode} should be valid"
 
 
+class TestPaginationValidation:
+    """Pagination params reject values that would overflow SQLite offsets."""
+
+    @pytest.mark.asyncio
+    async def test_posts_page_too_large_returns_422(self, client: AsyncClient) -> None:
+        resp = await client.get(
+            "/api/posts",
+            params={"page": "78023892654793026803456065670889502677827644", "per_page": 10},
+        )
+        assert resp.status_code == 422
+        detail = resp.json()["detail"]
+        assert isinstance(detail, list)
+        assert any(item["field"] == "page" for item in detail)
+
+    @pytest.mark.asyncio
+    async def test_label_posts_page_too_large_returns_422(self, client: AsyncClient) -> None:
+        resp = await client.get(
+            "/api/labels/swe/posts",
+            params={"page": "78023892654793026803456065670889502677827644", "per_page": 10},
+        )
+        assert resp.status_code == 422
+        detail = resp.json()["detail"]
+        assert isinstance(detail, list)
+        assert any(item["field"] == "page" for item in detail)
+
+
 class TestDateFilterValidation:
     """Invalid date filters return 400 with descriptive message."""
 

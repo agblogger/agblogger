@@ -49,7 +49,7 @@ from backend.schemas.post import (
 from backend.services.datetime_service import format_iso, now_utc
 from backend.services.git_service import GitService
 from backend.services.label_service import ensure_label_cache_entry
-from backend.services.post_service import get_post, list_posts, search_posts
+from backend.services.post_service import MAX_SAFE_PAGE, get_post, list_posts, search_posts
 from backend.services.slug_service import generate_post_path, generate_post_slug
 
 logger = logging.getLogger(__name__)
@@ -178,7 +178,7 @@ def _build_post_detail(
 async def list_posts_endpoint(
     session: Annotated[AsyncSession, Depends(get_session)],
     user: Annotated[User | None, Depends(get_current_user)],
-    page: int = Query(1, ge=1),
+    page: int = Query(1, ge=1, le=MAX_SAFE_PAGE),
     per_page: int = Query(20, ge=1, le=100),
     label: str | None = None,
     labels: str | None = None,

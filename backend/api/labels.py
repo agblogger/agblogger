@@ -37,7 +37,7 @@ from backend.services.label_service import (
     get_label_graph,
     update_label,
 )
-from backend.services.post_service import get_posts_by_label
+from backend.services.post_service import MAX_SAFE_PAGE, get_posts_by_label
 
 logger = logging.getLogger(__name__)
 
@@ -248,7 +248,7 @@ async def get_label_endpoint(
 async def label_posts(
     label_id: str,
     session: Annotated[AsyncSession, Depends(get_session)],
-    page: int = Query(1, ge=1),
+    page: int = Query(1, ge=1, le=MAX_SAFE_PAGE),
     per_page: int = Query(20, ge=1, le=100),
 ) -> PostListResponse:
     """Get posts for a specific label (including descendants)."""
