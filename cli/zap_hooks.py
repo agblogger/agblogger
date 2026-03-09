@@ -10,6 +10,7 @@ from urllib.parse import urlsplit
 
 _CONTEXT_NAME = "agblogger-local"
 _MOZILLA_DOMAIN_REGEX = r"^https?://(?:[^/]+\.)?mozilla(?:\.com|\.net|\.org)(?:/.*)?$"
+_UNSTABLE_ACTIVE_SCANNER_IDS = ("40026",)
 
 
 def _zap_common() -> Any:
@@ -54,10 +55,21 @@ class _AjaxSpiderApi(Protocol):
     ) -> object: ...
 
 
+class _AscanApi(Protocol):
+    def scanners(self, scanpolicyname: str | None = None) -> list[dict[str, str]]:
+        _ = scanpolicyname
+        raise NotImplementedError
+
+    def disable_scanners(self, ids: str, scanpolicyname: str | None = None) -> object:
+        _ = ids, scanpolicyname
+        raise NotImplementedError
+
+
 class _ZapApi(Protocol):
     context: _ContextApi
     core: _CoreApi
     spider: _SpiderApi
+    ascan: _AscanApi
 
     def __getattr__(self, name: str) -> Any: ...
 
@@ -95,11 +107,6 @@ def _off_target_regexes(target: str) -> tuple[str, ...]:
 
 
 def _configure_context(zap: _ZapApi, target: str) -> None:
-    try:
-        zap.context.remove_context(_CONTEXT_NAME)
-    except Exception:
-        logging.debug("ZAP context %s did not exist before scan", _CONTEXT_NAME)
-
     context_id = zap.context.new_context(_CONTEXT_NAME)
     zap.context.include_in_context(_CONTEXT_NAME, _target_origin_regex(target))
     for regex in _off_target_regexes(target):
@@ -152,8 +159,21 @@ def _configure_ajax_spider(zap: _ZapApi) -> None:
     )
 
 
+def _disable_unstable_active_scanners(zap: _ZapApi) -> None:
+    scanner_ids = {scanner["id"] for scanner in zap.ascan.scanners(scanpolicyname="Default Policy")}
+    disabled_ids = [
+        scanner_id for scanner_id in _UNSTABLE_ACTIVE_SCANNER_IDS if scanner_id in scanner_ids
+    ]
+    if not disabled_ids:
+        return
+
+    logging.info("Disabling unstable ZAP active scanner(s): %s", ", ".join(disabled_ids))
+    zap.ascan.disable_scanners(",".join(disabled_ids), scanpolicyname="Default Policy")
+
+
 def zap_started(zap: _ZapApi, target: str) -> None:
     """Apply target scoping before ZAP touches the application."""
     _configure_context(zap, target)
     _configure_proxy_and_spider_scope(zap, target)
     _configure_ajax_spider(zap)
+    _disable_unstable_active_scanners(zap)
