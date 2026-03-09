@@ -120,6 +120,9 @@ Applied by the `security_headers` middleware (`backend/main.py`) when `security_
 - `X-Content-Type-Options: nosniff` — prevents MIME-type sniffing
 - `X-Frame-Options: DENY` — clickjacking protection (belt-and-suspenders with CSP `frame-ancestors`)
 - `Referrer-Policy: strict-origin-when-cross-origin` — limits referrer leakage
+- `Cross-Origin-Opener-Policy: same-origin` — isolates the browsing context group for the app document
+- `Cross-Origin-Resource-Policy: same-origin` — prevents other origins from embedding AgBlogger resources as `no-cors` subresources
+- `Permissions-Policy` — deny-by-default for unused browser features while explicitly allowing same-origin `clipboard-write`, `fullscreen`, and `web-share`
 - `Content-Security-Policy` — as described above
 
 ## Middleware Stack

@@ -112,6 +112,21 @@ class Settings(BaseSettings):
 
     # Response hardening
     security_headers_enabled: bool = True
+    cross_origin_opener_policy: str = "same-origin"
+    cross_origin_resource_policy: str = "same-origin"
+    permissions_policy: str = (
+        "accelerometer=(), "
+        "camera=(), "
+        "geolocation=(), "
+        "gyroscope=(), "
+        "magnetometer=(), "
+        "microphone=(), "
+        "payment=(), "
+        "usb=(), "
+        "clipboard-write=(self), "
+        "fullscreen=(self), "
+        "web-share=(self)"
+    )
     content_security_policy: str = (
         "default-src 'self'; "
         "script-src 'self'; "

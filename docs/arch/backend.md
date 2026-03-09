@@ -12,7 +12,7 @@ The `create_app()` factory:
    - `TrustedHostMiddleware` for host header allowlisting.
    - CORS middleware for browser origin control.
    - Cookie CSRF middleware for unsafe methods.
-   - Security headers middleware (`nosniff`, frame deny, referrer policy, CSP).
+   - Security headers middleware (`nosniff`, frame deny, referrer policy, COOP, CORP, Permissions-Policy, CSP).
 4. Registers API routers under `/api/`.
 5. Serves the React SPA static files from `frontend/dist/`.
 

@@ -187,6 +187,11 @@ base-uri 'self'; form-action 'self'; frame-ancestors 'none'
 - Do not add `'unsafe-eval'` to `script-src`. The custom Semgrep rule (`.semgrep.yml`) blocks `eval()` and `new Function()`.
 - `frame-ancestors 'none'` prevents clickjacking. Do not relax this unless embedding is an explicit requirement.
 
+## Browser Security Headers
+
+- Preserve `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Resource-Policy: same-origin` unless you have a concrete cross-origin integration that requires something weaker.
+- `Permissions-Policy` is deny-by-default for unused browser features. If a frontend change needs a browser capability such as camera, microphone, geolocation, clipboard, fullscreen, or Web Share, update the header in `backend/config.py` and add a regression test proving the intended capability still works.
+
 ## Trust Boundary Controls
 
 ### Middleware

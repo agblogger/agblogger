@@ -547,6 +547,13 @@ class TestProductionHardeningDefaults:
             assert health_resp.headers.get("x-frame-options") == "DENY"
             assert health_resp.headers.get("referrer-policy") == "strict-origin-when-cross-origin"
             assert "content-security-policy" in health_resp.headers
+            assert health_resp.headers.get("cross-origin-opener-policy") == "same-origin"
+            assert health_resp.headers.get("cross-origin-resource-policy") == "same-origin"
+            permissions_policy = health_resp.headers.get("permissions-policy")
+            assert permissions_policy is not None
+            assert "clipboard-write=(self)" in permissions_policy
+            assert "fullscreen=(self)" in permissions_policy
+            assert "web-share=(self)" in permissions_policy
 
             bad_host_resp = await local_client.get("/api/health", headers={"Host": "evil.example"})
             assert bad_host_resp.status_code == 400

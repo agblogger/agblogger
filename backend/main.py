@@ -401,6 +401,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             response.headers.setdefault("X-Content-Type-Options", "nosniff")
             response.headers.setdefault("X-Frame-Options", "DENY")
             response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+            if settings.cross_origin_opener_policy:
+                response.headers.setdefault(
+                    "Cross-Origin-Opener-Policy",
+                    settings.cross_origin_opener_policy,
+                )
+            if settings.cross_origin_resource_policy:
+                response.headers.setdefault(
+                    "Cross-Origin-Resource-Policy",
+                    settings.cross_origin_resource_policy,
+                )
+            if settings.permissions_policy:
+                response.headers.setdefault("Permissions-Policy", settings.permissions_policy)
             if settings.content_security_policy:
                 response.headers.setdefault(
                     "Content-Security-Policy",
