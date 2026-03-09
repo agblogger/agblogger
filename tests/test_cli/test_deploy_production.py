@@ -10,8 +10,15 @@ from unittest.mock import patch
 import pytest
 
 from cli.deploy_production import (
+    DEFAULT_BUNDLE_DIR,
     DEFAULT_CADDY_PUBLIC_COMPOSE_FILE,
+    DEFAULT_IMAGE_COMPOSE_FILE,
+    DEFAULT_IMAGE_NO_CADDY_COMPOSE_FILE,
+    DEFAULT_IMAGE_TARBALL,
     DEFAULT_NO_CADDY_COMPOSE_FILE,
+    DEPLOY_MODE_LOCAL,
+    DEPLOY_MODE_REGISTRY,
+    DEPLOY_MODE_TARBALL,
     LOCALHOST_BIND_IP,
     MIN_SECRET_KEY_LENGTH,
     PUBLIC_BIND_IP,
@@ -25,6 +32,8 @@ from cli.deploy_production import (
     build_caddyfile_content,
     build_direct_compose_content,
     build_env_content,
+    build_image_compose_content,
+    build_image_direct_compose_content,
     build_lifecycle_commands,
     check_prerequisites,
     config_from_args,
@@ -44,6 +53,8 @@ def _make_config(
     caddy_public: bool = False,
     host_bind_ip: str = PUBLIC_BIND_IP,
     expose_docs: bool = False,
+    deployment_mode: str = DEPLOY_MODE_LOCAL,
+    image_ref: str | None = None,
 ) -> DeployConfig:
     """Build a valid DeployConfig with sensible defaults for tests."""
     return DeployConfig(
@@ -57,6 +68,10 @@ def _make_config(
         caddy_config=caddy_config,
         caddy_public=caddy_public,
         expose_docs=expose_docs,
+        deployment_mode=deployment_mode,
+        image_ref=image_ref,
+        bundle_dir=DEFAULT_BUNDLE_DIR,
+        tarball_filename=DEFAULT_IMAGE_TARBALL,
     )
 
 
@@ -159,6 +174,17 @@ def test_build_env_content_includes_auth_hardening_settings() -> None:
     assert "AUTH_RATE_LIMIT_WINDOW_SECONDS=300" in content
 
 
+def test_build_env_content_includes_image_reference_for_remote_deployments() -> None:
+    config = _make_config(
+        deployment_mode=DEPLOY_MODE_REGISTRY,
+        image_ref="ghcr.io/example/agblogger:1.2.3",
+    )
+
+    content = build_env_content(config)
+
+    assert 'AGBLOGGER_IMAGE="ghcr.io/example/agblogger:1.2.3"' in content
+
+
 def test_build_env_content_expose_docs_false_by_default() -> None:
     config = _make_config(expose_docs=False)
     content = build_env_content(config)
@@ -202,6 +228,19 @@ def test_build_direct_compose_content_uses_host_bind_and_port() -> None:
     assert "caddy:" not in content
 
 
+def test_build_image_compose_content_uses_required_image_reference() -> None:
+    content = build_image_compose_content()
+    assert "${AGBLOGGER_IMAGE?Set AGBLOGGER_IMAGE}" in content
+    assert "build:" not in content
+
+
+def test_build_image_direct_compose_content_uses_required_image_reference() -> None:
+    content = build_image_direct_compose_content()
+    assert "${AGBLOGGER_IMAGE?Set AGBLOGGER_IMAGE}" in content
+    assert "build:" not in content
+    assert "${HOST_BIND_IP:-127.0.0.1}:${HOST_PORT:-8000}:8000" in content
+
+
 # ── build_caddy_public_compose_override_content ──────────────────────
 
 
@@ -215,14 +254,22 @@ def test_build_caddy_public_override_exposes_ports() -> None:
 
 
 def test_build_lifecycle_commands_for_default_caddy() -> None:
-    commands = build_lifecycle_commands(use_caddy=True, caddy_public=False)
+    commands = build_lifecycle_commands(
+        deployment_mode=DEPLOY_MODE_LOCAL,
+        use_caddy=True,
+        caddy_public=False,
+    )
     assert commands["start"] == "docker compose --env-file .env.production up -d"
     assert commands["stop"] == "docker compose --env-file .env.production down"
     assert commands["status"] == "docker compose --env-file .env.production ps"
 
 
 def test_build_lifecycle_commands_for_public_caddy_override() -> None:
-    commands = build_lifecycle_commands(use_caddy=True, caddy_public=True)
+    commands = build_lifecycle_commands(
+        deployment_mode=DEPLOY_MODE_LOCAL,
+        use_caddy=True,
+        caddy_public=True,
+    )
     assert (
         commands["start"] == "docker compose --env-file .env.production -f docker-compose.yml "
         "-f docker-compose.caddy-public.yml up -d"
@@ -230,10 +277,46 @@ def test_build_lifecycle_commands_for_public_caddy_override() -> None:
 
 
 def test_build_lifecycle_commands_for_no_caddy_file() -> None:
-    commands = build_lifecycle_commands(use_caddy=False, caddy_public=False)
+    commands = build_lifecycle_commands(
+        deployment_mode=DEPLOY_MODE_LOCAL,
+        use_caddy=False,
+        caddy_public=False,
+    )
     assert (
         commands["start"]
         == "docker compose --env-file .env.production -f docker-compose.nocaddy.yml up -d"
+    )
+
+
+def test_build_lifecycle_commands_for_registry_bundle() -> None:
+    commands = build_lifecycle_commands(
+        deployment_mode=DEPLOY_MODE_REGISTRY,
+        use_caddy=True,
+        caddy_public=False,
+    )
+
+    assert (
+        commands["pull"]
+        == "docker compose --env-file .env.production -f docker-compose.image.yml pull"
+    )
+    assert (
+        commands["start"]
+        == "docker compose --env-file .env.production -f docker-compose.image.yml up -d"
+    )
+
+
+def test_build_lifecycle_commands_for_tarball_bundle() -> None:
+    commands = build_lifecycle_commands(
+        deployment_mode=DEPLOY_MODE_TARBALL,
+        use_caddy=False,
+        caddy_public=False,
+        tarball_filename="custom-image.tar",
+    )
+
+    assert commands["load"] == "docker load -i custom-image.tar"
+    assert (
+        commands["start"]
+        == "docker compose --env-file .env.production -f docker-compose.image.nocaddy.yml up -d"
     )
 
 
@@ -250,8 +333,8 @@ def test_check_prerequisites_checks_docker_and_compose(
     check_prerequisites(tmp_path)
 
     assert commands == [
-        (["/usr/bin/env", "docker", "--version"], tmp_path, True),
-        (["/usr/bin/env", "docker", "compose", "version"], tmp_path, True),
+        (["docker", "--version"], tmp_path, True),
+        (["docker", "compose", "version"], tmp_path, True),
     ]
 
 
@@ -363,13 +446,13 @@ def test_deploy_writes_env_file_and_runs_docker_compose_without_caddy(
         result.commands["start"]
         == "docker compose --env-file .env.production -f docker-compose.nocaddy.yml up -d"
     )
+    assert result.bundle_path is None
     assert (tmp_path / DEFAULT_NO_CADDY_COMPOSE_FILE).exists()
     assert not (tmp_path / "Caddyfile.production").exists()
     assert not (tmp_path / DEFAULT_CADDY_PUBLIC_COMPOSE_FILE).exists()
     assert commands == [
         (
             [
-                "/usr/bin/env",
                 "docker",
                 "compose",
                 "--env-file",
@@ -404,6 +487,10 @@ def test_deploy_with_public_caddy_writes_override_and_runs_multi_file_compose(
         caddy_config=CaddyConfig(domain="blog.example.com", email="ops@example.com"),
         caddy_public=True,
         expose_docs=False,
+        deployment_mode=DEPLOY_MODE_LOCAL,
+        image_ref=None,
+        bundle_dir=DEFAULT_BUNDLE_DIR,
+        tarball_filename=DEFAULT_IMAGE_TARBALL,
     )
 
     result = deploy(config=config, project_dir=tmp_path)
@@ -419,7 +506,6 @@ def test_deploy_with_public_caddy_writes_override_and_runs_multi_file_compose(
     assert commands == [
         (
             [
-                "/usr/bin/env",
                 "docker",
                 "compose",
                 "--env-file",
@@ -456,6 +542,10 @@ def test_deploy_with_local_caddy_runs_base_compose(
         caddy_config=CaddyConfig(domain="blog.example.com", email=None),
         caddy_public=False,
         expose_docs=False,
+        deployment_mode=DEPLOY_MODE_LOCAL,
+        image_ref=None,
+        bundle_dir=DEFAULT_BUNDLE_DIR,
+        tarball_filename=DEFAULT_IMAGE_TARBALL,
     )
 
     result = deploy(config=config, project_dir=tmp_path)
@@ -464,7 +554,6 @@ def test_deploy_with_local_caddy_runs_base_compose(
     assert commands == [
         (
             [
-                "/usr/bin/env",
                 "docker",
                 "compose",
                 "--env-file",
@@ -497,15 +586,10 @@ def test_deploy_runs_trivy_scan_before_compose_up(
     deploy(config=config, project_dir=tmp_path)
 
     assert commands == [
-        (["/usr/bin/env", "trivy", "--version"], tmp_path, True),
-        (
-            ["/usr/bin/env", "docker", "build", "--tag", SCAN_IMAGE_TAG, "."],
-            tmp_path,
-            True,
-        ),
+        (["trivy", "--version"], tmp_path, True),
+        (["docker", "build", "--tag", SCAN_IMAGE_TAG, "."], tmp_path, True),
         (
             [
-                "/usr/bin/env",
                 "trivy",
                 "image",
                 "--scanners",
@@ -521,7 +605,6 @@ def test_deploy_runs_trivy_scan_before_compose_up(
         ),
         (
             [
-                "/usr/bin/env",
                 "docker",
                 "compose",
                 "--env-file",
@@ -531,6 +614,83 @@ def test_deploy_runs_trivy_scan_before_compose_up(
                 "up",
                 "-d",
                 "--build",
+            ],
+            tmp_path,
+            True,
+        ),
+    ]
+
+
+def test_deploy_registry_mode_builds_pushes_and_writes_bundle(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    (tmp_path / "docker-compose.yml").write_text("services: {}\n", encoding="utf-8")
+    commands = _stub_subprocess(monkeypatch)
+    _stub_no_trivy(monkeypatch)
+
+    config = _make_config(
+        caddy_config=CaddyConfig(domain="blog.example.com", email=None),
+        host_bind_ip=LOCALHOST_BIND_IP,
+        deployment_mode=DEPLOY_MODE_REGISTRY,
+        image_ref="ghcr.io/example/agblogger:1.2.3",
+    )
+
+    result = deploy(config=config, project_dir=tmp_path)
+
+    assert result.bundle_path == tmp_path / DEFAULT_BUNDLE_DIR
+    assert result.env_path == tmp_path / DEFAULT_BUNDLE_DIR / ".env.production"
+    assert (tmp_path / DEFAULT_BUNDLE_DIR / DEFAULT_IMAGE_COMPOSE_FILE).exists()
+    assert not (tmp_path / DEFAULT_BUNDLE_DIR / DEFAULT_IMAGE_NO_CADDY_COMPOSE_FILE).exists()
+    assert commands == [
+        (
+            [
+                "docker",
+                "build",
+                "--tag",
+                "ghcr.io/example/agblogger:1.2.3",
+                ".",
+            ],
+            tmp_path,
+            True,
+        ),
+        (
+            ["docker", "push", "ghcr.io/example/agblogger:1.2.3"],
+            tmp_path,
+            True,
+        ),
+    ]
+
+
+def test_deploy_tarball_mode_builds_saves_and_writes_bundle(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    (tmp_path / "docker-compose.yml").write_text("services: {}\n", encoding="utf-8")
+    commands = _stub_subprocess(monkeypatch)
+    _stub_no_trivy(monkeypatch)
+
+    config = _make_config(
+        deployment_mode=DEPLOY_MODE_TARBALL,
+        image_ref="agblogger:portable",
+    )
+
+    result = deploy(config=config, project_dir=tmp_path)
+
+    assert result.bundle_path == tmp_path / DEFAULT_BUNDLE_DIR
+    assert result.env_path == tmp_path / DEFAULT_BUNDLE_DIR / ".env.production"
+    assert (tmp_path / DEFAULT_BUNDLE_DIR / DEFAULT_IMAGE_NO_CADDY_COMPOSE_FILE).exists()
+    assert commands == [
+        (
+            ["docker", "build", "--tag", "agblogger:portable", "."],
+            tmp_path,
+            True,
+        ),
+        (
+            [
+                "docker",
+                "save",
+                "--output",
+                str(tmp_path / DEFAULT_BUNDLE_DIR / DEFAULT_IMAGE_TARBALL),
+                "agblogger:portable",
             ],
             tmp_path,
             True,
@@ -601,6 +761,10 @@ def test_config_from_args_builds_config_without_caddy() -> None:
         host_port=9000,
         bind_public=True,
         expose_docs=False,
+        deployment_mode=DEPLOY_MODE_LOCAL,
+        image_ref=None,
+        bundle_dir=DEFAULT_BUNDLE_DIR,
+        tarball_filename=DEFAULT_IMAGE_TARBALL,
     )
 
     config = config_from_args(args)
@@ -610,6 +774,7 @@ def test_config_from_args_builds_config_without_caddy() -> None:
     assert config.host_bind_ip == PUBLIC_BIND_IP
     assert config.caddy_config is None
     assert config.trusted_hosts == ["example.com", "www.example.com"]
+    assert config.deployment_mode == DEPLOY_MODE_LOCAL
 
 
 def test_config_from_args_builds_config_with_caddy() -> None:
@@ -625,6 +790,10 @@ def test_config_from_args_builds_config_with_caddy() -> None:
         host_port=8000,
         bind_public=False,
         expose_docs=True,
+        deployment_mode=DEPLOY_MODE_LOCAL,
+        image_ref=None,
+        bundle_dir=DEFAULT_BUNDLE_DIR,
+        tarball_filename=DEFAULT_IMAGE_TARBALL,
     )
 
     config = config_from_args(args)
@@ -650,6 +819,10 @@ def test_config_from_args_auto_generates_secret_key() -> None:
         host_port=8000,
         bind_public=False,
         expose_docs=False,
+        deployment_mode=DEPLOY_MODE_LOCAL,
+        image_ref=None,
+        bundle_dir=DEFAULT_BUNDLE_DIR,
+        tarball_filename=DEFAULT_IMAGE_TARBALL,
     )
 
     config = config_from_args(args)
@@ -669,6 +842,10 @@ def test_config_from_args_auto_appends_caddy_domain_to_trusted_hosts() -> None:
         host_port=8000,
         bind_public=False,
         expose_docs=False,
+        deployment_mode=DEPLOY_MODE_LOCAL,
+        image_ref=None,
+        bundle_dir=DEFAULT_BUNDLE_DIR,
+        tarball_filename=DEFAULT_IMAGE_TARBALL,
     )
 
     config = config_from_args(args)
@@ -688,6 +865,10 @@ def test_config_from_args_raises_on_missing_admin_username() -> None:
         host_port=8000,
         bind_public=False,
         expose_docs=False,
+        deployment_mode=DEPLOY_MODE_LOCAL,
+        image_ref=None,
+        bundle_dir=DEFAULT_BUNDLE_DIR,
+        tarball_filename=DEFAULT_IMAGE_TARBALL,
     )
 
     with pytest.raises(DeployError, match="--admin-username"):
@@ -707,6 +888,10 @@ def test_config_from_args_raises_on_missing_admin_password() -> None:
         host_port=8000,
         bind_public=False,
         expose_docs=False,
+        deployment_mode=DEPLOY_MODE_LOCAL,
+        image_ref=None,
+        bundle_dir=DEFAULT_BUNDLE_DIR,
+        tarball_filename=DEFAULT_IMAGE_TARBALL,
     )
 
     with pytest.raises(DeployError, match="--admin-password"):
@@ -726,10 +911,62 @@ def test_config_from_args_raises_on_missing_trusted_hosts() -> None:
         host_port=8000,
         bind_public=False,
         expose_docs=False,
+        deployment_mode=DEPLOY_MODE_LOCAL,
+        image_ref=None,
+        bundle_dir=DEFAULT_BUNDLE_DIR,
+        tarball_filename=DEFAULT_IMAGE_TARBALL,
     )
 
     with pytest.raises(DeployError, match="--trusted-hosts"):
         config_from_args(args)
+
+
+def test_config_from_args_requires_image_ref_for_registry_mode() -> None:
+    args = argparse.Namespace(
+        secret_key="s" * 64,
+        admin_username="admin",
+        admin_password="strong-password!",
+        caddy_domain=None,
+        caddy_email=None,
+        caddy_public=False,
+        trusted_hosts="example.com",
+        trusted_proxy_ips=None,
+        host_port=8000,
+        bind_public=False,
+        expose_docs=False,
+        deployment_mode=DEPLOY_MODE_REGISTRY,
+        image_ref=None,
+        bundle_dir=DEFAULT_BUNDLE_DIR,
+        tarball_filename=DEFAULT_IMAGE_TARBALL,
+    )
+
+    with pytest.raises(DeployError, match="--image-ref"):
+        config_from_args(args)
+
+
+def test_config_from_args_builds_registry_mode() -> None:
+    args = argparse.Namespace(
+        secret_key="s" * 64,
+        admin_username="admin",
+        admin_password="strong-password!",
+        caddy_domain=None,
+        caddy_email=None,
+        caddy_public=False,
+        trusted_hosts="example.com",
+        trusted_proxy_ips=None,
+        host_port=8000,
+        bind_public=False,
+        expose_docs=False,
+        deployment_mode=DEPLOY_MODE_REGISTRY,
+        image_ref="ghcr.io/example/agblogger:1.2.3",
+        bundle_dir=DEFAULT_BUNDLE_DIR,
+        tarball_filename=DEFAULT_IMAGE_TARBALL,
+    )
+
+    config = config_from_args(args)
+
+    assert config.deployment_mode == DEPLOY_MODE_REGISTRY
+    assert config.image_ref == "ghcr.io/example/agblogger:1.2.3"
 
 
 # ── chmod warning on write_config_files ───────────────────────────────

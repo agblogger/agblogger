@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import getpass
 import json
 import secrets
@@ -20,6 +21,15 @@ DEFAULT_ENV_FILE = ".env.production"
 DEFAULT_CADDYFILE = "Caddyfile.production"
 DEFAULT_NO_CADDY_COMPOSE_FILE = "docker-compose.nocaddy.yml"
 DEFAULT_CADDY_PUBLIC_COMPOSE_FILE = "docker-compose.caddy-public.yml"
+DEFAULT_IMAGE_COMPOSE_FILE = "docker-compose.image.yml"
+DEFAULT_IMAGE_NO_CADDY_COMPOSE_FILE = "docker-compose.image.nocaddy.yml"
+DEFAULT_REMOTE_README = "DEPLOY-REMOTE.md"
+DEFAULT_IMAGE_TARBALL = "agblogger-image.tar"
+DEFAULT_BUNDLE_DIR = Path("dist/deploy")
+DEPLOY_MODE_LOCAL = "local"
+DEPLOY_MODE_REGISTRY = "registry"
+DEPLOY_MODE_TARBALL = "tarball"
+DEPLOY_MODES = {DEPLOY_MODE_LOCAL, DEPLOY_MODE_REGISTRY, DEPLOY_MODE_TARBALL}
 SCAN_IMAGE_TAG = "agblogger-deploy-scan:latest"
 # Constructed to avoid static-analysis tools flagging literal 0.0.0.0
 PUBLIC_BIND_IP = ".".join(("0", "0", "0", "0"))
@@ -30,6 +40,15 @@ GENERATED_CONFIG_FILES = [
     DEFAULT_CADDYFILE,
     DEFAULT_NO_CADDY_COMPOSE_FILE,
     DEFAULT_CADDY_PUBLIC_COMPOSE_FILE,
+]
+
+BUNDLE_CONFIG_FILES = [
+    DEFAULT_ENV_FILE,
+    DEFAULT_CADDYFILE,
+    DEFAULT_CADDY_PUBLIC_COMPOSE_FILE,
+    DEFAULT_IMAGE_COMPOSE_FILE,
+    DEFAULT_IMAGE_NO_CADDY_COMPOSE_FILE,
+    DEFAULT_REMOTE_README,
 ]
 
 
@@ -59,6 +78,10 @@ class DeployConfig:
     caddy_config: CaddyConfig | None
     caddy_public: bool
     expose_docs: bool
+    deployment_mode: str = DEPLOY_MODE_LOCAL
+    image_ref: str | None = None
+    bundle_dir: Path = DEFAULT_BUNDLE_DIR
+    tarball_filename: str = DEFAULT_IMAGE_TARBALL
 
 
 @dataclass(frozen=True)
@@ -67,6 +90,7 @@ class DeployResult:
 
     env_path: Path
     commands: dict[str, str]
+    bundle_path: Path | None = None
 
 
 # ── Content builders ─────────────────────────────────────────────────
@@ -92,6 +116,29 @@ def _quote_env_value(value: str) -> str:
     return json.dumps(value)
 
 
+async def _run_command(
+    command: list[str],
+    project_dir: Path,
+) -> subprocess.CompletedProcess[None]:
+    """Run a CLI command in the project directory."""
+    return await asyncio.to_thread(
+        subprocess.run,
+        command,
+        cwd=project_dir,
+        check=True,
+    )
+
+
+def _run_docker(project_dir: Path, args: list[str]) -> subprocess.CompletedProcess[None]:
+    """Run a Docker CLI command in the project directory."""
+    return asyncio.run(_run_command(["docker", *args], project_dir))
+
+
+def _run_trivy(project_dir: Path, args: list[str]) -> subprocess.CompletedProcess[None]:
+    """Run a Trivy CLI command in the project directory."""
+    return asyncio.run(_run_command(["trivy", *args], project_dir))
+
+
 def build_env_content(config: DeployConfig) -> str:
     """Build .env file content for production deployment."""
     lines = [
@@ -113,6 +160,8 @@ def build_env_content(config: DeployConfig) -> str:
         "AUTH_LOGIN_MAX_FAILURES=5",
         "AUTH_RATE_LIMIT_WINDOW_SECONDS=300",
     ]
+    if config.image_ref is not None:
+        lines.append(f"AGBLOGGER_IMAGE={_quote_env_value(config.image_ref)}")
     return "\n".join(lines) + "\n"
 
 
@@ -184,6 +233,82 @@ def build_direct_compose_content() -> str:
     )
 
 
+def build_image_compose_content() -> str:
+    """Build an image-only Caddy-first compose file for remote deployment."""
+    return (
+        "services:\n"
+        "  agblogger:\n"
+        '    image: "${AGBLOGGER_IMAGE?Set AGBLOGGER_IMAGE}"\n'
+        "    expose:\n"
+        '      - "8000"\n'
+        "    volumes:\n"
+        "      - ./content:/data/content\n"
+        "      - agblogger-db:/data/db\n"
+        "    environment:\n"
+        "      - SECRET_KEY=${SECRET_KEY?Set SECRET_KEY}\n"
+        "      - ADMIN_USERNAME=${ADMIN_USERNAME?Set ADMIN_USERNAME}\n"
+        "      - ADMIN_PASSWORD=${ADMIN_PASSWORD?Set ADMIN_PASSWORD}\n"
+        "      - TRUSTED_HOSTS=${TRUSTED_HOSTS?Set TRUSTED_HOSTS}\n"
+        "      - TRUSTED_PROXY_IPS=${TRUSTED_PROXY_IPS:-[]}\n"
+        "      - CONTENT_DIR=/data/content\n"
+        "      - DATABASE_URL=sqlite+aiosqlite:///data/db/agblogger.db\n"
+        "    restart: unless-stopped\n"
+        "    healthcheck:\n"
+        '      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]\n'
+        "      interval: 30s\n"
+        "      timeout: 5s\n"
+        "      start_period: 10s\n"
+        "      retries: 3\n\n"
+        "  caddy:\n"
+        "    image: caddy:2\n"
+        "    ports:\n"
+        '      - "127.0.0.1:80:80"\n'
+        '      - "127.0.0.1:443:443"\n'
+        "    volumes:\n"
+        "      - ./Caddyfile.production:/etc/caddy/Caddyfile:ro\n"
+        "      - caddy-data:/data\n"
+        "      - caddy-config:/config\n"
+        "    depends_on:\n"
+        "      - agblogger\n"
+        "    restart: unless-stopped\n\n"
+        "volumes:\n"
+        "  agblogger-db:\n"
+        "  caddy-data:\n"
+        "  caddy-config:\n"
+    )
+
+
+def build_image_direct_compose_content() -> str:
+    """Build an image-only no-Caddy compose file for remote deployment."""
+    return (
+        "services:\n"
+        "  agblogger:\n"
+        '    image: "${AGBLOGGER_IMAGE?Set AGBLOGGER_IMAGE}"\n'
+        "    ports:\n"
+        '      - "${HOST_BIND_IP:-127.0.0.1}:${HOST_PORT:-8000}:8000"\n'
+        "    volumes:\n"
+        "      - ./content:/data/content\n"
+        "      - agblogger-db:/data/db\n"
+        "    environment:\n"
+        "      - SECRET_KEY=${SECRET_KEY?Set SECRET_KEY}\n"
+        "      - ADMIN_USERNAME=${ADMIN_USERNAME?Set ADMIN_USERNAME}\n"
+        "      - ADMIN_PASSWORD=${ADMIN_PASSWORD?Set ADMIN_PASSWORD}\n"
+        "      - TRUSTED_HOSTS=${TRUSTED_HOSTS?Set TRUSTED_HOSTS}\n"
+        "      - TRUSTED_PROXY_IPS=${TRUSTED_PROXY_IPS:-[]}\n"
+        "      - CONTENT_DIR=/data/content\n"
+        "      - DATABASE_URL=sqlite+aiosqlite:///data/db/agblogger.db\n"
+        "    restart: unless-stopped\n"
+        "    healthcheck:\n"
+        '      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]\n'
+        "      interval: 30s\n"
+        "      timeout: 5s\n"
+        "      start_period: 10s\n"
+        "      retries: 3\n\n"
+        "volumes:\n"
+        "  agblogger-db:\n"
+    )
+
+
 def build_caddy_public_compose_override_content() -> str:
     """Build compose override that exposes Caddy publicly."""
     return 'services:\n  caddy:\n    ports:\n      - "80:80"\n      - "443:443"\n'
@@ -192,26 +317,60 @@ def build_caddy_public_compose_override_content() -> str:
 # ── Compose helpers ──────────────────────────────────────────────────
 
 
+def _compose_filenames(
+    deployment_mode: str,
+    use_caddy: bool,
+    caddy_public: bool,
+) -> list[str]:
+    """Return compose filenames for the requested deployment mode."""
+    if deployment_mode == DEPLOY_MODE_LOCAL:
+        if use_caddy and caddy_public:
+            return ["docker-compose.yml", DEFAULT_CADDY_PUBLIC_COMPOSE_FILE]
+        if use_caddy:
+            return []
+        return [DEFAULT_NO_CADDY_COMPOSE_FILE]
+
+    if use_caddy and caddy_public:
+        return [DEFAULT_IMAGE_COMPOSE_FILE, DEFAULT_CADDY_PUBLIC_COMPOSE_FILE]
+    if use_caddy:
+        return [DEFAULT_IMAGE_COMPOSE_FILE]
+    return [DEFAULT_IMAGE_NO_CADDY_COMPOSE_FILE]
+
+
+def _compose_base_command(
+    deployment_mode: str,
+    use_caddy: bool,
+    caddy_public: bool,
+    env_filename: str,
+) -> str:
+    """Build the shared docker compose command prefix for lifecycle commands."""
+    filenames = _compose_filenames(deployment_mode, use_caddy, caddy_public)
+    if not filenames:
+        return f"docker compose --env-file {env_filename}"
+
+    flags = " ".join(f"-f {name}" for name in filenames)
+    return f"docker compose --env-file {env_filename} {flags}"
+
+
 def build_lifecycle_commands(
+    deployment_mode: str,
     use_caddy: bool,
     caddy_public: bool,
     env_filename: str = DEFAULT_ENV_FILE,
+    tarball_filename: str = DEFAULT_IMAGE_TARBALL,
 ) -> dict[str, str]:
-    """Build Docker Compose lifecycle commands shown to the user."""
-    if use_caddy and caddy_public:
-        base = (
-            f"docker compose --env-file {env_filename} -f docker-compose.yml "
-            f"-f {DEFAULT_CADDY_PUBLIC_COMPOSE_FILE}"
-        )
-    elif use_caddy:
-        base = f"docker compose --env-file {env_filename}"
-    else:
-        base = f"docker compose --env-file {env_filename} -f {DEFAULT_NO_CADDY_COMPOSE_FILE}"
-    return {
+    """Build Docker lifecycle commands shown to the user."""
+    base = _compose_base_command(deployment_mode, use_caddy, caddy_public, env_filename)
+    commands = {
         "start": f"{base} up -d",
         "stop": f"{base} down",
         "status": f"{base} ps",
     }
+    if deployment_mode == DEPLOY_MODE_REGISTRY:
+        commands["pull"] = f"{base} pull"
+    if deployment_mode == DEPLOY_MODE_TARBALL:
+        commands["load"] = f"docker load -i {tarball_filename}"
+    return commands
 
 
 # ── Validation ───────────────────────────────────────────────────────
@@ -240,6 +399,19 @@ def _validate_config(config: DeployConfig) -> None:
             raise DeployError("Caddy contact email must contain '@'")
     if config.caddy_public and config.caddy_config is None:
         raise DeployError("Caddy public exposure requires Caddy to be enabled")
+    if config.deployment_mode not in DEPLOY_MODES:
+        raise DeployError(f"DEPLOYMENT_MODE must be one of: {', '.join(sorted(DEPLOY_MODES))}")
+    if config.deployment_mode in {DEPLOY_MODE_REGISTRY, DEPLOY_MODE_TARBALL}:
+        if not config.image_ref:
+            raise DeployError("IMAGE_REF is required for registry and tarball deployments")
+    elif config.image_ref is not None:
+        raise DeployError("IMAGE_REF is only supported for registry and tarball deployments")
+    if config.image_ref is not None and any(char.isspace() for char in config.image_ref):
+        raise DeployError("IMAGE_REF must not contain whitespace")
+    if not config.bundle_dir.parts:
+        raise DeployError("BUNDLE_DIR must not be empty")
+    if config.deployment_mode == DEPLOY_MODE_TARBALL and not config.tarball_filename.strip():
+        raise DeployError("TARBALL_FILENAME must not be empty")
 
 
 def check_prerequisites(project_dir: Path) -> None:
@@ -250,8 +422,8 @@ def check_prerequisites(project_dir: Path) -> None:
     if shutil.which("docker") is None:
         raise DeployError("Docker is not installed or not available on PATH")
 
-    subprocess.run(["/usr/bin/env", "docker", "--version"], cwd=project_dir, check=True)
-    subprocess.run(["/usr/bin/env", "docker", "compose", "version"], cwd=project_dir, check=True)
+    _run_docker(project_dir, ["--version"])
+    _run_docker(project_dir, ["compose", "version"])
 
 
 # ── File management ──────────────────────────────────────────────────
@@ -277,9 +449,9 @@ def backup_existing_configs(project_dir: Path) -> list[str]:
     return messages
 
 
-def write_config_files(config: DeployConfig, project_dir: Path) -> None:
-    """Write deployment config files and clean up stale alternatives."""
-    env_path = project_dir / DEFAULT_ENV_FILE
+def _write_env_file(config: DeployConfig, target_dir: Path) -> None:
+    """Write the generated environment file with restrictive permissions."""
+    env_path = target_dir / DEFAULT_ENV_FILE
     env_path.write_text(build_env_content(config), encoding="utf-8")
     try:
         env_path.chmod(0o600)
@@ -288,6 +460,11 @@ def write_config_files(config: DeployConfig, project_dir: Path) -> None:
             f"Warning: Could not set restrictive permissions on {DEFAULT_ENV_FILE}: {exc}",
             file=sys.stderr,
         )
+
+
+def write_config_files(config: DeployConfig, project_dir: Path) -> None:
+    """Write local deployment config files and clean up stale alternatives."""
+    _write_env_file(config, project_dir)
 
     stale_files: list[str] = []
 
@@ -312,20 +489,117 @@ def write_config_files(config: DeployConfig, project_dir: Path) -> None:
             (project_dir / name).unlink()
 
 
+def _backup_bundle_configs(bundle_dir: Path) -> list[str]:
+    """Back up generated bundle config files before overwriting them."""
+    messages: list[str] = []
+    for filename in BUNDLE_CONFIG_FILES:
+        backup = backup_file(bundle_dir / filename)
+        if backup is not None:
+            messages.append(f"Backed up {filename} to {backup.name}")
+    return messages
+
+
+def _remote_bundle_commands(config: DeployConfig) -> dict[str, str]:
+    """Build lifecycle commands for a remote deployment bundle."""
+    return build_lifecycle_commands(
+        deployment_mode=config.deployment_mode,
+        use_caddy=config.caddy_config is not None,
+        caddy_public=config.caddy_public,
+        tarball_filename=config.tarball_filename,
+    )
+
+
+def _build_remote_readme_content(config: DeployConfig, commands: dict[str, str]) -> str:
+    """Document how to use a generated remote deployment bundle."""
+    lines = [
+        "# Remote deployment bundle",
+        "",
+        "Copy this directory to the remote server, then run the commands below from there.",
+        "",
+    ]
+    if config.deployment_mode == DEPLOY_MODE_REGISTRY:
+        lines.extend(
+            [
+                "1. Authenticate the remote server to your container registry if needed.",
+                f"2. {commands['pull']}",
+                f"3. {commands['start']}",
+            ]
+        )
+    else:
+        lines.extend(
+            [
+                f"1. {commands['load']}",
+                f"2. {commands['start']}",
+            ]
+        )
+    lines.extend(
+        [
+            f"4. {commands['status']}",
+            "",
+            "Management commands:",
+            f"- Stop: {commands['stop']}",
+            f"- Status: {commands['status']}",
+        ]
+    )
+    return "\n".join(lines) + "\n"
+
+
+def write_bundle_files(config: DeployConfig, bundle_dir: Path) -> None:
+    """Write a self-contained remote deployment bundle."""
+    bundle_dir.mkdir(parents=True, exist_ok=True)
+    _write_env_file(config, bundle_dir)
+
+    stale_files: list[str] = []
+    if config.caddy_config is not None:
+        (bundle_dir / DEFAULT_CADDYFILE).write_text(
+            build_caddyfile_content(config.caddy_config), encoding="utf-8"
+        )
+        (bundle_dir / DEFAULT_IMAGE_COMPOSE_FILE).write_text(
+            build_image_compose_content(), encoding="utf-8"
+        )
+        stale_files.append(DEFAULT_IMAGE_NO_CADDY_COMPOSE_FILE)
+        if config.caddy_public:
+            (bundle_dir / DEFAULT_CADDY_PUBLIC_COMPOSE_FILE).write_text(
+                build_caddy_public_compose_override_content(), encoding="utf-8"
+            )
+        else:
+            stale_files.append(DEFAULT_CADDY_PUBLIC_COMPOSE_FILE)
+    else:
+        (bundle_dir / DEFAULT_IMAGE_NO_CADDY_COMPOSE_FILE).write_text(
+            build_image_direct_compose_content(), encoding="utf-8"
+        )
+        stale_files.extend(
+            [
+                DEFAULT_CADDYFILE,
+                DEFAULT_CADDY_PUBLIC_COMPOSE_FILE,
+                DEFAULT_IMAGE_COMPOSE_FILE,
+            ]
+        )
+
+    for name in stale_files:
+        with suppress(FileNotFoundError):
+            (bundle_dir / name).unlink()
+
+    commands = _remote_bundle_commands(config)
+    (bundle_dir / DEFAULT_REMOTE_README).write_text(
+        _build_remote_readme_content(config, commands),
+        encoding="utf-8",
+    )
+
+
 # ── Build and scan ───────────────────────────────────────────────────
 
 
-def build_and_scan(project_dir: Path) -> None:
-    """Build the Docker image and scan with Trivy before deployment."""
-    subprocess.run(
-        ["/usr/bin/env", "docker", "build", "--tag", "agblogger-deploy-scan:latest", "."],
-        cwd=project_dir,
-        check=True,
-    )
-    subprocess.run(
+def build_image(project_dir: Path, image_tag: str) -> None:
+    """Build a Docker image with the requested tag."""
+    _run_docker(project_dir, ["build", "--tag", image_tag, "."])
+
+
+def scan_image(project_dir: Path, image_tag: str) -> None:
+    """Scan a Docker image with Trivy."""
+    _run_trivy(
+        project_dir,
         [
-            "/usr/bin/env",
-            "trivy",
             "image",
             "--scanners",
             "vuln",
@@ -333,66 +607,44 @@ def build_and_scan(project_dir: Path) -> None:
             "1",
             "--severity",
             "MEDIUM,HIGH,CRITICAL",
-            "agblogger-deploy-scan:latest",
+            image_tag,
         ],
-        cwd=project_dir,
-        check=True,
     )
+
+
+def build_and_scan(project_dir: Path, image_tag: str) -> None:
+    """Build the Docker image and scan with Trivy before deployment."""
+    build_image(project_dir, image_tag)
+    scan_image(project_dir, image_tag)
+
+
+def push_image(project_dir: Path, image_tag: str) -> None:
+    """Push a Docker image to a registry."""
+    _run_docker(project_dir, ["push", image_tag])
+
+
+def save_image_tarball(project_dir: Path, image_tag: str, tarball_path: Path) -> None:
+    """Export a Docker image to a tarball."""
+    tarball_path.parent.mkdir(parents=True, exist_ok=True)
+    _run_docker(project_dir, ["save", "--output", str(tarball_path), image_tag])
+
+
+def _compose_up_command(config: DeployConfig) -> list[str]:
+    """Build the docker compose up command for local deployments."""
+    command = ["compose", "--env-file", ".env.production"]
+    for filename in _compose_filenames(
+        DEPLOY_MODE_LOCAL,
+        use_caddy=config.caddy_config is not None,
+        caddy_public=config.caddy_public,
+    ):
+        command.extend(["-f", filename])
+    command.extend(["up", "-d", "--build"])
+    return command
 
 
 def _run_compose_up(config: DeployConfig, project_dir: Path) -> None:
     """Start containers via docker compose with the correct file arguments."""
-    if config.caddy_config is not None and config.caddy_public:
-        subprocess.run(
-            [
-                "/usr/bin/env",
-                "docker",
-                "compose",
-                "--env-file",
-                ".env.production",
-                "-f",
-                "docker-compose.yml",
-                "-f",
-                "docker-compose.caddy-public.yml",
-                "up",
-                "-d",
-                "--build",
-            ],
-            cwd=project_dir,
-            check=True,
-        )
-    elif config.caddy_config is None:
-        subprocess.run(
-            [
-                "/usr/bin/env",
-                "docker",
-                "compose",
-                "--env-file",
-                ".env.production",
-                "-f",
-                "docker-compose.nocaddy.yml",
-                "up",
-                "-d",
-                "--build",
-            ],
-            cwd=project_dir,
-            check=True,
-        )
-    else:
-        subprocess.run(
-            [
-                "/usr/bin/env",
-                "docker",
-                "compose",
-                "--env-file",
-                ".env.production",
-                "up",
-                "-d",
-                "--build",
-            ],
-            cwd=project_dir,
-            check=True,
-        )
+    _run_docker(project_dir, _compose_up_command(config))
 
 
 # ── Deploy orchestration ────────────────────────────────────────────
@@ -407,7 +659,7 @@ def deploy(config: DeployConfig, project_dir: Path) -> DeployResult:
 
     trivy_available = shutil.which("trivy") is not None
     if trivy_available:
-        subprocess.run(["/usr/bin/env", "trivy", "--version"], cwd=project_dir, check=True)
+        _run_trivy(project_dir, ["--version"])
     else:
         print(
             "Warning: Trivy is not installed or not available on PATH; skipping Docker image scan.",
@@ -418,19 +670,49 @@ def deploy(config: DeployConfig, project_dir: Path) -> DeployResult:
     for msg in backup_messages:
         print(msg)
 
-    write_config_files(config, project_dir)
+    if config.deployment_mode == DEPLOY_MODE_LOCAL:
+        write_config_files(config, project_dir)
+
+        if trivy_available:
+            build_and_scan(project_dir, SCAN_IMAGE_TAG)
+
+        _run_compose_up(config, project_dir)
+
+        return DeployResult(
+            env_path=project_dir / DEFAULT_ENV_FILE,
+            commands=build_lifecycle_commands(
+                deployment_mode=config.deployment_mode,
+                use_caddy=config.caddy_config is not None,
+                caddy_public=config.caddy_public,
+            ),
+            bundle_path=None,
+        )
+
+    bundle_dir = project_dir / config.bundle_dir
+    bundle_backup_messages = _backup_bundle_configs(bundle_dir)
+    for msg in bundle_backup_messages:
+        print(msg)
+
+    image_tag = config.image_ref
+    if image_tag is None:
+        raise DeployError("IMAGE_REF is required for remote deployment modes")
 
     if trivy_available:
-        build_and_scan(project_dir)
+        build_and_scan(project_dir, image_tag)
+    else:
+        build_image(project_dir, image_tag)
 
-    _run_compose_up(config, project_dir)
+    write_bundle_files(config, bundle_dir)
+
+    if config.deployment_mode == DEPLOY_MODE_REGISTRY:
+        push_image(project_dir, image_tag)
+    else:
+        save_image_tarball(project_dir, image_tag, bundle_dir / config.tarball_filename)
 
     return DeployResult(
-        env_path=project_dir / DEFAULT_ENV_FILE,
-        commands=build_lifecycle_commands(
-            use_caddy=config.caddy_config is not None,
-            caddy_public=config.caddy_public,
-        ),
+        env_path=bundle_dir / DEFAULT_ENV_FILE,
+        commands=_remote_bundle_commands(config),
+        bundle_path=bundle_dir,
     )
 
 
@@ -451,6 +733,10 @@ def _mask_secrets(config: DeployConfig) -> DeployConfig:
         caddy_config=config.caddy_config,
         caddy_public=config.caddy_public,
         expose_docs=config.expose_docs,
+        deployment_mode=config.deployment_mode,
+        image_ref=config.image_ref,
+        bundle_dir=config.bundle_dir,
+        tarball_filename=config.tarball_filename,
     )
 
 
@@ -463,19 +749,40 @@ def dry_run(config: DeployConfig) -> None:
     print(f"=== {DEFAULT_ENV_FILE} ===")
     print(build_env_content(masked))
 
-    if config.caddy_config is not None:
+    caddy_config = config.caddy_config
+    if config.deployment_mode == DEPLOY_MODE_LOCAL and caddy_config is None:
+        print(f"=== {DEFAULT_NO_CADDY_COMPOSE_FILE} ===")
+        print(build_direct_compose_content())
+    elif config.deployment_mode == DEPLOY_MODE_LOCAL and caddy_config is not None:
         print(f"=== {DEFAULT_CADDYFILE} ===")
-        print(build_caddyfile_content(config.caddy_config))
+        print(build_caddyfile_content(caddy_config))
+        if config.caddy_public:
+            print(f"=== {DEFAULT_CADDY_PUBLIC_COMPOSE_FILE} ===")
+            print(build_caddy_public_compose_override_content())
+    elif caddy_config is not None:
+        print(f"=== {DEFAULT_CADDYFILE} ===")
+        print(build_caddyfile_content(caddy_config))
+        print(f"=== {DEFAULT_IMAGE_COMPOSE_FILE} ===")
+        print(build_image_compose_content())
         if config.caddy_public:
             print(f"=== {DEFAULT_CADDY_PUBLIC_COMPOSE_FILE} ===")
             print(build_caddy_public_compose_override_content())
     else:
-        print(f"=== {DEFAULT_NO_CADDY_COMPOSE_FILE} ===")
-        print(build_direct_compose_content())
+        print(f"=== {DEFAULT_IMAGE_NO_CADDY_COMPOSE_FILE} ===")
+        print(build_image_direct_compose_content())
 
     use_caddy = config.caddy_config is not None
-    commands = build_lifecycle_commands(use_caddy=use_caddy, caddy_public=config.caddy_public)
+    commands = build_lifecycle_commands(
+        deployment_mode=config.deployment_mode,
+        use_caddy=use_caddy,
+        caddy_public=config.caddy_public,
+        tarball_filename=config.tarball_filename,
+    )
     print("=== Lifecycle commands ===")
+    if "pull" in commands:
+        print(f"  Pull:   {commands['pull']}")
+    if "load" in commands:
+        print(f"  Load:   {commands['load']}")
     print(f"  Start:  {commands['start']}")
     print(f"  Stop:   {commands['stop']}")
     print(f"  Status: {commands['status']}")
@@ -508,6 +815,18 @@ def _prompt_yes_no(prompt: str, default: bool) -> bool:
         if value in {"n", "no"}:
             return False
         print("Please answer yes or no.")
+
+
+def _prompt_deployment_mode() -> str:
+    """Prompt for a supported deployment mode."""
+    prompt = f"Deployment mode [local/registry/tarball] [{DEPLOY_MODE_LOCAL}]"
+    while True:
+        value = input(f"{prompt}: ").strip().lower()
+        if not value:
+            return DEPLOY_MODE_LOCAL
+        if value in DEPLOY_MODES:
+            return value
+        print("Please choose local, registry, or tarball.")
 
 
 def _prompt_host_port(default: int = DEFAULT_HOST_PORT) -> int:
@@ -559,6 +878,16 @@ def collect_config() -> DeployConfig:
     secret_key = _prompt_secret_key()
     admin_username = _prompt_non_empty("Admin username", default="admin")
     admin_password = _prompt_password()
+    deployment_mode = _prompt_deployment_mode()
+    image_ref: str | None = None
+    tarball_filename = DEFAULT_IMAGE_TARBALL
+    if deployment_mode in {DEPLOY_MODE_REGISTRY, DEPLOY_MODE_TARBALL}:
+        image_ref = _prompt_non_empty("Container image reference")
+        if deployment_mode == DEPLOY_MODE_TARBALL:
+            tarball_filename = _prompt_non_empty(
+                "Tarball filename",
+                default=DEFAULT_IMAGE_TARBALL,
+            )
 
     use_caddy = _prompt_yes_no(
         (
@@ -627,6 +956,10 @@ def collect_config() -> DeployConfig:
         caddy_config=caddy_config,
         caddy_public=caddy_public,
         expose_docs=expose_docs,
+        deployment_mode=deployment_mode,
+        image_ref=image_ref,
+        bundle_dir=DEFAULT_BUNDLE_DIR,
+        tarball_filename=tarball_filename,
     )
 
 
@@ -642,6 +975,8 @@ def config_from_args(args: argparse.Namespace) -> DeployConfig:
         raise DeployError("--admin-password is required in non-interactive mode")
     if not args.trusted_hosts:
         raise DeployError("--trusted-hosts is required in non-interactive mode")
+    if args.deployment_mode in {DEPLOY_MODE_REGISTRY, DEPLOY_MODE_TARBALL} and not args.image_ref:
+        raise DeployError("--image-ref is required for registry and tarball deployment modes")
 
     caddy_config: CaddyConfig | None = None
     caddy_public = False
@@ -667,6 +1002,10 @@ def config_from_args(args: argparse.Namespace) -> DeployConfig:
         caddy_config=caddy_config,
         caddy_public=caddy_public,
         expose_docs=args.expose_docs,
+        deployment_mode=args.deployment_mode,
+        image_ref=args.image_ref,
+        bundle_dir=args.bundle_dir,
+        tarball_filename=args.tarball_filename,
     )
 
 
@@ -735,6 +1074,27 @@ def _parse_args() -> argparse.Namespace:
         default=False,
         help="Expose API documentation at /docs (default: disabled).",
     )
+    config_group.add_argument(
+        "--deployment-mode",
+        choices=sorted(DEPLOY_MODES),
+        default=DEPLOY_MODE_LOCAL,
+        help="Choose local deploy, registry bundle, or tarball bundle mode.",
+    )
+    config_group.add_argument(
+        "--image-ref",
+        help="Container image reference for registry or tarball deployment modes.",
+    )
+    config_group.add_argument(
+        "--bundle-dir",
+        type=Path,
+        default=DEFAULT_BUNDLE_DIR,
+        help=f"Output directory for remote deployment bundles (default: {DEFAULT_BUNDLE_DIR}).",
+    )
+    config_group.add_argument(
+        "--tarball-filename",
+        default=DEFAULT_IMAGE_TARBALL,
+        help=f"Image tarball name for tarball deployment mode (default: {DEFAULT_IMAGE_TARBALL}).",
+    )
 
     return parser.parse_args()
 
@@ -765,14 +1125,23 @@ def main() -> None:
 
     print("\nDeployment complete.")
     print(f"Environment file: {result.env_path}")
+    if result.bundle_path is not None:
+        print(f"Remote bundle: {result.bundle_path}")
     print("Use these commands to manage the server:")
+    if "pull" in result.commands:
+        print(f"  Pull:   {result.commands['pull']}")
+    if "load" in result.commands:
+        print(f"  Load:   {result.commands['load']}")
     print(f"  Start:  {result.commands['start']}")
     print(f"  Stop:   {result.commands['stop']}")
     print(f"  Status: {result.commands['status']}")
-    if config.caddy_config is not None:
-        print(f"Open the app at: https://{config.caddy_config.domain}/login")
+    if config.deployment_mode == DEPLOY_MODE_LOCAL:
+        if config.caddy_config is not None:
+            print(f"Open the app at: https://{config.caddy_config.domain}/login")
+        else:
+            print(f"Open the app at: http://<your-server-host>:{config.host_port}/login")
     else:
-        print(f"Open the app at: http://<your-server-host>:{config.host_port}/login")
+        print("Follow the bundle instructions on the remote server to finish deployment.")
 
 
 if __name__ == "__main__":

@@ -18,6 +18,13 @@ For public Caddy deployment, the script generates `docker-compose.caddy-public.y
 
 For deployments without Caddy, the deploy script generates `docker-compose.nocaddy.yml` that publishes AgBlogger directly on `${HOST_BIND_IP:-127.0.0.1}:${HOST_PORT:-8000}:8000`.
 
+For remote deployments that should not build on the target host, the deploy helper generates image-only compose files:
+
+- `docker-compose.image.yml` for the Caddy-first topology
+- `docker-compose.image.nocaddy.yml` for direct AgBlogger exposure
+
+These files use `${AGBLOGGER_IMAGE}` instead of `build: .`, so the remote host only needs the image plus the generated deployment bundle.
+
 ## Deploy helper
 
 Recommended deployment path is the interactive helper:
@@ -26,15 +33,21 @@ Recommended deployment path is the interactive helper:
 uv run agblogger-deploy
 ```
 
-The deploy helper:
+The deploy helper supports three deployment modes:
 
-1. Collects configuration interactively (secret key, admin credentials, Caddy/HTTPS setup, trusted hosts, API docs exposure).
+1. **Local**: current behavior. Write production config in the repo, optionally scan the image with Trivy, then run `docker compose up -d --build` on the current machine.
+2. **Registry**: build locally, optionally scan locally, push the image to a registry, and write a self-contained bundle under `dist/deploy/` for the remote server.
+3. **Tarball**: build locally, optionally scan locally, export the image to a tarball, and write the same style of self-contained bundle under `dist/deploy/`.
+
+In all modes the helper:
+
+1. Collects configuration interactively (secret key, admin credentials, deployment mode, Caddy/HTTPS setup, trusted hosts, API docs exposure).
 2. Validates all inputs (key length, password strength, domain format, port range).
 3. Backs up any existing generated config files (`.env.production.bak`, etc.) before overwriting.
-4. Writes `.env.production` (chmod 600), `Caddyfile.production`, and compose overrides as needed.
-5. Builds the Docker image and scans it with Trivy (if installed) **before** starting containers.
-6. Starts containers via `docker compose up -d`.
-7. Prints lifecycle commands (start/stop/status) for ongoing management.
+4. Writes `.env.production` (chmod 600), `Caddyfile.production`, and compose files as needed.
+5. Builds the Docker image and scans it with Trivy (if installed) before local deploy, registry push, or tarball export.
+6. Either starts local containers, pushes the image to a registry, or saves the image tarball depending on the selected mode.
+7. Prints lifecycle commands for the selected mode.
 
 ### Non-interactive mode
 
@@ -44,6 +57,8 @@ For CI/CD or scripted deployments, pass all values as CLI arguments:
 uv run agblogger-deploy --non-interactive \
   --admin-username admin \
   --admin-password "your-strong-password" \
+  --deployment-mode registry \
+  --image-ref ghcr.io/example/agblogger:1.2.3 \
   --caddy-domain blog.example.com \
   --caddy-email ops@example.com \
   --caddy-public \
@@ -52,6 +67,8 @@ uv run agblogger-deploy --non-interactive \
 ```
 
 The `--secret-key` flag is optional; one is auto-generated if omitted.
+
+For tarball mode, add `--deployment-mode tarball` and optionally `--tarball-filename agblogger-image.tar`.
 
 ### Dry run
 
@@ -65,7 +82,7 @@ Secrets are masked in dry-run output. Combine with `--non-interactive` for fully
 
 ### Re-run safety
 
-Running the helper again backs up existing config files (`.env.production` → `.env.production.bak`, etc.) before overwriting, preventing accidental loss of manual edits.
+Running the helper again backs up existing config files (`.env.production` → `.env.production.bak`, etc.) before overwriting, preventing accidental loss of manual edits. Remote bundle runs apply the same backup behavior inside the bundle directory for generated config files.
 
 ### Generated .env settings
 
@@ -77,6 +94,18 @@ The generated `.env.production` includes locked-down production defaults:
 ### DNS prerequisite
 
 When Caddy HTTPS is enabled, the helper reminds users that DNS A/AAAA records must point to the server before deployment. Caddy's automatic TLS provisioning requires Let's Encrypt to reach the server via the configured domain.
+
+### Remote deployment bundles
+
+Registry and tarball modes generate a self-contained bundle in `dist/deploy/` containing:
+
+- `.env.production`
+- `Caddyfile.production` when Caddy is enabled
+- `docker-compose.image.yml` or `docker-compose.image.nocaddy.yml`
+- `docker-compose.caddy-public.yml` when public Caddy exposure is enabled
+- `DEPLOY-REMOTE.md` with the exact remote-server commands
+
+Tarball mode also writes the exported image tarball into the bundle directory. The remote server then runs `docker load -i <tarball>` followed by `docker compose up -d` against the image-only compose file. Registry mode instead runs `docker compose pull` first and then `docker compose up -d`.
 
 ## Production HTTPS
 
