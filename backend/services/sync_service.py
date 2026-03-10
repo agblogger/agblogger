@@ -295,7 +295,7 @@ def merge_frontmatter(
     Rules:
     - modified_at: excluded from merge (caller sets server time via normalization)
     - labels: set-based merge (additions/removals relative to base from both sides)
-    - title, author, author_username, created_at, draft:
+    - title, author, created_at, draft:
       if both changed differently, server wins + reported
     - unrecognized fields: if one side changed, take that change; if both, server wins
       (silently, not reported as a conflict)
@@ -305,7 +305,7 @@ def merge_frontmatter(
     if base is None:
         conflicts = [
             k
-            for k in ("title", "author", "author_username", "created_at", "draft")
+            for k in ("title", "author", "created_at", "draft")
             if k in server and k in client and server.get(k) != client.get(k)
         ]
         return FrontmatterMergeResult(merged=dict(server), field_conflicts=conflicts)
@@ -358,7 +358,7 @@ def merge_frontmatter(
                 # Conflict: server wins
                 if server_val is not None:
                     merged[key] = server_val
-                if key in ("title", "author", "author_username", "created_at", "draft"):
+                if key in ("title", "author", "created_at", "draft"):
                     field_conflicts.append(key)
 
     return FrontmatterMergeResult(merged=merged, field_conflicts=field_conflicts)
@@ -450,7 +450,6 @@ def normalize_post_frontmatter(
     old_manifest: dict[str, FileEntry],
     content_dir: Path,
     default_author: str,
-    default_author_username: str = "",
 ) -> list[str]:
     """Normalize YAML front matter for uploaded post files during sync.
 
@@ -534,8 +533,6 @@ def normalize_post_frontmatter(
                 post["created_at"] = current_time
             if "author" not in post.metadata and default_author:
                 post["author"] = default_author
-            if "author_username" not in post.metadata and default_author_username:
-                post["author_username"] = default_author_username
         else:
             # New post: fill missing timestamps and author
             if "created_at" not in post.metadata:
@@ -544,8 +541,6 @@ def normalize_post_frontmatter(
                 post["modified_at"] = post["created_at"]
             if "author" not in post.metadata and default_author:
                 post["author"] = default_author
-            if "author_username" not in post.metadata and default_author_username:
-                post["author_username"] = default_author_username
 
         # Backfill title from first heading if not present or not a valid string
         raw_title = post.get("title")

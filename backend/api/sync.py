@@ -354,7 +354,6 @@ async def _sync_commit_inner(
         old_manifest=old_manifest,
         content_dir=content_dir,
         default_author="",
-        default_author_username=user.username,
     )
 
     # ── Git commit ──
