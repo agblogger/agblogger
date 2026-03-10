@@ -42,12 +42,23 @@ vi.mock('@/components/crosspost/SocialAccountsPanel', () => ({
   default: () => <div data-testid="social-accounts-panel">Social Accounts</div>,
 }))
 
+const mockUpdateProfile = vi.fn()
+
+vi.mock('@/api/auth', () => ({
+  updateProfile: (...args: unknown[]) => mockUpdateProfile(...args) as unknown,
+}))
+
 let mockUser: UserResponse | null = null
 let mockIsInitialized = true
+const mockSetUser = vi.fn()
+const mockLogout = vi.fn()
 
 vi.mock('@/stores/authStore', () => ({
-  useAuthStore: (selector: (s: { user: UserResponse | null; isInitialized: boolean }) => unknown) =>
-    selector({ user: mockUser, isInitialized: mockIsInitialized }),
+  useAuthStore: Object.assign(
+    (selector: (s: { user: UserResponse | null; isInitialized: boolean; setUser: typeof mockSetUser }) => unknown) =>
+      selector({ user: mockUser, isInitialized: mockIsInitialized, setUser: mockSetUser }),
+    { getState: () => ({ logout: mockLogout }) },
+  ),
 }))
 
 vi.mock('@/stores/siteStore', () => ({
@@ -670,9 +681,9 @@ describe('AdminPage', () => {
     renderAdmin()
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Password' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Account' })).toBeInTheDocument()
     })
-    await switchToTab(user, 'Password')
+    await switchToTab(user, 'Account')
 
     await waitFor(() => {
       expect(screen.getByLabelText(/Current Password/)).toBeInTheDocument()
@@ -690,9 +701,9 @@ describe('AdminPage', () => {
     renderAdmin()
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Password' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Account' })).toBeInTheDocument()
     })
-    await switchToTab(user, 'Password')
+    await switchToTab(user, 'Account')
 
     await waitFor(() => {
       expect(screen.getByLabelText(/Current Password/)).toBeInTheDocument()
@@ -712,9 +723,9 @@ describe('AdminPage', () => {
     renderAdmin()
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Password' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Account' })).toBeInTheDocument()
     })
-    await switchToTab(user, 'Password')
+    await switchToTab(user, 'Account')
 
     await waitFor(() => {
       expect(screen.getByLabelText(/Current Password/)).toBeInTheDocument()
@@ -735,9 +746,9 @@ describe('AdminPage', () => {
     renderAdmin()
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Password' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Account' })).toBeInTheDocument()
     })
-    await switchToTab(user, 'Password')
+    await switchToTab(user, 'Account')
 
     await waitFor(() => {
       expect(screen.getByLabelText(/Current Password/)).toBeInTheDocument()
@@ -768,9 +779,9 @@ describe('AdminPage', () => {
     renderAdmin()
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Password' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Account' })).toBeInTheDocument()
     })
-    await switchToTab(user, 'Password')
+    await switchToTab(user, 'Account')
 
     await waitFor(() => {
       expect(screen.getByLabelText(/Current Password/)).toBeInTheDocument()
@@ -795,9 +806,9 @@ describe('AdminPage', () => {
     renderAdmin()
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Password' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Account' })).toBeInTheDocument()
     })
-    await switchToTab(user, 'Password')
+    await switchToTab(user, 'Account')
 
     await waitFor(() => {
       expect(screen.getByLabelText(/Current Password/)).toBeInTheDocument()
@@ -842,7 +853,7 @@ describe('AdminPage', () => {
     })
 
     // Switch to Password tab
-    await switchToTab(user, 'Password')
+    await switchToTab(user, 'Account')
     expect(screen.queryByText('Timeline')).not.toBeInTheDocument()
     await waitFor(() => {
       expect(screen.getByLabelText(/Current Password/)).toBeInTheDocument()
@@ -914,9 +925,9 @@ describe('AdminPage', () => {
     renderAdmin()
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Password' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Account' })).toBeInTheDocument()
     })
-    await switchToTab(user, 'Password')
+    await switchToTab(user, 'Account')
 
     await waitFor(() => {
       expect(screen.getByLabelText(/Current Password/)).toBeInTheDocument()
@@ -987,9 +998,9 @@ describe('AdminPage', () => {
     renderAdmin()
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Password' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Account' })).toBeInTheDocument()
     })
-    await switchToTab(user, 'Password')
+    await switchToTab(user, 'Account')
 
     await waitFor(() => {
       expect(screen.getByText(/at least 12 characters/i)).toBeInTheDocument()

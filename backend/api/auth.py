@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import logging
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 from urllib.parse import urlparse
+
+if TYPE_CHECKING:
+    from backend.filesystem.content_manager import ContentManager
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
@@ -36,7 +39,6 @@ from backend.schemas.auth import (
     TokenResponse,
     UserResponse,
 )
-from backend.services.datetime_service import format_iso, now_utc
 from backend.services.auth_service import (
     authenticate_user,
     consume_invite_code,
@@ -52,6 +54,7 @@ from backend.services.auth_service import (
     revoke_refresh_token,
 )
 from backend.services.csrf_service import create_csrf_token
+from backend.services.datetime_service import format_iso, now_utc
 from backend.services.rate_limit_service import InMemoryRateLimiter
 
 logger = logging.getLogger(__name__)
@@ -461,15 +464,12 @@ async def update_profile(
     user: Annotated[User, Depends(require_auth)],
 ) -> UserResponse:
     """Update current user's profile (username, display name)."""
-    from backend.filesystem.content_manager import ContentManager
     from backend.services.cache_service import rebuild_cache
 
     changed = False
 
     if body.username is not None and body.username != user.username:
-        existing = await session.execute(
-            select(User).where(User.username == body.username)
-        )
+        existing = await session.execute(select(User).where(User.username == body.username))
         if existing.scalar_one_or_none() is not None:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
