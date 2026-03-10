@@ -68,7 +68,7 @@ Self-registration is disabled by default; create invite codes from the admin acc
 # Run full quality gate (static checks, then tests)
 just check
 
-# Run extra checks not covered by just check (full npm audit + Checkov + Gitleaks + CodeQL + Snyk OSS)
+# Run extra checks not covered by just check (full npm audit + Checkov + Gitleaks + CodeQL + Semgrep + Snyk OSS + slow backend tests)
 just check-extra
 
 # Run Checkov against Dockerfile and docker-compose.yml
@@ -87,7 +87,7 @@ just check-snyk
 # Run noisy scans kept outside the default gate
 just check-noisy
 
-# Run static checks only (backend + frontend + Semgrep + Vulture + Trivy)
+# Run static checks only (backend + frontend + Vulture + Trivy)
 just check-static
 
 # Run OWASP ZAP passive baseline scan against the local app
@@ -305,12 +305,13 @@ Posts are markdown files with YAML front matter in the `content/posts/` director
 
 ```markdown
 ---
+title: Hello World
 created_at: 2026-02-02 22:21:29.975359+00
 modified_at: 2026-02-02 22:21:35.000000+00
 author: Admin
+author_username: admin
 labels: ["#swe"]
 ---
-# Hello World
 
 Post content here with **markdown**, $\LaTeX$ math, and `code blocks`.
 ```
