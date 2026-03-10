@@ -535,9 +535,7 @@ async def update_profile(
             try:
                 await rebuild_cache(session_factory, content_manager)
             except Exception as exc:
-                logger.error(
-                    "Cache rebuild failed after author update, reverting files: %s", exc
-                )
+                logger.error("Cache rebuild failed after author update, reverting files: %s", exc)
                 try:
                     await asyncio.to_thread(
                         _update_author_in_posts,

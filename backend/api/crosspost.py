@@ -122,7 +122,8 @@ async def _upsert_social_account(
                     )
                     raise HTTPException(
                         status_code=status.HTTP_409_CONFLICT,
-                        detail=f"Could not connect {platform} account due to a conflict. Please try again.",
+                        detail=f"Could not connect {platform} account due to a conflict. "
+                        "Please try again.",
                     ) from None
                 replaced = True
                 break

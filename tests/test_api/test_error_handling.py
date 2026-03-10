@@ -148,7 +148,7 @@ class TestPagePandocFailure:
 
 
 class TestRuntimeErrorHandler:
-    """Non-render RuntimeError returns 500 'Internal processing error'."""
+    """Non-render RuntimeError returns 500 'Internal server error'."""
 
     @pytest.mark.asyncio
     async def test_non_render_runtime_error_returns_500(self, client: AsyncClient) -> None:
@@ -164,7 +164,7 @@ class TestRuntimeErrorHandler:
                 headers={"Authorization": f"Bearer {token}"},
             )
         assert resp.status_code == 500
-        assert "internal processing error" in resp.json()["detail"].lower()
+        assert "internal server error" in resp.json()["detail"].lower()
 
 
 class TestRenderErrorHandler:

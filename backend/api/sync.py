@@ -139,9 +139,7 @@ async def sync_status(
 
     async with content_write_lock:
         server_manifest = await get_server_manifest(session)
-        server_current = await asyncio.to_thread(
-            scan_content_files, content_manager.content_dir
-        )
+        server_current = await asyncio.to_thread(scan_content_files, content_manager.content_dir)
     plan = compute_sync_plan(client_manifest, server_manifest, server_current)
 
     conflicts = [

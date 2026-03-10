@@ -336,9 +336,7 @@ async def _render_markdown(
     if "error" in data:
         raise RenderError(f"Pandoc rendering error: {str(data['error'])[:200]}")
     if response.status_code >= 300:
-        raise RenderError(
-            f"Pandoc server returned non-2xx status ({response.status_code})"
-        )
+        raise RenderError(f"Pandoc server returned non-2xx status ({response.status_code})")
 
     output = data.get("output", "")
     sanitized = sanitizer(output)

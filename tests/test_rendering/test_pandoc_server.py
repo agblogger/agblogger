@@ -926,7 +926,7 @@ class TestRendererHttpxErrorHandling:
             await renderer.render_markdown("# test")
 
     async def test_non_200_without_error_key_raises_render_error(self) -> None:
-        """Non-2xx pandoc response without 'error' key must raise RenderError, not return empty string."""
+        """Non-2xx pandoc response without 'error' key must raise RenderError."""
         from backend.pandoc import renderer
         from backend.pandoc.renderer import RenderError
 

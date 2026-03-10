@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from backend.filesystem.content_manager import (
@@ -249,7 +249,7 @@ class TestPlainExcerptRegexSafety:
 
         # Adversarial content: many unclosed * that cause backtracking
         adversarial = "* " * 5000
-        now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        now = datetime(2026, 1, 1, tzinfo=UTC)
         post_data = PostData(
             file_path="posts/test.md",
             title="Test",

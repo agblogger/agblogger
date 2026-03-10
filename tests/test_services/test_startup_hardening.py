@@ -43,7 +43,7 @@ class TestGlobalExceptionHandlers:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.get("/test-runtime-error")
         assert resp.status_code == 500
-        assert resp.json()["detail"] == "Internal processing error"
+        assert resp.json()["detail"] == "Internal server error"
 
     @pytest.mark.asyncio
     async def test_os_error_returns_500(self, tmp_path: Path) -> None:

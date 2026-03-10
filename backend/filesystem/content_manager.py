@@ -6,9 +6,12 @@ import hashlib
 import logging
 import re
 from dataclasses import dataclass, field
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import yaml
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 from backend.filesystem.frontmatter import PostData, generate_markdown_excerpt, parse_post
 from backend.filesystem.toml_manager import (

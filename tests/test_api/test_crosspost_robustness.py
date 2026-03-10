@@ -173,19 +173,19 @@ class TestFacebookCallbackMissingPagesKey:
     """Issue: facebook_callback KeyError when 'pages' key absent in API response."""
 
     @pytest.mark.asyncio
-    async def test_facebook_callback_missing_pages_returns_502(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_facebook_callback_missing_pages_returns_502(self, client: AsyncClient) -> None:
         """When exchange_facebook_oauth_token returns a dict without 'pages', return 502."""
         import time
 
         transport = client._transport
         assert isinstance(transport, ASGITransport)
         app = transport.app
+        state = getattr(app, "state", None)
+        assert state is not None, "ASGI app has no state attribute"
 
         # Inject a valid pending state into the state store
         state_token = "test-state-token-abc123"
-        state_store = app.state.facebook_oauth_state
+        state_store = state.facebook_oauth_state
         state_store._entries[state_token] = (
             {
                 "app_id": "fake-app-id",

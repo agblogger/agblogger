@@ -101,8 +101,7 @@ class TestNonIterableParents:
     def test_integer_parents_skipped_gracefully(self, tmp_path: Path) -> None:
         labels_path = tmp_path / "labels.toml"
         labels_path.write_text(
-            '[labels.broken]\nnames = ["broken"]\nparents = 42\n'
-            '[labels.good]\nnames = ["good"]\n'
+            '[labels.broken]\nnames = ["broken"]\nparents = 42\n[labels.good]\nnames = ["good"]\n'
         )
         result = parse_labels_config(tmp_path)
         assert result["broken"].parents == []
