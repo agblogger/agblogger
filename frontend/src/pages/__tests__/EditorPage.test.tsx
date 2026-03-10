@@ -176,7 +176,7 @@ describe('EditorPage', () => {
       isDraft: false,
       savedAt: '2026-02-20T15:45:00.000Z',
     }
-    localStorage.setItem('agblogger:draft:new', JSON.stringify(draft))
+    localStorage.setItem('agblogger:draft:user:1:new', JSON.stringify(draft))
 
     renderEditor('/editor/new')
 
@@ -196,7 +196,7 @@ describe('EditorPage', () => {
       isDraft: true,
       savedAt: '2026-02-20T15:45:00.000Z',
     }
-    localStorage.setItem('agblogger:draft:new', JSON.stringify(draft))
+    localStorage.setItem('agblogger:draft:user:1:new', JSON.stringify(draft))
 
     renderEditor('/editor/new')
 
@@ -220,7 +220,7 @@ describe('EditorPage', () => {
   it('dismisses banner and clears draft when Discard is clicked', async () => {
     const user = userEvent.setup()
     localStorage.setItem(
-      'agblogger:draft:new',
+      'agblogger:draft:user:1:new',
       JSON.stringify({ title: 'Old', body: 'Old body', labels: [], isDraft: false, savedAt: '2026-02-20T15:45:00.000Z' }),
     )
 
@@ -232,7 +232,7 @@ describe('EditorPage', () => {
     await user.click(screen.getByRole('button', { name: /discard/i }))
 
     expect(screen.queryByText(/unsaved changes/i)).not.toBeInTheDocument()
-    expect(localStorage.getItem('agblogger:draft:new')).toBeNull()
+    expect(localStorage.getItem('agblogger:draft:user:1:new')).toBeNull()
   })
 
   it('renders title input for new post', async () => {

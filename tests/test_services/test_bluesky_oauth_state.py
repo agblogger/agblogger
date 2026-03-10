@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import time
 
+import pytest
+
 from backend.crosspost.bluesky_oauth_state import OAuthStateStore
 
 
@@ -39,3 +41,21 @@ class TestOAuthStateStore:
         store.cleanup()
         assert "old" not in store._entries
         assert "new" in store._entries
+
+    def test_rejects_new_state_when_per_user_limit_is_reached(self) -> None:
+        store = OAuthStateStore(ttl_seconds=60, max_entries=10, max_entries_per_user=1)
+        store.set("state-1", {"user_id": 1})
+
+        with pytest.raises(ValueError, match="Too many pending OAuth flows"):
+            store.set("state-2", {"user_id": 1})
+
+        assert store.get("state-1") == {"user_id": 1}
+
+    def test_does_not_evict_other_users_when_store_is_full(self) -> None:
+        store = OAuthStateStore(ttl_seconds=60, max_entries=1, max_entries_per_user=1)
+        store.set("state-admin", {"user_id": 1})
+
+        with pytest.raises(ValueError, match="OAuth state store is full"):
+            store.set("state-reader", {"user_id": 2})
+
+        assert store.get("state-admin") == {"user_id": 1}

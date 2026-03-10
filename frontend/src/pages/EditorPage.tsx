@@ -10,7 +10,7 @@ import { HTTPError } from '@/api/client'
 import { parseErrorDetail } from '@/api/parseError'
 import api from '@/api/client'
 import { useCodeBlockEnhance } from '@/hooks/useCodeBlockEnhance'
-import { useEditorAutoSave } from '@/hooks/useEditorAutoSave'
+import { buildEditorDraftStorageKey, useEditorAutoSave } from '@/hooks/useEditorAutoSave'
 import type { DraftData } from '@/hooks/useEditorAutoSave'
 import { useRenderedHtml } from '@/hooks/useKatex'
 import { useAuthStore } from '@/stores/authStore'
@@ -56,7 +56,8 @@ export default function EditorPage() {
   const showFileStrip = effectiveFilePath === null || effectiveFilePath.endsWith('/index.md')
   useCodeBlockEnhance(previewRef, renderedPreview)
 
-  const autoSaveKey = isNew ? 'agblogger:draft:new' : `agblogger:draft:${filePath}`
+  const draftOwnerId = user?.id ?? 0
+  const autoSaveKey = buildEditorDraftStorageKey(draftOwnerId, isNew ? undefined : filePath)
   const currentState = useMemo<DraftData>(
     () => ({ title, body, labels, isDraft }),
     [title, body, labels, isDraft],
@@ -74,7 +75,7 @@ export default function EditorPage() {
       key: autoSaveKey,
       currentState,
       onRestore: handleRestore,
-      enabled: isNew || !loading,
+      enabled: Boolean(user) && (isNew || !loading),
     })
 
   useEffect(() => {

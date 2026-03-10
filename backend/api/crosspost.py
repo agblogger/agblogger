@@ -74,6 +74,24 @@ def _generate_pkce_pair() -> tuple[str, str]:
     return code_verifier, code_challenge
 
 
+def _store_pending_oauth_state(state_store: object, state: str, data: dict[str, object]) -> None:
+    """Store OAuth state with bounded per-user abuse protection."""
+    try:
+        state_store.set(state, data)  # type: ignore[attr-defined]
+    except ValueError as exc:
+        detail = str(exc)
+        if detail == "Too many pending OAuth flows for this user":
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=detail,
+            ) from exc
+        logger.warning("OAuth state store capacity reached: %s", detail)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="OAuth authorization is temporarily unavailable",
+        ) from exc
+
+
 async def _upsert_social_account(
     session: AsyncSession,
     user_id: int,
@@ -318,7 +336,8 @@ async def bluesky_authorize(
             detail="Bluesky authentication failed",
         ) from exc
     state_store = request.app.state.bluesky_oauth_state
-    state_store.set(
+    _store_pending_oauth_state(
+        state_store,
         par_result["state"],
         {
             "pkce_verifier": par_result["pkce_verifier"],
@@ -512,7 +531,8 @@ async def mastodon_authorize(
 
     # Store pending state
     state_store = request.app.state.mastodon_oauth_state
-    state_store.set(
+    _store_pending_oauth_state(
+        state_store,
         oauth_state,
         {
             "instance_url": instance_url,
@@ -648,7 +668,8 @@ async def x_authorize(
     oauth_state = secrets.token_hex(32)
 
     state_store = request.app.state.x_oauth_state
-    state_store.set(
+    _store_pending_oauth_state(
+        state_store,
         oauth_state,
         {
             "pkce_verifier": code_verifier,
@@ -789,7 +810,8 @@ async def facebook_authorize(
     oauth_state = secrets.token_hex(32)
 
     state_store = request.app.state.facebook_oauth_state
-    state_store.set(
+    _store_pending_oauth_state(
+        state_store,
         oauth_state,
         {
             "user_id": user.id,

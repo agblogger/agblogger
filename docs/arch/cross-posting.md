@@ -38,7 +38,7 @@ The flow:
 
 **Client identity**: An ES256 keypair is generated on first startup and stored in a private state directory alongside the configured database, outside `content/`. The public key is served in the client metadata document at `GET /api/crosspost/bluesky/client-metadata.json`. The `BLUESKY_CLIENT_URL` setting provides the public base URL used to construct the `client_id`, and production startup validation requires it to be a canonical `https://` origin when configured.
 
-**OAuth state**: Pending authorization flows are stored in an in-memory `OAuthStateStore` (`backend/crosspost/bluesky_oauth_state.py`) with a 10-minute TTL, keyed by the `state` parameter.
+**OAuth state**: Pending authorization flows are stored in an in-memory `OAuthStateStore` (`backend/crosspost/bluesky_oauth_state.py`) with a 10-minute TTL, keyed by the `state` parameter. The store enforces per-user pending-flow limits and rejects new flows when saturated instead of evicting another user's state.
 
 **Token lifecycle**: Access tokens are short-lived and DPoP-bound. Refresh tokens last up to 3 months. On 401 responses during cross-posting, the `BlueskyCrossPoster` automatically refreshes tokens and retries. Updated tokens are persisted after each successful cross-post.
 
@@ -49,7 +49,7 @@ Mastodon uses standard OAuth 2.0 with dynamic client registration and PKCE:
 1. User enters their Mastodon instance URL → `POST /api/crosspost/mastodon/authorize`
 2. Backend validates and normalizes the instance URL (SSRF protection via `_normalize_instance_url()`)
 3. Backend dynamically registers an app on the instance via `POST /api/v1/apps`, generating PKCE challenge
-4. OAuth state (client credentials, PKCE verifier, instance URL) is stored in the in-memory `OAuthStateStore` with 10-minute TTL
+4. OAuth state (client credentials, PKCE verifier, instance URL) is stored in the in-memory `OAuthStateStore` with 10-minute TTL and per-user pending-flow limits
 5. Frontend redirects user to the instance's `/oauth/authorize` endpoint
 6. Instance redirects back to `GET /api/crosspost/mastodon/callback`
 7. Backend exchanges authorization code for access token, verifies credentials via `GET /api/v1/accounts/verify_credentials`, stores encrypted credentials in `SocialAccount`
@@ -60,7 +60,7 @@ X uses OAuth 2.0 with PKCE:
 
 1. User clicks "Connect X" on the admin page → `POST /api/crosspost/x/authorize`
 2. Backend builds the authorization URL with PKCE challenge using `X_CLIENT_ID` and `X_CLIENT_SECRET` settings
-3. OAuth state (PKCE verifier, client credentials) is stored in the in-memory `OAuthStateStore` with 10-minute TTL
+3. OAuth state (PKCE verifier, client credentials) is stored in the in-memory `OAuthStateStore` with 10-minute TTL and per-user pending-flow limits
 4. Frontend redirects user to X's authorization page
 5. X redirects back to `GET /api/crosspost/x/callback`
 6. Backend exchanges authorization code for access and refresh tokens, fetches user profile via `GET /2/users/me`, stores encrypted credentials in `SocialAccount`
@@ -73,7 +73,7 @@ Facebook uses OAuth 2.0 for Pages:
 
 1. User clicks "Connect Facebook" on the admin page → `POST /api/crosspost/facebook/authorize`
 2. Backend builds the authorization URL using `FACEBOOK_APP_ID` and `FACEBOOK_APP_SECRET` settings, requesting `pages_manage_posts` and `pages_read_engagement` scopes
-3. OAuth state is stored in the in-memory `OAuthStateStore` with 10-minute TTL
+3. OAuth state is stored in the in-memory `OAuthStateStore` with 10-minute TTL and per-user pending-flow limits
 4. Frontend redirects user to Facebook's authorization page
 5. Facebook redirects back to `GET /api/crosspost/facebook/callback`
 6. Backend exchanges the authorization code for a short-lived user token, then exchanges it for a long-lived token using server-side `POST` bodies rather than URL query parameters

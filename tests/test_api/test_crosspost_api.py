@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from backend.crosspost.bluesky_oauth_state import OAuthStateStore
 from tests.conftest import create_test_client
 
 pytestmark = pytest.mark.slow
@@ -281,6 +282,40 @@ class TestXAuthorize:
                 headers={"Authorization": f"Bearer {token}"},
             )
             assert resp.status_code == 503
+
+    async def test_x_authorize_rejects_excess_pending_flows_per_user(
+        self, test_settings: Settings
+    ) -> None:
+        test_settings.bluesky_client_url = "https://myblog.example.com"
+        test_settings.x_client_id = "test_client_id"
+        test_settings.x_client_secret = "test_client_secret"
+        test_settings.admin_password = "admin"
+        async with create_test_client(test_settings) as client:
+            transport = client._transport
+            transport.app.state.x_oauth_state = OAuthStateStore(  # type: ignore[attr-defined]
+                ttl_seconds=600,
+                max_entries=10,
+                max_entries_per_user=1,
+            )
+
+            login_resp = await client.post(
+                "/api/auth/token-login",
+                json={"username": "admin", "password": "admin"},
+            )
+            token = login_resp.json()["access_token"]
+
+            first = await client.post(
+                "/api/crosspost/x/authorize",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            assert first.status_code == 200
+
+            second = await client.post(
+                "/api/crosspost/x/authorize",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            assert second.status_code == 429
+            assert second.json()["detail"] == "Too many pending OAuth flows for this user"
 
 
 class TestXCallback:

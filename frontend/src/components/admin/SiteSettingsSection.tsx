@@ -14,24 +14,44 @@ interface SiteSettingsSectionProps {
   onSavedSettings: (settings: AdminSiteSettings) => void
 }
 
+const EMPTY_SITE_SETTINGS: AdminSiteSettings = {
+  title: '',
+  description: '',
+  timezone: '',
+}
+
+function normalizeSiteSettings(
+  settings: Partial<AdminSiteSettings> | AdminSiteSettings | null | undefined,
+): AdminSiteSettings {
+  return {
+    title: settings?.title ?? '',
+    description: settings?.description ?? '',
+    timezone: settings?.timezone ?? '',
+  }
+}
+
 export default function SiteSettingsSection({
   initialSettings,
   busy,
   onSaving,
   onSavedSettings,
 }: SiteSettingsSectionProps) {
-  const [siteSettings, setSiteSettings] = useState<AdminSiteSettings>(initialSettings)
+  const [siteSettings, setSiteSettings] = useState<AdminSiteSettings | undefined>(
+    normalizeSiteSettings(initialSettings),
+  )
   const [siteError, setSiteError] = useState<string | null>(null)
   const [siteSuccess, setSiteSuccess] = useState<string | null>(null)
   const [savingSite, setSavingSite] = useState(false)
 
   useEffect(() => { onSaving(savingSite) }, [savingSite, onSaving])
   useEffect(() => {
-    setSiteSettings(initialSettings)
+    setSiteSettings(normalizeSiteSettings(initialSettings))
   }, [initialSettings])
 
+  const currentSettings = siteSettings ?? EMPTY_SITE_SETTINGS
+
   async function handleSaveSiteSettings() {
-    if (!siteSettings.title.trim()) {
+    if (!currentSettings.title.trim()) {
       setSiteError('Title is required.')
       return
     }
@@ -39,7 +59,7 @@ export default function SiteSettingsSection({
     setSiteError(null)
     setSiteSuccess(null)
     try {
-      const updated = await updateAdminSiteSettings(siteSettings)
+      const updated = normalizeSiteSettings(await updateAdminSiteSettings(currentSettings))
       setSiteSettings(updated)
       onSavedSettings(updated)
       setSiteSuccess('Settings saved.')
@@ -85,9 +105,9 @@ export default function SiteSettingsSection({
           <input
             id="site-title"
             type="text"
-            value={siteSettings.title}
+            value={currentSettings.title}
             onChange={(e) => {
-              setSiteSettings({ ...siteSettings, title: e.target.value })
+              setSiteSettings({ ...currentSettings, title: e.target.value })
               setSiteSuccess(null)
             }}
             disabled={busy}
@@ -108,9 +128,9 @@ export default function SiteSettingsSection({
           <input
             id="site-description"
             type="text"
-            value={siteSettings.description}
+            value={currentSettings.description}
             onChange={(e) => {
-              setSiteSettings({ ...siteSettings, description: e.target.value })
+              setSiteSettings({ ...currentSettings, description: e.target.value })
               setSiteSuccess(null)
             }}
             disabled={busy}
@@ -126,9 +146,9 @@ export default function SiteSettingsSection({
             Timezone
           </label>
           <TimezoneCombobox
-            value={siteSettings.timezone}
+            value={currentSettings.timezone}
             onChange={(tz) => {
-              setSiteSettings({ ...siteSettings, timezone: tz })
+              setSiteSettings({ ...currentSettings, timezone: tz })
               setSiteSuccess(null)
             }}
             disabled={busy}

@@ -60,6 +60,8 @@ In-memory sliding-window rate limiter (`backend/services/rate_limit_service.py`)
 
 Returns 429 with `Retry-After` header when exceeded. Counters reset on successful authentication.
 
+Pending OAuth authorization state is bounded separately in `backend/crosspost/bluesky_oauth_state.py`. Each authenticated user gets a limited number of in-flight OAuth states, and new authorize requests are rejected instead of evicting another user's pending callback state.
+
 ### Trusted Proxy Handling
 
 `X-Forwarded-For` is only trusted when the direct peer IP is in the `TRUSTED_PROXY_IPS` list (`backend/api/auth.py:_get_client_ip()`). Otherwise the socket peer IP is used for rate-limit keys, preventing IP spoofing.
@@ -84,7 +86,7 @@ Protected endpoints use FastAPI dependency injection (`backend/api/deps.py`):
 |------|--------|
 | Unauthenticated | Read published posts, labels, pages, search |
 | Authenticated | Above + cross-post, user-scoped actions |
-| Admin | Above + post CRUD, label mutations, sync, admin panel |
+| Admin | Above + post CRUD, render preview, label mutations, sync, admin panel |
 
 ### Draft Visibility
 

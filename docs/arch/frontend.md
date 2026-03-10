@@ -22,7 +22,8 @@ Uses `createBrowserRouter` (data router) with `RouterProvider` for full react-ro
 The `useEditorAutoSave` hook (`hooks/useEditorAutoSave.ts`) provides crash recovery and unsaved-changes protection:
 
 - **Dirty tracking**: Compares current form state (title, body, labels, isDraft) to the loaded/initial state
-- **Debounced auto-save**: Writes draft to `localStorage` (key: `agblogger:draft:<filePath>`) 3 seconds after the last edit
+- **Debounced auto-save**: Writes draft to `localStorage` 3 seconds after the last edit so drafts survive browser restarts and accidental tab/window closes
+- **User-scoped storage keys**: Drafts are namespaced by authenticated user ID (`agblogger:draft:user:<userId>:<filePath|new>`) so one browser profile does not expose unpublished drafts across account switches
 - **Navigation blocking**: `useBlocker` shows a native `window.confirm` dialog for in-app SPA navigation; `beforeunload` covers tab close and page refresh
 - **Draft recovery**: On editor mount, detects stale drafts and shows a banner with Restore/Discard options
 - **Enabled gating**: The hook accepts an `enabled` parameter; for existing posts it activates only after loading completes, preventing false dirty state during data fetch

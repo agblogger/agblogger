@@ -70,7 +70,7 @@ All content-mutating API endpoints (post create/update/delete, admin page CRUD, 
 | `pages` | `/api/pages` | Site config, rendered page content |
 | `sync` | `/api/sync` | Bidirectional sync protocol (admin-only) |
 | `crosspost` | `/api/crosspost` | Social account management, cross-posting, Bluesky/Mastodon/X/Facebook OAuth flows |
-| `render` | `/api/render` | Server-side Pandoc preview for the editor |
+| `render` | `/api/render` | Server-side Pandoc preview for the admin-only editor |
 | `admin` | `/api/admin` | Site settings, page management, display name, password change (admin-only) |
 | `content` | `/api/content` | File serving for post assets and shared assets with canonical-path draft authorization |
 | `health` | `/api/health` | Health check with DB verification |

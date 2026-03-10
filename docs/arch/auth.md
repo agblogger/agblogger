@@ -27,7 +27,7 @@
 |------|--------|
 | Unauthenticated | Read published (non-draft) posts, labels, pages, search |
 | Authenticated | Above + cross-post and user-scoped account actions |
-| Admin | Above + post create/update/delete/upload/edit-data, label mutations, sync, and admin panel operations |
+| Admin | Above + post create/update/delete/upload/edit-data, render preview, label mutations, sync, and admin panel operations |
 
 Public reads require no authentication. The `get_current_user()` dependency returns `None` for unauthenticated requests.
 

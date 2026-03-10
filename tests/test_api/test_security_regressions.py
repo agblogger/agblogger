@@ -176,6 +176,21 @@ class TestRenderedHtmlSanitization:
         assert 'href="javascript:' not in html
 
 
+class TestRenderPreviewAuthorization:
+    @pytest.mark.asyncio
+    async def test_render_preview_rejects_non_admin_users(self, client: AsyncClient) -> None:
+        await _register(client, "writer", "writer@test.com", "writer-password")
+        token = await _login(client, "writer", "writer-password")
+
+        resp = await client.post(
+            "/api/render/preview",
+            json={"markdown": "# Private preview"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert resp.status_code == 403
+
+
 class TestDraftVisibility:
     @pytest.mark.asyncio
     async def test_draft_post_not_publicly_readable(self, client: AsyncClient) -> None:

@@ -3,6 +3,10 @@ import { useBlocker } from 'react-router-dom'
 
 const AUTO_SAVE_DEBOUNCE_MS = 3000
 
+export function buildEditorDraftStorageKey(userId: number, filePath?: string): string {
+  return `agblogger:draft:user:${userId}:${filePath ?? 'new'}`
+}
+
 export interface DraftData {
   title: string
   body: string
@@ -55,6 +59,22 @@ function readDraft(key: string): DraftData | null {
     // Ignore invalid JSON
   }
   return null
+}
+
+function persistDraft(key: string, draft: DraftData): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(draft))
+  } catch {
+    // Ignore storage quota / privacy mode failures and keep editing session alive.
+  }
+}
+
+function deleteDraft(key: string): void {
+  try {
+    localStorage.removeItem(key)
+  } catch {
+    // Ignore storage failures so discard/save never crash the editor.
+  }
 }
 
 export function useEditorAutoSave({
@@ -113,7 +133,7 @@ export function useEditorAutoSave({
         ...currentState,
         savedAt: new Date().toISOString(),
       }
-      localStorage.setItem(key, JSON.stringify(toSave))
+      persistDraft(key, toSave)
     }, AUTO_SAVE_DEBOUNCE_MS)
 
     return () => clearTimeout(timer)
@@ -158,12 +178,12 @@ export function useEditorAutoSave({
   }, [draftData, key])
 
   const discardDraft = useCallback(() => {
-    localStorage.removeItem(key)
+    deleteDraft(key)
     setDraftOverride({ key, draft: null })
   }, [key])
 
   const markSaved = useCallback(() => {
-    localStorage.removeItem(key)
+    deleteDraft(key)
     setSavedState(currentStateRef.current)
     setDraftOverride({ key, draft: null })
     navigationAllowedRef.current = true

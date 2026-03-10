@@ -8,7 +8,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from backend.api.deps import require_auth
+from backend.api.deps import require_admin
 from backend.models.user import User
 from backend.pandoc.renderer import RenderError, render_markdown, rewrite_relative_urls
 
@@ -33,7 +33,7 @@ class RenderResponse(BaseModel):
 @router.post("/preview", response_model=RenderResponse)
 async def preview(
     body: RenderRequest,
-    _user: Annotated[User, Depends(require_auth)],
+    _user: Annotated[User, Depends(require_admin)],
 ) -> RenderResponse:
     """Render markdown to HTML for preview."""
     try:
