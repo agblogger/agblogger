@@ -16,6 +16,8 @@ from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 
+from backend.validation import is_valid_trusted_host
+
 MIN_SECRET_KEY_LENGTH = 32
 MIN_ADMIN_PASSWORD_LENGTH = 8
 DEFAULT_HOST_PORT = 8000
@@ -251,19 +253,6 @@ def build_caddyfile_content(config: CaddyConfig) -> str:
     )
 
 
-def _is_valid_trusted_host(host: str) -> bool:
-    """Return True for explicit hosts and narrow subdomain wildcards.
-
-    NOTE: Duplicated in backend/config.py — update both if validation logic changes.
-    """
-    candidate = host.strip()
-    if not candidate or candidate == "*":
-        return False
-    if "*" not in candidate:
-        return True
-    return candidate.startswith("*.") and candidate.count("*") == 1 and len(candidate) > 2
-
-
 def _agblogger_env_section() -> str:
     """Return the environment YAML block shared across all compose files."""
     return (
@@ -483,7 +472,7 @@ def _validate_config(config: DeployConfig) -> None:
     if not config.trusted_hosts:
         raise DeployError("TRUSTED_HOSTS must include at least one host")
     for host in config.trusted_hosts:
-        if not _is_valid_trusted_host(host):
+        if not is_valid_trusted_host(host):
             raise DeployError(
                 f"Invalid trusted host: {host!r}. "
                 "Use explicit hosts or '*.example.com' (no catch-all wildcards)."
@@ -567,7 +556,8 @@ def _write_env_file(config: DeployConfig, target_dir: Path) -> None:
         env_path.chmod(0o600)
     except OSError as exc:
         print(
-            f"Warning: Could not set restrictive permissions on {DEFAULT_ENV_FILE}: {exc}",
+            f"WARNING: Could not set restrictive permissions on {DEFAULT_ENV_FILE}: {exc}\n"
+            f"This file contains sensitive secrets and may be readable by other users.",
             file=sys.stderr,
         )
 
@@ -864,9 +854,8 @@ def _wait_for_healthy(
                 continue
         print("All services healthy.")
         return
-    print(
-        "Warning: health check timed out. Run the status command to inspect services.",
-        file=sys.stderr,
+    raise DeployError(
+        f"Health check timed out after {timeout}s. Run the status command to inspect services."
     )
 
 
@@ -1136,7 +1125,7 @@ def _prompt_trusted_hosts(caddy_domain: str | None) -> list[str]:
         if not trusted_hosts:
             print("Provide at least one trusted host.")
             continue
-        invalid = [h for h in trusted_hosts if not _is_valid_trusted_host(h)]
+        invalid = [h for h in trusted_hosts if not is_valid_trusted_host(h)]
         if invalid:
             print(
                 f"Invalid host(s): {', '.join(repr(h) for h in invalid)}. "

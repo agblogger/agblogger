@@ -2,14 +2,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from pathlib import Path
-
 from pathlib import Path
 
-from backend.config import Settings, _sqlite_database_path
+from backend.config import Settings, sqlite_database_path
 
 
 class TestSettings:
@@ -36,9 +31,40 @@ class TestSettings:
         assert test_settings.content_dir.exists()
 
     def test_sqlite_database_path_preserves_absolute_container_paths(self) -> None:
-        assert _sqlite_database_path("sqlite+aiosqlite:////data/db/agblogger.db") == Path(
+        assert sqlite_database_path("sqlite+aiosqlite:////data/db/agblogger.db") == Path(
             "/data/db/agblogger.db"
         )
+
+
+class TestSqliteDatabasePath:
+    def test_absolute_aiosqlite_url(self) -> None:
+        assert sqlite_database_path("sqlite+aiosqlite:////data/db/agblogger.db") == Path(
+            "/data/db/agblogger.db"
+        )
+
+    def test_absolute_sqlite_url(self) -> None:
+        assert sqlite_database_path("sqlite:////data/db/agblogger.db") == Path(
+            "/data/db/agblogger.db"
+        )
+
+    def test_relative_aiosqlite_url(self) -> None:
+        assert sqlite_database_path("sqlite+aiosqlite:///data/db/agblogger.db") == Path(
+            "data/db/agblogger.db"
+        )
+
+    def test_relative_sqlite_url(self) -> None:
+        assert sqlite_database_path("sqlite:///data/db/agblogger.db") == Path(
+            "data/db/agblogger.db"
+        )
+
+    def test_non_sqlite_url_returns_none(self) -> None:
+        assert sqlite_database_path("postgresql://localhost/db") is None
+
+    def test_empty_string_returns_none(self) -> None:
+        assert sqlite_database_path("") is None
+
+    def test_simple_filename(self) -> None:
+        assert sqlite_database_path("sqlite+aiosqlite:///test.db") == Path("test.db")
 
 
 class TestCrosspostSettings:

@@ -11,6 +11,7 @@ Sync does not expose or mutate every file under `content/`. The managed surface 
 - `labels.toml`
 - Top-level `.md` pages such as `about.md`
 - All non-hidden files recursively under `posts/`, including co-located post assets and nested subfolders
+- All non-hidden files recursively under `assets/` (shared site assets)
 
 Hidden files are excluded everywhere, and private application state such as the AT Protocol OAuth keypair lives outside `content/` entirely.
 

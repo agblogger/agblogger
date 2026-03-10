@@ -9,8 +9,9 @@ from typing import Any, Protocol, cast
 from urllib.parse import urlsplit
 
 _CONTEXT_NAME = "agblogger-local"
+# Exclude Firefox telemetry/update domains from ZAP proxy and scan scope
 _MOZILLA_DOMAIN_REGEX = r"^https?://(?:[^/]+\.)?mozilla(?:\.com|\.net|\.org)(?:/.*)?$"
-_UNSTABLE_ACTIVE_SCANNER_IDS = ("40026",)
+_UNSTABLE_ACTIVE_SCANNER_IDS = ("40026",)  # DOM XSS -- hangs in local full scans
 
 
 def _zap_common() -> Any:

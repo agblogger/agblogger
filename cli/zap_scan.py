@@ -285,7 +285,10 @@ def run_zap_scan(
         return run_command(command, project_dir)
     finally:
         if started_local_caddy_profile:
-            stop_local_caddy_profile(project_dir, env_file)
+            try:
+                stop_local_caddy_profile(project_dir, env_file)
+            except ZapScanError as cleanup_exc:
+                print(f"Warning: cleanup failed: {cleanup_exc}", file=sys.stderr)
 
 
 def _build_parser() -> argparse.ArgumentParser:

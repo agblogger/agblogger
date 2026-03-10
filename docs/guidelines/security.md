@@ -141,7 +141,7 @@ Add regression tests for traversal attempts: `../etc/passwd`, `posts/../../etc/p
 
 ### Sync path boundaries
 
-Sync endpoints must stay narrower than the raw content root. Preserve the managed sync surface in `backend/services/sync_service.py` and `backend/api/sync.py`: `index.toml`, `labels.toml`, top-level `.md` pages, and all non-hidden files recursively under `posts/`. Hidden files and private application state must remain unreachable through sync APIs.
+Sync endpoints must stay narrower than the raw content root. Preserve the managed sync surface in `backend/services/sync_service.py` and `backend/api/sync.py`: `index.toml`, `labels.toml`, top-level `.md` pages, and all non-hidden files recursively under `posts/` and `assets/`. Hidden files and private application state must remain unreachable through sync APIs.
 
 ### Pydantic validation
 

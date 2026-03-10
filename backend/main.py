@@ -31,7 +31,7 @@ from backend.api.pages import router as pages_router
 from backend.api.posts import router as posts_router
 from backend.api.render import router as render_router
 from backend.api.sync import router as sync_router
-from backend.config import Settings, _sqlite_database_path
+from backend.config import Settings, sqlite_database_path
 from backend.database import create_engine
 from backend.filesystem.content_manager import ContentManager
 from backend.models.base import Base
@@ -129,7 +129,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     logger.info("Starting AgBlogger (debug=%s)", settings.debug)
     app.state.content_write_lock = asyncio.Lock()
     # Ensure SQLite database parent directory exists
-    database_path = _sqlite_database_path(settings.database_url)
+    database_path = sqlite_database_path(settings.database_url)
     if database_path is not None:
         database_path.parent.mkdir(parents=True, exist_ok=True)
 

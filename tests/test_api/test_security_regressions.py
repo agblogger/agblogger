@@ -632,6 +632,15 @@ class TestIsTrustedProxy:
 
         assert _is_trusted_proxy("127.0.0.1", ["bad-entry", "127.0.0.1"]) is True
 
+    def test_invalid_trusted_entry_logs_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        import logging
+
+        from backend.api.auth import _is_trusted_proxy
+
+        with caplog.at_level(logging.WARNING, logger="backend.api.auth"):
+            _is_trusted_proxy("127.0.0.1", ["not-valid-cidr/33", "127.0.0.1"])
+        assert any("not-valid-cidr/33" in msg for msg in caplog.messages)
+
     def test_empty_list(self) -> None:
         from backend.api.auth import _is_trusted_proxy
 
@@ -706,6 +715,50 @@ class TestTrustedProxyForwarding:
         # Both use the actual client IP → shared rate limit → second is 429
         assert first.status_code == 401
         assert second.status_code == 429
+
+    @pytest.mark.slow
+    @pytest.mark.asyncio
+    async def test_cidr_trusted_proxy_separates_forwarded_ips(
+        self, tmp_content_dir: Path, tmp_path: Path
+    ) -> None:
+        """CIDR-based trusted proxy entries correctly separate forwarded client IPs."""
+        posts_dir = tmp_content_dir / "posts"
+        (posts_dir / "hello.md").write_text(
+            "---\n"
+            "title: Hello World\n"
+            "created_at: 2026-02-02 22:21:29.975359+00\n"
+            "author: Admin\n"
+            "labels: []\n"
+            "---\nHello.\n",
+            encoding="utf-8",
+        )
+        (tmp_content_dir / "labels.toml").write_text("[labels]\n", encoding="utf-8")
+        db_path = tmp_path / "test_cidr_proxy.db"
+        cidr_settings = Settings(
+            secret_key="test-secret-key-very-long-for-security",
+            debug=True,
+            database_url=f"sqlite+aiosqlite:///{db_path}",
+            content_dir=tmp_content_dir,
+            frontend_dir=tmp_path / "frontend",
+            admin_username="admin",
+            admin_password="admin123",
+            auth_login_max_failures=2,
+            auth_rate_limit_window_seconds=300,
+            trusted_proxy_ips=["127.0.0.0/8"],
+        )
+        async with create_test_client(cidr_settings) as cidr_client:
+            first = await cidr_client.post(
+                "/api/auth/login",
+                json={"username": "admin", "password": "wrong"},
+                headers={"X-Forwarded-For": "203.0.113.10"},
+            )
+            second = await cidr_client.post(
+                "/api/auth/login",
+                json={"username": "admin", "password": "wrong"},
+                headers={"X-Forwarded-For": "198.51.100.42"},
+            )
+            assert first.status_code == 401
+            assert second.status_code == 401
 
 
 class TestProductionStartupValidation:

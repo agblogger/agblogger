@@ -14,6 +14,14 @@ This review did not find any current Critical or High severity issues in the che
 
 This pass was a manual source review of the repository contents. I did not run live DAST or dependency-audit commands during this review.
 
+## Remediation Status
+
+All three findings below have been fully resolved:
+
+- **SBP-001 (Medium):** Resolved. OAuth key moved to `Settings.atproto_oauth_key_path()` outside `content/`; sync endpoints now enforce `is_sync_managed_path()` rejecting dotfiles and non-managed paths with 403.
+- **SBP-002 (Low):** Resolved. `validate_runtime_security()` now rejects catch-all wildcards via `_is_valid_trusted_host()` in `backend/config.py`.
+- **SBP-003 (Low):** Resolved. `_is_valid_public_oauth_base_url()` validates BLUESKY_CLIENT_URL as a canonical HTTPS origin at startup.
+
 ## Medium Severity
 
 ### SBP-001: Sync API permits remote access to hidden files in `content/`, including the ATProto OAuth private key

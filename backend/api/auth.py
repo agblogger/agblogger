@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Annotated
 from urllib.parse import urlparse
 
@@ -51,6 +52,8 @@ from backend.services.auth_service import (
 from backend.services.csrf_service import create_csrf_token
 from backend.services.datetime_service import format_iso, now_utc
 from backend.services.rate_limit_service import InMemoryRateLimiter
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -105,6 +108,7 @@ def _is_trusted_proxy(client_ip: str, trusted_proxy_ips: list[str]) -> bool:
             elif client_ip == entry:
                 return True
         except ValueError:
+            logger.warning("Malformed trusted proxy entry: %s", entry)
             continue
     return False
 

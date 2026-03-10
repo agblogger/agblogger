@@ -1049,8 +1049,9 @@ def test_write_config_files_warns_on_chmod_failure(
     with patch("pathlib.Path.chmod", side_effect=OSError("permission denied")):
         write_config_files(config, tmp_path)
     captured = capsys.readouterr()
-    assert "Warning" in captured.err
+    assert "WARNING" in captured.err
     assert ".env.production" in captured.err
+    assert "sensitive secrets" in captured.err
 
 
 # ── trusted host validation ──────────────────────────────────────────
@@ -1469,10 +1470,8 @@ def test_wait_for_healthy_warns_on_timeout(
     monkeypatch.setattr("cli.deploy_production.time.monotonic", fake_monotonic)
 
     config = _make_config()
-    _wait_for_healthy(config, tmp_path, timeout=10, interval=1)
-
-    captured = capsys.readouterr()
-    assert "timed out" in captured.err
+    with pytest.raises(DeployError, match="timed out"):
+        _wait_for_healthy(config, tmp_path, timeout=10, interval=1)
 
 
 # ── Config summary ───────────────────────────────────────────────────
@@ -1528,8 +1527,8 @@ def test_deploy_prints_progress_messages(
 class TestWaitForHealthyVacuousTruth:
     """Issue 1: _wait_for_healthy should not report success when agblogger is absent."""
 
-    def test_does_not_report_healthy_when_agblogger_absent(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    def test_raises_deploy_error_when_health_check_times_out(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         from cli.deploy_production import _wait_for_healthy
 
@@ -1547,11 +1546,8 @@ class TestWaitForHealthyVacuousTruth:
         monkeypatch.setattr("cli.deploy_production.time.monotonic", fake_monotonic)
 
         config = _make_config()
-        _wait_for_healthy(config, tmp_path, timeout=10, interval=1)
-
-        captured = capsys.readouterr()
-        assert "All services healthy" not in captured.out
-        assert "timed out" in captured.err
+        with pytest.raises(DeployError, match="timed out"):
+            _wait_for_healthy(config, tmp_path, timeout=10, interval=1)
 
     def test_reports_healthy_when_agblogger_present_and_healthy(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -1755,11 +1751,8 @@ class TestWaitForHealthyWithCaddy:
             caddy_config=CaddyConfig(domain="blog.example.com", email=None),
             host_bind_ip=LOCALHOST_BIND_IP,
         )
-        _wait_for_healthy(config, tmp_path, timeout=10, interval=1)
-
-        captured = capsys.readouterr()
-        assert "All services healthy" not in captured.out
-        assert "timed out" in captured.err
+        with pytest.raises(DeployError, match="timed out"):
+            _wait_for_healthy(config, tmp_path, timeout=10, interval=1)
 
     def test_skips_caddy_check_when_caddy_disabled(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -1892,7 +1885,8 @@ class TestHealthPollProgress:
         monkeypatch.setattr("cli.deploy_production.time.monotonic", fake_monotonic)
 
         config = _make_config()
-        _wait_for_healthy(config, tmp_path, timeout=60, interval=5)
+        with pytest.raises(DeployError, match="timed out"):
+            _wait_for_healthy(config, tmp_path, timeout=60, interval=5)
 
         captured = capsys.readouterr()
         # Should show elapsed time in intermediate output
@@ -1987,7 +1981,8 @@ class TestWaitForHealthyHandlesSubprocessErrors:
         monkeypatch.setattr("cli.deploy_production.time.monotonic", fake_monotonic)
 
         config = _make_config()
-        _wait_for_healthy(config, tmp_path, timeout=60, interval=1)
+        with pytest.raises(DeployError, match="timed out"):
+            _wait_for_healthy(config, tmp_path, timeout=60, interval=1)
 
         captured = capsys.readouterr()
         # Should indicate the status query failed rather than silently showing "no services found"

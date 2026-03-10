@@ -156,6 +156,71 @@ class TestComputeSyncPlan:
         assert "added.md" in plan.to_upload
 
 
+class TestIsSyncManagedPath:
+    """Unit tests for the sync path security gate."""
+
+    # ── Positive cases: allowed paths ──
+
+    def test_allows_index_toml(self) -> None:
+        assert is_sync_managed_path("index.toml") is True
+
+    def test_allows_labels_toml(self) -> None:
+        assert is_sync_managed_path("labels.toml") is True
+
+    def test_allows_top_level_md(self) -> None:
+        assert is_sync_managed_path("about.md") is True
+
+    def test_allows_posts_files(self) -> None:
+        assert is_sync_managed_path("posts/2026-02-02-hello/index.md") is True
+
+    def test_allows_nested_post_assets(self) -> None:
+        assert is_sync_managed_path("posts/2026-02-02-hello/assets/photo.png") is True
+        assert is_sync_managed_path("posts/2026-02-02-hello/images/diagrams/arch.svg") is True
+
+    def test_allows_shared_assets(self) -> None:
+        assert is_sync_managed_path("assets/logo.png") is True
+        assert is_sync_managed_path("assets/images/banner.jpg") is True
+
+    # ── Negative cases: rejected paths ──
+
+    def test_rejects_empty_path(self) -> None:
+        assert is_sync_managed_path("") is False
+
+    def test_rejects_whitespace_only(self) -> None:
+        assert is_sync_managed_path("   ") is False
+
+    def test_rejects_hidden_files_at_root(self) -> None:
+        assert is_sync_managed_path(".env") is False
+        assert is_sync_managed_path(".atproto-oauth-key.json") is False
+        assert is_sync_managed_path(".agblogger-manifest.json") is False
+
+    def test_rejects_hidden_files_in_subdirectory(self) -> None:
+        assert is_sync_managed_path("posts/.hidden") is False
+        assert is_sync_managed_path("posts/2026-02-02-hello/.secret") is False
+
+    def test_rejects_hidden_directory_components(self) -> None:
+        assert is_sync_managed_path("posts/.hidden/index.md") is False
+        assert is_sync_managed_path(".secrets/key.json") is False
+
+    def test_rejects_dotdot_traversal(self) -> None:
+        assert is_sync_managed_path("../etc/passwd") is False
+        assert is_sync_managed_path("posts/../../etc/passwd") is False
+        assert is_sync_managed_path("posts/../../../secret") is False
+
+    def test_rejects_dot_segments(self) -> None:
+        assert is_sync_managed_path("./posts/index.md") is False
+        assert is_sync_managed_path("posts/./index.md") is False
+
+    def test_rejects_paths_outside_allowed_prefixes(self) -> None:
+        assert is_sync_managed_path("config/something.toml") is False
+        assert is_sync_managed_path("backups/db.sql") is False
+        assert is_sync_managed_path("random.txt") is False
+
+    def test_rejects_non_md_top_level_files(self) -> None:
+        assert is_sync_managed_path("data.json") is False
+        assert is_sync_managed_path("config.toml") is False
+
+
 class TestScanContentFiles:
     def test_allows_nested_assets_inside_post_directories(self, tmp_path: Path) -> None:
         assert is_sync_managed_path("posts/2026-02-02-hello-world/assets/photo.png")

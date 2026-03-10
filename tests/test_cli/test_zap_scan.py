@@ -8,6 +8,7 @@ import pytest
 
 from cli.zap_scan import (
     DEFAULT_ZAP_IMAGE,
+    ZapScanError,
     build_docker_command,
     run_zap_scan,
 )
@@ -245,3 +246,39 @@ class TestRunZapScan:
             )
 
         assert lifecycle_calls == ["start", "stop"]
+
+    def test_cleanup_failure_does_not_mask_original_error(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        """When stop_local_caddy_profile raises, the original scan error propagates."""
+        localdir = tmp_path / ".local"
+
+        monkeypatch.setattr(
+            "cli.zap_scan.local_caddy_profile_health",
+            lambda _caddy_port: False,
+        )
+        monkeypatch.setattr(
+            "cli.zap_scan.start_local_caddy_profile",
+            lambda _project_dir, _env_file, _caddy_port: None,
+        )
+
+        def failing_stop(_project_dir: Path, _env_file: Path) -> None:
+            raise ZapScanError("cleanup failed")
+
+        monkeypatch.setattr("cli.zap_scan.stop_local_caddy_profile", failing_stop)
+
+        def fake_run_command(_command: list[str], _cwd: Path) -> int:
+            raise RuntimeError("scan crashed")
+
+        monkeypatch.setattr("cli.zap_scan.run_command", fake_run_command)
+
+        with pytest.raises(RuntimeError, match="scan crashed"):
+            run_zap_scan(
+                scan_mode="baseline",
+                project_dir=tmp_path,
+                localdir=localdir,
+                caddy_port=8080,
+                minutes=None,
+            )

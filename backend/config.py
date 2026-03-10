@@ -9,24 +9,12 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from backend.exceptions import InternalServerError
+from backend.validation import is_valid_trusted_host
 
 INSECURE_DEV_SENTINEL = "change-me-in-production"
 INSECURE_BOOTSTRAP_SENTINEL = "admin"
 _SQLITE_ABSOLUTE_URL_PREFIXES = ("sqlite+aiosqlite:////", "sqlite:////")
 _SQLITE_RELATIVE_URL_PREFIXES = ("sqlite+aiosqlite:///", "sqlite:///")
-
-
-def _is_valid_trusted_host(host: str) -> bool:
-    """Return True for explicit hosts and narrow subdomain wildcards.
-
-    NOTE: Duplicated in cli/deploy_production.py — update both if validation logic changes.
-    """
-    candidate = host.strip()
-    if not candidate or candidate == "*":
-        return False
-    if "*" not in candidate:
-        return True
-    return candidate.startswith("*.") and candidate.count("*") == 1 and len(candidate) > 2
 
 
 def _is_valid_public_oauth_base_url(url: str) -> bool:
@@ -44,7 +32,7 @@ def _is_valid_public_oauth_base_url(url: str) -> bool:
     return not (parsed.path not in ("", "/") or parsed.params or parsed.query or parsed.fragment)
 
 
-def _sqlite_database_path(database_url: str) -> Path | None:
+def sqlite_database_path(database_url: str) -> Path | None:
     """Return the configured SQLite database path when the URL uses SQLite."""
     for prefix in _SQLITE_ABSOLUTE_URL_PREFIXES:
         if database_url.startswith(prefix):
@@ -145,7 +133,7 @@ class Settings(BaseSettings):
 
     def atproto_oauth_key_path(self) -> Path:
         """Return the persisted ATProto OAuth key path outside the content tree."""
-        database_path = _sqlite_database_path(self.database_url)
+        database_path = sqlite_database_path(self.database_url)
         if database_path is not None:
             return database_path.parent / ".agblogger-secrets" / "atproto-oauth-key.json"
         return self.content_dir.parent / ".agblogger-secrets" / "atproto-oauth-key.json"
@@ -164,7 +152,7 @@ class Settings(BaseSettings):
             violations.append("ADMIN_PASSWORD must be overridden with a strong value (>=8 chars)")
         if not self.trusted_hosts:
             violations.append("TRUSTED_HOSTS must be configured in production")
-        elif any(not _is_valid_trusted_host(host) for host in self.trusted_hosts):
+        elif any(not is_valid_trusted_host(host) for host in self.trusted_hosts):
             violations.append(
                 "TRUSTED_HOSTS must not use a catch-all wildcard; "
                 "use explicit hosts or '*.example.com'"
