@@ -110,25 +110,26 @@ async def _upsert_social_account(
         replaced = False
         for acct in existing:
             if acct.platform == platform and acct.account_name == account_name:
-                await delete_social_account(session, acct.id, user_id)
+                try:
+                    async with session.begin_nested():
+                        await delete_social_account(session, acct.id, user_id)
+                        await create_social_account(session, user_id, account_data, secret_key)
+                except DuplicateAccountError:
+                    logger.error(
+                        "Race condition: failed to re-create %s account %s after deletion",
+                        platform,
+                        account_name,
+                    )
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail=f"Could not connect {platform} account due to a conflict. Please try again.",
+                    ) from None
                 replaced = True
                 break
         if not replaced:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"{platform.capitalize()} account already exists",
-            ) from None
-        try:
-            await create_social_account(session, user_id, account_data, secret_key)
-        except DuplicateAccountError:
-            logger.error(
-                "Race condition: failed to re-create %s account %s after deletion",
-                platform,
-                account_name,
-            )
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"Could not connect {platform} account due to a conflict. Please try again.",
             ) from None
 
 
