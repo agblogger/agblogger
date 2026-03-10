@@ -49,7 +49,13 @@ from backend.schemas.post import (
 from backend.services.datetime_service import format_iso, now_utc
 from backend.services.git_service import GitService
 from backend.services.label_service import ensure_label_cache_entry
-from backend.services.post_service import MAX_SAFE_PAGE, get_post, list_posts, search_posts
+from backend.services.post_service import (
+    MAX_SAFE_PAGE,
+    get_post,
+    list_posts,
+    resolve_author_display_name,
+    search_posts,
+)
 from backend.services.slug_service import generate_post_path, generate_post_slug
 
 logger = logging.getLogger(__name__)
@@ -151,7 +157,8 @@ async def _render_raw(content: str) -> tuple[str, str]:
     return raw_excerpt, raw_html
 
 
-def _build_post_detail(
+async def _build_post_detail(
+    session: AsyncSession,
     post: PostCache,
     *,
     labels: list[str],
@@ -159,11 +166,12 @@ def _build_post_detail(
     warnings: list[str] | None = None,
 ) -> PostDetail:
     """Build a PostDetail response from a cache row."""
+    display_author = await resolve_author_display_name(session, post.author)
     return PostDetail(
         id=post.id,
         file_path=post.file_path,
         title=post.title,
-        author=post.author,
+        author=display_author,
         created_at=format_iso(post.created_at),
         modified_at=format_iso(post.modified_at),
         is_draft=post.is_draft,
@@ -362,7 +370,9 @@ async def upload_post(
         await session.refresh(post)
         set_git_warning(response, await git_service.try_commit(f"Upload post: {file_path}"))
 
-        return _build_post_detail(post, labels=post_data.labels, rendered_html=rendered_html)
+        return await _build_post_detail(
+            session, post, labels=post_data.labels, rendered_html=rendered_html
+        )
 
 
 @router.get("/{file_path:path}/edit", response_model=PostEditResponse)
@@ -693,7 +703,9 @@ async def create_post_endpoint(
         await session.refresh(post)
         set_git_warning(response, await git_service.try_commit(f"Create post: {file_path}"))
 
-        return _build_post_detail(post, labels=body.labels, rendered_html=rendered_html)
+        return await _build_post_detail(
+            session, post, labels=body.labels, rendered_html=rendered_html
+        )
 
 
 @router.put("/{file_path:path}", response_model=PostDetail)
@@ -888,7 +900,8 @@ async def update_post_endpoint(
             await git_service.try_commit(f"Update post: {existing.file_path}"),
         )
 
-        return _build_post_detail(
+        return await _build_post_detail(
+            session,
             existing,
             labels=body.labels,
             rendered_html=existing.rendered_html or "",

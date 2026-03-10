@@ -1,0 +1,223 @@
+"""Tests for author display name resolution in post queries.
+
+Posts store a username in PostCache.author. The API response should resolve
+this to the user's display_name via a LEFT JOIN, falling back to the raw
+username when the user does not exist or has no display_name.
+"""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING
+
+import pytest
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+
+from backend.models.base import Base
+from backend.models.post import PostCache
+from backend.models.user import User
+from backend.services.post_service import get_post, list_posts
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
+    from pathlib import Path
+
+    from sqlalchemy.ext.asyncio import AsyncEngine
+
+
+@pytest.fixture
+async def engine(tmp_path: Path) -> AsyncGenerator[AsyncEngine]:
+    """Create an in-memory SQLite engine with all tables."""
+    db_path = tmp_path / "test_display_name.db"
+    eng = create_async_engine(f"sqlite+aiosqlite:///{db_path}", echo=False)
+    async with eng.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    async with eng.begin() as conn:
+        await conn.execute(
+            text(
+                "CREATE VIRTUAL TABLE IF NOT EXISTS posts_fts USING fts5("
+                "title, content, content='posts_cache', content_rowid='id')"
+            )
+        )
+    yield eng
+    await eng.dispose()
+
+
+@pytest.fixture
+async def session(engine: AsyncEngine) -> AsyncGenerator[AsyncSession]:
+    """Create a session for the test database."""
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async with factory() as sess:
+        yield sess
+
+
+async def _create_user(
+    session: AsyncSession,
+    *,
+    username: str,
+    display_name: str | None = None,
+) -> User:
+    """Insert a user row and return it."""
+    now = datetime.now(UTC).isoformat()
+    user = User(
+        username=username,
+        email=f"{username}@test.com",
+        password_hash="fakehash",
+        display_name=display_name,
+        is_admin=False,
+        created_at=now,
+        updated_at=now,
+    )
+    session.add(user)
+    await session.flush()
+    return user
+
+
+async def _create_post(
+    session: AsyncSession,
+    *,
+    file_path: str,
+    title: str,
+    author: str,
+    is_draft: bool = False,
+) -> PostCache:
+    """Insert a PostCache row and return it."""
+    now = datetime.now(UTC)
+    post = PostCache(
+        file_path=file_path,
+        title=title,
+        author=author,
+        created_at=now,
+        modified_at=now,
+        is_draft=is_draft,
+        content_hash="abc123",
+        rendered_excerpt=None,
+        rendered_html="<p>test</p>",
+    )
+    session.add(post)
+    await session.flush()
+    return post
+
+
+class TestListPostsAuthorDisplayName:
+    """list_posts should resolve author display names via JOIN."""
+
+    @pytest.mark.asyncio
+    async def test_resolves_display_name(self, session: AsyncSession) -> None:
+        """Post by 'admin' where admin has display_name='John Smith' returns 'John Smith'."""
+        await _create_user(session, username="admin", display_name="John Smith")
+        await _create_post(session, file_path="posts/hello.md", title="Hello", author="admin")
+        await session.commit()
+
+        result = await list_posts(session)
+        assert len(result.posts) == 1
+        assert result.posts[0].author == "John Smith"
+
+    @pytest.mark.asyncio
+    async def test_fallback_for_deleted_user(self, session: AsyncSession) -> None:
+        """Post by 'deleteduser' where no user exists returns 'deleteduser'."""
+        await _create_post(
+            session, file_path="posts/orphan.md", title="Orphan", author="deleteduser"
+        )
+        await session.commit()
+
+        result = await list_posts(session)
+        assert len(result.posts) == 1
+        assert result.posts[0].author == "deleteduser"
+
+    @pytest.mark.asyncio
+    async def test_fallback_for_null_display_name(self, session: AsyncSession) -> None:
+        """Post by 'nodisplay' where user has display_name=None returns 'nodisplay'."""
+        await _create_user(session, username="nodisplay", display_name=None)
+        await _create_post(session, file_path="posts/plain.md", title="Plain", author="nodisplay")
+        await session.commit()
+
+        result = await list_posts(session)
+        assert len(result.posts) == 1
+        assert result.posts[0].author == "nodisplay"
+
+    @pytest.mark.asyncio
+    async def test_filter_by_display_name(self, session: AsyncSession) -> None:
+        """Filtering by author=John should match the display name, not the username."""
+        await _create_user(session, username="admin", display_name="John Smith")
+        await _create_post(session, file_path="posts/a.md", title="Post A", author="admin")
+        await session.commit()
+
+        # Should match "John" in display name
+        result = await list_posts(session, author="John")
+        assert len(result.posts) == 1
+        assert result.posts[0].title == "Post A"
+
+        # Should NOT match "admin" (the raw username) when display name is set
+        # Actually, COALESCE means we search the resolved name. "admin" != "John Smith"
+        result_raw = await list_posts(session, author="admin")
+        assert len(result_raw.posts) == 0
+
+    @pytest.mark.asyncio
+    async def test_filter_by_username_fallback(self, session: AsyncSession) -> None:
+        """When user has no display name, filtering by username still works."""
+        await _create_user(session, username="nodisplay", display_name=None)
+        await _create_post(session, file_path="posts/b.md", title="Post B", author="nodisplay")
+        await session.commit()
+
+        result = await list_posts(session, author="nodisplay")
+        assert len(result.posts) == 1
+        assert result.posts[0].title == "Post B"
+
+    @pytest.mark.asyncio
+    async def test_sort_by_author_uses_display_name(self, session: AsyncSession) -> None:
+        """Sorting by author should sort on the resolved display name."""
+        await _create_user(session, username="alice", display_name="Zara")
+        await _create_user(session, username="bob", display_name="Albert")
+        await _create_post(session, file_path="posts/p1.md", title="Post 1", author="alice")
+        await _create_post(session, file_path="posts/p2.md", title="Post 2", author="bob")
+        await session.commit()
+
+        # Sort ascending by author. Albert < Zara, so Post 2 first.
+        result = await list_posts(session, sort="author", order="asc")
+        assert len(result.posts) == 2
+        assert result.posts[0].author == "Albert"
+        assert result.posts[1].author == "Zara"
+
+
+class TestGetPostAuthorDisplayName:
+    """get_post should resolve author display names via JOIN."""
+
+    @pytest.mark.asyncio
+    async def test_resolves_display_name(self, session: AsyncSession) -> None:
+        """get_post returns display_name for an existing user."""
+        await _create_user(session, username="admin", display_name="John Smith")
+        await _create_post(session, file_path="posts/hello.md", title="Hello", author="admin")
+        await session.commit()
+
+        result = await get_post(session, "posts/hello.md")
+        assert result is not None
+        assert result.author == "John Smith"
+
+    @pytest.mark.asyncio
+    async def test_fallback_for_deleted_user(self, session: AsyncSession) -> None:
+        """get_post returns raw username when user doesn't exist."""
+        await _create_post(
+            session, file_path="posts/orphan.md", title="Orphan", author="deleteduser"
+        )
+        await session.commit()
+
+        result = await get_post(session, "posts/orphan.md")
+        assert result is not None
+        assert result.author == "deleteduser"
+
+    @pytest.mark.asyncio
+    async def test_fallback_for_null_display_name(self, session: AsyncSession) -> None:
+        """get_post returns username when user's display_name is None."""
+        await _create_user(session, username="nodisplay", display_name=None)
+        await _create_post(session, file_path="posts/plain.md", title="Plain", author="nodisplay")
+        await session.commit()
+
+        result = await get_post(session, "posts/plain.md")
+        assert result is not None
+        assert result.author == "nodisplay"

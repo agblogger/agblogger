@@ -26,7 +26,7 @@ def app_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
     posts_dir = tmp_content_dir / "posts"
     (posts_dir / "hello.md").write_text(
         "---\ncreated_at: 2026-02-02 22:21:29.975359+00\n"
-        "author: Admin\nlabels: ['#swe']\n---\n# Hello World\n\nTest content.\n"
+        "author: admin\nlabels: ['#swe']\n---\n# Hello World\n\nTest content.\n"
     )
     # Add labels
     (tmp_content_dir / "labels.toml").write_text(
@@ -748,7 +748,7 @@ class TestPostCRUD:
         assert data["labels"] == ["swe"]
         assert "created_at" in data
         assert "modified_at" in data
-        assert data["author"] == "Admin"
+        assert data["author"] == "admin"
 
     @pytest.mark.asyncio
     async def test_get_post_for_edit_requires_auth(self, client: AsyncClient) -> None:
@@ -903,7 +903,7 @@ class TestPostCRUD:
         assert data["title"] == "Structured Post"
         assert data["labels"] == ["swe"]
         assert data["is_draft"] is False
-        assert data["author"] == "admin"
+        assert data["author"] == "Admin"  # display_name resolved from users table
 
     @pytest.mark.asyncio
     async def test_update_post_structured(self, client: AsyncClient) -> None:

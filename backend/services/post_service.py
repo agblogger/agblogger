@@ -11,6 +11,7 @@ from sqlalchemy import func, or_, select, text
 
 from backend.models.label import PostLabelCache
 from backend.models.post import PostCache
+from backend.models.user import User
 from backend.schemas.post import (
     PostDetail,
     PostListResponse,
@@ -27,6 +28,16 @@ logger = logging.getLogger(__name__)
 _SQLITE_MAX_INTEGER = 2**63 - 1
 _MAX_API_PER_PAGE = 100
 MAX_SAFE_PAGE = (_SQLITE_MAX_INTEGER // _MAX_API_PER_PAGE) + 1
+
+
+async def resolve_author_display_name(session: AsyncSession, username: str | None) -> str | None:
+    """Resolve a username to the user's display name, falling back to the raw username."""
+    if not username:
+        return username
+    stmt = select(User.display_name).where(User.username == username)
+    result = await session.execute(stmt)
+    display_name = result.scalar_one_or_none()
+    return display_name or username
 
 
 async def _post_labels(session: AsyncSession, post_id: int) -> list[str]:
@@ -69,10 +80,13 @@ async def list_posts(
     """List posts with pagination and filtering."""
     validate_pagination(page, per_page)
 
-    stmt = select(PostCache)
+    # Resolve author display name: LEFT JOIN to users table, fall back to raw username.
+    resolved_author = func.coalesce(User.display_name, PostCache.author).label("resolved_author")
+    stmt = select(PostCache, resolved_author).outerjoin(User, PostCache.author == User.username)
 
     if draft_owner_username:
-        # Show published posts + drafts authored by the given user
+        # Show published posts + drafts authored by the given user.
+        # Draft ownership is checked against the raw username, not the display name.
         stmt = stmt.where(
             or_(
                 PostCache.is_draft.is_(False),
@@ -85,7 +99,7 @@ async def list_posts(
 
     if author:
         escaped = author.replace("%", r"\%").replace("_", r"\_")
-        stmt = stmt.where(PostCache.author.ilike(f"%{escaped}%", escape="\\"))
+        stmt = stmt.where(resolved_author.ilike(f"%{escaped}%", escape="\\"))
 
     if from_date:
         try:
@@ -151,7 +165,7 @@ async def list_posts(
     if sort not in allowed_sort_columns:
         msg = f"Invalid sort column: {sort!r}. Allowed: {', '.join(sorted(allowed_sort_columns))}"
         raise ValueError(msg)
-    sort_col = getattr(PostCache, sort)
+    sort_col = resolved_author if sort == "author" else getattr(PostCache, sort)
     stmt = stmt.order_by(sort_col.asc()) if order == "asc" else stmt.order_by(sort_col.desc())
 
     # Paginate
@@ -159,27 +173,29 @@ async def list_posts(
     stmt = stmt.offset(offset).limit(per_page)
 
     result = await session.execute(stmt)
-    posts = result.scalars().all()
+    rows = result.all()
 
     # Batch load labels for all posts in one query
-    post_ids = [post.id for post in posts]
+    post_ids = [row[0].id for row in rows]
     labels_map: dict[int, list[str]] = {pid: [] for pid in post_ids}
     if post_ids:
         label_stmt = select(PostLabelCache.post_id, PostLabelCache.label_id).where(
             PostLabelCache.post_id.in_(post_ids)
         )
         label_result = await session.execute(label_stmt)
-        for row in label_result.all():
-            labels_map[row[0]].append(row[1])
+        for label_row in label_result.all():
+            labels_map[label_row[0]].append(label_row[1])
 
     summaries: list[PostSummary] = []
-    for post in posts:
+    for row in rows:
+        post = row[0]
+        display_author = row[1]
         summaries.append(
             PostSummary(
                 id=post.id,
                 file_path=post.file_path,
                 title=post.title,
-                author=post.author,
+                author=display_author,
                 created_at=format_iso(post.created_at),
                 modified_at=format_iso(post.modified_at),
                 is_draft=post.is_draft,
@@ -201,20 +217,27 @@ async def list_posts(
 
 async def get_post(session: AsyncSession, file_path: str) -> PostDetail | None:
     """Get a single post by file path."""
-    stmt = select(PostCache).where(PostCache.file_path == file_path)
+    resolved_author = func.coalesce(User.display_name, PostCache.author).label("resolved_author")
+    stmt = (
+        select(PostCache, resolved_author)
+        .outerjoin(User, PostCache.author == User.username)
+        .where(PostCache.file_path == file_path)
+    )
     result = await session.execute(stmt)
-    post = result.scalar_one_or_none()
+    row = result.one_or_none()
 
-    if post is None:
+    if row is None:
         return None
 
+    post = row[0]
+    display_author = row[1]
     post_label_ids = await _post_labels(session, post.id)
 
     return PostDetail(
         id=post.id,
         file_path=post.file_path,
         title=post.title,
-        author=post.author,
+        author=display_author,
         created_at=format_iso(post.created_at),
         modified_at=format_iso(post.modified_at),
         is_draft=post.is_draft,
