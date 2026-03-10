@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -302,3 +303,52 @@ class TestProfileUpdateEdgeCases:
             headers=headers,
         )
         assert resp.status_code == 422
+
+
+async def _login(client: AsyncClient) -> str:
+    """Login as admin via token-login and return a Bearer token."""
+    resp = await client.post(
+        "/api/auth/token-login",
+        json={"username": "admin", "password": "admin123"},
+    )
+    assert resp.status_code == 200
+    return resp.json()["access_token"]
+
+
+class TestProfileUpdateAtomicity:
+    """Username change must be atomic: if cache rebuild fails, filesystem must be reverted."""
+
+    async def test_filesystem_reverted_on_rebuild_cache_failure(
+        self, client: AsyncClient, app_settings: Settings
+    ) -> None:
+        token = await _login(client)
+
+        # Create a post first
+        resp = await client.post(
+            "/api/posts",
+            json={"title": "Atomic Test", "body": "Content"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 201
+        file_path = resp.json()["file_path"]
+
+        # Now try to change username — but make rebuild_cache fail
+        with patch(
+            "backend.services.cache_service.rebuild_cache",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("cache boom"),
+        ):
+            resp = await client.patch(
+                "/api/auth/me",
+                json={"username": "newname"},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+
+        # Should fail (500)
+        assert resp.status_code == 500
+
+        # Filesystem must still have the OLD author (admin), not the new one
+        post_path = app_settings.content_dir / file_path
+        content = post_path.read_text()
+        assert "author: admin" in content
+        assert "author: newname" not in content

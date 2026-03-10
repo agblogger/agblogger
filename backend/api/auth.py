@@ -532,7 +532,26 @@ async def update_profile(
                     status_code=500,
                     detail="Failed to update author in post files",
                 ) from exc
-            await rebuild_cache(session_factory, content_manager)
+            try:
+                await rebuild_cache(session_factory, content_manager)
+            except Exception as exc:
+                logger.error(
+                    "Cache rebuild failed after author update, reverting files: %s", exc
+                )
+                try:
+                    await asyncio.to_thread(
+                        _update_author_in_posts,
+                        content_manager,
+                        new_username,
+                        old_username,
+                    )
+                except OSError as revert_exc:
+                    logger.error("Failed to revert author in posts: %s", revert_exc)
+                await session.rollback()
+                raise HTTPException(
+                    status_code=500,
+                    detail="Failed to update author",
+                ) from exc
 
     return UserResponse.from_user(user)
 
