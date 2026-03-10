@@ -25,7 +25,7 @@ def app_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
         "title: Hello World\n"
         "created_at: 2026-02-02 22:21:29.975359+00\n"
         "modified_at: 2026-02-02 22:21:29.975359+00\n"
-        "author: Admin\n"
+        "author: admin\n"
         "labels: ['#swe']\n"
         "---\n"
         "Hello from fixture.\n",
@@ -36,7 +36,7 @@ def app_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
         "title: Admin Flat Draft\n"
         "created_at: 2026-02-02 22:21:29.975359+00\n"
         "modified_at: 2026-02-02 22:21:29.975359+00\n"
-        "author: Admin\n"
+        "author: admin\n"
         "labels: []\n"
         "draft: true\n"
         "---\n"
@@ -656,7 +656,7 @@ class TestTrustedProxyForwarding:
             "---\n"
             "title: Hello World\n"
             "created_at: 2026-02-02 22:21:29.975359+00\n"
-            "author: Admin\n"
+            "author: admin\n"
             "labels: []\n"
             "---\nHello.\n",
             encoding="utf-8",
@@ -727,7 +727,7 @@ class TestTrustedProxyForwarding:
             "---\n"
             "title: Hello World\n"
             "created_at: 2026-02-02 22:21:29.975359+00\n"
-            "author: Admin\n"
+            "author: admin\n"
             "labels: []\n"
             "---\nHello.\n",
             encoding="utf-8",

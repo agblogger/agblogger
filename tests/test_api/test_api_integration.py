@@ -903,7 +903,7 @@ class TestPostCRUD:
         assert data["title"] == "Structured Post"
         assert data["labels"] == ["swe"]
         assert data["is_draft"] is False
-        assert data["author"] == "Admin"
+        assert data["author"] == "admin"
 
     @pytest.mark.asyncio
     async def test_update_post_structured(self, client: AsyncClient) -> None:
@@ -962,7 +962,7 @@ class TestPostCRUD:
         assert "# Roundtrip" not in data["body"]
         assert data["labels"] == ["swe"]
         assert data["is_draft"] is True
-        assert data["author"] == "Admin"
+        assert data["author"] == "admin"
         assert data["created_at"] is not None
         assert data["modified_at"] is not None
 

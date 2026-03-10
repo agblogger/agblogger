@@ -32,19 +32,19 @@ def draft_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
     posts_dir = tmp_content_dir / "posts"
     (posts_dir / "published.md").write_text(
         "---\ntitle: Published Post\ncreated_at: 2026-02-02 22:21:29+00\n"
-        "author: Admin\nlabels: []\n---\nPublished content.\n"
+        "author: admin\nlabels: []\n---\nPublished content.\n"
     )
     # Add a draft post by Admin
     (posts_dir / "admin-draft.md").write_text(
         "---\ntitle: Admin Draft\ncreated_at: 2026-02-02 22:21:29+00\n"
-        "author: Admin\nlabels: []\ndraft: true\n---\nDraft content.\n"
+        "author: admin\nlabels: []\ndraft: true\n---\nDraft content.\n"
     )
     # Add a draft post directory with an image asset
     draft_dir = posts_dir / "draft-with-asset"
     draft_dir.mkdir()
     (draft_dir / "index.md").write_text(
         "---\ntitle: Draft With Asset\ncreated_at: 2026-02-02 22:21:29+00\n"
-        "author: Admin\nlabels: []\ndraft: true\n---\nDraft with image.\n"
+        "author: admin\nlabels: []\ndraft: true\n---\nDraft with image.\n"
     )
     (draft_dir / "photo.png").write_bytes(b"fake-png-data")
     # Add a published post directory with an image asset
@@ -52,7 +52,7 @@ def draft_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
     pub_dir.mkdir()
     (pub_dir / "index.md").write_text(
         "---\ntitle: Published With Asset\ncreated_at: 2026-02-02 22:21:29+00\n"
-        "author: Admin\nlabels: []\n---\nPublished with image.\n"
+        "author: admin\nlabels: []\n---\nPublished with image.\n"
     )
     (pub_dir / "banner.png").write_bytes(b"fake-banner-png")
 

@@ -296,7 +296,7 @@ async def upload_post(
         raise HTTPException(status_code=422, detail="no_title")
 
     if not post_data.author:
-        post_data.author = user.display_name or user.username
+        post_data.author = user.username
 
     # Render via Pandoc before acquiring lock (the slow part)
     try:
@@ -643,7 +643,7 @@ async def create_post_endpoint(
             raise HTTPException(status_code=409, detail="A post with this file path already exists")
 
         now = now_utc()
-        author = user.display_name or user.username
+        author = user.username
 
         post_data = PostData(
             title=body.title,
@@ -735,7 +735,7 @@ async def update_post_endpoint(
                 "Post %s exists in DB cache but not on filesystem; using cached metadata", file_path
             )
             created_at = existing.created_at
-            author = existing.author or user.display_name or user.username
+            author = existing.author or user.username
 
         now = now_utc()
 

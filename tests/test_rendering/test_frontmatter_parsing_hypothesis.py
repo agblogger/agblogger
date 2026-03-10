@@ -133,6 +133,7 @@ class TestExtractTitleProperties:
     @given(title=_SAFE_TITLE)
     def test_h2_headings_are_not_extracted(self, title: str) -> None:
         """## headings are not treated as titles."""
+        assume(title != "Untitled")  # "Untitled" is the default fallback
         content = f"## {title}\n\nSome body"
         assert extract_title(content) != title
 
