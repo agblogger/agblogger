@@ -23,7 +23,6 @@ class PostCache(Base):
     file_path: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     title: Mapped[str] = mapped_column(Text, nullable=False)
     author: Mapped[str | None] = mapped_column(Text, nullable=True)
-    author_username: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     modified_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     is_draft: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
@@ -38,7 +37,6 @@ class PostCache(Base):
     __table_args__ = (
         Index("idx_posts_created_at", "created_at"),
         Index("idx_posts_author", "author"),
-        Index("idx_posts_author_username", "author_username"),
     )
 
 
