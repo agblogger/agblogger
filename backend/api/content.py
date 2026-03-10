@@ -149,7 +149,9 @@ async def serve_content_file(
     headers: dict[str, str] = {}
     filename = resolved.name
     if content_type in _ATTACHMENT_MEDIA_TYPES:
-        headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+        # Escape backslashes and double-quotes in filename per RFC 6266
+        safe_filename = filename.replace("\\", "\\\\").replace('"', '\\"')
+        headers["Content-Disposition"] = f'attachment; filename="{safe_filename}"'
         headers["Content-Security-Policy"] = "default-src 'none'; sandbox"
 
     return FileResponse(path=resolved, media_type=content_type, headers=headers)

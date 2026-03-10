@@ -205,3 +205,26 @@ class TestContentServing:
         """An empty or root-level path is forbidden."""
         resp = await client.get("/api/content/")
         assert resp.status_code in (403, 404)
+
+    @pytest.mark.asyncio
+    async def test_content_disposition_escapes_double_quotes_in_filename(
+        self, client: AsyncClient, tmp_content_dir: Path
+    ) -> None:
+        """Content-Disposition filename with double quotes is properly escaped per RFC 6266."""
+        post_dir = tmp_content_dir / "posts" / "quoted"
+        post_dir.mkdir(parents=True, exist_ok=True)
+        # Create an SVG file whose name contains a double-quote character
+        filename = 'file"name.svg'
+        (post_dir / filename).write_text(
+            '<svg xmlns="http://www.w3.org/2000/svg"></svg>', encoding="utf-8"
+        )
+
+        resp = await client.get(f"/api/content/posts/quoted/{filename}")
+
+        assert resp.status_code == 200
+        cd_header = resp.headers["content-disposition"]
+        assert cd_header.startswith("attachment")
+        # The embedded double-quote must be escaped as \" per RFC 6266
+        assert '\\"' in cd_header
+        # The escaped filename (with \" inside) must appear correctly in the header
+        assert 'filename="file\\"name.svg"' in cd_header
