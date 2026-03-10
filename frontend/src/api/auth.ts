@@ -26,6 +26,12 @@ export async function fetchMe(): Promise<UserResponse> {
   return api.get('auth/me').json<UserResponse>()
 }
 
+export async function updateProfile(
+  data: { username?: string; display_name?: string },
+): Promise<UserResponse> {
+  return api.patch('auth/me', { json: data }).json<UserResponse>()
+}
+
 export async function logout(): Promise<void> {
   try {
     await api.post('auth/logout', { json: {} })
