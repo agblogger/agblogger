@@ -3,6 +3,9 @@ import { useBlocker } from 'react-router-dom'
 
 const AUTO_SAVE_DEBOUNCE_MS = 3000
 
+/** Bump when the persisted draft shape changes so stale drafts are ignored. */
+export const DRAFT_SCHEMA_VERSION = 1
+
 export function buildEditorDraftStorageKey(userId: number, filePath?: string): string {
   return `agblogger:draft:user:${userId}:${filePath ?? 'new'}`
 }
@@ -13,6 +16,7 @@ export interface DraftData {
   labels: string[]
   isDraft: boolean
   savedAt?: string
+  _v?: number
 }
 
 interface UseEditorAutoSaveParams {
@@ -47,11 +51,13 @@ function readDraft(key: string): DraftData | null {
     const stored = localStorage.getItem(key)
     if (stored !== null) {
       const parsed = JSON.parse(stored) as Partial<DraftData>
+      if (parsed._v !== DRAFT_SCHEMA_VERSION) return null
       return {
         title: typeof parsed.title === 'string' ? parsed.title : '',
         body: typeof parsed.body === 'string' ? parsed.body : '',
         labels: Array.isArray(parsed.labels) ? parsed.labels.filter((label) => typeof label === 'string') : [],
         isDraft: parsed.isDraft === true,
+        _v: DRAFT_SCHEMA_VERSION,
         ...(typeof parsed.savedAt === 'string' ? { savedAt: parsed.savedAt } : {}),
       }
     }
@@ -63,7 +69,7 @@ function readDraft(key: string): DraftData | null {
 
 function persistDraft(key: string, draft: DraftData): void {
   try {
-    localStorage.setItem(key, JSON.stringify(draft))
+    localStorage.setItem(key, JSON.stringify({ ...draft, _v: DRAFT_SCHEMA_VERSION }))
   } catch {
     // Ignore storage quota / privacy mode failures and keep editing session alive.
   }

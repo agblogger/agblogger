@@ -1,19 +1,25 @@
-import { useEffect } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { createBrowserRouter, RouterProvider, useLocation, Outlet } from 'react-router-dom'
 import Header from '@/components/layout/Header'
+import LoadingSpinner from '@/components/LoadingSpinner'
 import TimelinePage from '@/pages/TimelinePage'
 import PostPage from '@/pages/PostPage'
 import PageViewPage from '@/pages/PageViewPage'
-import SearchPage from '@/pages/SearchPage'
 import LoginPage from '@/pages/LoginPage'
 import LabelPostsPage from '@/pages/LabelPostsPage'
 import LabelsPage from '@/pages/LabelsPage'
 import LabelSettingsPage from '@/pages/LabelSettingsPage'
-import EditorPage from '@/pages/EditorPage'
-import AdminPage from '@/pages/AdminPage'
 import { useSiteStore } from '@/stores/siteStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useThemeStore } from '@/stores/themeStore'
+
+const SearchPage = lazy(() => import('@/pages/SearchPage'))
+const EditorPage = lazy(() => import('@/pages/EditorPage'))
+const AdminPage = lazy(() => import('@/pages/AdminPage'))
+
+function LazyFallback() {
+  return <LoadingSpinner />
+}
 
 function Layout() {
   const location = useLocation()
@@ -41,7 +47,9 @@ function Layout() {
     <div className="min-h-screen bg-paper">
       <Header />
       <main className={mainClass}>
-        <Outlet />
+        <Suspense fallback={<LazyFallback />}>
+          <Outlet />
+        </Suspense>
       </main>
 
       <footer className="border-t border-border mt-16">

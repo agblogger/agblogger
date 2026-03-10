@@ -1,10 +1,12 @@
+import { memo } from 'react'
+
 interface PlatformIconProps {
   platform: string
   size?: number
   className?: string
 }
 
-export default function PlatformIcon({ platform, size = 16, className = '' }: PlatformIconProps) {
+export default memo(function PlatformIcon({ platform, size = 16, className = '' }: PlatformIconProps) {
   if (platform === 'bluesky') {
     return (
       <svg
@@ -119,4 +121,4 @@ export default function PlatformIcon({ platform, size = 16, className = '' }: Pl
       {platform.charAt(0).toUpperCase()}
     </span>
   )
-}
+})

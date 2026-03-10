@@ -33,7 +33,7 @@ export default function EditorPage() {
   const [body, setBody] = useState('')
   const [labels, setLabels] = useState<string[]>([])
   const [isDraft, setIsDraft] = useState(false)
-  const [author, setAuthor] = useState<string | null>(null)
+  const [loadedAuthor, setLoadedAuthor] = useState<string | null>(null)
   const [createdAt, setCreatedAt] = useState<string | null>(null)
   const [modifiedAt, setModifiedAt] = useState<string | null>(null)
   const [loading, setLoading] = useState(!isNew)
@@ -93,7 +93,7 @@ export default function EditorPage() {
           setBody(data.body)
           setLabels(data.labels)
           setIsDraft(data.is_draft)
-          setAuthor(data.author)
+          setLoadedAuthor(data.author)
           setCreatedAt(data.created_at)
           setModifiedAt(data.modified_at)
         })
@@ -108,11 +108,7 @@ export default function EditorPage() {
     }
   }, [filePath, isNew])
 
-  useEffect(() => {
-    if (isNew) {
-      setAuthor(user?.display_name ?? user?.username ?? null)
-    }
-  }, [isNew, user?.display_name, user?.username])
+  const author = isNew ? (user?.display_name ?? user?.username ?? null) : loadedAuthor
 
   useEffect(() => {
     if (user) {

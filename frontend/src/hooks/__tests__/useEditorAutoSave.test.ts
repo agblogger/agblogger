@@ -4,7 +4,7 @@ import type { ReactNode } from 'react'
 import { createElement } from 'react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 
-import { useEditorAutoSave } from '@/hooks/useEditorAutoSave'
+import { useEditorAutoSave, DRAFT_SCHEMA_VERSION } from '@/hooks/useEditorAutoSave'
 import type { DraftData } from '@/hooks/useEditorAutoSave'
 
 // Mock localStorage since jsdom doesn't always provide it
@@ -147,6 +147,7 @@ describe('useEditorAutoSave', () => {
         ...baseState,
         body: '# Draft',
         savedAt: '2026-02-20T10:00:00.000Z',
+        _v: DRAFT_SCHEMA_VERSION,
       }
       localStorage.setItem('test-key', JSON.stringify(draft))
 
@@ -165,6 +166,7 @@ describe('useEditorAutoSave', () => {
         ...baseState,
         body: '# Draft',
         savedAt: '2026-02-20T10:00:00.000Z',
+        _v: DRAFT_SCHEMA_VERSION,
       }
       localStorage.setItem('test-key', JSON.stringify(draft))
 
@@ -189,6 +191,7 @@ describe('useEditorAutoSave', () => {
         ...baseState,
         body: '# Draft',
         savedAt: '2026-02-20T10:00:00.000Z',
+        _v: DRAFT_SCHEMA_VERSION,
       }
       localStorage.setItem('test-key', JSON.stringify(draft))
 
@@ -213,11 +216,13 @@ describe('useEditorAutoSave', () => {
         ...baseState,
         body: '# Old Draft',
         savedAt: '2026-02-20T10:00:00.000Z',
+        _v: DRAFT_SCHEMA_VERSION,
       }
       const newDraft: DraftData = {
         ...baseState,
         body: '# New Draft',
         savedAt: '2026-02-20T11:00:00.000Z',
+        _v: DRAFT_SCHEMA_VERSION,
       }
       localStorage.setItem('draft-1', JSON.stringify(oldDraft))
       localStorage.setItem('draft-2', JSON.stringify(newDraft))
@@ -311,6 +316,87 @@ describe('useEditorAutoSave', () => {
       // Now change from the new baseline — should be dirty
       rerender({ state: { ...changedState, body: '# Different' }, enabled: true })
       expect(result.current.isDirty).toBe(true)
+    })
+  })
+
+  describe('schema versioning', () => {
+    it('ignores drafts with wrong schema version', () => {
+      const draft = {
+        ...baseState,
+        body: '# Old Draft',
+        savedAt: '2026-02-20T10:00:00.000Z',
+        _v: 0, // wrong version
+      }
+      localStorage.setItem('test-key', JSON.stringify(draft))
+
+      const onRestore = vi.fn()
+      const { result } = renderHook(
+        () => useEditorAutoSave({ key: 'test-key', currentState: baseState, onRestore }),
+        { wrapper: createWrapper() },
+      )
+
+      expect(result.current.draftAvailable).toBe(false)
+    })
+
+    it('ignores drafts without schema version', () => {
+      // Legacy draft with no _v field
+      const draft = {
+        title: 'Legacy',
+        body: '# Legacy',
+        labels: ['swe'],
+        isDraft: false,
+        savedAt: '2026-02-20T10:00:00.000Z',
+      }
+      localStorage.setItem('test-key', JSON.stringify(draft))
+
+      const onRestore = vi.fn()
+      const { result } = renderHook(
+        () => useEditorAutoSave({ key: 'test-key', currentState: baseState, onRestore }),
+        { wrapper: createWrapper() },
+      )
+
+      expect(result.current.draftAvailable).toBe(false)
+    })
+
+    it('loads drafts with correct schema version', () => {
+      const draft = {
+        ...baseState,
+        body: '# Versioned Draft',
+        savedAt: '2026-02-20T10:00:00.000Z',
+        _v: DRAFT_SCHEMA_VERSION,
+      }
+      localStorage.setItem('test-key', JSON.stringify(draft))
+
+      const onRestore = vi.fn()
+      const { result } = renderHook(
+        () => useEditorAutoSave({ key: 'test-key', currentState: baseState, onRestore }),
+        { wrapper: createWrapper() },
+      )
+
+      expect(result.current.draftAvailable).toBe(true)
+      expect(result.current.draftSavedAt).toBe('2026-02-20T10:00:00.000Z')
+    })
+
+    it('auto-saved drafts include schema version', () => {
+      vi.useFakeTimers()
+      const onRestore = vi.fn()
+      const changedState: DraftData = { ...baseState, body: '# Changed' }
+
+      const { rerender } = renderHook(
+        ({ state }) => useEditorAutoSave({ key: 'test-key', currentState: state, onRestore }),
+        { wrapper: createWrapper(), initialProps: { state: baseState } },
+      )
+
+      rerender({ state: changedState })
+
+      act(() => {
+        vi.advanceTimersByTime(3000)
+      })
+
+      const saved = JSON.parse(localStorage.getItem('test-key')!) as Record<string, unknown>
+      expect(saved['_v']).toBe(DRAFT_SCHEMA_VERSION)
+
+      vi.useRealTimers()
     })
   })
 

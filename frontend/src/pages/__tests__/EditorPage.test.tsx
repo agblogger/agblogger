@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import { fetchPostForEdit, createPost, updatePost } from '@/api/posts'
 import type { UserResponse, PostEditResponse, PostDetail } from '@/api/client'
+import { DRAFT_SCHEMA_VERSION } from '@/hooks/useEditorAutoSave'
 
 // Mock localStorage since jsdom doesn't always provide full implementation
 const storage = new Map<string, string>()
@@ -175,6 +176,7 @@ describe('EditorPage', () => {
       labels: ['swe'],
       isDraft: false,
       savedAt: '2026-02-20T15:45:00.000Z',
+      _v: DRAFT_SCHEMA_VERSION,
     }
     localStorage.setItem('agblogger:draft:user:1:new', JSON.stringify(draft))
 
@@ -195,6 +197,7 @@ describe('EditorPage', () => {
       labels: ['cs'],
       isDraft: true,
       savedAt: '2026-02-20T15:45:00.000Z',
+      _v: DRAFT_SCHEMA_VERSION,
     }
     localStorage.setItem('agblogger:draft:user:1:new', JSON.stringify(draft))
 
@@ -221,7 +224,7 @@ describe('EditorPage', () => {
     const user = userEvent.setup()
     localStorage.setItem(
       'agblogger:draft:user:1:new',
-      JSON.stringify({ title: 'Old', body: 'Old body', labels: [], isDraft: false, savedAt: '2026-02-20T15:45:00.000Z' }),
+      JSON.stringify({ title: 'Old', body: 'Old body', labels: [], isDraft: false, savedAt: '2026-02-20T15:45:00.000Z', _v: DRAFT_SCHEMA_VERSION }),
     )
 
     renderEditor('/editor/new')
