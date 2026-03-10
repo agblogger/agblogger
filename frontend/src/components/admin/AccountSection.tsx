@@ -7,6 +7,9 @@ import { changeAdminPassword } from '@/api/admin'
 import { updateProfile } from '@/api/auth'
 import { useAuthStore } from '@/stores/authStore'
 
+const INPUT_CLASSES =
+  'w-full px-3 py-2 bg-paper-warm border border-border rounded-lg text-ink text-sm focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/20 disabled:opacity-50'
+
 interface AccountSectionProps {
   busy: boolean
   onSaving: (saving: boolean) => void
@@ -171,10 +174,7 @@ export default function AccountSection({ busy, onSaving }: AccountSectionProps) 
                 setProfileSuccess(null)
               }}
               disabled={busy}
-              className="w-full px-3 py-2 bg-paper-warm border border-border rounded-lg
-                       text-ink text-sm
-                       focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/20
-                       disabled:opacity-50"
+              className={INPUT_CLASSES}
             />
             <p className="text-xs text-muted mt-1">
               Must start with a letter or digit. Letters, digits, dots, hyphens, or underscores. 3-50 characters.
@@ -196,10 +196,7 @@ export default function AccountSection({ busy, onSaving }: AccountSectionProps) 
               }}
               disabled={busy}
               placeholder="Shown as author on posts"
-              className="w-full px-3 py-2 bg-paper-warm border border-border rounded-lg
-                       text-ink text-sm placeholder:text-muted/50
-                       focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/20
-                       disabled:opacity-50"
+              className={`${INPUT_CLASSES} placeholder:text-muted/50`}
             />
           </div>
 
@@ -261,10 +258,7 @@ export default function AccountSection({ busy, onSaving }: AccountSectionProps) 
                 setPasswordSuccess(null)
               }}
               disabled={busy}
-              className="w-full px-3 py-2 bg-paper-warm border border-border rounded-lg
-                       text-ink text-sm
-                       focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/20
-                       disabled:opacity-50"
+              className={INPUT_CLASSES}
             />
           </div>
 
@@ -284,10 +278,7 @@ export default function AccountSection({ busy, onSaving }: AccountSectionProps) 
                 setPasswordSuccess(null)
               }}
               disabled={busy}
-              className="w-full px-3 py-2 bg-paper-warm border border-border rounded-lg
-                       text-ink text-sm
-                       focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/20
-                       disabled:opacity-50"
+              className={INPUT_CLASSES}
             />
             <p className="text-xs text-muted mt-1">At least 12 characters.</p>
           </div>
@@ -311,10 +302,7 @@ export default function AccountSection({ busy, onSaving }: AccountSectionProps) 
                 setPasswordSuccess(null)
               }}
               disabled={busy}
-              className="w-full px-3 py-2 bg-paper-warm border border-border rounded-lg
-                       text-ink text-sm
-                       focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/20
-                       disabled:opacity-50"
+              className={INPUT_CLASSES}
             />
           </div>
 

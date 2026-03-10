@@ -167,7 +167,11 @@ async def _build_post_detail(
     author_display_name: str | None = None,
 ) -> PostDetail:
     """Build a PostDetail response from a cache row."""
-    display_author = author_display_name or await resolve_author_display_name(session, post.author)
+    display_author = (
+        author_display_name
+        if author_display_name is not None
+        else await resolve_author_display_name(session, post.author)
+    )
     return PostDetail(
         id=post.id,
         file_path=post.file_path,

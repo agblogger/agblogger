@@ -14,12 +14,6 @@ interface SiteSettingsSectionProps {
   onSavedSettings: (settings: AdminSiteSettings) => void
 }
 
-const EMPTY_SITE_SETTINGS: AdminSiteSettings = {
-  title: '',
-  description: '',
-  timezone: '',
-}
-
 function normalizeSiteSettings(
   settings: Partial<AdminSiteSettings> | AdminSiteSettings | null | undefined,
 ): AdminSiteSettings {
@@ -36,7 +30,7 @@ export default function SiteSettingsSection({
   onSaving,
   onSavedSettings,
 }: SiteSettingsSectionProps) {
-  const [siteSettings, setSiteSettings] = useState<AdminSiteSettings | undefined>(
+  const [siteSettings, setSiteSettings] = useState<AdminSiteSettings>(
     normalizeSiteSettings(initialSettings),
   )
   const [siteError, setSiteError] = useState<string | null>(null)
@@ -48,7 +42,7 @@ export default function SiteSettingsSection({
     setSiteSettings(normalizeSiteSettings(initialSettings))
   }, [initialSettings])
 
-  const currentSettings = siteSettings ?? EMPTY_SITE_SETTINGS
+  const currentSettings = siteSettings
 
   async function handleSaveSiteSettings() {
     if (!currentSettings.title.trim()) {

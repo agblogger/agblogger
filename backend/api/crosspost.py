@@ -21,6 +21,7 @@ from backend.api.deps import (
     require_auth,
 )
 from backend.config import Settings
+from backend.crosspost.bluesky_oauth_state import OAuthStateStore, OAuthUserLimitError
 from backend.exceptions import PostNotFoundError
 from backend.filesystem.content_manager import ContentManager
 from backend.models.user import User
@@ -74,18 +75,19 @@ def _generate_pkce_pair() -> tuple[str, str]:
     return code_verifier, code_challenge
 
 
-def _store_pending_oauth_state(state_store: object, state: str, data: dict[str, object]) -> None:
+def _store_pending_oauth_state(
+    state_store: OAuthStateStore, state: str, data: dict[str, object]
+) -> None:
     """Store OAuth state with bounded per-user abuse protection."""
     try:
-        state_store.set(state, data)  # type: ignore[attr-defined]
+        state_store.set(state, data)
+    except OAuthUserLimitError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=str(exc),
+        ) from exc
     except ValueError as exc:
-        detail = str(exc)
-        if detail == "Too many pending OAuth flows for this user":
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail=detail,
-            ) from exc
-        logger.warning("OAuth state store capacity reached: %s", detail)
+        logger.warning("OAuth state store capacity reached: %s", exc)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="OAuth authorization is temporarily unavailable",

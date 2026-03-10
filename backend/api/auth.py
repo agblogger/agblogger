@@ -336,13 +336,7 @@ async def register(
     await session.commit()
     await session.refresh(user)
 
-    return UserResponse(
-        id=user.id,
-        username=user.username,
-        email=user.email,
-        display_name=user.display_name,
-        is_admin=user.is_admin,
-    )
+    return UserResponse.from_user(user)
 
 
 @router.post("/refresh", response_model=SessionAuthResponse)
@@ -435,13 +429,7 @@ async def me(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
         )
-    return UserResponse(
-        id=user.id,
-        username=user.username,
-        email=user.email,
-        display_name=user.display_name,
-        is_admin=user.is_admin,
-    )
+    return UserResponse.from_user(user)
 
 
 def _update_author_in_posts(
@@ -545,13 +533,7 @@ async def update_profile(
         await session.commit()
         await session.refresh(user)
 
-    return UserResponse(
-        id=user.id,
-        username=user.username,
-        email=user.email,
-        display_name=user.display_name,
-        is_admin=user.is_admin,
-    )
+    return UserResponse.from_user(user)
 
 
 @router.post("/invites", response_model=InviteCreateResponse, status_code=201)

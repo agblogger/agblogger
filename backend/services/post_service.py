@@ -21,9 +21,19 @@ from backend.schemas.post import (
 from backend.services.datetime_service import format_iso, parse_datetime
 
 if TYPE_CHECKING:
+    from sqlalchemy import Select
     from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
+
+# Shared SQL expression: resolve author display name via LEFT JOIN to users table.
+_resolved_author = func.coalesce(User.display_name, PostCache.author).label("resolved_author")
+
+
+def _select_posts_with_author() -> Select[tuple[PostCache, str]]:
+    """Base select joining PostCache with resolved author display name."""
+    return select(PostCache, _resolved_author).outerjoin(User, PostCache.author == User.username)
+
 
 _SQLITE_MAX_INTEGER = 2**63 - 1
 _MAX_API_PER_PAGE = 100
@@ -80,9 +90,7 @@ async def list_posts(
     """List posts with pagination and filtering."""
     validate_pagination(page, per_page)
 
-    # Resolve author display name: LEFT JOIN to users table, fall back to raw username.
-    resolved_author = func.coalesce(User.display_name, PostCache.author).label("resolved_author")
-    stmt = select(PostCache, resolved_author).outerjoin(User, PostCache.author == User.username)
+    stmt = _select_posts_with_author()
 
     if draft_owner_username:
         # Show published posts + drafts authored by the given user.
@@ -99,7 +107,7 @@ async def list_posts(
 
     if author:
         escaped = author.replace("%", r"\%").replace("_", r"\_")
-        stmt = stmt.where(resolved_author.ilike(f"%{escaped}%", escape="\\"))
+        stmt = stmt.where(_resolved_author.ilike(f"%{escaped}%", escape="\\"))
 
     if from_date:
         try:
@@ -165,7 +173,7 @@ async def list_posts(
     if sort not in allowed_sort_columns:
         msg = f"Invalid sort column: {sort!r}. Allowed: {', '.join(sorted(allowed_sort_columns))}"
         raise ValueError(msg)
-    sort_col = resolved_author if sort == "author" else getattr(PostCache, sort)
+    sort_col = _resolved_author if sort == "author" else getattr(PostCache, sort)
     stmt = stmt.order_by(sort_col.asc()) if order == "asc" else stmt.order_by(sort_col.desc())
 
     # Paginate
@@ -226,12 +234,7 @@ async def get_post(
     When *draft_owner_username* is provided, draft posts are only returned if
     their ``author`` matches.  Otherwise drafts are hidden (returns ``None``).
     """
-    resolved_author = func.coalesce(User.display_name, PostCache.author).label("resolved_author")
-    stmt = (
-        select(PostCache, resolved_author)
-        .outerjoin(User, PostCache.author == User.username)
-        .where(PostCache.file_path == file_path)
-    )
+    stmt = _select_posts_with_author().where(PostCache.file_path == file_path)
     result = await session.execute(stmt)
     row = result.one_or_none()
 

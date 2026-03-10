@@ -6,6 +6,10 @@ import time
 from typing import Any
 
 
+class OAuthUserLimitError(ValueError):
+    """Raised when a single user has too many pending OAuth flows."""
+
+
 class OAuthStateStore:
     """Store pending OAuth authorization state with automatic expiry.
 
@@ -45,7 +49,7 @@ class OAuthStateStore:
             if self._owner_key(entry_data) == owner_key
         ]
         if len(owner_entries) >= self._max_entries_per_user:
-            raise ValueError("Too many pending OAuth flows for this user")
+            raise OAuthUserLimitError("Too many pending OAuth flows for this user")
         if len(self._entries) >= self._max_entries:
             raise ValueError("OAuth state store is full")
         self._entries[state] = (data, time.time())
