@@ -50,6 +50,11 @@ html {
   color: #c8c4be;
 }
 
+.dark .prose mark {
+  background: rgba(217, 164, 6, 0.35);
+  color: #e0ddd8;
+}
+
 /* Prose styling for rendered content */
 .prose h1, .prose h2, .prose h3, .prose h4, .prose h5, .prose h6 {
   font-family: var(--font-display);
