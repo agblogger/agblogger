@@ -76,7 +76,7 @@ async def list_posts(
         stmt = stmt.where(
             or_(
                 PostCache.is_draft.is_(False),
-                PostCache.author_username == draft_owner_username,
+                PostCache.author == draft_owner_username,
             )
         )
     else:

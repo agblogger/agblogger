@@ -297,7 +297,6 @@ async def upload_post(
 
     if not post_data.author:
         post_data.author = user.display_name or user.username
-    post_data.author_username = user.username
 
     # Render via Pandoc before acquiring lock (the slow part)
     try:
@@ -331,7 +330,6 @@ async def upload_post(
             file_path=file_path,
             title=post_data.title,
             author=post_data.author,
-            author_username=post_data.author_username,
             created_at=post_data.created_at,
             modified_at=post_data.modified_at,
             is_draft=post_data.is_draft,
@@ -608,11 +606,11 @@ async def get_post_endpoint(
     if post.is_draft:
         if user is None:
             raise HTTPException(status_code=404, detail="Post not found")
-        # PostDetail doesn't expose author_username; query the cache directly
-        stmt = select(PostCache.author_username).where(PostCache.file_path == file_path)
+        # Check draft ownership via author field
+        stmt = select(PostCache.author).where(PostCache.file_path == file_path)
         result = await session.execute(stmt)
-        author_username = result.scalar_one_or_none()
-        if author_username != user.username:
+        post_author = result.scalar_one_or_none()
+        if post_author != user.username:
             raise HTTPException(status_code=404, detail="Post not found")
     return post
 
@@ -654,7 +652,6 @@ async def create_post_endpoint(
             created_at=now,
             modified_at=now,
             author=author,
-            author_username=user.username,
             labels=body.labels,
             is_draft=body.is_draft,
             file_path=file_path,
@@ -668,7 +665,6 @@ async def create_post_endpoint(
             file_path=file_path,
             title=post_data.title,
             author=post_data.author,
-            author_username=post_data.author_username,
             created_at=post_data.created_at,
             modified_at=post_data.modified_at,
             is_draft=post_data.is_draft,
@@ -734,14 +730,12 @@ async def update_post_endpoint(
         if existing_post_data:
             created_at = existing_post_data.created_at
             author = existing_post_data.author
-            author_username = existing_post_data.author_username or existing.author_username
         else:
             logger.warning(
                 "Post %s exists in DB cache but not on filesystem; using cached metadata", file_path
             )
             created_at = existing.created_at
             author = existing.author or user.display_name or user.username
-            author_username = existing.author_username
 
         now = now_utc()
 
@@ -758,7 +752,6 @@ async def update_post_endpoint(
             created_at=created_at,
             modified_at=now,
             author=author,
-            author_username=author_username,
             labels=body.labels,
             is_draft=body.is_draft,
             file_path=file_path,
@@ -817,7 +810,6 @@ async def update_post_endpoint(
 
         existing.title = title
         existing.author = author
-        existing.author_username = author_username
         existing.created_at = created_at
         existing.modified_at = now
         existing.is_draft = body.is_draft

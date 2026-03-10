@@ -110,7 +110,7 @@ async def _check_draft_access(
             detail="File not found",
         )
 
-    if post.author_username != user.username:
+    if post.author != user.username:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="File not found",
