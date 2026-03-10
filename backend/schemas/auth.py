@@ -112,6 +112,25 @@ class PersonalAccessTokenCreateResponse(PersonalAccessTokenResponse):
     token: str
 
 
+class ProfileUpdate(BaseModel):
+    """Request to update the current user's profile."""
+
+    username: str | None = Field(default=None, min_length=3, max_length=50)
+    display_name: str | None = Field(default=None, max_length=100)
+
+    @field_validator("username")
+    @classmethod
+    def validate_username_format(cls, v: str | None) -> str | None:
+        """Ensure username is safe for DB and YAML storage."""
+        if v is not None and not _USERNAME_PATTERN.match(v):
+            msg = (
+                "Username must start with a letter or digit and contain only"
+                " letters, digits, dots, hyphens, or underscores"
+            )
+            raise ValueError(msg)
+        return v
+
+
 class UserResponse(BaseModel):
     """User info response."""
 

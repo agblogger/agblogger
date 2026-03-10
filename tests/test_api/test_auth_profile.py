@@ -110,3 +110,101 @@ class TestUsernameFormatValidation:
             headers=headers,
         )
         assert resp.status_code == 201
+
+
+async def _create_user(
+    client: AsyncClient, headers: dict[str, str], username: str, email: str
+) -> None:
+    """Register a user via invite."""
+    resp = await client.post("/api/auth/invites", json={}, headers=headers)
+    assert resp.status_code == 201
+    code = resp.json()["invite_code"]
+    resp = await client.post(
+        "/api/auth/register",
+        json={
+            "username": username,
+            "email": email,
+            "password": "password123",
+            "invite_code": code,
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 201
+
+
+class TestProfileUpdate:
+    async def test_update_display_name(self, client: AsyncClient) -> None:
+        headers = await _login_admin(client)
+        resp = await client.patch(
+            "/api/auth/me",
+            json={"display_name": "Admin User"},
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["display_name"] == "Admin User"
+        assert data["username"] == "admin"
+
+    async def test_update_username(self, client: AsyncClient) -> None:
+        headers = await _login_admin(client)
+        resp = await client.patch(
+            "/api/auth/me",
+            json={"username": "newadmin"},
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["username"] == "newadmin"
+
+    async def test_update_username_rejects_invalid_format(
+        self, client: AsyncClient
+    ) -> None:
+        headers = await _login_admin(client)
+        resp = await client.patch(
+            "/api/auth/me",
+            json={"username": "bad user"},
+            headers=headers,
+        )
+        assert resp.status_code == 422
+
+    async def test_update_username_rejects_duplicate(
+        self, client: AsyncClient
+    ) -> None:
+        headers = await _login_admin(client)
+        await _create_user(client, headers, "other", "other@test.com")
+        resp = await client.patch(
+            "/api/auth/me",
+            json={"username": "other"},
+            headers=headers,
+        )
+        assert resp.status_code == 409
+
+    async def test_update_requires_auth(self, client: AsyncClient) -> None:
+        resp = await client.patch(
+            "/api/auth/me",
+            json={"display_name": "Hacker"},
+        )
+        assert resp.status_code == 401
+
+    async def test_clear_display_name(self, client: AsyncClient) -> None:
+        headers = await _login_admin(client)
+        await client.patch(
+            "/api/auth/me",
+            json={"display_name": "Admin User"},
+            headers=headers,
+        )
+        resp = await client.patch(
+            "/api/auth/me",
+            json={"display_name": ""},
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["display_name"] is None
+
+    async def test_noop_update_succeeds(self, client: AsyncClient) -> None:
+        headers = await _login_admin(client)
+        resp = await client.patch(
+            "/api/auth/me",
+            json={},
+            headers=headers,
+        )
+        assert resp.status_code == 200

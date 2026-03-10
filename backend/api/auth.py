@@ -29,12 +29,14 @@ from backend.schemas.auth import (
     PersonalAccessTokenCreateRequest,
     PersonalAccessTokenCreateResponse,
     PersonalAccessTokenResponse,
+    ProfileUpdate,
     RefreshRequest,
     RegisterRequest,
     SessionAuthResponse,
     TokenResponse,
     UserResponse,
 )
+from backend.services.datetime_service import format_iso, now_utc
 from backend.services.auth_service import (
     authenticate_user,
     consume_invite_code,
@@ -50,7 +52,6 @@ from backend.services.auth_service import (
     revoke_refresh_token,
 )
 from backend.services.csrf_service import create_csrf_token
-from backend.services.datetime_service import format_iso, now_utc
 from backend.services.rate_limit_service import InMemoryRateLimiter
 
 logger = logging.getLogger(__name__)
@@ -430,6 +431,73 @@ async def me(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
         )
+    return UserResponse(
+        id=user.id,
+        username=user.username,
+        email=user.email,
+        display_name=user.display_name,
+        is_admin=user.is_admin,
+    )
+
+
+def _update_author_in_posts(
+    content_manager: ContentManager,
+    old_username: str,
+    new_username: str,
+) -> None:
+    """Update the author field in all markdown files that match old_username."""
+    posts = content_manager.scan_posts()
+    for post in posts:
+        if post.author == old_username:
+            post.author = new_username
+            content_manager.write_post(post.file_path, post)
+
+
+@router.patch("/me", response_model=UserResponse)
+async def update_profile(
+    body: ProfileUpdate,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    user: Annotated[User, Depends(require_auth)],
+) -> UserResponse:
+    """Update current user's profile (username, display name)."""
+    from backend.filesystem.content_manager import ContentManager
+    from backend.services.cache_service import rebuild_cache
+
+    changed = False
+
+    if body.username is not None and body.username != user.username:
+        existing = await session.execute(
+            select(User).where(User.username == body.username)
+        )
+        if existing.scalar_one_or_none() is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Username already taken",
+            )
+        old_username = user.username
+        user.username = body.username
+        changed = True
+
+        # Update author field in all markdown files on disk
+        content_manager: ContentManager = request.app.state.content_manager
+        _update_author_in_posts(content_manager, old_username, body.username)
+
+        # Refresh posts cache
+        async with request.app.state.content_write_lock:
+            await rebuild_cache(session, content_manager)
+
+    if body.display_name is not None:
+        new_display_name = body.display_name.strip() or None
+        if new_display_name != user.display_name:
+            user.display_name = new_display_name
+            changed = True
+
+    if changed:
+        user.updated_at = format_iso(now_utc())
+        await session.commit()
+        await session.refresh(user)
+
     return UserResponse(
         id=user.id,
         username=user.username,
