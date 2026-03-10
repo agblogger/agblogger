@@ -123,6 +123,8 @@ Registry and tarball modes generate a self-contained bundle in `dist/deploy/` co
 
 Tarball mode also writes the exported image tarball into the bundle directory. The remote server then runs `docker load -i <tarball>` followed by `docker compose up -d` against the image-only compose file. Registry mode instead runs `docker compose pull` first and then `docker compose up -d`.
 
+The generated `DEPLOY-REMOTE.md` includes upgrade instructions (pull/load + restart) and, when Caddy is publicly exposed, firewall guidance (ports 80, 443, and SSH).
+
 ## Production HTTPS
 
 When enabled in the deploy helper, Caddy is configured as a reverse proxy in front of AgBlogger with automatic Let's Encrypt TLS, HSTS (`Strict-Transport-Security: max-age=31536000`) on HTTPS responses, static asset caching with `Cache-Control: immutable`, gzip/zstd compression, and request-body caps for multipart upload endpoints (`55 MB` for post upload/assets, `100 MB` for sync commit). The local ZAP/DAST profile intentionally stays on plain HTTP and does not emit HSTS.

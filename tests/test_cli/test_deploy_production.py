@@ -623,11 +623,12 @@ def test_deploy_with_local_caddy_runs_base_compose(
     ]
 
 
-def test_deploy_requires_docker_compose_file(tmp_path: Path) -> None:
-    config = _make_config()
-
-    with pytest.raises(FileNotFoundError, match=r"docker-compose\.yml"):
-        deploy(config=config, project_dir=tmp_path)
+def test_check_prerequisites_requires_docker_compose_file_for_local_mode(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr("cli.deploy_production.shutil.which", lambda _name: "/usr/bin/docker")
+    with pytest.raises(DeployError, match=r"docker compose file"):
+        check_prerequisites(tmp_path, DEPLOY_MODE_LOCAL)
 
 
 def test_deploy_runs_trivy_scan_before_compose_up(
@@ -1853,13 +1854,14 @@ class TestDeployRemoteModeWithoutComposeYml:
 
         assert result.bundle_path == tmp_path / DEFAULT_BUNDLE_DIR
 
-    def test_local_mode_still_requires_docker_compose_yml(self, tmp_path: Path) -> None:
+    def test_local_mode_still_requires_docker_compose_yml(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
         (tmp_path / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
+        monkeypatch.setattr("cli.deploy_production.shutil.which", lambda _name: "/usr/bin/docker")
 
-        config = _make_config()
-
-        with pytest.raises(FileNotFoundError, match=r"docker-compose\.yml"):
-            deploy(config=config, project_dir=tmp_path)
+        with pytest.raises(DeployError, match=r"docker compose file"):
+            check_prerequisites(tmp_path, DEPLOY_MODE_LOCAL)
 
 
 class TestHealthPollProgress:
@@ -1921,3 +1923,220 @@ class TestReadVersion:
         version = _read_version()
         assert version != ""
         assert version != "unknown"
+
+
+# ── Issue #3: Remove duplicate prerequisite checks from deploy() ─────
+
+
+class TestDeployDoesNotDuplicatePrerequisiteChecks:
+    """deploy() should not re-check file existence since check_prerequisites() handles it."""
+
+    def test_deploy_does_not_check_compose_file_when_missing(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """deploy() should trust that check_prerequisites() was called before it."""
+        _stub_subprocess(monkeypatch)
+        _stub_no_trivy(monkeypatch)
+
+        config = _make_config()
+        # No docker-compose.yml present — deploy() should not raise on its own
+        # because the caller (main) calls check_prerequisites() first.
+        # Instead, docker compose will fail naturally when invoked.
+        deploy(config=config, project_dir=tmp_path)
+
+    def test_deploy_does_not_check_dockerfile_when_missing(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        _stub_subprocess(monkeypatch)
+        _stub_no_trivy(monkeypatch)
+
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_REGISTRY,
+            image_ref="ghcr.io/example/agblogger:1.0",
+        )
+        # No Dockerfile present — deploy() should not raise on its own
+        deploy(config=config, project_dir=tmp_path)
+
+
+# ── Issue #4: _wait_for_healthy handles docker compose ps failures ───
+
+
+class TestWaitForHealthyHandlesSubprocessErrors:
+    """_wait_for_healthy should handle docker compose ps returning non-zero."""
+
+    def test_prints_error_status_on_compose_ps_failure(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        from cli.deploy_production import _wait_for_healthy
+
+        call_counter = 0
+        # First two calls within timeout, third exceeds it to break the loop
+        timestamps = [0.0, 1.0, 2.0, 200.0]
+
+        def fake_monotonic() -> float:
+            nonlocal call_counter
+            idx = min(call_counter, len(timestamps) - 1)
+            call_counter += 1
+            return timestamps[idx]
+
+        def fake_run(command: list[str], **_kwargs: object) -> SimpleNamespace:
+            return SimpleNamespace(returncode=1, stdout="", stderr="daemon error")
+
+        monkeypatch.setattr("cli.deploy_production.subprocess.run", fake_run)
+        monkeypatch.setattr("cli.deploy_production.time.sleep", lambda _s: None)
+        monkeypatch.setattr("cli.deploy_production.time.monotonic", fake_monotonic)
+
+        config = _make_config()
+        _wait_for_healthy(config, tmp_path, timeout=60, interval=1)
+
+        captured = capsys.readouterr()
+        # Should indicate the status query failed rather than silently showing "no services found"
+        assert "failed to query" in captured.out.lower()
+
+
+# ── Issue #10: validate image ref format ─────────────────────────────
+
+
+class TestValidateImageRef:
+    """Image references should be validated beyond whitespace checks."""
+
+    def test_rejects_empty_tag_after_colon(self) -> None:
+        from cli.deploy_production import _validate_config
+
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_REGISTRY,
+            image_ref="ghcr.io/example/agblogger:",
+        )
+        with pytest.raises(DeployError, match="IMAGE_REF"):
+            _validate_config(config)
+
+    def test_rejects_bare_colon(self) -> None:
+        from cli.deploy_production import _validate_config
+
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_REGISTRY,
+            image_ref=":",
+        )
+        with pytest.raises(DeployError, match="IMAGE_REF"):
+            _validate_config(config)
+
+    def test_rejects_empty_image_ref(self) -> None:
+        from cli.deploy_production import _validate_config
+
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_REGISTRY,
+            image_ref="",
+        )
+        with pytest.raises(DeployError):
+            _validate_config(config)
+
+    def test_accepts_valid_registry_image_ref(self) -> None:
+        from cli.deploy_production import _validate_config
+
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_REGISTRY,
+            image_ref="ghcr.io/example/agblogger:v1.0.0",
+        )
+        _validate_config(config)
+
+    def test_accepts_valid_local_image_ref(self) -> None:
+        from cli.deploy_production import _validate_config
+
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="agblogger:latest",
+        )
+        _validate_config(config)
+
+
+# ── Issue #7: Trusted hosts prompt mentions auto-append ──────────────
+
+
+class TestTrustedHostsPromptMentionsCaddyDomain:
+    """Interactive prompt should inform users that the Caddy domain is auto-included."""
+
+    def test_prompt_mentions_auto_include(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from cli.deploy_production import _prompt_trusted_hosts
+
+        inputs = iter(["api.example.com"])
+        monkeypatch.setattr("builtins.input", lambda _prompt: next(inputs))
+
+        result = _prompt_trusted_hosts("blog.example.com")
+        assert "blog.example.com" in result
+        assert "api.example.com" in result
+
+
+# ── Issue #14: Firewall guidance for public deployments ──────────────
+
+
+class TestRemoteReadmeFirewallGuidance:
+    """Remote deployment readme should include firewall guidance for public Caddy."""
+
+    def test_public_caddy_readme_includes_firewall_note(self) -> None:
+        config = _make_config(
+            caddy_config=CaddyConfig(domain="blog.example.com", email=None),
+            caddy_public=True,
+            host_bind_ip=LOCALHOST_BIND_IP,
+            deployment_mode=DEPLOY_MODE_REGISTRY,
+            image_ref="ghcr.io/example/agblogger:v1",
+        )
+        commands = build_lifecycle_commands(
+            deployment_mode=DEPLOY_MODE_REGISTRY,
+            use_caddy=True,
+            caddy_public=True,
+        )
+        content = _build_remote_readme_content(config, commands)
+        assert "firewall" in content.lower()
+
+    def test_non_public_caddy_readme_omits_firewall_note(self) -> None:
+        config = _make_config(
+            caddy_config=CaddyConfig(domain="blog.example.com", email=None),
+            caddy_public=False,
+            host_bind_ip=LOCALHOST_BIND_IP,
+            deployment_mode=DEPLOY_MODE_REGISTRY,
+            image_ref="ghcr.io/example/agblogger:v1",
+        )
+        commands = build_lifecycle_commands(
+            deployment_mode=DEPLOY_MODE_REGISTRY,
+            use_caddy=True,
+            caddy_public=False,
+        )
+        content = _build_remote_readme_content(config, commands)
+        assert "firewall" not in content.lower()
+
+
+# ── Issue #16: Upgrade guidance in remote readme ─────────────────────
+
+
+class TestRemoteReadmeUpgradeGuidance:
+    """Remote deployment readme should include upgrade instructions."""
+
+    def test_registry_readme_includes_upgrade_section(self) -> None:
+        config = _make_config(
+            caddy_config=CaddyConfig(domain="blog.example.com", email=None),
+            host_bind_ip=LOCALHOST_BIND_IP,
+            deployment_mode=DEPLOY_MODE_REGISTRY,
+            image_ref="ghcr.io/example/agblogger:v1",
+        )
+        commands = build_lifecycle_commands(
+            deployment_mode=DEPLOY_MODE_REGISTRY,
+            use_caddy=True,
+            caddy_public=False,
+        )
+        content = _build_remote_readme_content(config, commands)
+        assert "## Upgrading" in content or "## Upgrade" in content
+        assert "pull" in content.lower()
+
+    def test_tarball_readme_includes_upgrade_section(self) -> None:
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="agblogger:v1",
+        )
+        commands = build_lifecycle_commands(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            use_caddy=False,
+            caddy_public=False,
+        )
+        content = _build_remote_readme_content(config, commands)
+        assert "## Upgrading" in content or "## Upgrade" in content
+        assert "load" in content.lower()

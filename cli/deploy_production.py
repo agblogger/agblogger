@@ -507,8 +507,12 @@ def _validate_config(config: DeployConfig) -> None:
             raise DeployError("IMAGE_REF is required for registry and tarball deployments")
     elif config.image_ref is not None:
         raise DeployError("IMAGE_REF is only supported for registry and tarball deployments")
-    if config.image_ref is not None and any(char.isspace() for char in config.image_ref):
-        raise DeployError("IMAGE_REF must not contain whitespace")
+    if config.image_ref is not None:
+        ref = config.image_ref
+        if any(char.isspace() for char in ref):
+            raise DeployError("IMAGE_REF must not contain whitespace")
+        if ref.endswith(":") or ref.startswith(":"):
+            raise DeployError("IMAGE_REF has an invalid format (missing name or tag around ':')")
     if not config.bundle_dir.parts:
         raise DeployError("BUNDLE_DIR must not be empty")
     if config.deployment_mode == DEPLOY_MODE_TARBALL and not config.tarball_filename.strip():
@@ -661,6 +665,51 @@ def _build_remote_readme_content(config: DeployConfig, commands: dict[str, str])
             f"- Logs: `{commands['logs']}`",
         ]
     )
+    if config.caddy_public:
+        lines.extend(
+            [
+                "",
+                "## Firewall",
+                "",
+                "Caddy is configured to listen on ports 80 and 443 on all interfaces.",
+                "Ensure your server firewall allows inbound traffic on these ports and",
+                "blocks all other unnecessary ports. For example, with ufw:",
+                "```",
+                "ufw allow 80/tcp",
+                "ufw allow 443/tcp",
+                "ufw allow 22/tcp  # SSH",
+                "ufw enable",
+                "```",
+            ]
+        )
+    if config.deployment_mode == DEPLOY_MODE_REGISTRY:
+        lines.extend(
+            [
+                "",
+                "## Upgrading",
+                "",
+                "The database is a regenerable cache — only `./content/` needs to be preserved.",
+                "To upgrade to a new version, update the image tag in `.env.production` and run:",
+                "```",
+                f"{commands['pull']}",
+                f"{commands['start']}",
+                "```",
+            ]
+        )
+    elif config.deployment_mode == DEPLOY_MODE_TARBALL:
+        lines.extend(
+            [
+                "",
+                "## Upgrading",
+                "",
+                "The database is a regenerable cache — only `./content/` needs to be preserved.",
+                "To upgrade to a new version, copy the new tarball to the server and run:",
+                "```",
+                f"{commands['load']}",
+                f"{commands['start']}",
+                "```",
+            ]
+        )
     return "\n".join(lines) + "\n"
 
 
@@ -798,8 +847,11 @@ def _wait_for_healthy(
             capture_output=True,
             text=True,
         )
-        lines = result.stdout.strip().splitlines()
         elapsed = int(time.monotonic() - start)
+        if result.returncode != 0:
+            print(f"  [{elapsed}s] failed to query service status (exit {result.returncode})")
+            continue
+        lines = result.stdout.strip().splitlines()
         status_parts = [line.strip() for line in lines if line.strip()]
         status_summary = "; ".join(status_parts) if status_parts else "no services found"
         print(f"  [{elapsed}s] {status_summary}")
@@ -829,13 +881,10 @@ def _run_compose_up(config: DeployConfig, project_dir: Path, *, build: bool = Tr
 
 
 def deploy(config: DeployConfig, project_dir: Path) -> DeployResult:
-    """Write deployment config, build, scan, and start containers."""
-    if config.deployment_mode == DEPLOY_MODE_LOCAL:
-        if not (project_dir / "docker-compose.yml").exists():
-            raise FileNotFoundError(f"Missing docker-compose.yml in {project_dir}")
-    elif not (project_dir / "Dockerfile").exists():
-        raise FileNotFoundError(f"Missing Dockerfile in {project_dir}")
+    """Write deployment config, build, scan, and start containers.
 
+    Assumes check_prerequisites() has already been called by the caller.
+    """
     _validate_config(config)
 
     trivy_available = shutil.which("trivy") is not None
@@ -1074,6 +1123,8 @@ def _prompt_caddy_domain() -> str:
 
 def _prompt_trusted_hosts(caddy_domain: str | None) -> list[str]:
     """Prompt for trusted hosts with inline validation."""
+    if caddy_domain:
+        print(f"Note: '{caddy_domain}' will be included automatically.")
     while True:
         raw_hosts = input(
             "Hostnames/IPs clients will use to reach your blog"
