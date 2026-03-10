@@ -92,7 +92,6 @@ class ContentManager:
                     raw_content,
                     file_path=rel_path,
                     default_tz=self.site_config.timezone,
-                    default_author=self.site_config.default_author,
                 )
             except (UnicodeDecodeError, ValueError, yaml.YAMLError, OSError) as exc:
                 logger.warning("Skipping post %s due to parse error: %s", rel_path, exc)
@@ -118,7 +117,6 @@ class ContentManager:
             raw_content,
             file_path="",
             default_tz=self.site_config.timezone,
-            default_author=self.site_config.default_author,
         )
         if title_override and (not post_data.title or post_data.title == "Untitled"):
             post_data.title = title_override
@@ -151,7 +149,6 @@ class ContentManager:
                 raw_content,
                 file_path=rel_path,
                 default_tz=self.site_config.timezone,
-                default_author=self.site_config.default_author,
             )
         except (UnicodeDecodeError, ValueError, yaml.YAMLError) as exc:
             logger.warning("Failed to parse post %s: %s", rel_path, exc)

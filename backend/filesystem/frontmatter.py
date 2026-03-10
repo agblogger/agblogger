@@ -17,7 +17,6 @@ RECOGNIZED_FIELDS: frozenset[str] = frozenset(
         "created_at",
         "modified_at",
         "author",
-        "author_username",
         "labels",
         "draft",
     }
@@ -34,7 +33,6 @@ class PostData:
     created_at: datetime
     modified_at: datetime
     author: str | None = None
-    author_username: str | None = None
     labels: list[str] = field(default_factory=list)
     is_draft: bool = False
     file_path: str = ""
@@ -45,7 +43,6 @@ class FrontmatterMetadata(TypedDict):
     created_at: str
     modified_at: str
     author: NotRequired[str]
-    author_username: NotRequired[str]
     labels: NotRequired[list[str]]
     draft: NotRequired[bool]
 
@@ -113,7 +110,6 @@ def parse_post(
     raw_content: str,
     file_path: str = "",
     default_tz: str = "UTC",
-    default_author: str = "",
 ) -> PostData:
     """Parse a markdown file with YAML front matter into PostData."""
     post = frontmatter.loads(raw_content)
@@ -161,19 +157,11 @@ def parse_post(
     raw_author = post.get("author")
     author: str | None
     if isinstance(raw_author, str):
-        author = raw_author or default_author or None
+        author = raw_author.strip() or None
     elif raw_author is not None:
-        author = str(raw_author) or default_author or None
+        author = str(raw_author).strip() or None
     else:
-        author = default_author or None
-    raw_author_username = post.get("author_username")
-    author_username: str | None
-    if isinstance(raw_author_username, str):
-        author_username = raw_author_username.strip() or None
-    elif raw_author_username is not None:
-        author_username = str(raw_author_username).strip() or None
-    else:
-        author_username = None
+        author = None
     is_draft = bool(post.get("draft", False))
 
     return PostData(
@@ -183,7 +171,6 @@ def parse_post(
         created_at=created_at,
         modified_at=modified_at,
         author=author,
-        author_username=author_username,
         labels=labels,
         is_draft=is_draft,
         file_path=file_path,
@@ -199,8 +186,6 @@ def serialize_post(post_data: PostData) -> str:
     }
     if post_data.author:
         metadata["author"] = post_data.author
-    if post_data.author_username:
-        metadata["author_username"] = post_data.author_username
     if post_data.labels:
         metadata["labels"] = [f"#{label}" for label in post_data.labels]
     if post_data.is_draft:

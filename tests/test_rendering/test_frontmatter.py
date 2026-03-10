@@ -24,6 +24,9 @@ class TestRecognizedFields:
         assert "labels" in RECOGNIZED_FIELDS
         assert "draft" in RECOGNIZED_FIELDS
 
+    def test_author_username_not_in_recognized_fields(self) -> None:
+        assert "author_username" not in RECOGNIZED_FIELDS
+
     def test_title_in_recognized_fields(self) -> None:
         assert "title" in RECOGNIZED_FIELDS
 
@@ -323,6 +326,69 @@ class TestSerializePost:
         result = serialize_post(post_data)
         parsed = frontmatter.loads(result)
         assert "# Different Heading" in parsed.content
+
+
+class TestAuthorParsing:
+    def test_author_from_frontmatter(self) -> None:
+        content = """\
+---
+created_at: 2026-02-02 22:21:29.975359+00
+author: admin
+---
+
+Body content.
+"""
+        post = parse_post(content)
+        assert post.author == "admin"
+
+    def test_author_none_when_absent(self) -> None:
+        content = """\
+---
+created_at: 2026-02-02 22:21:29.975359+00
+---
+
+Body content.
+"""
+        post = parse_post(content)
+        assert post.author is None
+
+    def test_author_none_when_empty_string(self) -> None:
+        content = """\
+---
+created_at: 2026-02-02 22:21:29.975359+00
+author: ""
+---
+
+Body content.
+"""
+        post = parse_post(content)
+        assert post.author is None
+
+    def test_no_author_username_attribute(self) -> None:
+        post = parse_post("---\ncreated_at: 2026-01-01\n---\nBody\n")
+        assert not hasattr(post, "author_username")
+
+    def test_no_default_author_parameter(self) -> None:
+        """parse_post should not accept a default_author parameter."""
+        import inspect
+
+        sig = inspect.signature(parse_post)
+        assert "default_author" not in sig.parameters
+
+    def test_author_username_in_frontmatter_ignored(self) -> None:
+        """author_username in front matter is not parsed into PostData."""
+        content = """\
+---
+created_at: 2026-02-02 22:21:29.975359+00
+author: admin
+author_username: admin_user
+---
+
+Body content.
+"""
+        post = parse_post(content)
+        assert post.author == "admin"
+        assert not hasattr(post, "author_username")
 
 
 class TestStripLeadingHeading:
