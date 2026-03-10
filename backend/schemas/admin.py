@@ -69,6 +69,15 @@ class PageOrderItem(BaseModel):
     title: str
     file: str | None = None
 
+    @field_validator("file")
+    @classmethod
+    def validate_file_path(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        if v.startswith("/") or ".." in v.split("/"):
+            raise ValueError("Invalid file path")
+        return v
+
 
 class PageOrderUpdate(BaseModel):
     """Request to update page order."""

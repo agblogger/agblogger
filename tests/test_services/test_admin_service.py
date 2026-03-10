@@ -175,6 +175,38 @@ class TestUpdatePageOrder:
         assert reloaded.pages[1].title == "Home"
 
 
+class TestPageOrderItemValidation:
+    """PageOrderItem.file must reject path traversal."""
+
+    def test_rejects_path_traversal_dotdot(self) -> None:
+        from pydantic import ValidationError
+
+        from backend.schemas.admin import PageOrderItem
+
+        with pytest.raises(ValidationError):
+            PageOrderItem(id="test", title="Test", file="../../.env")
+
+    def test_rejects_absolute_path(self) -> None:
+        from pydantic import ValidationError
+
+        from backend.schemas.admin import PageOrderItem
+
+        with pytest.raises(ValidationError):
+            PageOrderItem(id="test", title="Test", file="/etc/passwd")
+
+    def test_accepts_valid_relative_path(self) -> None:
+        from backend.schemas.admin import PageOrderItem
+
+        item = PageOrderItem(id="about", title="About", file="about.md")
+        assert item.file == "about.md"
+
+    def test_accepts_none_file(self) -> None:
+        from backend.schemas.admin import PageOrderItem
+
+        item = PageOrderItem(id="timeline", title="Timeline", file=None)
+        assert item.file is None
+
+
 class TestSiteConfigWithPages:
     """SiteConfig.with_pages() should return a copy with replaced pages."""
 
