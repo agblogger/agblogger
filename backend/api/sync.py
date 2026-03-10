@@ -123,6 +123,7 @@ async def sync_status(
     session: Annotated[AsyncSession, Depends(get_session)],
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
     git_service: Annotated[GitService, Depends(get_git_service)],
+    content_write_lock: Annotated[AsyncWriteLock, Depends(get_content_write_lock)],
     user: Annotated[User, Depends(require_admin)],
 ) -> SyncStatusResponse:
     """Exchange manifests and compute sync plan."""
@@ -135,8 +136,11 @@ async def sync_status(
             file_mtime=entry.file_mtime,
         )
 
-    server_manifest = await get_server_manifest(session)
-    server_current = await asyncio.to_thread(scan_content_files, content_manager.content_dir)
+    async with content_write_lock:
+        server_manifest = await get_server_manifest(session)
+        server_current = await asyncio.to_thread(
+            scan_content_files, content_manager.content_dir
+        )
     plan = compute_sync_plan(client_manifest, server_manifest, server_current)
 
     conflicts = [
