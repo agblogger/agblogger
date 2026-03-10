@@ -42,7 +42,7 @@ class TestFrontMatterNormalization:
         self._write_post(
             content_dir,
             "posts/existing.md",
-            "---\ncreated_at: '2026-01-01T00:00:00+00:00'\nauthor: Admin\n---\n# Existing\n",
+            "---\ncreated_at: '2026-01-01T00:00:00+00:00'\nauthor: admin\n---\n# Existing\n",
         )
         old_manifest = {
             "posts/existing.md": FileEntry(

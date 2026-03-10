@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import (
 from backend.models.base import Base
 from backend.models.post import PostCache
 from backend.models.user import User
-from backend.services.post_service import get_post, list_posts
+from backend.services.post_service import get_post, list_posts, resolve_author_display_name
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
@@ -83,7 +83,7 @@ async def _create_post(
     *,
     file_path: str,
     title: str,
-    author: str,
+    author: str | None = None,
     is_draft: bool = False,
 ) -> PostCache:
     """Insert a PostCache row and return it."""
@@ -221,3 +221,104 @@ class TestGetPostAuthorDisplayName:
         result = await get_post(session, "posts/plain.md")
         assert result is not None
         assert result.author == "nodisplay"
+
+    @pytest.mark.asyncio
+    async def test_draft_hidden_without_owner(self, session: AsyncSession) -> None:
+        """get_post hides drafts when no draft_owner_username is given."""
+        await _create_post(
+            session, file_path="posts/draft.md", title="Draft", author="admin", is_draft=True
+        )
+        await session.commit()
+
+        assert await get_post(session, "posts/draft.md") is None
+
+    @pytest.mark.asyncio
+    async def test_draft_visible_to_owner(self, session: AsyncSession) -> None:
+        """get_post returns draft when draft_owner_username matches author."""
+        await _create_user(session, username="admin", display_name="Admin")
+        await _create_post(
+            session, file_path="posts/draft.md", title="Draft", author="admin", is_draft=True
+        )
+        await session.commit()
+
+        result = await get_post(session, "posts/draft.md", draft_owner_username="admin")
+        assert result is not None
+        assert result.title == "Draft"
+        assert result.author == "Admin"
+
+    @pytest.mark.asyncio
+    async def test_draft_hidden_from_wrong_user(self, session: AsyncSession) -> None:
+        """get_post hides drafts from users who are not the author."""
+        await _create_post(
+            session, file_path="posts/draft.md", title="Draft", author="alice", is_draft=True
+        )
+        await session.commit()
+
+        assert await get_post(session, "posts/draft.md", draft_owner_username="bob") is None
+
+
+class TestResolveAuthorDisplayName:
+    """Unit tests for the resolve_author_display_name function."""
+
+    @pytest.mark.asyncio
+    async def test_returns_display_name(self, session: AsyncSession) -> None:
+        """Returns display_name when user exists and has one."""
+        await _create_user(session, username="admin", display_name="John Smith")
+        await session.commit()
+
+        assert await resolve_author_display_name(session, "admin") == "John Smith"
+
+    @pytest.mark.asyncio
+    async def test_returns_username_when_no_display_name(self, session: AsyncSession) -> None:
+        """Returns username when user exists but display_name is None."""
+        await _create_user(session, username="nodisplay", display_name=None)
+        await session.commit()
+
+        assert await resolve_author_display_name(session, "nodisplay") == "nodisplay"
+
+    @pytest.mark.asyncio
+    async def test_returns_username_when_user_missing(self, session: AsyncSession) -> None:
+        """Returns raw username when no matching user exists."""
+        assert await resolve_author_display_name(session, "ghost") == "ghost"
+
+    @pytest.mark.asyncio
+    async def test_returns_none_for_none(self, session: AsyncSession) -> None:
+        """Returns None when username is None."""
+        assert await resolve_author_display_name(session, None) is None
+
+    @pytest.mark.asyncio
+    async def test_returns_none_for_empty_string(self, session: AsyncSession) -> None:
+        """Returns empty string when username is empty (falsy guard)."""
+        assert await resolve_author_display_name(session, "") == ""
+
+    @pytest.mark.asyncio
+    async def test_returns_username_for_empty_display_name(self, session: AsyncSession) -> None:
+        """Returns username when user has empty-string display_name."""
+        await _create_user(session, username="emptydn", display_name="")
+        await session.commit()
+
+        assert await resolve_author_display_name(session, "emptydn") == "emptydn"
+
+
+class TestNullAuthorInQueries:
+    """Posts with author=None should not crash queries."""
+
+    @pytest.mark.asyncio
+    async def test_list_posts_with_null_author(self, session: AsyncSession) -> None:
+        """list_posts handles PostCache.author=None gracefully."""
+        await _create_post(session, file_path="posts/no-author.md", title="No Author")
+        await session.commit()
+
+        result = await list_posts(session)
+        assert len(result.posts) == 1
+        assert result.posts[0].author is None
+
+    @pytest.mark.asyncio
+    async def test_get_post_with_null_author(self, session: AsyncSession) -> None:
+        """get_post handles PostCache.author=None gracefully."""
+        await _create_post(session, file_path="posts/no-author.md", title="No Author")
+        await session.commit()
+
+        result = await get_post(session, "posts/no-author.md")
+        assert result is not None
+        assert result.author is None

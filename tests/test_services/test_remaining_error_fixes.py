@@ -45,7 +45,7 @@ class TestPostRenameRollbackOnCommitFailure:
         post_dir.mkdir()
         (post_dir / "index.md").write_text(
             "---\ntitle: Original Title\ncreated_at: 2026-02-02 22:21:29+00\n"
-            "author: Admin\nlabels: []\n---\nContent here.\n"
+            "author: admin\nlabels: []\n---\nContent here.\n"
         )
 
         db_path = tmp_path / "test.db"

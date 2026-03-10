@@ -215,8 +215,17 @@ async def list_posts(
     )
 
 
-async def get_post(session: AsyncSession, file_path: str) -> PostDetail | None:
-    """Get a single post by file path."""
+async def get_post(
+    session: AsyncSession,
+    file_path: str,
+    *,
+    draft_owner_username: str | None = None,
+) -> PostDetail | None:
+    """Get a single post by file path.
+
+    When *draft_owner_username* is provided, draft posts are only returned if
+    their ``author`` matches.  Otherwise drafts are hidden (returns ``None``).
+    """
     resolved_author = func.coalesce(User.display_name, PostCache.author).label("resolved_author")
     stmt = (
         select(PostCache, resolved_author)
@@ -231,6 +240,10 @@ async def get_post(session: AsyncSession, file_path: str) -> PostDetail | None:
 
     post = row[0]
     display_author = row[1]
+
+    if post.is_draft and (not draft_owner_username or post.author != draft_owner_username):
+        return None
+
     post_label_ids = await _post_labels(session, post.id)
 
     return PostDetail(

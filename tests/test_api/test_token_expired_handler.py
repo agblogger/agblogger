@@ -29,7 +29,7 @@ def app_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
     posts_dir = tmp_content_dir / "posts"
     (posts_dir / "hello.md").write_text(
         "---\ncreated_at: 2026-02-02 22:21:29.975359+00\n"
-        "author: Admin\n---\n# Hello World\n\nTest content.\n"
+        "author: admin\n---\n# Hello World\n\nTest content.\n"
     )
     db_path = tmp_path / "test.db"
     return Settings(

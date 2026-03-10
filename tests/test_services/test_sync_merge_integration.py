@@ -27,7 +27,7 @@ pytestmark = pytest.mark.slow
 def merge_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
     posts_dir = tmp_content_dir / "posts"
     (posts_dir / "shared.md").write_text(
-        "---\ntitle: Shared Post\ncreated_at: 2026-02-01 00:00:00+00\nauthor: Admin\n"
+        "---\ntitle: Shared Post\ncreated_at: 2026-02-01 00:00:00+00\nauthor: admin\n"
         "labels:\n- '#a'\n---\n\nParagraph one.\n\nParagraph two.\n"
     )
     db_path = tmp_path / "test.db"
@@ -99,7 +99,7 @@ class TestSyncCommit:
         assert resp.status_code == 200
 
         client_content = (
-            "---\ntitle: Shared Post\ncreated_at: 2026-02-01 00:00:00+00\nauthor: Admin\n"
+            "---\ntitle: Shared Post\ncreated_at: 2026-02-01 00:00:00+00\nauthor: admin\n"
             "labels:\n- '#a'\n---\n\nParagraph one.\n\nParagraph two (client edit).\n"
         )
         metadata = json.dumps({"deleted_files": [], "last_sync_commit": server_commit})
@@ -147,7 +147,7 @@ class TestSyncCommit:
         assert resp.status_code == 200
 
         client_content = (
-            "---\ntitle: Shared Post\ncreated_at: 2026-02-01 00:00:00+00\nauthor: Admin\n"
+            "---\ntitle: Shared Post\ncreated_at: 2026-02-01 00:00:00+00\nauthor: admin\n"
             "labels:\n- '#a'\n---\n\nClient version of paragraph one.\n\nParagraph two.\n"
         )
         metadata = json.dumps({"deleted_files": [], "last_sync_commit": server_commit})
@@ -171,7 +171,7 @@ class TestSyncCommit:
         token = await _login(merge_client)
         headers = {"Authorization": f"Bearer {token}"}
 
-        client_content = b"---\ntitle: Different\nauthor: Admin\n---\n\nClient only.\n"
+        client_content = b"---\ntitle: Different\nauthor: admin\n---\n\nClient only.\n"
         metadata = json.dumps({"deleted_files": [], "last_sync_commit": None})
         resp = await merge_client.post(
             "/api/sync/commit",
@@ -203,7 +203,7 @@ class TestSyncCommit:
         token = await _login(merge_client)
         headers = {"Authorization": f"Bearer {token}"}
 
-        new_content = b"---\ntitle: New Post\nauthor: Admin\n---\n\nBrand new.\n"
+        new_content = b"---\ntitle: New Post\nauthor: admin\n---\n\nBrand new.\n"
         metadata = json.dumps({"deleted_files": []})
         resp = await merge_client.post(
             "/api/sync/commit",
@@ -337,7 +337,7 @@ class TestSyncCommit:
         token = await _login(merge_client)
         headers = {"Authorization": f"Bearer {token}"}
 
-        new_content = b"---\ntitle: Synced\nauthor: Admin\n---\n\nBody.\n"
+        new_content = b"---\ntitle: Synced\nauthor: admin\n---\n\nBody.\n"
         metadata = json.dumps({"deleted_files": []})
         resp = await merge_client.post(
             "/api/sync/commit",
@@ -382,7 +382,7 @@ class TestSyncCommit:
         assert resp.status_code == 200
 
         client_content = (
-            "---\ntitle: Shared Post\ncreated_at: 2026-02-01 00:00:00+00\nauthor: Admin\n"
+            "---\ntitle: Shared Post\ncreated_at: 2026-02-01 00:00:00+00\nauthor: admin\n"
             "labels:\n- '#a'\n- '#client-label'\n---\n\nParagraph one.\n\nParagraph two.\n"
         )
         metadata = json.dumps({"deleted_files": [], "last_sync_commit": server_commit})
@@ -434,7 +434,7 @@ class TestSyncCommit:
         assert resp.status_code == 200
 
         client_content = (
-            "---\ntitle: Shared Post\ncreated_at: 2026-02-01 00:00:00+00\nauthor: Admin\n"
+            "---\ntitle: Shared Post\ncreated_at: 2026-02-01 00:00:00+00\nauthor: admin\n"
             "labels:\n- '#a'\n---\n\nClient edited paragraph.\n\nParagraph two.\n"
         )
 
@@ -491,7 +491,7 @@ class TestSyncRoundTrip:
         # Step 1: Client uploads a new file via sync commit
         # Directory name must match the slug of the title ("round-trip-post")
         # to avoid rename when the server processes the file via PUT.
-        new_content = b"---\ntitle: Round Trip Post\nauthor: Admin\n---\n\nOriginal content.\n"
+        new_content = b"---\ntitle: Round Trip Post\nauthor: admin\n---\n\nOriginal content.\n"
         new_file_path = "posts/2026-03-01-round-trip-post/index.md"
         metadata = json.dumps({"deleted_files": []})
         commit_resp = await merge_client.post(

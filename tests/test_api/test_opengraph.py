@@ -22,12 +22,12 @@ def og_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
     posts_dir = tmp_content_dir / "posts"
     (posts_dir / "hello.md").write_text(
         "---\ntitle: Hello World\ncreated_at: 2026-02-02 22:21:29.975359+00\n"
-        "author: Admin\nlabels: []\n---\n"
+        "author: admin\nlabels: []\n---\n"
         "This is the post body with some content for the excerpt.\n"
     )
     (posts_dir / "my-draft.md").write_text(
         "---\ntitle: Secret Draft\ncreated_at: 2026-02-02 22:21:29+00\n"
-        "author: Admin\nlabels: []\ndraft: true\n---\n"
+        "author: admin\nlabels: []\ndraft: true\n---\n"
         "Draft content that should not leak.\n"
     )
 

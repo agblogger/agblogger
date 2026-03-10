@@ -664,7 +664,7 @@ class TestCrosspostErrorMessageLeakage:
         posts_dir = tmp_path / "posts"
         posts_dir.mkdir(exist_ok=True)
         (posts_dir / "hello.md").write_text(
-            "---\ntitle: Hello\nauthor: Admin\n"
+            "---\ntitle: Hello\nauthor: admin\n"
             "created_at: 2026-02-02 22:21:29+00\nlabels: []\n---\nHello world.\n"
         )
 

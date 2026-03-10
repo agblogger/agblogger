@@ -132,6 +132,25 @@ class TestNormalizeNewPost:
         post = _read_post(content_dir, "posts/hello.md")
         assert "draft" not in post.metadata
 
+    def test_no_author_backfill_for_new_posts(self, tmp_path: Path) -> None:
+        """A synced post with no author field remains without an author field."""
+        content_dir = tmp_path / "content"
+        (content_dir / "posts").mkdir(parents=True)
+        _write_post(content_dir, "posts/hello.md", "---\n---\n# Hello\n")
+
+        with patch("backend.services.sync_service.now_utc") as mock_now:
+            from datetime import UTC, datetime
+
+            mock_now.return_value = datetime(2026, 2, 18, 12, 0, 0, tzinfo=UTC)
+            normalize_post_frontmatter(
+                uploaded_files=["posts/hello.md"],
+                old_manifest={},
+                content_dir=content_dir,
+            )
+
+        post = _read_post(content_dir, "posts/hello.md")
+        assert "author" not in post.metadata
+
     def test_invalid_created_at_is_replaced_with_current_time(self, tmp_path: Path) -> None:
         """Malformed created_at should not crash normalization for new posts."""
         content_dir = tmp_path / "content"
@@ -165,7 +184,7 @@ class TestNormalizeEditedPost:
             "posts/hello.md",
             "---\ncreated_at: 2026-01-01 10:00:00.000000+00:00\n"
             "modified_at: 2026-01-01 10:00:00.000000+00:00\n"
-            "author: Admin\n---\n# Hello\n",
+            "author: admin\n---\n# Hello\n",
         )
 
         old_manifest = {"posts/hello.md": _entry("posts/hello.md")}
@@ -216,7 +235,7 @@ class TestNormalizeEditedPost:
         _write_post(
             content_dir,
             "posts/hello.md",
-            "---\nauthor: Admin\n---\n# Hello\n",
+            "---\nauthor: admin\n---\n# Hello\n",
         )
 
         old_manifest = {"posts/hello.md": _entry("posts/hello.md")}
@@ -241,7 +260,7 @@ class TestNormalizeEditedPost:
         _write_post(
             content_dir,
             "posts/hello.md",
-            "---\ncreated_at: 0\nauthor: Admin\n---\n# Hello\n",
+            "---\ncreated_at: 0\nauthor: admin\n---\n# Hello\n",
         )
 
         old_manifest = {"posts/hello.md": _entry("posts/hello.md")}
@@ -386,7 +405,7 @@ class TestNormalizeTitleBackfill:
             content_dir,
             "posts/hello.md",
             "---\ncreated_at: 2026-01-01 10:00:00.000000+00:00\n"
-            "author: Admin\n---\n# Edited Title\n\nContent.\n",
+            "author: admin\n---\n# Edited Title\n\nContent.\n",
         )
         old_manifest = {"posts/hello.md": _entry("posts/hello.md")}
 

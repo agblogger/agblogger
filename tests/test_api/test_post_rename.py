@@ -265,7 +265,7 @@ class TestPostRename:
         flat_post = posts_dir / "flat-post.md"
         flat_post.write_text(
             "---\ntitle: Flat Post\ncreated_at: 2026-02-02 22:21:29+00\n"
-            "author: Admin\nlabels: []\n---\nContent.\n"
+            "author: admin\nlabels: []\n---\nContent.\n"
         )
 
         # Rebuild cache so the post is indexed

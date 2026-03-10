@@ -75,7 +75,7 @@ async def test_startup_backfilled_files_are_committed_and_cache_rebuilt(tmp_path
         "---\n"
         "title: Hello World\n"
         "created_at: 2026-02-02 22:21:29.975359+00\n"
-        "author: Admin\n"
+        "author: admin\n"
         "---\n"
         "Post body.\n",
         encoding="utf-8",

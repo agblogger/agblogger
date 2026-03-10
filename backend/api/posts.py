@@ -164,9 +164,10 @@ async def _build_post_detail(
     labels: list[str],
     rendered_html: str,
     warnings: list[str] | None = None,
+    author_display_name: str | None = None,
 ) -> PostDetail:
     """Build a PostDetail response from a cache row."""
-    display_author = await resolve_author_display_name(session, post.author)
+    display_author = author_display_name or await resolve_author_display_name(session, post.author)
     return PostDetail(
         id=post.id,
         file_path=post.file_path,
@@ -371,7 +372,13 @@ async def upload_post(
         set_git_warning(response, await git_service.try_commit(f"Upload post: {file_path}"))
 
         return await _build_post_detail(
-            session, post, labels=post_data.labels, rendered_html=rendered_html
+            session,
+            post,
+            labels=post_data.labels,
+            rendered_html=rendered_html,
+            author_display_name=(
+                (user.display_name or user.username) if post_data.author == user.username else None
+            ),
         )
 
 
@@ -610,18 +617,9 @@ async def get_post_endpoint(
     user: Annotated[User | None, Depends(get_current_user)],
 ) -> PostDetail:
     """Get a single post by file path."""
-    post = await get_post(session, file_path)
+    post = await get_post(session, file_path, draft_owner_username=user.username if user else None)
     if post is None:
         raise HTTPException(status_code=404, detail="Post not found")
-    if post.is_draft:
-        if user is None:
-            raise HTTPException(status_code=404, detail="Post not found")
-        # Check draft ownership via author field
-        stmt = select(PostCache.author).where(PostCache.file_path == file_path)
-        result = await session.execute(stmt)
-        post_author = result.scalar_one_or_none()
-        if post_author != user.username:
-            raise HTTPException(status_code=404, detail="Post not found")
     return post
 
 
@@ -704,7 +702,11 @@ async def create_post_endpoint(
         set_git_warning(response, await git_service.try_commit(f"Create post: {file_path}"))
 
         return await _build_post_detail(
-            session, post, labels=body.labels, rendered_html=rendered_html
+            session,
+            post,
+            labels=body.labels,
+            rendered_html=rendered_html,
+            author_display_name=user.display_name or user.username,
         )
 
 
@@ -906,6 +908,9 @@ async def update_post_endpoint(
             labels=body.labels,
             rendered_html=existing.rendered_html or "",
             warnings=endpoint_warnings,
+            author_display_name=(
+                (user.display_name or user.username) if author == user.username else None
+            ),
         )
 
 
