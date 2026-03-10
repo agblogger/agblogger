@@ -239,7 +239,7 @@ class ContentManager:
             stripped = line.strip()
             if stripped:
                 stripped = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", stripped)
-                stripped = re.sub(r"[*_]{1,3}([^*_]+)[*_]{1,3}", r"\1", stripped)
+                stripped = re.sub(r"[*_]+", "", stripped)
                 stripped = re.sub(r"`([^`]+)`", r"\1", stripped)
                 stripped = re.sub(r"\$[^$]+\$", "", stripped)
                 lines.append(stripped)

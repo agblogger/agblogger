@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from backend.filesystem.content_manager import (
@@ -10,6 +12,7 @@ from backend.filesystem.content_manager import (
     hash_content,
 )
 from backend.filesystem.frontmatter import (
+    PostData,
     extract_title,
     generate_markdown_excerpt,
     parse_labels,
@@ -232,3 +235,33 @@ class TestContentManager:
         cm = ContentManager(content_dir=tmp_content_dir)
         assert cm.delete_post("posts/to-delete.md") is True
         assert cm.delete_post("posts/nonexistent.md") is False
+
+
+class TestPlainExcerptRegexSafety:
+    """get_plain_excerpt must not exhibit quadratic regex behavior."""
+
+    def test_adversarial_asterisks_completes_quickly(self, tmp_path: Path) -> None:
+        content_dir = tmp_path / "content"
+        content_dir.mkdir()
+        (content_dir / "index.toml").write_text('[site]\ntitle = "T"\n')
+        (content_dir / "labels.toml").write_text("[labels]\n")
+        cm = ContentManager(content_dir)
+
+        # Adversarial content: many unclosed * that cause backtracking
+        adversarial = "* " * 5000
+        now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        post_data = PostData(
+            file_path="posts/test.md",
+            title="Test",
+            author="admin",
+            created_at=now,
+            modified_at=now,
+            content=adversarial,
+            raw_content=adversarial,
+            labels=[],
+        )
+
+        start = time.monotonic()
+        cm.get_plain_excerpt(post_data)
+        elapsed = time.monotonic() - start
+        assert elapsed < 1.0, f"Regex took {elapsed:.1f}s — backtracking detected"
