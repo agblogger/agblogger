@@ -214,17 +214,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         app.state.x_oauth_state = OAuthStateStore(ttl_seconds=600)
         app.state.facebook_oauth_state = OAuthStateStore(ttl_seconds=600)
 
-        from backend.services.admin_service import sync_default_author_from_admin
         from backend.services.auth_service import ensure_admin_user
 
         try:
             async with session_factory() as session:
                 await ensure_admin_user(session, settings)
-                await sync_default_author_from_admin(
-                    session,
-                    content_manager,
-                    admin_username=settings.admin_username,
-                )
         except Exception as exc:
             logger.critical("Failed to ensure admin user: %s", exc)
             raise

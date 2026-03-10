@@ -3,11 +3,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import replace
 from typing import TYPE_CHECKING, Any
-
-from sqlalchemy import select, update
-from sqlalchemy.exc import IntegrityError, OperationalError
 
 from backend.exceptions import BuiltinPageError
 from backend.filesystem.toml_manager import (
@@ -15,17 +11,11 @@ from backend.filesystem.toml_manager import (
     SiteConfig,
     write_site_config,
 )
-from backend.models.post import PostCache
 
 if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncSession
-
     from backend.filesystem.content_manager import ContentManager
-    from backend.filesystem.frontmatter import PostData
-    from backend.models.user import User
 
 BUILTIN_PAGE_IDS = {"timeline", "labels"}
-_DISPLAY_NAME_DB_ERRORS = (OperationalError, IntegrityError)
 logger = logging.getLogger(__name__)
 
 
@@ -47,23 +37,6 @@ def update_site_settings(
         title=title,
         description=description,
         timezone=timezone,
-        pages=cfg.pages,
-    )
-    write_site_config(cm.content_dir, updated)
-    cm.reload_config()
-    return cm.site_config
-
-
-def sync_site_default_author(cm: ContentManager, *, default_author: str) -> SiteConfig:
-    """Persist the system-managed default author when it changes."""
-    cfg = cm.site_config
-    if cfg.default_author == default_author:
-        return cfg
-    updated = SiteConfig(
-        title=cfg.title,
-        description=cfg.description,
-        default_author=default_author,
-        timezone=cfg.timezone,
         pages=cfg.pages,
     )
     write_site_config(cm.content_dir, updated)
@@ -218,117 +191,3 @@ def update_page_order(cm: ContentManager, pages: list[PageConfig]) -> None:
     updated = cfg.with_pages(pages)
     write_site_config(cm.content_dir, updated)
     cm.reload_config()
-
-
-async def update_user_display_name(
-    session: AsyncSession,
-    cm: ContentManager,
-    *,
-    user: User,
-    display_name: str | None,
-) -> str | None:
-    """Update a user's display name and retroactively update all their posts.
-
-    Updates the author field in both the database cache and on-disk markdown files
-    for all posts where author_username matches the user's username.
-    """
-    from backend.services.datetime_service import format_iso, now_utc
-
-    author_value = display_name or user.username
-    stmt = select(PostCache.file_path).where(PostCache.author_username == user.username)
-    result = await session.execute(stmt)
-    file_paths = [row[0] for row in result.all()]
-    original_default_author = cm.site_config.default_author
-
-    original_posts: dict[str, PostData] = {}
-    updated_posts: dict[str, PostData] = {}
-    for file_path in file_paths:
-        post_data = cm.read_post(file_path)
-        if post_data is None:
-            msg = f"Failed to load post for display-name migration: {file_path}"
-            logger.error(msg)
-            raise OSError(msg)
-        original_posts[file_path] = post_data
-        updated_posts[file_path] = replace(post_data, author=author_value)
-
-    def rollback_filesystem_changes(written_paths: list[str]) -> None:
-        for written_path in reversed(written_paths):
-            original_post = original_posts.get(written_path)
-            if original_post is None:
-                continue
-            try:
-                cm.write_post(written_path, original_post)
-            except OSError as rollback_exc:
-                logger.error(
-                    "Failed to rollback display-name migration for post %s: %s",
-                    written_path,
-                    rollback_exc,
-                )
-        if cm.site_config.default_author != original_default_author:
-            try:
-                sync_site_default_author(cm, default_author=original_default_author)
-            except OSError as rollback_exc:
-                logger.error(
-                    "Failed to rollback default author after display-name migration: %s",
-                    rollback_exc,
-                )
-
-    written_paths: list[str] = []
-    current_path: str | None = None
-    try:
-        for current_path, post_data in updated_posts.items():
-            cm.write_post(current_path, post_data)
-            written_paths.append(current_path)
-        current_path = None
-        sync_site_default_author(cm, default_author=author_value)
-    except OSError as exc:
-        failed_path = current_path if current_path not in written_paths else None
-        rollback_filesystem_changes(written_paths)
-        if failed_path is not None:
-            msg = f"Failed to update author in {failed_path}: {exc}"
-        else:
-            msg = f"Failed to update site config: {exc}"
-        raise OSError(msg) from exc
-
-    original_display_name = user.display_name
-    original_updated_at = user.updated_at
-    user.display_name = display_name
-    user.updated_at = format_iso(now_utc())
-    session.add(user)
-
-    try:
-        await session.execute(
-            update(PostCache)
-            .where(PostCache.author_username == user.username)
-            .values(author=author_value)
-        )
-        await session.commit()
-    except _DISPLAY_NAME_DB_ERRORS as exc:
-        logger.error("Database error during display name update: %s", exc)
-        await session.rollback()
-        user.display_name = original_display_name
-        user.updated_at = original_updated_at
-        rollback_filesystem_changes(written_paths)
-        raise
-    return display_name
-
-
-async def sync_default_author_from_admin(
-    session: AsyncSession,
-    cm: ContentManager,
-    *,
-    admin_username: str,
-) -> SiteConfig:
-    """Ensure the system-managed default author matches the sole editing admin."""
-    from backend.models.user import User
-
-    result = await session.execute(
-        select(User.username, User.display_name).where(User.is_admin.is_(True)).order_by(User.id)
-    )
-    admins = result.all()
-    if len(admins) != 1:
-        return cm.site_config
-    username, display_name = admins[0]
-    if username != admin_username:
-        return cm.site_config
-    return sync_site_default_author(cm, default_author=display_name or username)
