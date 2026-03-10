@@ -3,14 +3,12 @@ import { Settings, Save } from 'lucide-react'
 
 import { HTTPError } from '@/api/client'
 import type { AdminSiteSettings } from '@/api/client'
-import { updateAdminSiteSettings, updateDisplayName } from '@/api/admin'
+import { updateAdminSiteSettings } from '@/api/admin'
 import TimezoneCombobox from './TimezoneCombobox'
 import { useSiteStore } from '@/stores/siteStore'
-import { useAuthStore } from '@/stores/authStore'
 
 interface SiteSettingsSectionProps {
   initialSettings: AdminSiteSettings
-  initialDisplayName: string
   busy: boolean
   onSaving: (saving: boolean) => void
   onSavedSettings: (settings: AdminSiteSettings) => void
@@ -18,13 +16,11 @@ interface SiteSettingsSectionProps {
 
 export default function SiteSettingsSection({
   initialSettings,
-  initialDisplayName,
   busy,
   onSaving,
   onSavedSettings,
 }: SiteSettingsSectionProps) {
   const [siteSettings, setSiteSettings] = useState<AdminSiteSettings>(initialSettings)
-  const [displayName, setDisplayName] = useState(initialDisplayName)
   const [siteError, setSiteError] = useState<string | null>(null)
   const [siteSuccess, setSiteSuccess] = useState<string | null>(null)
   const [savingSite, setSavingSite] = useState(false)
@@ -33,9 +29,6 @@ export default function SiteSettingsSection({
   useEffect(() => {
     setSiteSettings(initialSettings)
   }, [initialSettings])
-  useEffect(() => {
-    setDisplayName(initialDisplayName)
-  }, [initialDisplayName])
 
   async function handleSaveSiteSettings() {
     if (!siteSettings.title.trim()) {
@@ -49,21 +42,7 @@ export default function SiteSettingsSection({
       const updated = await updateAdminSiteSettings(siteSettings)
       setSiteSettings(updated)
       onSavedSettings(updated)
-      try {
-        await updateDisplayName(displayName)
-      } catch (dnErr) {
-        console.error('Failed to update display name:', dnErr)
-        setSiteError('Settings saved, but failed to update display name.')
-        useSiteStore.getState().fetchConfig().catch((err: unknown) => { console.warn('Failed to refresh site config', err) })
-        return
-      }
       setSiteSuccess('Settings saved.')
-      const user = useAuthStore.getState().user
-      if (user) {
-        useAuthStore.setState({
-          user: { ...user, display_name: displayName.trim() || null },
-        })
-      }
       useSiteStore.getState().fetchConfig().catch((err: unknown) => { console.warn('Failed to refresh site config', err) })
     } catch (err) {
       if (err instanceof HTTPError) {
@@ -99,27 +78,6 @@ export default function SiteSettingsSection({
       )}
 
       <div className="space-y-4">
-        <div>
-          <label htmlFor="display-name" className="block text-xs font-medium text-muted mb-1">
-            Name
-          </label>
-          <input
-            id="display-name"
-            type="text"
-            value={displayName}
-            onChange={(e) => {
-              setDisplayName(e.target.value)
-              setSiteSuccess(null)
-            }}
-            disabled={busy}
-            maxLength={100}
-            className="w-full px-3 py-2 bg-paper-warm border border-border rounded-lg
-                     text-ink text-sm
-                     focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/20
-                     disabled:opacity-50"
-          />
-        </div>
-
         <div>
           <label htmlFor="site-title" className="block text-xs font-medium text-muted mb-1">
             Title *

@@ -70,7 +70,6 @@ const mockApiPost = vi.mocked(api.post)
 const defaultSettings: AdminSiteSettings = {
   title: 'My Blog',
   description: 'A test blog',
-  default_author: 'Admin',
   timezone: 'UTC',
 }
 

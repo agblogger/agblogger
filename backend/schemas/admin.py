@@ -76,24 +76,6 @@ class PageOrderUpdate(BaseModel):
     pages: list[PageOrderItem]
 
 
-class DisplayNameUpdate(BaseModel):
-    """Request to update user display name."""
-
-    display_name: str = Field(default="", max_length=100)
-
-    @field_validator("display_name", mode="before")
-    @classmethod
-    def strip_display_name(cls, v: str) -> str:
-        _ = cls
-        return v.strip()
-
-
-class DisplayNameResponse(BaseModel):
-    """Response after updating display name."""
-
-    display_name: str | None
-
-
 class PasswordChange(BaseModel):
     """Request to change admin password."""
 

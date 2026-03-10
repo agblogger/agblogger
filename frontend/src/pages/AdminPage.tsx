@@ -35,7 +35,6 @@ export default function AdminPage() {
   const [siteSettings, setSiteSettings] = useState<AdminSiteSettings>({
     title: '',
     description: '',
-    default_author: '',
     timezone: '',
   })
   const [pages, setPages] = useState<AdminPageConfig[]>([])
@@ -140,7 +139,6 @@ export default function AdminPage() {
       {activeTab === 'settings' && (
         <SiteSettingsSection
           initialSettings={siteSettings}
-          initialDisplayName={user.display_name ?? user.username}
           busy={busy}
           onSaving={setSiteSaving}
           onSavedSettings={setSiteSettings}

@@ -253,7 +253,6 @@ export interface AssetListResponse {
 export interface AdminSiteSettings {
   title: string
   description: string
-  default_author: string
   timezone: string
 }
 

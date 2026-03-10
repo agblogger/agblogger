@@ -49,10 +49,3 @@ export async function changeAdminPassword(data: {
   return api.put('admin/password', { json: data }).json<{ status: string; sessions_revoked?: boolean }>()
 }
 
-export async function updateDisplayName(
-  displayName: string,
-): Promise<{ display_name: string | null }> {
-  return api
-    .put('admin/display-name', { json: { display_name: displayName } })
-    .json<{ display_name: string | null }>()
-}
