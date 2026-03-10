@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 MAX_SLUG_LENGTH = 80
 _UNTITLED_FALLBACK = "untitled"
 _UNTITLED_COLLISION_SLUG = "untitled-post"
+_MAX_SLUG_COLLISION = 1000
 
 
 def generate_post_slug(title: str) -> str:
@@ -70,8 +71,9 @@ def generate_post_path(title: str, posts_dir: Path) -> Path:
         return dir_path / "index.md"
 
     counter = 2
-    while True:
+    while counter <= _MAX_SLUG_COLLISION:
         candidate = posts_dir / f"{base_name}-{counter}"
         if not candidate.exists():
             return candidate / "index.md"
         counter += 1
+    raise ValueError(f"Too many slug collisions for '{base_name}' (>{_MAX_SLUG_COLLISION})")

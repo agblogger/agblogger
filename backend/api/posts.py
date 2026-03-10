@@ -804,12 +804,17 @@ async def update_post_endpoint(
                     # Handle collision: append -2, -3, etc.
                     if new_dir.exists():
                         counter = 2
-                        while True:
+                        while counter <= 1000:
                             candidate = posts_parent / f"{new_dir_name}-{counter}"
                             if not candidate.exists():
                                 new_dir = candidate
                                 break
                             counter += 1
+                        else:
+                            raise HTTPException(
+                                status_code=500,
+                                detail="Too many directory name collisions",
+                            )
 
                     new_file_path = str(
                         (new_dir / "index.md").relative_to(content_manager.content_dir)

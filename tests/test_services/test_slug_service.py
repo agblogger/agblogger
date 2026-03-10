@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from backend.services.slug_service import generate_post_path, generate_post_slug
 
 
@@ -147,3 +149,32 @@ class TestGeneratePostPath:
         posts_dir.mkdir()
         result = generate_post_path("Test", posts_dir)
         assert isinstance(result, Path)
+
+
+class TestSlugCollisionCap:
+    def test_raises_after_1000_collisions(self, tmp_path: Path) -> None:
+        """generate_post_path must raise ValueError after 1000 collisions."""
+        from datetime import date
+
+        posts_dir = tmp_path / "posts"
+        posts_dir.mkdir()
+        slug = generate_post_slug("My Post")
+        today = date.today().isoformat()
+        (posts_dir / f"{today}-{slug}").mkdir()
+        for i in range(2, 1001):
+            (posts_dir / f"{today}-{slug}-{i}").mkdir()
+        with pytest.raises(ValueError, match="Too many slug collisions"):
+            generate_post_path("My Post", posts_dir)
+
+    def test_finds_slot_just_before_cap(self, tmp_path: Path) -> None:
+        from datetime import date
+
+        posts_dir = tmp_path / "posts"
+        posts_dir.mkdir()
+        slug = generate_post_slug("My Post")
+        today = date.today().isoformat()
+        (posts_dir / f"{today}-{slug}").mkdir()
+        for i in range(2, 1000):
+            (posts_dir / f"{today}-{slug}-{i}").mkdir()
+        result = generate_post_path("My Post", posts_dir)
+        assert result.parent.name == f"{today}-{slug}-1000"
