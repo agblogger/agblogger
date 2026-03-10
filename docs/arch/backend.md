@@ -64,14 +64,13 @@ All content-mutating API endpoints (post create/update/delete, admin page CRUD, 
 
 | Router | Prefix | Purpose |
 |--------|--------|---------|
-| `auth` | `/api/auth` | Cookie session login, non-browser token login, invite-based register, refresh/logout, invite management, PAT management, current user |
+| `auth` | `/api/auth` | Cookie session login, non-browser token login, invite-based register, refresh/logout, profile updates (username, display name), invite management, PAT management, current user |
 | `posts` | `/api/posts` | Search/list/read for all users; create/update/delete/upload/edit-data/asset-management are admin-only |
 | `labels` | `/api/labels` | Public label reads plus admin-only label CRUD (create, update, delete) |
 | `pages` | `/api/pages` | Site config, rendered page content |
 | `sync` | `/api/sync` | Bidirectional sync protocol (admin-only) |
 | `crosspost` | `/api/crosspost` | Social account management, cross-posting, Bluesky/Mastodon/X/Facebook OAuth flows |
 | `render` | `/api/render` | Server-side Pandoc preview for the editor |
-| `auth` | `/api/auth` | Login, registration, token refresh, profile updates (username, display name), invites, PATs |
 | `admin` | `/api/admin` | Site settings, page management, password change (admin-only) |
 | `content` | `/api/content` | File serving for post assets and shared assets with canonical-path draft authorization |
 | `health` | `/api/health` | Health check with DB verification |

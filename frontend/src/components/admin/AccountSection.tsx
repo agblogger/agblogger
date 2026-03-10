@@ -177,7 +177,7 @@ export default function AccountSection({ busy, onSaving }: AccountSectionProps) 
                        disabled:opacity-50"
             />
             <p className="text-xs text-muted mt-1">
-              Letters, digits, dots, hyphens, or underscores. 3-50 characters.
+              Must start with a letter or digit. Letters, digits, dots, hyphens, or underscores. 3-50 characters.
             </p>
           </div>
 

@@ -1,4 +1,4 @@
-"""Profile update integration tests."""
+"""Profile update and username validation integration tests."""
 
 from __future__ import annotations
 
@@ -238,3 +238,67 @@ class TestUsernameChangeUpdatesFiles:
 
         content = (posts_dir / "index.md").read_text()
         assert "author: someone_else" in content
+
+
+class TestProfileUpdateEdgeCases:
+    async def test_update_username_and_display_name_simultaneously(
+        self, client: AsyncClient
+    ) -> None:
+        headers = await _login_admin(client)
+        resp = await client.patch(
+            "/api/auth/me",
+            json={"username": "newadmin", "display_name": "New Admin"},
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["username"] == "newadmin"
+        assert data["display_name"] == "New Admin"
+
+    async def test_whitespace_only_display_name_normalized_to_null(
+        self, client: AsyncClient
+    ) -> None:
+        headers = await _login_admin(client)
+        resp = await client.patch(
+            "/api/auth/me",
+            json={"display_name": "   "},
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["display_name"] is None
+
+    async def test_patch_me_requires_csrf_token(self, client: AsyncClient) -> None:
+        await _login_admin(client)
+        resp = await client.patch(
+            "/api/auth/me",
+            json={"display_name": "Hacker"},
+        )
+        assert resp.status_code == 403
+
+    async def test_get_me_reflects_username_change(self, client: AsyncClient) -> None:
+        headers = await _login_admin(client)
+        await client.patch(
+            "/api/auth/me",
+            json={"username": "newadmin"},
+            headers=headers,
+        )
+        resp = await client.get("/api/auth/me")
+        assert resp.status_code == 200
+        assert resp.json()["username"] == "newadmin"
+
+    async def test_register_rejects_long_display_name(self, client: AsyncClient) -> None:
+        headers = await _login_admin(client)
+        resp = await client.post("/api/auth/invites", json={}, headers=headers)
+        code = resp.json()["invite_code"]
+        resp = await client.post(
+            "/api/auth/register",
+            json={
+                "username": "longdisplay",
+                "email": "long@example.com",
+                "password": "password123",
+                "display_name": "A" * 101,
+                "invite_code": code,
+            },
+            headers=headers,
+        )
+        assert resp.status_code == 422
