@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import subprocess
@@ -135,7 +136,7 @@ async def sync_status(
         )
 
     server_manifest = await get_server_manifest(session)
-    server_current = scan_content_files(content_manager.content_dir)
+    server_current = await asyncio.to_thread(scan_content_files, content_manager.content_dir)
     plan = compute_sync_plan(client_manifest, server_manifest, server_current)
 
     conflicts = [
@@ -372,7 +373,7 @@ async def _sync_commit_inner(
     # Wrap manifest update and cache rebuild in try/except so sync still
     # returns even if post-commit operations fail (files are already committed to git).
     try:
-        current_files = scan_content_files(content_dir)
+        current_files = await asyncio.to_thread(scan_content_files, content_dir)
         await update_server_manifest(session, current_files)
     except (OSError, OperationalError, RuntimeError) as exc:
         logger.error("Manifest update failed during sync commit: %s", exc)
