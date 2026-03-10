@@ -390,6 +390,24 @@ Body content.
         assert post.author == "admin"
         assert not hasattr(post, "author_username")
 
+    def test_author_whitespace_stripped(self) -> None:
+        content = "---\ncreated_at: 2026-01-01\nauthor: '  Alice  '\n---\nBody\n"
+        post = parse_post(content)
+        assert post.author == "Alice"
+
+    def test_serialize_does_not_write_author_username(self) -> None:
+        now = now_utc()
+        post_data = PostData(
+            title="Test",
+            content="Body",
+            raw_content="",
+            created_at=now,
+            modified_at=now,
+            author="admin",
+        )
+        result = serialize_post(post_data)
+        assert "author_username" not in result
+
 
 class TestStripLeadingHeading:
     def test_strips_matching_heading(self) -> None:
