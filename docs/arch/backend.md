@@ -71,7 +71,8 @@ All content-mutating API endpoints (post create/update/delete, admin page CRUD, 
 | `sync` | `/api/sync` | Bidirectional sync protocol (admin-only) |
 | `crosspost` | `/api/crosspost` | Social account management, cross-posting, Bluesky/Mastodon/X/Facebook OAuth flows |
 | `render` | `/api/render` | Server-side Pandoc preview for the editor |
-| `admin` | `/api/admin` | Site settings, page management, display name, password change (admin-only) |
+| `auth` | `/api/auth` | Login, registration, token refresh, profile updates (username, display name), invites, PATs |
+| `admin` | `/api/admin` | Site settings, page management, password change (admin-only) |
 | `content` | `/api/content` | File serving for post assets and shared assets with canonical-path draft authorization |
 | `health` | `/api/health` | Health check with DB verification |
 

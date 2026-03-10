@@ -15,7 +15,7 @@ Uses `createBrowserRouter` (data router) with `RouterProvider` for full react-ro
 | `/labels/:labelId` | LabelPostsPage | Posts filtered by label |
 | `/labels/:labelId/settings` | LabelSettingsPage | Label names, parents, delete (admin-only mutations) |
 | `/editor/*` | EditorPage | Structured metadata bar, collapsible file strip, split-pane markdown editor |
-| `/admin` | AdminPage | Admin panel: site settings, pages, password, social accounts (admin required) |
+| `/admin` | AdminPage | Admin panel: site settings, pages, account (profile + password), social accounts (admin required) |
 
 ## Editor Auto-Save
 
@@ -39,7 +39,7 @@ The `FileStrip` component (`components/editor/FileStrip.tsx`) provides inline as
 
 ## Admin Settings
 
-The admin settings tab exposes the editable site-level fields (`title`, `description`, `timezone`) plus the current admin user's display name.
+The admin settings tab exposes the editable site-level fields (`title`, `description`, `timezone`). The account tab allows users to change their username and display name (via `PATCH /api/auth/me`), with the display name shown as the author on all posts. Username changes update the `author` field in all matching markdown files on disk and refresh the posts cache. The account tab also contains the password change form.
 
 ## State Management
 
