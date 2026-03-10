@@ -20,7 +20,6 @@ def test_write_site_config_roundtrip(tmp_path: Path) -> None:
     config = SiteConfig(
         title="My Test Blog",
         description="A test blog",
-        default_author="Test Author",
         timezone="America/New_York",
         pages=[
             PageConfig(id="timeline", title="Posts"),
@@ -35,7 +34,6 @@ def test_write_site_config_roundtrip(tmp_path: Path) -> None:
 
     assert result.title == "My Test Blog"
     assert result.description == "A test blog"
-    assert result.default_author == "Test Author"
     assert result.timezone == "America/New_York"
     assert len(result.pages) == 3
     assert result.pages[0].id == "timeline"

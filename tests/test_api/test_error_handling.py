@@ -744,7 +744,6 @@ class TestAdminOSError:
                 json={
                     "title": "New Title",
                     "description": "desc",
-                    "default_author": "Admin",
                     "timezone": "UTC",
                 },
                 headers={"Authorization": f"Bearer {token}"},

@@ -22,7 +22,6 @@ class SiteConfig:
 
     title: str = "My Blog"
     description: str = ""
-    default_author: str = ""
     timezone: str = "UTC"
     pages: list[PageConfig] = field(default_factory=list)
 
@@ -31,7 +30,6 @@ class SiteConfig:
         return SiteConfig(
             title=self.title,
             description=self.description,
-            default_author=self.default_author,
             timezone=self.timezone,
             pages=pages,
         )
@@ -107,7 +105,6 @@ def parse_site_config(content_dir: Path) -> SiteConfig:
     return SiteConfig(
         title=site_data.get("title", "My Blog"),
         description=site_data.get("description", ""),
-        default_author=site_data.get("default_author", ""),
         timezone=timezone,
         pages=pages,
     )
@@ -182,7 +179,6 @@ def write_site_config(content_dir: Path, config: SiteConfig) -> None:
     site_data: dict[str, Any] = {
         "title": config.title,
         "description": config.description,
-        "default_author": config.default_author,
         "timezone": config.timezone,
     }
 

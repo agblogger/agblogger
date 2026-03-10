@@ -71,7 +71,6 @@ async def get_settings(
     return SiteSettingsResponse(
         title=cfg.title,
         description=cfg.description,
-        default_author=cfg.default_author,
         timezone=cfg.timezone,
     )
 
@@ -92,7 +91,6 @@ async def update_settings(
                 content_manager,
                 title=body.title,
                 description=body.description,
-                default_author=body.default_author,
                 timezone=body.timezone,
             )
         except OSError as exc:
@@ -102,7 +100,6 @@ async def update_settings(
         return SiteSettingsResponse(
             title=cfg.title,
             description=cfg.description,
-            default_author=cfg.default_author,
             timezone=cfg.timezone,
         )
 

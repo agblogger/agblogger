@@ -1635,7 +1635,6 @@ class TestAdmin:
         assert resp.status_code == 200
         data = resp.json()
         assert data["title"] == "Test Blog"
-        assert data["default_author"] == "Admin"
         assert "timezone" in data
 
     @pytest.mark.asyncio
@@ -1651,7 +1650,6 @@ class TestAdmin:
             json={
                 "title": "Updated Blog",
                 "description": "New desc",
-                "default_author": "Admin",
                 "timezone": "US/Eastern",
             },
             headers={"Authorization": f"Bearer {token}"},

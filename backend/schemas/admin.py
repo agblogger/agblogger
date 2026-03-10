@@ -12,7 +12,6 @@ class SiteSettingsUpdate(BaseModel):
 
     title: str = Field(min_length=1, max_length=200)
     description: str = Field(default="", max_length=1000)
-    default_author: str = Field(default="", max_length=100)
     timezone: str = Field(default="UTC", max_length=100)
 
     @field_validator("timezone")
@@ -30,7 +29,6 @@ class SiteSettingsResponse(BaseModel):
 
     title: str
     description: str
-    default_author: str
     timezone: str
 
 

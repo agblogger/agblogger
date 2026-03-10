@@ -39,7 +39,6 @@ def update_site_settings(
     *,
     title: str,
     description: str,
-    default_author: str,
     timezone: str,
 ) -> SiteConfig:
     """Update site settings in index.toml and reload config."""
@@ -47,7 +46,6 @@ def update_site_settings(
     updated = SiteConfig(
         title=title,
         description=description,
-        default_author=cfg.default_author,
         timezone=timezone,
         pages=cfg.pages,
     )
