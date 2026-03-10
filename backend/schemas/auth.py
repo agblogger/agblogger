@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import re
 from typing import Literal
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
+
+_USERNAME_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]*$")
 
 
 def _default_token_type() -> Literal["bearer"]:
@@ -26,6 +29,18 @@ class RegisterRequest(BaseModel):
     password: str = Field(min_length=8, max_length=200)
     display_name: str | None = None
     invite_code: str | None = Field(default=None, min_length=1, max_length=200)
+
+    @field_validator("username")
+    @classmethod
+    def validate_username_format(cls, v: str) -> str:
+        """Ensure username is safe for DB and YAML storage."""
+        if not _USERNAME_PATTERN.match(v):
+            msg = (
+                "Username must start with a letter or digit and contain only"
+                " letters, digits, dots, hyphens, or underscores"
+            )
+            raise ValueError(msg)
+        return v
 
 
 class TokenResponse(BaseModel):
