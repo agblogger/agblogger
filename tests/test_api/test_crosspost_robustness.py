@@ -167,3 +167,48 @@ class TestUpsertSocialAccountRaceCondition:
                         account_name="race.bsky.social",
                     )
                 assert exc_info.value.status_code == 409
+
+
+class TestFacebookCallbackMissingPagesKey:
+    """Issue: facebook_callback KeyError when 'pages' key absent in API response."""
+
+    @pytest.mark.asyncio
+    async def test_facebook_callback_missing_pages_returns_502(
+        self, client: AsyncClient
+    ) -> None:
+        """When exchange_facebook_oauth_token returns a dict without 'pages', return 502."""
+        import time
+
+        transport = client._transport
+        assert isinstance(transport, ASGITransport)
+        app = transport.app
+
+        # Inject a valid pending state into the state store
+        state_token = "test-state-token-abc123"
+        state_store = app.state.facebook_oauth_state
+        state_store._entries[state_token] = (
+            {
+                "app_id": "fake-app-id",
+                "app_secret": "fake-app-secret",
+                "redirect_uri": "http://localhost/api/crosspost/facebook/callback",
+                "user_id": 1,
+            },
+            time.time(),
+        )
+
+        # Mock exchange_facebook_oauth_token to return a response missing 'pages'
+        mock_result: dict[str, Any] = {"access_token": "some-token"}
+
+        with patch(
+            "backend.crosspost.facebook.exchange_facebook_oauth_token",
+            new_callable=AsyncMock,
+            return_value=mock_result,
+        ):
+            resp = await client.get(
+                "/api/crosspost/facebook/callback",
+                params={"state": state_token, "code": "fake-auth-code"},
+                follow_redirects=False,
+            )
+
+        assert resp.status_code == 502
+        assert "page" in resp.json()["detail"].lower()

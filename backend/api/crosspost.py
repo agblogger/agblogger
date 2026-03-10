@@ -899,7 +899,12 @@ async def facebook_callback(
             detail="Facebook authentication failed",
         ) from exc
 
-    raw_pages = result["pages"]
+    raw_pages = result.get("pages")
+    if raw_pages is None:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Facebook API response missing page data",
+        )
     if not isinstance(raw_pages, list):
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
