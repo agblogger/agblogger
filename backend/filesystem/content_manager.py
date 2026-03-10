@@ -6,7 +6,7 @@ import hashlib
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 import yaml
 
@@ -17,9 +17,6 @@ from backend.filesystem.toml_manager import (
     parse_labels_config,
     parse_site_config,
 )
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -179,20 +176,27 @@ class ContentManager:
             return False
 
         if delete_assets and full_path.name == "index.md":
-            post_dir = full_path.parent
-            resolved_dir = post_dir.resolve()
-            parent = post_dir.parent
-            # Remove symlinks in the parent directory pointing to this directory
-            try:
-                for item in parent.iterdir():
-                    try:
-                        if item.is_symlink() and item.resolve() == resolved_dir:
-                            item.unlink()
-                    except OSError as exc:
-                        logger.warning("Failed to clean up symlink %s: %s", item, exc)
-            except OSError as exc:
-                logger.warning("Failed to iterate parent directory %s: %s", parent, exc)
-            shutil.rmtree(post_dir)
+            # Use the non-resolved path so we can detect if the directory
+            # itself is a symlink (resolve() in _validate_path follows symlinks).
+            raw_post_dir: Path = (self.content_dir / rel_path).parent
+            parent = raw_post_dir.parent
+            if raw_post_dir.is_symlink():
+                # The directory is a symlink (created during title rename);
+                # remove only the symlink, not the target it points to.
+                raw_post_dir.unlink()
+            else:
+                resolved_dir = raw_post_dir.resolve()
+                # Remove symlinks in the parent directory pointing to this directory
+                try:
+                    for item in parent.iterdir():
+                        try:
+                            if item.is_symlink() and item.resolve() == resolved_dir:
+                                item.unlink()
+                        except OSError as exc:
+                            logger.warning("Failed to clean up symlink %s: %s", item, exc)
+                except OSError as exc:
+                    logger.warning("Failed to iterate parent directory %s: %s", parent, exc)
+                shutil.rmtree(raw_post_dir)
         else:
             full_path.unlink()
         return True

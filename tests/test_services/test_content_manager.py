@@ -265,3 +265,31 @@ class TestPlainExcerptRegexSafety:
         cm.get_plain_excerpt(post_data)
         elapsed = time.monotonic() - start
         assert elapsed < 1.0, f"Regex took {elapsed:.1f}s — backtracking detected"
+
+
+class TestDeletePostSymlink:
+    """Deleting a symlinked post directory must not delete the symlink target."""
+
+    def test_delete_symlinked_post_does_not_delete_target(self, tmp_path: Path) -> None:
+        content_dir = tmp_path / "content"
+        content_dir.mkdir()
+        posts_dir = content_dir / "posts"
+        posts_dir.mkdir()
+        (content_dir / "index.toml").write_text('[site]\ntitle = "Test"\n')
+        (content_dir / "labels.toml").write_text("[labels]\n")
+
+        real_dir = posts_dir / "2026-01-01-real-post"
+        real_dir.mkdir()
+        (real_dir / "index.md").write_text("---\ntitle: Real\n---\nContent")
+        (real_dir / "image.png").write_bytes(b"PNG")
+
+        symlink_dir = posts_dir / "2026-01-01-old-name"
+        symlink_dir.symlink_to(real_dir)
+
+        cm = ContentManager(content_dir)
+        cm.delete_post("posts/2026-01-01-old-name/index.md", delete_assets=True)
+
+        assert real_dir.exists()
+        assert (real_dir / "index.md").exists()
+        assert (real_dir / "image.png").exists()
+        assert not symlink_dir.exists()
