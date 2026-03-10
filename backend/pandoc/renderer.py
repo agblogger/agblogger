@@ -324,7 +324,7 @@ async def _render_markdown(
         except Exception as retry_exc:
             msg = f"Pandoc server unreachable after restart: {retry_exc}"
             raise RenderError(msg) from retry_exc
-    except httpx.ReadTimeout:
+    except httpx.TimeoutException:
         raise RenderError(f"Pandoc rendering timed out after {_RENDER_TIMEOUT}s") from None
 
     try:
@@ -335,6 +335,10 @@ async def _render_markdown(
         ) from None
     if "error" in data:
         raise RenderError(f"Pandoc rendering error: {str(data['error'])[:200]}")
+    if response.status_code >= 300:
+        raise RenderError(
+            f"Pandoc server returned non-2xx status ({response.status_code})"
+        )
 
     output = data.get("output", "")
     sanitized = sanitizer(output)

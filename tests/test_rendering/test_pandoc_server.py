@@ -515,6 +515,7 @@ class TestRenderViaServer:
         mock_server.base_url = "http://127.0.0.1:3031"
 
         mock_response = MagicMock()
+        mock_response.status_code = 200
         mock_response.raise_for_status = MagicMock()
         mock_response.json.return_value = {"output": "<p>Hello <strong>world</strong></p>\n"}
 
@@ -538,6 +539,7 @@ class TestRenderViaServer:
         mock_server.base_url = "http://127.0.0.1:3031"
 
         mock_response = MagicMock()
+        mock_response.status_code = 200
         mock_response.json.return_value = {
             "output": '<p>Hello <strong>world</strong> <img src="https://evil.example/x.png"></p>\n'
         }
@@ -569,6 +571,7 @@ class TestRenderViaServer:
         mock_server.base_url = "http://127.0.0.1:3031"
 
         success_response = MagicMock()
+        success_response.status_code = 200
         success_response.raise_for_status = MagicMock()
         success_response.json.return_value = {"output": "<p>ok</p>\n"}
 
@@ -595,6 +598,7 @@ class TestRenderViaServer:
         mock_server.base_url = "http://127.0.0.1:3031"
 
         success_response = MagicMock()
+        success_response.status_code = 200
         success_response.raise_for_status = MagicMock()
         success_response.json.return_value = {"output": "<p>ok</p>\n"}
 
@@ -621,6 +625,7 @@ class TestRenderViaServer:
         mock_server.base_url = "http://127.0.0.1:3031"
 
         success_response = MagicMock()
+        success_response.status_code = 200
         success_response.raise_for_status = MagicMock()
         success_response.json.return_value = {"output": "<p>ok</p>\n"}
 
@@ -755,6 +760,7 @@ class TestRendererShutdownRace:
         mock_server.base_url = "http://127.0.0.1:3031"
 
         mock_response = MagicMock()
+        mock_response.status_code = 200
         mock_response.json.return_value = {"output": "<p>ok</p>"}
 
         mock_client = AsyncMock()
@@ -878,3 +884,65 @@ class TestRenderError:
             pytest.raises(RenderError, match="parse error"),
         ):
             await renderer.render_markdown("bad")
+
+
+class TestRendererHttpxErrorHandling:
+    """Renderer must catch all httpx transport errors, not just NetworkError and ReadTimeout."""
+
+    async def test_write_timeout_raises_render_error(self) -> None:
+        """httpx.WriteTimeout must be caught and wrapped in RenderError."""
+        from backend.pandoc import renderer
+        from backend.pandoc.renderer import RenderError
+
+        mock_server = MagicMock(spec=PandocServer)
+        mock_server.base_url = "http://127.0.0.1:3031"
+
+        mock_client = AsyncMock()
+        mock_client.post.side_effect = httpx.WriteTimeout("timed out writing request")
+
+        with (
+            patch.object(renderer, "_server", mock_server),
+            patch.object(renderer, "_http_client", mock_client),
+            pytest.raises(RenderError, match="timed out"),
+        ):
+            await renderer.render_markdown("# test")
+
+    async def test_pool_timeout_raises_render_error(self) -> None:
+        """httpx.PoolTimeout must be caught and wrapped in RenderError."""
+        from backend.pandoc import renderer
+        from backend.pandoc.renderer import RenderError
+
+        mock_server = MagicMock(spec=PandocServer)
+        mock_server.base_url = "http://127.0.0.1:3031"
+
+        mock_client = AsyncMock()
+        mock_client.post.side_effect = httpx.PoolTimeout("timed out waiting for pool")
+
+        with (
+            patch.object(renderer, "_server", mock_server),
+            patch.object(renderer, "_http_client", mock_client),
+            pytest.raises(RenderError, match="timed out"),
+        ):
+            await renderer.render_markdown("# test")
+
+    async def test_non_200_without_error_key_raises_render_error(self) -> None:
+        """Non-2xx pandoc response without 'error' key must raise RenderError, not return empty string."""
+        from backend.pandoc import renderer
+        from backend.pandoc.renderer import RenderError
+
+        mock_server = MagicMock(spec=PandocServer)
+        mock_server.base_url = "http://127.0.0.1:3031"
+
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        mock_response.json.return_value = {"message": "internal server error"}
+
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_response
+
+        with (
+            patch.object(renderer, "_server", mock_server),
+            patch.object(renderer, "_http_client", mock_client),
+            pytest.raises(RenderError, match="non-2xx"),
+        ):
+            await renderer.render_markdown("# test")
