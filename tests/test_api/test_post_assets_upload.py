@@ -30,11 +30,11 @@ def app_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
     hello_post_dir.mkdir()
     (hello_post_dir / "index.md").write_text(
         "---\ntitle: Hello World\ncreated_at: 2026-02-02 22:21:29.975359+00\n"
-        "author: Admin\nauthor_username: admin\nlabels: []\n---\n\nTest content.\n"
+        "author: Admin\nlabels: []\n---\n\nTest content.\n"
     )
     (posts_dir / "legacy-post.md").write_text(
         "---\ntitle: Legacy Post\ncreated_at: 2026-02-03 09:00:00+00\n"
-        "author: Admin\nauthor_username: admin\nlabels: []\n---\n\nLegacy content.\n"
+        "author: Admin\nlabels: []\n---\n\nLegacy content.\n"
     )
     (tmp_content_dir / "labels.toml").write_text("[labels]\n")
     db_path = tmp_path / "test.db"

@@ -26,7 +26,6 @@ class TestFrontMatterNormalization:
             uploaded_files=["posts/new.md"],
             old_manifest={},
             content_dir=content_dir,
-            default_author="Admin",
         )
         assert warnings == []
 
@@ -35,7 +34,6 @@ class TestFrontMatterNormalization:
         post = fm.loads((content_dir / "posts/new.md").read_text())
         assert "created_at" in post.metadata
         assert "modified_at" in post.metadata
-        assert post["author"] == "Admin"
 
     def test_edited_post_updates_modified_at(self, tmp_path: Path) -> None:
         """Edited posts have modified_at updated."""
@@ -59,7 +57,6 @@ class TestFrontMatterNormalization:
             uploaded_files=["posts/existing.md"],
             old_manifest=old_manifest,
             content_dir=content_dir,
-            default_author="Admin",
         )
 
         import frontmatter as fm
@@ -83,7 +80,6 @@ class TestFrontMatterNormalization:
             uploaded_files=["posts/dt.md"],
             old_manifest={},
             content_dir=content_dir,
-            default_author="",
         )
         assert warnings == []
 
@@ -107,7 +103,6 @@ class TestFrontMatterNormalization:
             uploaded_files=["posts/custom.md"],
             old_manifest={},
             content_dir=content_dir,
-            default_author="Admin",
         )
         assert any("custom_field" in w for w in warnings)
         assert any("weird_key" in w for w in warnings)
@@ -122,7 +117,6 @@ class TestFrontMatterNormalization:
             uploaded_files=["labels.toml"],
             old_manifest={},
             content_dir=content_dir,
-            default_author="Admin",
         )
         assert warnings == []
 
@@ -135,7 +129,6 @@ class TestFrontMatterNormalization:
             uploaded_files=["posts/../../etc/passwd"],
             old_manifest={},
             content_dir=content_dir,
-            default_author="Admin",
         )
         assert warnings == []
 
@@ -154,7 +147,6 @@ class TestFrontMatterNormalization:
             uploaded_files=["posts/date-only.md"],
             old_manifest={},
             content_dir=content_dir,
-            default_author="",
         )
         assert warnings == []
 

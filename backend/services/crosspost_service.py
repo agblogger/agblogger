@@ -137,9 +137,7 @@ async def crosspost(
     cached_post = await _resolve_maybe_awaitable(post_query_result.scalar_one_or_none())
 
     is_draft = cached_post.is_draft if cached_post is not None else post_data.is_draft
-    owner_username = (
-        cached_post.author if cached_post is not None else post_data.author
-    )
+    owner_username = cached_post.author if cached_post is not None else post_data.author
     if is_draft and not actor.is_admin and owner_username != actor.username:
         msg = f"Post not found: {post_path}"
         raise PostNotFoundError(msg)

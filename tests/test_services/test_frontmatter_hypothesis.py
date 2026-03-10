@@ -203,7 +203,6 @@ class TestNormalizeFrontmatterProperties:
         metadata=_frontmatter_dict(),
         body=_post_body(),
         file_path=_safe_post_path(),
-        default_author=st.text(alphabet=_TEXT_ALPHA, min_size=0, max_size=24),
     )
     def test_new_post_normalization_preserves_unknown_fields_and_backfills_required_fields(
         self,
@@ -211,7 +210,6 @@ class TestNormalizeFrontmatterProperties:
         metadata: dict[str, object],
         body: str,
         file_path: str,
-        default_author: str,
     ) -> None:
         content_dir = tmp_path / "content"
         (content_dir / "posts").mkdir(parents=True, exist_ok=True)
@@ -222,7 +220,6 @@ class TestNormalizeFrontmatterProperties:
                 uploaded_files=[file_path],
                 old_manifest={},
                 content_dir=content_dir,
-                default_author=default_author,
             )
 
         post = fm.loads((content_dir / file_path).read_text(encoding="utf-8"))
@@ -230,9 +227,6 @@ class TestNormalizeFrontmatterProperties:
         assert "modified_at" in post.metadata
         assert isinstance(post.get("title"), str)
         assert post["title"].strip() != ""
-
-        if "author" not in metadata and default_author:
-            assert post["author"] == default_author
 
         unknown_keys = [key for key in metadata if key not in RECOGNIZED_FIELDS]
         for key in unknown_keys:
@@ -244,7 +238,6 @@ class TestNormalizeFrontmatterProperties:
         metadata=_frontmatter_dict(),
         body=_post_body(),
         file_path=_safe_post_path(),
-        default_author=st.text(alphabet=_TEXT_ALPHA, min_size=0, max_size=24),
     )
     def test_edited_post_always_refreshes_modified_at(
         self,
@@ -252,7 +245,6 @@ class TestNormalizeFrontmatterProperties:
         metadata: dict[str, object],
         body: str,
         file_path: str,
-        default_author: str,
     ) -> None:
         content_dir = tmp_path / "content"
         (content_dir / "posts").mkdir(parents=True, exist_ok=True)
@@ -271,7 +263,6 @@ class TestNormalizeFrontmatterProperties:
                 uploaded_files=[file_path],
                 old_manifest=old_manifest,
                 content_dir=content_dir,
-                default_author=default_author,
             )
 
         post = fm.loads((content_dir / file_path).read_text(encoding="utf-8"))
@@ -303,7 +294,6 @@ class TestNormalizeFrontmatterProperties:
                 uploaded_files=[file_path],
                 old_manifest={},
                 content_dir=content_dir,
-                default_author="Admin",
             )
 
         assert any("invalid path" in warning for warning in warnings)

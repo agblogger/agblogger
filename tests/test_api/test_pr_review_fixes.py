@@ -50,7 +50,7 @@ def app_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
     (posts_dir / "2026-02-02-hello-world").mkdir()
     (posts_dir / "2026-02-02-hello-world" / "index.md").write_text(
         "---\ntitle: Hello World\ncreated_at: 2026-02-02 22:21:29.975359+00\n"
-        "author: Admin\nauthor_username: admin\nlabels: []\n---\n\nTest content.\n"
+        "author: Admin\nlabels: []\n---\n\nTest content.\n"
     )
     (tmp_content_dir / "labels.toml").write_text("[labels]\n")
     db_path = tmp_path / "test.db"
@@ -393,7 +393,7 @@ class TestIssue11SymlinkRollbackOnCommitFailure:
         post_dir.mkdir()
         (post_dir / "index.md").write_text(
             "---\ntitle: Original Title\ncreated_at: 2026-02-02 22:21:29+00\n"
-            "author: Admin\nauthor_username: admin\nlabels: []\n---\nContent here.\n"
+            "author: Admin\nlabels: []\n---\nContent here.\n"
         )
 
         db_path = tmp_path / "test.db"
@@ -517,7 +517,7 @@ class TestIssue3SyncNoPathLeak:
                         (
                             "posts/test-path-leak.md",
                             b"---\ntitle: T\ncreated_at: 2026-02-02 22:21:29+00\n"
-                            b"author: Admin\nauthor_username: admin\nlabels: []\n"
+                            b"author: Admin\nlabels: []\n"
                             b"---\nBody",
                             "text/plain",
                         ),
@@ -592,7 +592,7 @@ class TestIssue14SyncDeletionFailureCount:
                     (
                         "posts/to-delete.md",
                         b"---\ntitle: X\ncreated_at: 2026-02-02 22:21:29+00\n"
-                        b"author: Admin\nauthor_username: admin\nlabels: []\n"
+                        b"author: Admin\nlabels: []\n"
                         b"---\nBody",
                         "text/plain",
                     ),

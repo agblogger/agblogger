@@ -43,7 +43,7 @@ def app_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
     (posts_dir / "hello.md").write_text(
         "---\ntitle: Hello\ncreated_at: 2026-01-01 00:00:00+00:00\n"
         "modified_at: 2026-01-01 00:00:00+00:00\nauthor: Admin\n"
-        "author_username: admin\nlabels: []\n---\nHello\n"
+        "labels: []\n---\nHello\n"
     )
     (tmp_content_dir / "labels.toml").write_text("[labels]\n")
 

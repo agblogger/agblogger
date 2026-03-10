@@ -34,7 +34,7 @@ class TestNormalizeNewPost:
     """Tests for new files (not in old_manifest)."""
 
     def test_fills_missing_created_at(self, tmp_path: Path) -> None:
-        """File with no front matter gets created_at, modified_at, author filled."""
+        """File with no front matter gets created_at and modified_at filled."""
         content_dir = tmp_path / "content"
         (content_dir / "posts").mkdir(parents=True)
         _write_post(content_dir, "posts/hello.md", "---\n---\n# Hello\n")
@@ -47,13 +47,11 @@ class TestNormalizeNewPost:
                 uploaded_files=["posts/hello.md"],
                 old_manifest={},
                 content_dir=content_dir,
-                default_author="Admin",
             )
 
         post = _read_post(content_dir, "posts/hello.md")
         assert post["created_at"] == FROZEN_NOW
         assert post["modified_at"] == FROZEN_NOW
-        assert post["author"] == "Admin"
         assert warnings == []
 
     def test_fills_missing_fields_preserves_existing(self, tmp_path: Path) -> None:
@@ -70,7 +68,6 @@ class TestNormalizeNewPost:
                 uploaded_files=["posts/hello.md"],
                 old_manifest={},
                 content_dir=content_dir,
-                default_author="Admin",
             )
 
         post = _read_post(content_dir, "posts/hello.md")
@@ -92,7 +89,6 @@ class TestNormalizeNewPost:
                 uploaded_files=["posts/hello.md"],
                 old_manifest={},
                 content_dir=content_dir,
-                default_author="Admin",
             )
 
         post = _read_post(content_dir, "posts/hello.md")
@@ -112,7 +108,6 @@ class TestNormalizeNewPost:
                 uploaded_files=["posts/hello.md"],
                 old_manifest={},
                 content_dir=content_dir,
-                default_author="Admin",
             )
 
         post = _read_post(content_dir, "posts/hello.md")
@@ -132,7 +127,6 @@ class TestNormalizeNewPost:
                 uploaded_files=["posts/hello.md"],
                 old_manifest={},
                 content_dir=content_dir,
-                default_author="Admin",
             )
 
         post = _read_post(content_dir, "posts/hello.md")
@@ -152,7 +146,6 @@ class TestNormalizeNewPost:
                 uploaded_files=["posts/hello.md"],
                 old_manifest={},
                 content_dir=content_dir,
-                default_author="Admin",
             )
 
         post = _read_post(content_dir, "posts/hello.md")
@@ -185,7 +178,6 @@ class TestNormalizeEditedPost:
                 uploaded_files=["posts/hello.md"],
                 old_manifest=old_manifest,
                 content_dir=content_dir,
-                default_author="Admin",
             )
 
         post = _read_post(content_dir, "posts/hello.md")
@@ -193,7 +185,7 @@ class TestNormalizeEditedPost:
         assert post["created_at"] == "2026-01-01 10:00:00.000000+0000"
 
     def test_edit_preserves_existing_author(self, tmp_path: Path) -> None:
-        """Author from file is kept, not overwritten by default_author."""
+        """Author from file is preserved during normalization."""
         content_dir = tmp_path / "content"
         (content_dir / "posts").mkdir(parents=True)
         _write_post(
@@ -212,7 +204,6 @@ class TestNormalizeEditedPost:
                 uploaded_files=["posts/hello.md"],
                 old_manifest=old_manifest,
                 content_dir=content_dir,
-                default_author="DefaultAdmin",
             )
 
         post = _read_post(content_dir, "posts/hello.md")
@@ -238,7 +229,6 @@ class TestNormalizeEditedPost:
                 uploaded_files=["posts/hello.md"],
                 old_manifest=old_manifest,
                 content_dir=content_dir,
-                default_author="Admin",
             )
 
         post = _read_post(content_dir, "posts/hello.md")
@@ -264,7 +254,6 @@ class TestNormalizeEditedPost:
                 uploaded_files=["posts/hello.md"],
                 old_manifest=old_manifest,
                 content_dir=content_dir,
-                default_author="Admin",
             )
 
         post = _read_post(content_dir, "posts/hello.md")
@@ -294,7 +283,6 @@ class TestNormalizeUnrecognizedFields:
                 uploaded_files=["posts/hello.md"],
                 old_manifest={},
                 content_dir=content_dir,
-                default_author="Admin",
             )
 
         assert len(warnings) == 2
@@ -319,7 +307,6 @@ class TestNormalizeUnrecognizedFields:
                 uploaded_files=["posts/hello.md"],
                 old_manifest={},
                 content_dir=content_dir,
-                default_author="Admin",
             )
 
         post = _read_post(content_dir, "posts/hello.md")
@@ -343,7 +330,6 @@ class TestNormalizeTitleBackfill:
                 uploaded_files=["posts/hello.md"],
                 old_manifest={},
                 content_dir=content_dir,
-                default_author="Admin",
             )
 
         post = _read_post(content_dir, "posts/hello.md")
@@ -368,7 +354,6 @@ class TestNormalizeTitleBackfill:
                 uploaded_files=["posts/hello.md"],
                 old_manifest={},
                 content_dir=content_dir,
-                default_author="Admin",
             )
 
         post = _read_post(content_dir, "posts/hello.md")
@@ -388,7 +373,6 @@ class TestNormalizeTitleBackfill:
                 uploaded_files=["posts/my-cool-post.md"],
                 old_manifest={},
                 content_dir=content_dir,
-                default_author="Admin",
             )
 
         post = _read_post(content_dir, "posts/my-cool-post.md")
@@ -414,7 +398,6 @@ class TestNormalizeTitleBackfill:
                 uploaded_files=["posts/hello.md"],
                 old_manifest=old_manifest,
                 content_dir=content_dir,
-                default_author="Admin",
             )
 
         post = _read_post(content_dir, "posts/hello.md")
@@ -439,7 +422,6 @@ class TestNormalizeTitleBackfill:
                 uploaded_files=["posts/hello.md"],
                 old_manifest={},
                 content_dir=content_dir,
-                default_author="Admin",
             )
 
         post = _read_post(content_dir, "posts/hello.md")
@@ -461,7 +443,6 @@ class TestNormalizeSkipNonPosts:
             uploaded_files=["index.toml"],
             old_manifest={},
             content_dir=content_dir,
-            default_author="Admin",
         )
 
         assert warnings == []
@@ -478,7 +459,6 @@ class TestNormalizeSkipNonPosts:
             uploaded_files=["about.md"],
             old_manifest={},
             content_dir=content_dir,
-            default_author="Admin",
         )
 
         assert warnings == []
@@ -493,7 +473,6 @@ class TestNormalizeSkipNonPosts:
             uploaded_files=["posts/missing.md"],
             old_manifest={},
             content_dir=content_dir,
-            default_author="Admin",
         )
 
         assert warnings == []

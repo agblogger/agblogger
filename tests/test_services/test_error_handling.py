@@ -194,7 +194,6 @@ class TestSyncYamlError:
             uploaded_files=["posts/bad.md"],
             old_manifest={},
             content_dir=tmp_path,
-            default_author="admin",
         )
         assert any("parse error" in w for w in warnings)
 
@@ -304,7 +303,6 @@ class TestSyncTimestampNarrowing:
             uploaded_files=["posts/test.md"],
             old_manifest={},
             content_dir=tmp_path,
-            default_author="admin",
         )
         # ValueError from parse_datetime("valid") is still caught
         assert any("invalid created_at" in w for w in warnings)
