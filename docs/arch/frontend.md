@@ -39,7 +39,7 @@ The `FileStrip` component (`components/editor/FileStrip.tsx`) provides inline as
 
 ## Admin Settings
 
-The admin settings tab exposes the editable site-level fields (`title`, `description`, `timezone`) plus the current admin user's display name. It does not expose `site.default_author` directly; in the single-editor model, the backend keeps that value synchronized to the sole admin user's display name or username.
+The admin settings tab exposes the editable site-level fields (`title`, `description`, `timezone`) plus the current admin user's display name.
 
 ## State Management
 

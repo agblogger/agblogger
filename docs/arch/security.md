@@ -88,7 +88,7 @@ Protected endpoints use FastAPI dependency injection (`backend/api/deps.py`):
 
 ### Draft Visibility
 
-Draft posts and their co-located assets are visible only to their author. Ownership is enforced with the stable `author_username` field in post front matter and `PostCache`, with limited legacy fallback only while rebuilding older content that lacks the field. The content endpoint (`backend/api/content.py:_check_draft_access()`) authorizes against the resolved canonical path, not just the requested path, so renamed-directory symlinks cannot expose draft assets. Deleting a directory-backed draft removes its co-located assets even when `delete_assets=false`, preventing orphaned draft assets from becoming public after deletion. Non-authors receive 404 (not 403) to avoid information disclosure.
+Draft posts and their co-located assets are visible only to their author. Ownership is determined by the `author` field in post front matter (which stores the username) and `PostCache`. The content endpoint (`backend/api/content.py:_check_draft_access()`) authorizes against the resolved canonical path, not just the requested path, so renamed-directory symlinks cannot expose draft assets. Deleting a directory-backed draft removes its co-located assets even when `delete_assets=false`, preventing orphaned draft assets from becoming public after deletion. Non-authors receive 404 (not 403) to avoid information disclosure.
 
 ### Password Rotation
 

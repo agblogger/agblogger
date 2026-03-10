@@ -31,7 +31,7 @@
 
 Public reads require no authentication. The `get_current_user()` dependency returns `None` for unauthenticated requests.
 
-**Draft visibility**: Draft posts and their co-located assets are visible only to their author for read endpoints. The post listing endpoint filters drafts by `author_username`, a stable owner field stored in post front matter and cached in `PostCache`. Cache rebuilds and sync normalize older content by backfilling `author_username` when ownership can be resolved safely. Direct access to draft post pages and content files enforces the same owner-only restriction, including legacy flat draft markdown files under `posts/*.md`. Content authorization is based on the resolved canonical path, so renamed-directory symlinks cannot bypass draft checks. Deleting a directory-backed draft now removes its co-located assets even when `delete_assets=false`, preventing orphaned draft files from becoming public. Editing endpoints are admin-only regardless of draft owner.
+**Draft visibility**: Draft posts and their co-located assets are visible only to their author for read endpoints. The post listing endpoint filters drafts by `author`, which stores the username in post front matter and is cached in `PostCache`. Direct access to draft post pages and content files enforces the same owner-only restriction, including legacy flat draft markdown files under `posts/*.md`. Content authorization is based on the resolved canonical path, so renamed-directory symlinks cannot bypass draft checks. Deleting a directory-backed draft now removes its co-located assets even when `delete_assets=false`, preventing orphaned draft files from becoming public. Editing endpoints are admin-only regardless of draft owner.
 
 ## Admin Bootstrap
 

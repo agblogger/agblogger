@@ -30,7 +30,7 @@ On startup, the lifespan handler:
 8. Initializes the `ContentManager`.
 9. Initializes the `GitService` (creates a git repo in the content directory if one doesn't exist).
 10. Loads or creates the AT Protocol OAuth ES256 keypair in a private state directory alongside the configured database (outside `content/`) and initializes OAuth state stores for Bluesky, Mastodon, X, and Facebook on `app.state`.
-11. Creates the admin user if it doesn't exist, then synchronizes `site.default_author` to that sole admin user's current display name (falling back to username) when the install has exactly one admin.
+11. Creates the admin user if it doesn't exist.
 12. Starts the pandoc server (`PandocServer`) and initializes the renderer. Pandoc is a
     required dependency — if startup fails, the server aborts with a critical log message.
 13. Rebuilds the full database cache from the filesystem.
@@ -79,7 +79,7 @@ All content-mutating API endpoints (post create/update/delete, admin page CRUD, 
 
 The database serves as a **cache**, not the source of truth:
 
-- **`PostCache`** — Cached post metadata: file path, title, display author, stable owner username (`author_username`), timestamps (`DateTime(timezone=True)`, stored as UTC), draft status, content hash (SHA-256), rendered excerpt (Pandoc HTML), rendered HTML.
+- **`PostCache`** — Cached post metadata: file path, title, author username (display names resolved via LEFT JOIN against the users table), timestamps (`DateTime(timezone=True)`, stored as UTC), draft status, content hash (SHA-256), rendered excerpt (Pandoc HTML), rendered HTML.
 - **`PostsFTS`** — SQLite FTS5 virtual table for full-text search over title and content. **Limitation:** FTS5's default tokenizer does not segment CJK (Chinese, Japanese, Korean) text, so CJK queries may not return expected results. A custom tokenizer (e.g., `unicode61` with ICU) would be needed for CJK support.
 - **`LabelCache`** — Label with ID, display names (JSON array), and implicit flag.
 - **`LabelParentCache`** — DAG edge table (label_id → parent_id).

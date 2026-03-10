@@ -449,7 +449,6 @@ def normalize_post_frontmatter(
     uploaded_files: list[str],
     old_manifest: dict[str, FileEntry],
     content_dir: Path,
-    default_author: str,
 ) -> list[str]:
     """Normalize YAML front matter for uploaded post files during sync.
 
@@ -531,16 +530,12 @@ def normalize_post_frontmatter(
             post["modified_at"] = current_time
             if "created_at" not in post.metadata:
                 post["created_at"] = current_time
-            if "author" not in post.metadata and default_author:
-                post["author"] = default_author
         else:
-            # New post: fill missing timestamps and author
+            # New post: fill missing timestamps
             if "created_at" not in post.metadata:
                 post["created_at"] = current_time
             if "modified_at" not in post.metadata:
                 post["modified_at"] = post["created_at"]
-            if "author" not in post.metadata and default_author:
-                post["author"] = default_author
 
         # Backfill title from first heading if not present or not a valid string
         raw_title = post.get("title")

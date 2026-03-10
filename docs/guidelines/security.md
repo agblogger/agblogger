@@ -62,7 +62,7 @@ Do not inline auth checks like `if not user.is_admin: raise ...` inside handlers
 ### Draft visibility
 
 Draft posts and their co-located assets are visible only to their author. This is enforced in:
-- Post listing: filters drafts by matching authenticated user's username against the post's stable `author_username` owner field
+- Post listing: filters drafts by matching authenticated user's username against the post's `author` field
 - Content file serving: `backend/api/content.py:_check_draft_access()` returns 404 (not 403) for non-authors to avoid information disclosure
 - Direct post access: same author-matching logic
 

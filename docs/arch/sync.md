@@ -59,7 +59,7 @@ Client                                   Server
 
 During `sync_commit`, before scanning files and updating the manifest, the server applies `deleted_files` requested by the client and normalizes YAML front matter for uploaded `.md` files under `posts/`. Uploaded files are identified from the multipart form data in the commit request.
 
-- **New posts** (not in old server manifest): missing fields are filled with defaults — `created_at` and `modified_at` set to now, `author` from site config `default_author`.
+- **New posts** (not in old server manifest): missing fields are filled with defaults — `created_at` and `modified_at` set to now.
 - **Edited posts** (in old server manifest): existing fields are preserved, except `modified_at` which is set to the current server time.
 - **Malformed timestamps**: invalid `created_at` / `modified_at` values are treated as missing, replaced with server-time defaults, and reported as warnings in the sync response.
 - **Unrecognized fields** in front matter are preserved in the file but generate warnings in the commit response.

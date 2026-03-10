@@ -308,8 +308,7 @@ Posts are markdown files with YAML front matter in the `content/posts/` director
 title: Hello World
 created_at: 2026-02-02 22:21:29.975359+00
 modified_at: 2026-02-02 22:21:35.000000+00
-author: Admin
-author_username: admin
+author: admin
 labels: ["#swe"]
 ---
 

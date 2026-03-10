@@ -75,8 +75,7 @@ Posts use YAML front matter:
 title: Post Title
 created_at: 2026-02-02 22:21:29.975359+00
 modified_at: 2026-02-02 22:21:35.000000+00
-author: Admin
-author_username: admin
+author: admin
 labels: ["#swe"]
 ---
 
@@ -84,7 +83,7 @@ Content here...
 ```
 
 - **Title** is stored as a `title` field in YAML front matter. For backward compatibility, if `title` is absent, it is extracted from the first `# Heading` in the body, falling back to filename derivation. During sync, missing titles are backfilled from the first heading (or filename), and any matching leading heading is stripped from the body.
-- **Ownership** uses `author_username` as the stable draft owner identifier. The human-readable `author` field remains for display.
+- **Ownership**: `author` stores the username of the post creator. Display names are resolved at query time via a LEFT JOIN against the users table.
 - **Labels** are referenced as `#label-id` strings.
 - **Timestamps** use strict ISO output format; lax input is accepted via pendulum.
 - **Post-per-directory**: Posts created and shipped with AgBlogger use `posts/<date>-<slug>/index.md` with co-located assets. The slug is generated from the title via NFKD unicode normalization → ASCII → lowercase → hyphenated (max 80 chars). Editor file management targets this directory-backed layout.
@@ -118,7 +117,7 @@ Descendant queries use recursive CTEs in SQLite, enabling a "show me all posts i
 
 ### TOML Configuration
 
-`content/index.toml` defines site-level settings (title, timezone, page navigation, and a system-managed `default_author`). `content/labels.toml` defines the label hierarchy. Both are read at startup and on cache rebuild.
+`content/index.toml` defines site-level settings (title, timezone, and page navigation). `content/labels.toml` defines the label hierarchy. Both are read at startup and on cache rebuild.
 
 ## Key Design Decisions
 
