@@ -28,6 +28,10 @@ def app_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
         "---\ncreated_at: 2026-02-02 22:21:29.975359+00\n"
         "author: admin\nlabels: ['#swe']\n---\n# Hello World\n\nTest content.\n"
     )
+    (posts_dir / "no-author.md").write_text(
+        "---\ncreated_at: 2026-02-03 10:00:00+00\n"
+        "labels: []\n---\n# No Author Post\n\nPost without author field.\n"
+    )
     # Add labels
     (tmp_content_dir / "labels.toml").write_text(
         "[labels]\n[labels.swe]\nnames = ['software engineering']\n"
@@ -153,7 +157,7 @@ class TestPosts:
         )
         token = login_resp.json()["access_token"]
 
-        # Create 12 published posts (there's already 1 from fixture = 13 total)
+        # Create 12 published posts (there are already 2 from fixture = 14 total)
         for i in range(12):
             resp = await client.post(
                 "/api/posts",
@@ -171,7 +175,7 @@ class TestPosts:
         page1_resp = await client.get("/api/posts", params={"page": 1, "per_page": 5})
         assert page1_resp.status_code == 200
         page1_data = page1_resp.json()
-        assert page1_data["total"] == 13
+        assert page1_data["total"] == 14
         assert len(page1_data["posts"]) == 5
 
         # Request page 2 with per_page=5
@@ -927,6 +931,27 @@ class TestPostCRUD:
         data = resp.json()
         assert data["title"] == "Hello World Structured"
         assert data["labels"] == ["swe"]
+
+    @pytest.mark.asyncio
+    async def test_update_backfills_author_when_missing(self, client: AsyncClient) -> None:
+        login_resp = await client.post(
+            "/api/auth/token-login",
+            json={"username": "admin", "password": "admin123"},
+        )
+        token = login_resp.json()["access_token"]
+
+        resp = await client.put(
+            "/api/posts/posts/no-author.md",
+            json={
+                "title": "No Author Post",
+                "body": "Edited content.",
+                "labels": [],
+                "is_draft": False,
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["author"] == "Admin"  # backfilled from editing user
 
     @pytest.mark.asyncio
     async def test_create_and_edit_roundtrip(self, client: AsyncClient) -> None:

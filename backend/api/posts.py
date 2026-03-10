@@ -743,7 +743,7 @@ async def update_post_endpoint(
         existing_post_data = content_manager.read_post(file_path)
         if existing_post_data:
             created_at = existing_post_data.created_at
-            author = existing_post_data.author
+            author = existing_post_data.author or user.username
         else:
             logger.warning(
                 "Post %s exists in DB cache but not on filesystem; using cached metadata", file_path
