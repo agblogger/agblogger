@@ -208,3 +208,47 @@ class TestProfileUpdate:
             headers=headers,
         )
         assert resp.status_code == 200
+
+
+class TestUsernameChangeUpdatesFiles:
+    async def test_username_change_updates_post_author_on_disk(
+        self, client: AsyncClient, tmp_content_dir: Path
+    ) -> None:
+        posts_dir = tmp_content_dir / "posts" / "2026-01-01-test"
+        posts_dir.mkdir(parents=True, exist_ok=True)
+        (posts_dir / "index.md").write_text(
+            "---\ntitle: Test Post\nauthor: admin\n"
+            "created_at: 2026-01-01\nmodified_at: 2026-01-01\n---\nHello\n"
+        )
+
+        headers = await _login_admin(client)
+        resp = await client.patch(
+            "/api/auth/me",
+            json={"username": "newadmin"},
+            headers=headers,
+        )
+        assert resp.status_code == 200
+
+        content = (posts_dir / "index.md").read_text()
+        assert "author: newadmin" in content
+        assert "author: admin" not in content
+
+    async def test_username_change_does_not_affect_other_authors(
+        self, client: AsyncClient, tmp_content_dir: Path
+    ) -> None:
+        posts_dir = tmp_content_dir / "posts" / "2026-01-02-other"
+        posts_dir.mkdir(parents=True, exist_ok=True)
+        (posts_dir / "index.md").write_text(
+            "---\ntitle: Other Post\nauthor: someone_else\n"
+            "created_at: 2026-01-02\nmodified_at: 2026-01-02\n---\nContent\n"
+        )
+
+        headers = await _login_admin(client)
+        await client.patch(
+            "/api/auth/me",
+            json={"username": "newadmin"},
+            headers=headers,
+        )
+
+        content = (posts_dir / "index.md").read_text()
+        assert "author: someone_else" in content
