@@ -136,6 +136,11 @@ def parse_labels_config(content_dir: Path) -> dict[str, LabelDef]:
         # Handle both parent (single) and parents (list)
         raw_parent = label_info.get("parent")
         raw_parents = label_info.get("parents", [])
+        if not isinstance(raw_parents, list):
+            logger.warning(
+                "Skipping non-list 'parents' for label %r in labels.toml", label_id
+            )
+            raw_parents = []
         parents: list[str] = []
         if raw_parent:
             parents.append(str(raw_parent).removeprefix("#"))

@@ -93,3 +93,17 @@ class TestInvalidTomlResilience:
         (tmp_path / "index.toml").write_text('[site]\ntitle = "Blog"\ntimezone = 42\n')
         result = parse_site_config(tmp_path)
         assert result.timezone == "UTC"
+
+
+class TestNonIterableParents:
+    """Non-iterable parents value in labels.toml must not crash."""
+
+    def test_integer_parents_skipped_gracefully(self, tmp_path: Path) -> None:
+        labels_path = tmp_path / "labels.toml"
+        labels_path.write_text(
+            '[labels.broken]\nnames = ["broken"]\nparents = 42\n'
+            '[labels.good]\nnames = ["good"]\n'
+        )
+        result = parse_labels_config(tmp_path)
+        assert result["broken"].parents == []
+        assert "good" in result
