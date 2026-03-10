@@ -458,14 +458,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.exception_handler(RuntimeError)
     async def runtime_error_handler(request: Request, exc: RuntimeError) -> JSONResponse:
-        if isinstance(exc, (NotImplementedError, RecursionError)):
-            raise exc
         logger.error(
             "RuntimeError in %s %s: %s", request.method, request.url.path, exc, exc_info=exc
         )
         return JSONResponse(
             status_code=500,
-            content={"detail": "Internal processing error"},
+            content={"detail": "Internal server error"},
         )
 
     @app.exception_handler(OSError)
@@ -660,6 +658,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             status_code=503,
             content={"detail": "Database temporarily unavailable"},
         )
+
+    @app.exception_handler(AttributeError)
+    async def attribute_error_handler(request: Request, exc: AttributeError) -> JSONResponse:
+        logger.error(
+            "[BUG] AttributeError in %s %s: %s", request.method, request.url.path, exc, exc_info=exc
+        )
+        return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+
+    @app.exception_handler(IndexError)
+    async def index_error_handler(request: Request, exc: IndexError) -> JSONResponse:
+        logger.error(
+            "[BUG] IndexError in %s %s: %s", request.method, request.url.path, exc, exc_info=exc
+        )
+        return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
     # OG tag route — must be registered before the StaticFiles catch-all
     @app.get("/post/{file_path:path}", response_class=HTMLResponse, include_in_schema=False)

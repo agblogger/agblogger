@@ -233,3 +233,77 @@ class TestDuplicateAccountErrorSafetyNet:
 
         # Should be caught by ValueError handler (409 or 422), not 500
         assert resp.status_code != 500
+
+
+class TestAttributeErrorGlobalHandler:
+    """AttributeError must return 500 with generic message, not leak attribute name."""
+
+    async def test_attribute_error_returns_500_generic_message(self, client: AsyncClient) -> None:
+        headers = await _login(client)
+        with patch(
+            "backend.api.posts.list_posts",
+            new_callable=AsyncMock,
+            side_effect=AttributeError("secret_attr"),
+        ):
+            resp = await client.get("/api/posts", headers=headers)
+
+        assert resp.status_code == 500
+        body = resp.json()
+        assert "secret_attr" not in body["detail"]
+        assert body["detail"] == "Internal server error"
+
+
+class TestIndexErrorGlobalHandler:
+    """IndexError must return 500 with generic message, not leak index details."""
+
+    async def test_index_error_returns_500_generic_message(self, client: AsyncClient) -> None:
+        headers = await _login(client)
+        with patch(
+            "backend.api.posts.list_posts",
+            new_callable=AsyncMock,
+            side_effect=IndexError("list index out of range"),
+        ):
+            resp = await client.get("/api/posts", headers=headers)
+
+        assert resp.status_code == 500
+        body = resp.json()
+        assert "list index out of range" not in body["detail"]
+        assert body["detail"] == "Internal server error"
+
+
+class TestRecursionErrorGlobalHandler:
+    """RecursionError must return 500 with generic message, not crash or re-raise."""
+
+    async def test_recursion_error_returns_500_generic_message(self, client: AsyncClient) -> None:
+        headers = await _login(client)
+        with patch(
+            "backend.api.posts.list_posts",
+            new_callable=AsyncMock,
+            side_effect=RecursionError("maximum recursion depth exceeded"),
+        ):
+            resp = await client.get("/api/posts", headers=headers)
+
+        assert resp.status_code == 500
+        body = resp.json()
+        assert "maximum recursion depth exceeded" not in body["detail"]
+        assert body["detail"] == "Internal server error"
+
+
+class TestNotImplementedErrorGlobalHandler:
+    """NotImplementedError must return 500 with generic message, not crash or re-raise."""
+
+    async def test_not_implemented_error_returns_500_generic_message(
+        self, client: AsyncClient
+    ) -> None:
+        headers = await _login(client)
+        with patch(
+            "backend.api.posts.list_posts",
+            new_callable=AsyncMock,
+            side_effect=NotImplementedError("not yet implemented"),
+        ):
+            resp = await client.get("/api/posts", headers=headers)
+
+        assert resp.status_code == 500
+        body = resp.json()
+        assert "not yet implemented" not in body["detail"]
+        assert body["detail"] == "Internal server error"
