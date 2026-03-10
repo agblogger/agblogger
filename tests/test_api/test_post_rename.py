@@ -275,8 +275,7 @@ class TestPostRename:
 
         engine, session_factory = create_engine(app_settings)
         cm = ContentManager(content_dir=app_settings.content_dir)
-        async with session_factory() as session:
-            await rebuild_cache(session, cm)
+        await rebuild_cache(session_factory, cm)
         await engine.dispose()
 
         token = await _login(client)

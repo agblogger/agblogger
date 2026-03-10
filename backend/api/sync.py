@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import OperationalError
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from backend.api.deps import (
     AsyncWriteLock,
@@ -20,6 +20,7 @@ from backend.api.deps import (
     get_content_write_lock,
     get_git_service,
     get_session,
+    get_session_factory,
     require_admin,
 )
 from backend.filesystem.content_manager import ContentManager
@@ -194,6 +195,7 @@ async def sync_commit(
     git_service: Annotated[GitService, Depends(get_git_service)],
     content_write_lock: Annotated[AsyncWriteLock, Depends(get_content_write_lock)],
     user: Annotated[User, Depends(require_admin)],
+    session_factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
     metadata: Annotated[str, Form()] = "{}",
     files: list[UploadFile] | None = File(default=None),
 ) -> SyncCommitResponse:
@@ -208,6 +210,7 @@ async def sync_commit(
             metadata_json=metadata,
             upload_files=files or [],
             session=session,
+            session_factory=session_factory,
             content_manager=content_manager,
             git_service=git_service,
             user=user,
@@ -219,6 +222,7 @@ async def _sync_commit_inner(
     metadata_json: str,
     upload_files: list[UploadFile],
     session: AsyncSession,
+    session_factory: async_sessionmaker[AsyncSession],
     content_manager: ContentManager,
     git_service: GitService,
     user: User,
@@ -393,7 +397,7 @@ async def _sync_commit_inner(
     try:
         from backend.services.cache_service import rebuild_cache
 
-        _post_count, cache_warnings = await rebuild_cache(session, content_manager)
+        _post_count, cache_warnings = await rebuild_cache(session_factory, content_manager)
     except (OSError, OperationalError, RuntimeError) as exc:
         logger.error("Cache rebuild failed during sync commit: %s", exc)
         sync_warnings.append(

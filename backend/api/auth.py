@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from backend.api.deps import (
     AsyncWriteLock,
@@ -17,6 +17,7 @@ from backend.api.deps import (
     get_content_write_lock,
     get_current_user,
     get_session,
+    get_session_factory,
     get_settings,
     require_admin,
     require_auth,
@@ -459,6 +460,7 @@ async def update_profile(
     user: Annotated[User, Depends(require_auth)],
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
     content_write_lock: Annotated[AsyncWriteLock, Depends(get_content_write_lock)],
+    session_factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
 ) -> UserResponse:
     """Update current user's profile (username, display name).
 
@@ -500,6 +502,10 @@ async def update_profile(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Username already taken",
             ) from None
+        # Commit the user changes before any operation that needs its own session
+        # (e.g. rebuild_cache), to avoid SQLite "database is locked" errors.
+        await session.commit()
+        await session.refresh(user)
 
     if needs_file_update:
         new_username = user.username
@@ -522,16 +528,11 @@ async def update_profile(
                     "Failed to update author in posts: %s",
                     exc,
                 )
-                await session.rollback()
                 raise HTTPException(
                     status_code=500,
                     detail="Failed to update author in post files",
                 ) from exc
-            await rebuild_cache(session, content_manager)
-
-    if changed:
-        await session.commit()
-        await session.refresh(user)
+            await rebuild_cache(session_factory, content_manager)
 
     return UserResponse.from_user(user)
 

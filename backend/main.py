@@ -235,11 +235,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         from backend.services.cache_service import rebuild_cache
 
         try:
-            async with session_factory() as session:
-                post_count, warnings = await rebuild_cache(session, content_manager)
-                logger.info("Indexed %d posts from filesystem", post_count)
-                for warning in warnings:
-                    logger.warning("Cache rebuild: %s", warning)
+            post_count, warnings = await rebuild_cache(session_factory, content_manager)
+            logger.info("Indexed %d posts from filesystem", post_count)
+            for warning in warnings:
+                logger.warning("Cache rebuild: %s", warning)
         except Exception as exc:
             logger.critical("Failed to rebuild cache: %s", exc)
             raise

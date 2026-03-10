@@ -262,8 +262,7 @@ async def create_test_client(settings: Settings) -> AsyncGenerator[AsyncClient]:
         else:
             _install_subprocess_fallback()
 
-        async with session_factory() as session:
-            await rebuild_cache(session, content_manager)
+        await rebuild_cache(session_factory, content_manager)
 
         async with AsyncClient(
             transport=ASGITransport(app=app),
@@ -329,14 +328,21 @@ async def db_engine(test_settings: Settings) -> AsyncGenerator[AsyncEngine]:
 
 
 @pytest.fixture
-async def db_session(
+async def db_session_factory(
     db_engine: AsyncEngine,
-) -> AsyncGenerator[AsyncSession]:
-    """Create a test database session."""
-    session_factory = async_sessionmaker(
+) -> async_sessionmaker[AsyncSession]:
+    """Create a test database session factory."""
+    return async_sessionmaker(
         db_engine,
         class_=AsyncSession,
         expire_on_commit=False,
     )
-    async with session_factory() as session:
+
+
+@pytest.fixture
+async def db_session(
+    db_session_factory: async_sessionmaker[AsyncSession],
+) -> AsyncGenerator[AsyncSession]:
+    """Create a test database session."""
+    async with db_session_factory() as session:
         yield session

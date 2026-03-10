@@ -16,7 +16,7 @@ from backend.services.dag import break_cycles
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from sqlalchemy.ext.asyncio import AsyncSession
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 
 class TestLabelParsing:
@@ -93,6 +93,7 @@ class TestCacheCycleEnforcement:
     async def test_rebuild_cache_drops_cyclic_edges(
         self,
         db_session: AsyncSession,
+        db_session_factory: async_sessionmaker[AsyncSession],
         tmp_content_dir: Path,
     ) -> None:
         (tmp_content_dir / "labels.toml").write_text(
@@ -103,7 +104,7 @@ class TestCacheCycleEnforcement:
         )
         await ensure_tables(db_session)
         cm = ContentManager(tmp_content_dir)
-        _post_count, warnings = await rebuild_cache(db_session, cm)
+        _post_count, warnings = await rebuild_cache(db_session_factory, cm)
 
         # All 3 labels should exist
         result = await db_session.execute(select(LabelCache))
@@ -119,6 +120,7 @@ class TestCacheCycleEnforcement:
     async def test_rebuild_cache_no_warnings_when_no_cycles(
         self,
         db_session: AsyncSession,
+        db_session_factory: async_sessionmaker[AsyncSession],
         tmp_content_dir: Path,
     ) -> None:
         (tmp_content_dir / "labels.toml").write_text(
@@ -126,7 +128,7 @@ class TestCacheCycleEnforcement:
         )
         await ensure_tables(db_session)
         cm = ContentManager(tmp_content_dir)
-        _post_count, warnings = await rebuild_cache(db_session, cm)
+        _post_count, warnings = await rebuild_cache(db_session_factory, cm)
         assert warnings == []
 
         edge_result = await db_session.execute(select(LabelParentCache))
@@ -139,6 +141,7 @@ class TestDeeplyNestedHierarchy:
     async def test_deeply_nested_hierarchy(
         self,
         db_session: AsyncSession,
+        db_session_factory: async_sessionmaker[AsyncSession],
         tmp_content_dir: Path,
     ) -> None:
         """A chain of 12 labels A→B→C→...→L should return all descendants of root."""
@@ -153,7 +156,7 @@ class TestDeeplyNestedHierarchy:
 
         await ensure_tables(db_session)
         cm = ContentManager(tmp_content_dir)
-        await rebuild_cache(db_session, cm)
+        await rebuild_cache(db_session_factory, cm)
 
         from sqlalchemy import text
 

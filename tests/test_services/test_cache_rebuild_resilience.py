@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 from typing import TYPE_CHECKING
 from unittest.mock import patch
 
@@ -15,13 +16,14 @@ from backend.services.cache_service import ensure_tables, rebuild_cache
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from sqlalchemy.ext.asyncio import AsyncSession
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 
 class TestDuplicateImplicitLabel:
     async def test_multiple_labels_referencing_same_undefined_parent(
         self,
         db_session: AsyncSession,
+        db_session_factory: async_sessionmaker[AsyncSession],
         tmp_content_dir: Path,
     ) -> None:
         """Two labels sharing the same undefined parent must not crash.
@@ -36,7 +38,7 @@ class TestDuplicateImplicitLabel:
         )
         await ensure_tables(db_session)
         cm = ContentManager(tmp_content_dir)
-        _post_count, _warnings = await rebuild_cache(db_session, cm)
+        _post_count, _warnings = await rebuild_cache(db_session_factory, cm)
 
         # The implicit "web" label should exist exactly once
         result = await db_session.execute(select(LabelCache).where(LabelCache.id == "web"))
@@ -53,6 +55,7 @@ class TestDuplicateImplicitLabel:
     async def test_three_labels_referencing_same_undefined_parent(
         self,
         db_session: AsyncSession,
+        db_session_factory: async_sessionmaker[AsyncSession],
         tmp_content_dir: Path,
     ) -> None:
         """Three labels sharing the same undefined parent must not crash."""
@@ -64,7 +67,7 @@ class TestDuplicateImplicitLabel:
         )
         await ensure_tables(db_session)
         cm = ContentManager(tmp_content_dir)
-        _post_count, _warnings = await rebuild_cache(db_session, cm)
+        _post_count, _warnings = await rebuild_cache(db_session_factory, cm)
 
         result = await db_session.execute(select(LabelCache).where(LabelCache.id == "missing"))
         assert len(result.scalars().all()) == 1
@@ -83,6 +86,7 @@ class TestPandocFailureResilience:
     async def test_pandoc_failure_skips_post_without_crashing(
         self,
         db_session: AsyncSession,
+        db_session_factory: async_sessionmaker[AsyncSession],
         tmp_content_dir: Path,
     ) -> None:
         """A pandoc failure on one post must not prevent other posts from being indexed."""
@@ -107,7 +111,7 @@ class TestPandocFailureResilience:
                 side_effect=failing_render,
             ),
         ):
-            post_count, warnings = await rebuild_cache(db_session, cm)
+            post_count, warnings = await rebuild_cache(db_session_factory, cm)
 
         # Good post should be indexed
         result = await db_session.execute(select(PostCache))
@@ -122,6 +126,7 @@ class TestPandocFailureResilience:
     async def test_pandoc_not_installed_skips_all_posts_without_crashing(
         self,
         db_session: AsyncSession,
+        db_session_factory: async_sessionmaker[AsyncSession],
         tmp_content_dir: Path,
     ) -> None:
         """If pandoc is not installed, posts are skipped but the server still starts."""
@@ -144,7 +149,56 @@ class TestPandocFailureResilience:
                 side_effect=always_fail,
             ),
         ):
-            post_count, warnings = await rebuild_cache(db_session, cm)
+            post_count, warnings = await rebuild_cache(db_session_factory, cm)
 
         assert post_count == 0
         assert len(warnings) == 2
+
+
+class TestRebuildCacheSessionIsolation:
+    """rebuild_cache must use its own session to avoid committing the caller's transaction."""
+
+    async def test_rebuild_cache_accepts_session_factory(self) -> None:
+        """rebuild_cache signature must accept a session factory, not a raw session."""
+        sig = inspect.signature(rebuild_cache)
+        params = list(sig.parameters.keys())
+        assert params[0] == "session_factory", (
+            "First parameter should be 'session_factory', not 'session'"
+        )
+
+    async def test_rebuild_cache_creates_own_session(
+        self,
+        db_session: AsyncSession,
+        db_session_factory: async_sessionmaker[AsyncSession],
+        tmp_content_dir: Path,
+    ) -> None:
+        """rebuild_cache must create its own session and not touch the caller's.
+
+        Verifies that rebuild_cache uses the session factory to create an
+        independent session, so callers can hold uncommitted changes without
+        having them prematurely committed by the cache rebuild.
+        """
+        await ensure_tables(db_session)
+        cm = ContentManager(tmp_content_dir)
+
+        # Create a tracking wrapper around the session factory
+        call_count = 0
+        real_factory = db_session_factory
+
+        class TrackingFactory:
+            """Wraps async_sessionmaker to count calls."""
+
+            def __call__(self) -> AsyncSession:
+                nonlocal call_count
+                call_count += 1
+                return real_factory()
+
+        tracking = TrackingFactory()
+
+        # Pass the tracking wrapper as if it were the session factory
+        await rebuild_cache(tracking, cm)  # type: ignore[arg-type]
+
+        # rebuild_cache must have created its own session via the factory
+        assert call_count == 1, (
+            f"Expected rebuild_cache to create exactly 1 session, got {call_count}"
+        )

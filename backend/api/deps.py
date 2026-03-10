@@ -8,7 +8,7 @@ from typing import Annotated, Any, Protocol, cast
 
 from fastapi import Depends, HTTPException, Request, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from backend.config import Settings
 from backend.exceptions import TokenExpiredError
@@ -87,6 +87,14 @@ async def get_session(request: Request) -> AsyncGenerator[AsyncSession]:
     )
     async with session_factory() as session:
         yield session
+
+
+def get_session_factory(request: Request) -> async_sessionmaker[AsyncSession]:
+    """Get the database session factory for operations that need their own session."""
+    return cast(
+        "async_sessionmaker[AsyncSession]",
+        _require_app_state(request, "session_factory", _DB_UNAVAILABLE),
+    )
 
 
 def get_content_write_lock(request: Request) -> AsyncWriteLock:
