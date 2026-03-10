@@ -452,7 +452,7 @@ def normalize_post_frontmatter(
 ) -> list[str]:
     """Normalize YAML front matter for uploaded post files during sync.
 
-    Fills missing fields (timestamps, author, title) with defaults, strips the
+    Fills missing fields (timestamps, title) with defaults, strips the
     leading heading from the body when backfilling title, normalizes existing
     timestamps to strict format, and warns about unrecognized front matter fields.
 

@@ -353,7 +353,6 @@ async def _sync_commit_inner(
         uploaded_files=uploaded_paths,
         old_manifest=old_manifest,
         content_dir=content_dir,
-        default_author="",
     )
 
     # ── Git commit ──
