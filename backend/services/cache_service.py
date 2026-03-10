@@ -15,7 +15,6 @@ from backend.models.post import PostCache
 from backend.pandoc.renderer import render_markdown, render_markdown_excerpt, rewrite_relative_urls
 from backend.services.dag import break_cycles
 from backend.services.label_service import ensure_label_cache_entry
-from backend.services.post_owner_service import build_owner_lookup, resolve_owner_username
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
