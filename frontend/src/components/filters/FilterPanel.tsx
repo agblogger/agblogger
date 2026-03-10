@@ -169,8 +169,7 @@ export default function FilterPanel({ value, onChange }: FilterPanelProps) {
                           : 'bg-tag-bg text-tag-text hover:bg-border'
                       }`}
                     >
-                      #{label.id}
-                      <span className="ml-1 opacity-60">{label.post_count}</span>
+                      #{label.id} <span className="opacity-60">({label.post_count})</span>
                     </button>
                   )
                 })}
