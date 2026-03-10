@@ -197,6 +197,18 @@ class TestUploadAssets:
         assert uploaded_path.exists()
 
     @pytest.mark.asyncio
+    async def test_upload_index_md_rejected(self, client: AsyncClient) -> None:
+        """Upload with filename 'index.md' must be rejected to prevent post corruption."""
+        token = await _login(client)
+        resp = await client.post(
+            f"/api/posts/{POST_PATH}/assets",
+            files=[("files", ("index.md", b"overwrite attack", "text/markdown"))],
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 400
+        assert "content file" in resp.json()["detail"].lower()
+
+    @pytest.mark.asyncio
     async def test_upload_rejects_legacy_flat_file_post(self, client: AsyncClient) -> None:
         token = await _login(client)
 

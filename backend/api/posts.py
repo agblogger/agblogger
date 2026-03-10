@@ -436,6 +436,8 @@ async def upload_assets(
         filename = FilePath(upload_file.filename or "upload").name
         if not filename or filename.startswith("."):
             raise HTTPException(status_code=400, detail=f"Invalid filename: {upload_file.filename}")
+        if filename == "index.md":
+            raise HTTPException(status_code=400, detail="Cannot overwrite the post content file")
         asset_data.append((filename, content))
 
     async with content_write_lock:
