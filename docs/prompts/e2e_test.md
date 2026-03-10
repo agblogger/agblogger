@@ -10,6 +10,7 @@ Make sure to test user workflows involving:
 - support for ALL of pandoc markdown (read docs/pandoc/08-pandocs-markdown.md) and whether it renders correctly and looks good in the Web UI,
 - non-english characters, unicode,
 - invalid input (e.g. invalid markdown, spaces in labels, invalid title or author, cycles in label graph),
+- managing files associated with posts,
 - label editing,
 - post search and filtering,
 - sharing posts on social media platforms,
