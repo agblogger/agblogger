@@ -6,7 +6,7 @@ import time
 
 import pytest
 
-from backend.crosspost.bluesky_oauth_state import OAuthStateStore
+from backend.crosspost.bluesky_oauth_state import OAuthStateStore, OAuthUserLimitError
 
 
 class TestOAuthStateStore:
@@ -46,7 +46,7 @@ class TestOAuthStateStore:
         store = OAuthStateStore(ttl_seconds=60, max_entries=10, max_entries_per_user=1)
         store.set("state-1", {"user_id": 1})
 
-        with pytest.raises(ValueError, match="Too many pending OAuth flows"):
+        with pytest.raises(OAuthUserLimitError, match="Too many pending OAuth flows"):
             store.set("state-2", {"user_id": 1})
 
         assert store.get("state-1") == {"user_id": 1}

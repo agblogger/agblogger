@@ -1269,6 +1269,82 @@ class TestOAuthErrorLeakage:
         assert detail == "Facebook authentication failed"
         assert "facebook.internal" not in detail
 
+    @pytest.mark.asyncio
+    async def test_facebook_callback_multipage_store_full_returns_503(
+        self, client: AsyncClient
+    ) -> None:
+        """Multi-page facebook callback must not crash if state store is full."""
+        two_pages = [
+            {"access_token": "tok1", "id": "111", "name": "Page One"},
+            {"access_token": "tok2", "id": "222", "name": "Page Two"},
+        ]
+        with (
+            patch(
+                "backend.crosspost.facebook.exchange_facebook_oauth_token",
+                new_callable=AsyncMock,
+                return_value={"pages": two_pages},
+            ),
+            patch(
+                "backend.crosspost.bluesky_oauth_state.OAuthStateStore.pop",
+                return_value={
+                    "user_id": 1,
+                    "redirect_uri": "http://test/api/crosspost/facebook/callback",
+                    "app_id": "test-app-id",
+                    "app_secret": "test-app-secret",
+                },
+            ),
+            patch(
+                "backend.crosspost.bluesky_oauth_state.OAuthStateStore.set",
+                side_effect=ValueError("OAuth state store is full"),
+            ),
+        ):
+            resp = await client.get(
+                "/api/crosspost/facebook/callback",
+                params={"code": "test-code", "state": "test-state"},
+                follow_redirects=False,
+            )
+        assert resp.status_code == 503
+        assert "temporarily unavailable" in resp.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_facebook_callback_multipage_user_limit_returns_429(
+        self, client: AsyncClient
+    ) -> None:
+        """Multi-page facebook callback must return 429 on per-user limit."""
+        from backend.crosspost.bluesky_oauth_state import OAuthUserLimitError
+
+        two_pages = [
+            {"access_token": "tok1", "id": "111", "name": "Page One"},
+            {"access_token": "tok2", "id": "222", "name": "Page Two"},
+        ]
+        with (
+            patch(
+                "backend.crosspost.facebook.exchange_facebook_oauth_token",
+                new_callable=AsyncMock,
+                return_value={"pages": two_pages},
+            ),
+            patch(
+                "backend.crosspost.bluesky_oauth_state.OAuthStateStore.pop",
+                return_value={
+                    "user_id": 1,
+                    "redirect_uri": "http://test/api/crosspost/facebook/callback",
+                    "app_id": "test-app-id",
+                    "app_secret": "test-app-secret",
+                },
+            ),
+            patch(
+                "backend.crosspost.bluesky_oauth_state.OAuthStateStore.set",
+                side_effect=OAuthUserLimitError("Too many pending OAuth flows for this user"),
+            ),
+        ):
+            resp = await client.get(
+                "/api/crosspost/facebook/callback",
+                params={"code": "test-code", "state": "test-state"},
+                follow_redirects=False,
+            )
+        assert resp.status_code == 429
+        assert "Too many pending OAuth flows" in resp.json()["detail"]
+
 
 class TestDeletePostOSError:
     """Delete post endpoint handles OSError from filesystem operations."""

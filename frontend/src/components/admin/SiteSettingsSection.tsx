@@ -42,10 +42,8 @@ export default function SiteSettingsSection({
     setSiteSettings(normalizeSiteSettings(initialSettings))
   }, [initialSettings])
 
-  const currentSettings = siteSettings
-
   async function handleSaveSiteSettings() {
-    if (!currentSettings.title.trim()) {
+    if (!siteSettings.title.trim()) {
       setSiteError('Title is required.')
       return
     }
@@ -53,7 +51,7 @@ export default function SiteSettingsSection({
     setSiteError(null)
     setSiteSuccess(null)
     try {
-      const updated = normalizeSiteSettings(await updateAdminSiteSettings(currentSettings))
+      const updated = normalizeSiteSettings(await updateAdminSiteSettings(siteSettings))
       setSiteSettings(updated)
       onSavedSettings(updated)
       setSiteSuccess('Settings saved.')
@@ -99,9 +97,9 @@ export default function SiteSettingsSection({
           <input
             id="site-title"
             type="text"
-            value={currentSettings.title}
+            value={siteSettings.title}
             onChange={(e) => {
-              setSiteSettings({ ...currentSettings, title: e.target.value })
+              setSiteSettings({ ...siteSettings, title: e.target.value })
               setSiteSuccess(null)
             }}
             disabled={busy}
@@ -122,9 +120,9 @@ export default function SiteSettingsSection({
           <input
             id="site-description"
             type="text"
-            value={currentSettings.description}
+            value={siteSettings.description}
             onChange={(e) => {
-              setSiteSettings({ ...currentSettings, description: e.target.value })
+              setSiteSettings({ ...siteSettings, description: e.target.value })
               setSiteSuccess(null)
             }}
             disabled={busy}
@@ -140,9 +138,9 @@ export default function SiteSettingsSection({
             Timezone
           </label>
           <TimezoneCombobox
-            value={currentSettings.timezone}
+            value={siteSettings.timezone}
             onChange={(tz) => {
-              setSiteSettings({ ...currentSettings, timezone: tz })
+              setSiteSettings({ ...siteSettings, timezone: tz })
               setSiteSuccess(null)
             }}
             disabled={busy}

@@ -132,13 +132,13 @@ class ProfileUpdate(BaseModel):
     def validate_username_format(cls, v: str | None) -> str | None:
         """Ensure username is safe for DB and YAML storage."""
         if v is not None:
-            _validate_username(v)
+            return _validate_username(v)
         return v
 
     @field_validator("display_name")
     @classmethod
     def normalize_display_name(cls, v: str | None) -> str | None:
-        """Strip whitespace; empty/whitespace-only strings become empty."""
+        """Strip whitespace; whitespace-only strings become empty string ''."""
         if v is not None:
             return v.strip()
         return v

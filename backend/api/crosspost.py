@@ -940,7 +940,8 @@ async def facebook_callback(
 
     # Multiple pages: store in temp state for page selection
     page_selection_state = secrets.token_hex(32)
-    state_store.set(
+    _store_pending_oauth_state(
+        state_store,
         page_selection_state,
         {
             "user_id": pending["user_id"],

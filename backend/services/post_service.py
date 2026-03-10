@@ -260,7 +260,7 @@ async def get_post(
         rendered_excerpt=post.rendered_excerpt,
         labels=post_label_ids,
         rendered_html=post.rendered_html or "",
-        content=None,  # Only provided when authenticated
+        content=None,  # Raw content not included in public view; use the /edit endpoint
     )
 
 
