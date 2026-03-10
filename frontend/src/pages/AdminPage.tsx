@@ -9,13 +9,13 @@ import type { AdminSiteSettings, AdminPageConfig } from '@/api/client'
 import { fetchAdminSiteSettings, fetchAdminPages } from '@/api/admin'
 import SiteSettingsSection from '@/components/admin/SiteSettingsSection'
 import PagesSection from '@/components/admin/PagesSection'
-import PasswordSection from '@/components/admin/PasswordSection'
+import AccountSection from '@/components/admin/AccountSection'
 import SocialAccountsPanel from '@/components/crosspost/SocialAccountsPanel'
 
 const ADMIN_TABS = [
   { key: 'settings', label: 'Settings' },
   { key: 'pages', label: 'Pages' },
-  { key: 'password', label: 'Password' },
+  { key: 'account', label: 'Account' },
   { key: 'social', label: 'Social' },
 ] as const
 
@@ -29,7 +29,7 @@ export default function AdminPage() {
   const [loadError, setLoadError] = useState<string | null>(null)
 
   // === Tab navigation ===
-  const [activeTab, setActiveTab] = useState<'settings' | 'pages' | 'password' | 'social'>('settings')
+  const [activeTab, setActiveTab] = useState<'settings' | 'pages' | 'account' | 'social'>('settings')
 
   // === Initial data ===
   const [siteSettings, setSiteSettings] = useState<AdminSiteSettings>({
@@ -42,9 +42,9 @@ export default function AdminPage() {
   // === Busy tracking from sections ===
   const [siteSaving, setSiteSaving] = useState(false)
   const [pagesSaving, setPagesSaving] = useState(false)
-  const [passwordSaving, setPasswordSaving] = useState(false)
+  const [accountSaving, setAccountSaving] = useState(false)
   const [socialBusy, setSocialBusy] = useState(false)
-  const busy = siteSaving || pagesSaving || passwordSaving || socialBusy
+  const busy = siteSaving || pagesSaving || accountSaving || socialBusy
 
   // === Auth redirect ===
   useEffect(() => {
@@ -152,8 +152,8 @@ export default function AdminPage() {
           onPagesChange={setPages}
         />
       )}
-      {activeTab === 'password' && (
-        <PasswordSection busy={busy} onSaving={setPasswordSaving} />
+      {activeTab === 'account' && (
+        <AccountSection busy={busy} onSaving={setAccountSaving} />
       )}
       {activeTab === 'social' && (
         <SocialAccountsPanel busy={busy} onBusyChange={setSocialBusy} />

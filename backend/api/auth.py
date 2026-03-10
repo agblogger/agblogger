@@ -12,6 +12,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.deps import (
+    AsyncWriteLock,
+    get_content_manager,
+    get_content_write_lock,
     get_current_user,
     get_session,
     get_settings,
@@ -19,6 +22,7 @@ from backend.api.deps import (
     require_auth,
 )
 from backend.config import Settings
+from backend.filesystem.content_manager import ContentManager
 from backend.models.user import User
 from backend.schemas.auth import (
     CsrfTokenResponse,
@@ -29,6 +33,7 @@ from backend.schemas.auth import (
     PersonalAccessTokenCreateRequest,
     PersonalAccessTokenCreateResponse,
     PersonalAccessTokenResponse,
+    ProfileUpdate,
     RefreshRequest,
     RegisterRequest,
     SessionAuthResponse,
@@ -430,6 +435,116 @@ async def me(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
         )
+    return UserResponse(
+        id=user.id,
+        username=user.username,
+        email=user.email,
+        display_name=user.display_name,
+        is_admin=user.is_admin,
+    )
+
+
+def _update_author_in_posts(
+    content_manager: ContentManager,
+    old_username: str,
+    new_username: str,
+) -> int:
+    """Update the author field in all markdown files that match old_username.
+
+    Performs synchronous filesystem I/O for each matching post.
+    Returns the number of posts updated.
+    """
+    posts = content_manager.scan_posts()
+    updated = 0
+    for post in posts:
+        if post.author == old_username:
+            post.author = new_username
+            content_manager.write_post(post.file_path, post)
+            updated += 1
+    return updated
+
+
+@router.patch("/me", response_model=UserResponse)
+async def update_profile(
+    body: ProfileUpdate,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    user: Annotated[User, Depends(require_auth)],
+    content_manager: Annotated[ContentManager, Depends(get_content_manager)],
+    content_write_lock: Annotated[AsyncWriteLock, Depends(get_content_write_lock)],
+) -> UserResponse:
+    """Update current user's profile (username, display name).
+
+    Username changes also update the author field in all markdown files
+    on disk and trigger a full cache rebuild.
+    """
+    import asyncio
+
+    from backend.services.cache_service import rebuild_cache
+
+    changed = False
+    needs_file_update = False
+    old_username = user.username
+
+    if body.username is not None and body.username != user.username:
+        existing = await session.execute(select(User).where(User.username == body.username))
+        if existing.scalar_one_or_none() is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Username already taken",
+            )
+        user.username = body.username
+        changed = True
+        needs_file_update = True
+
+    if body.display_name is not None:
+        new_display_name = body.display_name or None
+        if new_display_name != user.display_name:
+            user.display_name = new_display_name
+            changed = True
+
+    if changed:
+        user.updated_at = format_iso(now_utc())
+        try:
+            await session.flush()
+        except IntegrityError:
+            await session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Username already taken",
+            ) from None
+
+    if needs_file_update:
+        new_username = user.username
+        logger.info(
+            "Username change: %s -> %s, updating author in posts",
+            old_username,
+            new_username,
+        )
+        async with content_write_lock:
+            try:
+                count = await asyncio.to_thread(
+                    _update_author_in_posts,
+                    content_manager,
+                    old_username,
+                    new_username,
+                )
+                logger.info("Updated author in %d post(s)", count)
+            except OSError as exc:
+                logger.error(
+                    "Failed to update author in posts: %s",
+                    exc,
+                )
+                await session.rollback()
+                raise HTTPException(
+                    status_code=500,
+                    detail="Failed to update author in post files",
+                ) from exc
+            await rebuild_cache(session, content_manager)
+
+    if changed:
+        await session.commit()
+        await session.refresh(user)
+
     return UserResponse(
         id=user.id,
         username=user.username,

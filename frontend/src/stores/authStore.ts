@@ -9,6 +9,7 @@ interface AuthState {
   isLoggingOut: boolean
   isInitialized: boolean
   error: string | null
+  setUser: (user: UserResponse) => void
   login: (username: string, password: string) => Promise<void>
   logout: () => Promise<void>
   checkAuth: () => Promise<void>
@@ -20,6 +21,8 @@ export const useAuthStore = create<AuthState>((set) => ({
   isLoggingOut: false,
   isInitialized: false,
   error: null,
+
+  setUser: (user: UserResponse) => set({ user }),
 
   login: async (username: string, password: string) => {
     set({ isLoading: true, error: null })

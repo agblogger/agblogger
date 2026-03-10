@@ -2,9 +2,24 @@
 
 from __future__ import annotations
 
+import re
 from typing import Literal
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
+
+_USERNAME_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]*$")
+
+_USERNAME_FORMAT_ERROR = (
+    "Username must start with a letter or digit and contain only"
+    " letters, digits, dots, hyphens, or underscores"
+)
+
+
+def _validate_username(v: str) -> str:
+    """Validate username format for DB and YAML storage safety."""
+    if not _USERNAME_PATTERN.match(v):
+        raise ValueError(_USERNAME_FORMAT_ERROR)
+    return v
 
 
 def _default_token_type() -> Literal["bearer"]:
@@ -24,8 +39,14 @@ class RegisterRequest(BaseModel):
     username: str = Field(min_length=3, max_length=50)
     email: EmailStr
     password: str = Field(min_length=8, max_length=200)
-    display_name: str | None = None
+    display_name: str | None = Field(default=None, max_length=100)
     invite_code: str | None = Field(default=None, min_length=1, max_length=200)
+
+    @field_validator("username")
+    @classmethod
+    def validate_username_format(cls, v: str) -> str:
+        """Ensure username is safe for DB and YAML storage."""
+        return _validate_username(v)
 
 
 class TokenResponse(BaseModel):
@@ -95,6 +116,29 @@ class PersonalAccessTokenCreateResponse(PersonalAccessTokenResponse):
     """Created token metadata including one-time plaintext token."""
 
     token: str
+
+
+class ProfileUpdate(BaseModel):
+    """Request to update the current user's profile."""
+
+    username: str | None = Field(default=None, min_length=3, max_length=50)
+    display_name: str | None = Field(default=None, max_length=100)
+
+    @field_validator("username")
+    @classmethod
+    def validate_username_format(cls, v: str | None) -> str | None:
+        """Ensure username is safe for DB and YAML storage."""
+        if v is not None:
+            _validate_username(v)
+        return v
+
+    @field_validator("display_name")
+    @classmethod
+    def normalize_display_name(cls, v: str | None) -> str | None:
+        """Strip whitespace; empty/whitespace-only strings become empty."""
+        if v is not None:
+            return v.strip()
+        return v
 
 
 class UserResponse(BaseModel):

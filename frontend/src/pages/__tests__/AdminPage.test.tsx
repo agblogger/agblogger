@@ -42,12 +42,23 @@ vi.mock('@/components/crosspost/SocialAccountsPanel', () => ({
   default: () => <div data-testid="social-accounts-panel">Social Accounts</div>,
 }))
 
+const mockUpdateProfile = vi.fn()
+
+vi.mock('@/api/auth', () => ({
+  updateProfile: (...args: unknown[]) => mockUpdateProfile(...args) as unknown,
+}))
+
 let mockUser: UserResponse | null = null
 let mockIsInitialized = true
+const mockSetUser = vi.fn()
+const mockLogout = vi.fn()
 
 vi.mock('@/stores/authStore', () => ({
-  useAuthStore: (selector: (s: { user: UserResponse | null; isInitialized: boolean }) => unknown) =>
-    selector({ user: mockUser, isInitialized: mockIsInitialized }),
+  useAuthStore: Object.assign(
+    (selector: (s: { user: UserResponse | null; isInitialized: boolean; setUser: typeof mockSetUser }) => unknown) =>
+      selector({ user: mockUser, isInitialized: mockIsInitialized, setUser: mockSetUser }),
+    { getState: () => ({ logout: mockLogout }) },
+  ),
 }))
 
 vi.mock('@/stores/siteStore', () => ({
@@ -670,9 +681,9 @@ describe('AdminPage', () => {
     renderAdmin()
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Password' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Account' })).toBeInTheDocument()
     })
-    await switchToTab(user, 'Password')
+    await switchToTab(user, 'Account')
 
     await waitFor(() => {
       expect(screen.getByLabelText(/Current Password/)).toBeInTheDocument()
@@ -690,9 +701,9 @@ describe('AdminPage', () => {
     renderAdmin()
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Password' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Account' })).toBeInTheDocument()
     })
-    await switchToTab(user, 'Password')
+    await switchToTab(user, 'Account')
 
     await waitFor(() => {
       expect(screen.getByLabelText(/Current Password/)).toBeInTheDocument()
@@ -712,9 +723,9 @@ describe('AdminPage', () => {
     renderAdmin()
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Password' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Account' })).toBeInTheDocument()
     })
-    await switchToTab(user, 'Password')
+    await switchToTab(user, 'Account')
 
     await waitFor(() => {
       expect(screen.getByLabelText(/Current Password/)).toBeInTheDocument()
@@ -735,9 +746,9 @@ describe('AdminPage', () => {
     renderAdmin()
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Password' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Account' })).toBeInTheDocument()
     })
-    await switchToTab(user, 'Password')
+    await switchToTab(user, 'Account')
 
     await waitFor(() => {
       expect(screen.getByLabelText(/Current Password/)).toBeInTheDocument()
@@ -768,9 +779,9 @@ describe('AdminPage', () => {
     renderAdmin()
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Password' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Account' })).toBeInTheDocument()
     })
-    await switchToTab(user, 'Password')
+    await switchToTab(user, 'Account')
 
     await waitFor(() => {
       expect(screen.getByLabelText(/Current Password/)).toBeInTheDocument()
@@ -795,9 +806,9 @@ describe('AdminPage', () => {
     renderAdmin()
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Password' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Account' })).toBeInTheDocument()
     })
-    await switchToTab(user, 'Password')
+    await switchToTab(user, 'Account')
 
     await waitFor(() => {
       expect(screen.getByLabelText(/Current Password/)).toBeInTheDocument()
@@ -811,6 +822,218 @@ describe('AdminPage', () => {
     await waitFor(() => {
       expect(screen.getByText('Session expired. Please log in again.')).toBeInTheDocument()
     })
+  })
+
+  // === Profile Update ===
+
+  it('saves profile successfully', async () => {
+    setupLoadSuccess()
+    mockUpdateProfile.mockResolvedValue({
+      id: 1,
+      username: 'admin',
+      email: 'a@t.com',
+      display_name: 'New Display Name',
+      is_admin: true,
+    })
+    const user = userEvent.setup()
+    renderAdmin()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Account' })).toBeInTheDocument()
+    })
+    await switchToTab(user, 'Account')
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Username')).toBeInTheDocument()
+    })
+
+    await user.clear(screen.getByLabelText('Display Name'))
+    await user.type(screen.getByLabelText('Display Name'), 'New Display Name')
+    await user.click(screen.getByRole('button', { name: /save profile/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Profile updated successfully.')).toBeInTheDocument()
+    })
+    expect(mockUpdateProfile).toHaveBeenCalledWith({ display_name: 'New Display Name' })
+    expect(mockSetUser).toHaveBeenCalledWith({
+      id: 1,
+      username: 'admin',
+      email: 'a@t.com',
+      display_name: 'New Display Name',
+      is_admin: true,
+    })
+  })
+
+  it('shows username is required error', async () => {
+    setupLoadSuccess()
+    const user = userEvent.setup()
+    renderAdmin()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Account' })).toBeInTheDocument()
+    })
+    await switchToTab(user, 'Account')
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Username')).toBeInTheDocument()
+    })
+
+    await user.clear(screen.getByLabelText('Username'))
+    // Changing username makes Save Profile enabled, so we can click it
+    await user.click(screen.getByRole('button', { name: /save profile/i }))
+
+    expect(screen.getByText('Username is required.')).toBeInTheDocument()
+  })
+
+  it('shows username already taken error (409)', async () => {
+    setupLoadSuccess()
+    mockUpdateProfile.mockRejectedValue(
+      new (MockHTTPError as unknown as new (s: number) => Error)(409),
+    )
+    const user = userEvent.setup()
+    renderAdmin()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Account' })).toBeInTheDocument()
+    })
+    await switchToTab(user, 'Account')
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Username')).toBeInTheDocument()
+    })
+
+    await user.clear(screen.getByLabelText('Username'))
+    await user.type(screen.getByLabelText('Username'), 'taken-user')
+    await user.click(screen.getByRole('button', { name: /save profile/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Username is already taken.')).toBeInTheDocument()
+    })
+  })
+
+  it('shows validation error (422)', async () => {
+    setupLoadSuccess()
+    mockUpdateProfile.mockRejectedValue(
+      new (MockHTTPError as unknown as new (s: number, body?: string) => Error)(
+        422,
+        JSON.stringify({ detail: 'Invalid format' }),
+      ),
+    )
+    const user = userEvent.setup()
+    renderAdmin()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Account' })).toBeInTheDocument()
+    })
+    await switchToTab(user, 'Account')
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Username')).toBeInTheDocument()
+    })
+
+    await user.clear(screen.getByLabelText('Username'))
+    await user.type(screen.getByLabelText('Username'), 'bad!user')
+    await user.click(screen.getByRole('button', { name: /save profile/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Invalid format')).toBeInTheDocument()
+    })
+  })
+
+  it('shows session expired error (401)', async () => {
+    setupLoadSuccess()
+    mockUpdateProfile.mockRejectedValue(
+      new (MockHTTPError as unknown as new (s: number) => Error)(401),
+    )
+    const user = userEvent.setup()
+    renderAdmin()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Account' })).toBeInTheDocument()
+    })
+    await switchToTab(user, 'Account')
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Username')).toBeInTheDocument()
+    })
+
+    await user.clear(screen.getByLabelText('Username'))
+    await user.type(screen.getByLabelText('Username'), 'newname')
+    await user.click(screen.getByRole('button', { name: /save profile/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Session expired. Please log in again.')).toBeInTheDocument()
+    })
+  })
+
+  it('shows network error', async () => {
+    setupLoadSuccess()
+    mockUpdateProfile.mockRejectedValue(new Error('Network'))
+    const user = userEvent.setup()
+    renderAdmin()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Account' })).toBeInTheDocument()
+    })
+    await switchToTab(user, 'Account')
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Username')).toBeInTheDocument()
+    })
+
+    await user.clear(screen.getByLabelText('Username'))
+    await user.type(screen.getByLabelText('Username'), 'newname')
+    await user.click(screen.getByRole('button', { name: /save profile/i }))
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('Failed to update profile. The server may be unavailable.'),
+      ).toBeInTheDocument()
+    })
+  })
+
+  it('disables Save Profile when no changes', async () => {
+    setupLoadSuccess()
+    const user = userEvent.setup()
+    renderAdmin()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Account' })).toBeInTheDocument()
+    })
+    await switchToTab(user, 'Account')
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Username')).toBeInTheDocument()
+    })
+
+    expect(screen.getByRole('button', { name: /save profile/i })).toBeDisabled()
+  })
+
+  it('clears profile error when user types', async () => {
+    setupLoadSuccess()
+    const user = userEvent.setup()
+    renderAdmin()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Account' })).toBeInTheDocument()
+    })
+    await switchToTab(user, 'Account')
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Username')).toBeInTheDocument()
+    })
+
+    // Clear the username to trigger "Username is required." error
+    await user.clear(screen.getByLabelText('Username'))
+    await user.click(screen.getByRole('button', { name: /save profile/i }))
+
+    expect(screen.getByText('Username is required.')).toBeInTheDocument()
+
+    // Type in the username field
+    await user.type(screen.getByLabelText('Username'), 'a')
+
+    // Error should be cleared
+    expect(screen.queryByText('Username is required.')).not.toBeInTheDocument()
   })
 
   it('renders Admin Panel heading', async () => {
@@ -842,7 +1065,7 @@ describe('AdminPage', () => {
     })
 
     // Switch to Password tab
-    await switchToTab(user, 'Password')
+    await switchToTab(user, 'Account')
     expect(screen.queryByText('Timeline')).not.toBeInTheDocument()
     await waitFor(() => {
       expect(screen.getByLabelText(/Current Password/)).toBeInTheDocument()
@@ -914,9 +1137,9 @@ describe('AdminPage', () => {
     renderAdmin()
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Password' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Account' })).toBeInTheDocument()
     })
-    await switchToTab(user, 'Password')
+    await switchToTab(user, 'Account')
 
     await waitFor(() => {
       expect(screen.getByLabelText(/Current Password/)).toBeInTheDocument()
@@ -987,9 +1210,9 @@ describe('AdminPage', () => {
     renderAdmin()
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Password' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Account' })).toBeInTheDocument()
     })
-    await switchToTab(user, 'Password')
+    await switchToTab(user, 'Account')
 
     await waitFor(() => {
       expect(screen.getByText(/at least 12 characters/i)).toBeInTheDocument()
