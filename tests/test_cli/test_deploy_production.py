@@ -690,7 +690,7 @@ def test_deploy_runs_trivy_scan_before_compose_up(
 def test_deploy_registry_mode_builds_pushes_and_writes_bundle(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    (tmp_path / "docker-compose.yml").write_text("services: {}\n", encoding="utf-8")
+    (tmp_path / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
     commands = _stub_subprocess(monkeypatch)
     _stub_no_trivy(monkeypatch)
 
@@ -730,7 +730,7 @@ def test_deploy_registry_mode_builds_pushes_and_writes_bundle(
 def test_deploy_tarball_mode_builds_saves_and_writes_bundle(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    (tmp_path / "docker-compose.yml").write_text("services: {}\n", encoding="utf-8")
+    (tmp_path / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
     commands = _stub_subprocess(monkeypatch)
     _stub_no_trivy(monkeypatch)
 
@@ -1813,6 +1813,105 @@ class TestDryRunLocalCaddyNonPublic:
         assert "Using existing docker-compose.yml" in captured
         assert "=== Caddyfile.production ===" in captured
         assert f"=== {DEFAULT_CADDY_PUBLIC_COMPOSE_FILE} ===" in captured
+
+
+class TestDeployRemoteModeWithoutComposeYml:
+    """Registry/tarball modes only need Dockerfile, not docker-compose.yml."""
+
+    def test_registry_mode_succeeds_without_docker_compose_yml(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        # Only Dockerfile exists, no docker-compose.yml
+        (tmp_path / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
+        _stub_subprocess(monkeypatch)
+        _stub_no_trivy(monkeypatch)
+
+        config = _make_config(
+            caddy_config=CaddyConfig(domain="blog.example.com", email=None),
+            host_bind_ip=LOCALHOST_BIND_IP,
+            deployment_mode=DEPLOY_MODE_REGISTRY,
+            image_ref="ghcr.io/example/agblogger:1.0",
+        )
+
+        result = deploy(config=config, project_dir=tmp_path)
+
+        assert result.bundle_path == tmp_path / DEFAULT_BUNDLE_DIR
+
+    def test_tarball_mode_succeeds_without_docker_compose_yml(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        (tmp_path / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
+        _stub_subprocess(monkeypatch)
+        _stub_no_trivy(monkeypatch)
+
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="agblogger:portable",
+        )
+
+        result = deploy(config=config, project_dir=tmp_path)
+
+        assert result.bundle_path == tmp_path / DEFAULT_BUNDLE_DIR
+
+    def test_local_mode_still_requires_docker_compose_yml(self, tmp_path: Path) -> None:
+        (tmp_path / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
+
+        config = _make_config()
+
+        with pytest.raises(FileNotFoundError, match=r"docker-compose\.yml"):
+            deploy(config=config, project_dir=tmp_path)
+
+
+class TestHealthPollProgress:
+    """Health poll should print intermediate status updates."""
+
+    def test_prints_elapsed_time_during_poll(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        from cli.deploy_production import _wait_for_healthy
+
+        call_count = 0
+        timestamps = [0.0, 5.0, 10.0, 200.0]  # last one triggers timeout
+
+        def fake_monotonic() -> float:
+            nonlocal call_count
+            idx = min(call_count, len(timestamps) - 1)
+            call_count += 1
+            return timestamps[idx]
+
+        def fake_run(command: list[str], **_kwargs: object) -> SimpleNamespace:
+            return SimpleNamespace(
+                returncode=0,
+                stdout="agblogger: Up 5 seconds\n",
+            )
+
+        monkeypatch.setattr("cli.deploy_production.subprocess.run", fake_run)
+        monkeypatch.setattr("cli.deploy_production.time.sleep", lambda _s: None)
+        monkeypatch.setattr("cli.deploy_production.time.monotonic", fake_monotonic)
+
+        config = _make_config()
+        _wait_for_healthy(config, tmp_path, timeout=60, interval=5)
+
+        captured = capsys.readouterr()
+        # Should show elapsed time in intermediate output
+        assert "5s" in captured.out or "10s" in captured.out
+
+
+class TestIpv4DetectionSharedHelper:
+    """IPv4 detection should use a single shared helper."""
+
+    def test_is_ipv4_like_detects_ipv4(self) -> None:
+        from cli.deploy_production import _is_ipv4_like
+
+        assert _is_ipv4_like("127.0.0.1")
+        assert _is_ipv4_like("93.184.216.34")
+
+    def test_is_ipv4_like_rejects_non_ipv4(self) -> None:
+        from cli.deploy_production import _is_ipv4_like
+
+        assert not _is_ipv4_like("blog.example.com")
+        assert not _is_ipv4_like("single")
+        assert not _is_ipv4_like("")
 
 
 class TestReadVersion:

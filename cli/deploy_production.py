@@ -60,6 +60,13 @@ _DOMAIN_RE = re.compile(
     r"(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)+$"
 )
 
+
+def _is_ipv4_like(host: str) -> bool:
+    """Return True when the string looks like a dotted-decimal IPv4 address."""
+    parts = host.split(".")
+    return len(parts) == 4 and all(p.isdigit() for p in parts)
+
+
 GENERATED_CONFIG_FILES = [
     DEFAULT_ENV_FILE,
     DEFAULT_CADDYFILE,
@@ -487,9 +494,7 @@ def _validate_config(config: DeployConfig) -> None:
         raise DeployError(f"HOST_BIND_IP must be either {LOCALHOST_BIND_IP} or {PUBLIC_BIND_IP}")
     if config.caddy_config is not None:
         domain = config.caddy_config.domain
-        parts = domain.split(".")
-        is_ipv4 = len(parts) == 4 and all(p.isdigit() for p in parts)
-        if is_ipv4 or not _DOMAIN_RE.match(domain):
+        if _is_ipv4_like(domain) or not _DOMAIN_RE.match(domain):
             raise DeployError(f"Caddy domain must be a valid public hostname (got {domain!r})")
         if config.caddy_config.email and "@" not in config.caddy_config.email:
             raise DeployError("Caddy contact email must contain '@'")
@@ -510,11 +515,16 @@ def _validate_config(config: DeployConfig) -> None:
         raise DeployError("TARBALL_FILENAME must not be empty")
 
 
-def check_prerequisites(project_dir: Path) -> None:
+def check_prerequisites(project_dir: Path, deployment_mode: str = DEPLOY_MODE_LOCAL) -> None:
     """Check required deployment prerequisites."""
-    compose_file = project_dir / "docker-compose.yml"
-    if not compose_file.exists():
-        raise DeployError(f"Missing docker compose file: {compose_file}")
+    if deployment_mode == DEPLOY_MODE_LOCAL:
+        compose_file = project_dir / "docker-compose.yml"
+        if not compose_file.exists():
+            raise DeployError(f"Missing docker compose file: {compose_file}")
+    else:
+        dockerfile = project_dir / "Dockerfile"
+        if not dockerfile.exists():
+            raise DeployError(f"Missing Dockerfile: {dockerfile}")
     if shutil.which("docker") is None:
         raise DeployError("Docker is not installed or not available on PATH")
 
@@ -776,7 +786,8 @@ def _wait_for_healthy(
 ) -> None:
     """Poll service status after startup until healthy or timeout."""
     base = _compose_base_args(config)
-    deadline = time.monotonic() + timeout
+    start = time.monotonic()
+    deadline = start + timeout
     use_caddy = config.caddy_config is not None
     print("Waiting for services to become healthy...")
     while time.monotonic() < deadline:
@@ -788,6 +799,10 @@ def _wait_for_healthy(
             text=True,
         )
         lines = result.stdout.strip().splitlines()
+        elapsed = int(time.monotonic() - start)
+        status_parts = [line.strip() for line in lines if line.strip()]
+        status_summary = "; ".join(status_parts) if status_parts else "no services found"
+        print(f"  [{elapsed}s] {status_summary}")
         agblogger_lines = [line for line in lines if "agblogger" in line]
         if not (agblogger_lines and all("(healthy)" in line for line in agblogger_lines)):
             continue
@@ -815,8 +830,11 @@ def _run_compose_up(config: DeployConfig, project_dir: Path, *, build: bool = Tr
 
 def deploy(config: DeployConfig, project_dir: Path) -> DeployResult:
     """Write deployment config, build, scan, and start containers."""
-    if not (project_dir / "docker-compose.yml").exists():
-        raise FileNotFoundError(f"Missing docker-compose.yml in {project_dir}")
+    if config.deployment_mode == DEPLOY_MODE_LOCAL:
+        if not (project_dir / "docker-compose.yml").exists():
+            raise FileNotFoundError(f"Missing docker-compose.yml in {project_dir}")
+    elif not (project_dir / "Dockerfile").exists():
+        raise FileNotFoundError(f"Missing Dockerfile in {project_dir}")
 
     _validate_config(config)
 
@@ -1036,9 +1054,7 @@ def _prompt_host_port(default: int = DEFAULT_HOST_PORT) -> int:
 
 def _is_valid_caddy_domain(domain: str) -> bool:
     """Return True when the domain is a valid public hostname for Caddy TLS."""
-    parts = domain.split(".")
-    is_ipv4 = len(parts) == 4 and all(p.isdigit() for p in parts)
-    if is_ipv4:
+    if _is_ipv4_like(domain):
         return False
     return _DOMAIN_RE.match(domain) is not None
 
@@ -1374,7 +1390,7 @@ def main() -> None:
                 print("Deployment cancelled.")
                 return
 
-        check_prerequisites(project_dir)
+        check_prerequisites(project_dir, config.deployment_mode)
         result = deploy(config=config, project_dir=project_dir)
     except (DeployError, FileNotFoundError) as exc:
         print(f"Deployment failed: {exc}")
