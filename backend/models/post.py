@@ -8,13 +8,13 @@ from typing import TYPE_CHECKING
 from sqlalchemy import Boolean, DateTime, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from backend.models.base import Base
+from backend.models.base import CacheBase
 
 if TYPE_CHECKING:
     from backend.models.label import PostLabelCache
 
 
-class PostCache(Base):
+class PostCache(CacheBase):
     """Cached post metadata (regenerated from filesystem)."""
 
     __tablename__ = "posts_cache"
@@ -40,7 +40,7 @@ class PostCache(Base):
     )
 
 
-class PostsFTS(Base):
+class PostsFTS(CacheBase):
     """Full-text search virtual table for posts.
 
     This model represents the FTS5 virtual table.

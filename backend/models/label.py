@@ -7,13 +7,13 @@ from typing import TYPE_CHECKING
 from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from backend.models.base import Base
+from backend.models.base import CacheBase
 
 if TYPE_CHECKING:
     from backend.models.post import PostCache
 
 
-class LabelCache(Base):
+class LabelCache(CacheBase):
     """Cached label definition (regenerated from labels.toml + implicit labels)."""
 
     __tablename__ = "labels_cache"
@@ -37,7 +37,7 @@ class LabelCache(Base):
     )
 
 
-class LabelParentCache(Base):
+class LabelParentCache(CacheBase):
     """Parent-child relationship between labels (DAG edges)."""
 
     __tablename__ = "label_parents_cache"
@@ -53,7 +53,7 @@ class LabelParentCache(Base):
     __table_args__ = (CheckConstraint("label_id != parent_id"),)
 
 
-class PostLabelCache(Base):
+class PostLabelCache(CacheBase):
     """Association between posts and labels."""
 
     __tablename__ = "post_labels_cache"
