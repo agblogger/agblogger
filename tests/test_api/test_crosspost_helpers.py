@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from backend.api.crosspost import _generate_pkce_pair, _store_pending_oauth_state
 from backend.crosspost.bluesky_oauth_state import OAuthStateStore
-from backend.models.base import Base
+from backend.models.base import DurableBase
 from backend.models.crosspost import SocialAccount
 from backend.services.crosspost_service import DuplicateAccountError, get_social_accounts
 
@@ -83,7 +83,7 @@ async def db_session() -> AsyncGenerator[AsyncSession]:
     """In-memory SQLite session for testing DB-level behaviour."""
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(DurableBase.metadata.create_all)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     async with factory() as session:
         yield session

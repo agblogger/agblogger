@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from backend.models.base import Base
+from backend.models.base import DurableBase
 from backend.models.user import User
 from backend.services.auth_service import (
     authenticate_personal_access_token,
@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 @pytest.fixture
 async def _create_tables(db_engine: AsyncEngine) -> None:
     async with db_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(DurableBase.metadata.create_all)
 
 
 @pytest.fixture

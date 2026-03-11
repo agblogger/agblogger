@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from backend.models.base import Base
+from backend.models.base import DurableBase
 from backend.models.crosspost import SocialAccount
 from backend.schemas.crosspost import SocialAccountCreate
 from backend.services.crosspost_service import (
@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 @pytest.fixture
 async def _create_tables(db_engine: AsyncEngine) -> None:
     async with db_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(DurableBase.metadata.create_all)
 
 
 @pytest.fixture

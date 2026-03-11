@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from backend.models.base import Base
+from backend.models.base import CacheBase, DurableBase
 from backend.models.post import PostCache
 from backend.models.user import User
 from backend.services.post_service import get_post, list_posts, resolve_author_display_name
@@ -36,7 +36,8 @@ async def engine(tmp_path: Path) -> AsyncGenerator[AsyncEngine]:
     db_path = tmp_path / "test_display_name.db"
     eng = create_async_engine(f"sqlite+aiosqlite:///{db_path}", echo=False)
     async with eng.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(DurableBase.metadata.create_all)
+        await conn.run_sync(CacheBase.metadata.create_all)
     async with eng.begin() as conn:
         await conn.execute(
             text(

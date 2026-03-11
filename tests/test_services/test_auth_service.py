@@ -12,7 +12,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from backend.models.base import Base
+from backend.models.base import DurableBase
 from backend.models.user import InviteCode, RefreshToken, User
 from backend.services.auth_service import (
     ALGORITHM,
@@ -39,7 +39,7 @@ if TYPE_CHECKING:
 @pytest.fixture
 async def _create_tables(db_engine: AsyncEngine) -> None:
     async with db_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(DurableBase.metadata.create_all)
 
 
 @pytest.fixture

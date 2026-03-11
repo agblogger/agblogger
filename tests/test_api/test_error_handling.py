@@ -1451,7 +1451,7 @@ class TestMissingServiceDependencies:
         from sqlalchemy import text
 
         from backend.database import create_engine as create_db_engine
-        from backend.models.base import Base
+        from backend.models.base import CacheBase, DurableBase
 
         settings = Settings(
             secret_key="test-secret-key-min-32-characters-long",
@@ -1467,7 +1467,8 @@ class TestMissingServiceDependencies:
         app.state.session_factory = session_factory
 
         async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+            await conn.run_sync(DurableBase.metadata.create_all)
+            await conn.run_sync(CacheBase.metadata.create_all)
         async with session_factory() as session:
             await session.execute(
                 text(
@@ -1507,7 +1508,7 @@ class TestMissingServiceDependencies:
         from sqlalchemy import text
 
         from backend.database import create_engine as create_db_engine
-        from backend.models.base import Base
+        from backend.models.base import CacheBase, DurableBase
 
         settings = Settings(
             secret_key="test-secret-key-min-32-characters-long",
@@ -1525,7 +1526,8 @@ class TestMissingServiceDependencies:
         app.state.content_write_lock = __import__("asyncio").Lock()
 
         async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+            await conn.run_sync(DurableBase.metadata.create_all)
+            await conn.run_sync(CacheBase.metadata.create_all)
         async with session_factory() as session:
             await session.execute(
                 text(

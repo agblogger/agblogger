@@ -20,8 +20,3 @@ class CacheBase(DeclarativeBase):
     post_labels_cache, sync_manifest, posts_fts.
     """
 
-
-# Temporary alias so existing consumers that import Base keep working
-# while migration to DurableBase/CacheBase is in progress.
-# Removed in Task 12 after all consumers are updated.
-Base = DurableBase
