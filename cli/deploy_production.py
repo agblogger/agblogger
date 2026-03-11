@@ -728,6 +728,12 @@ def _build_remote_readme_content(config: DeployConfig, commands: dict[str, str])
         " cache data. Both `./content/` and the `agblogger-db` Docker volume must be"
         " preserved during upgrades. Schema migrations run automatically on startup."
     )
+    bundle_note = (
+        "When upgrading, regenerate the full bundle locally and replace all files"
+        " in this directory (compose files and config may change between versions)."
+        " The `./content/` directory and `agblogger-db` Docker volume are not part"
+        " of the bundle and will be preserved automatically."
+    )
     if config.deployment_mode == DEPLOY_MODE_REGISTRY:
         lines.extend(
             [
@@ -735,6 +741,8 @@ def _build_remote_readme_content(config: DeployConfig, commands: dict[str, str])
                 "## Upgrading",
                 "",
                 data_note,
+                "",
+                bundle_note,
                 "",
                 "To upgrade to a new version, update the `AGBLOGGER_IMAGE` tag"
                 " in `.env.production` and run:",
@@ -751,6 +759,8 @@ def _build_remote_readme_content(config: DeployConfig, commands: dict[str, str])
                 "## Upgrading",
                 "",
                 data_note,
+                "",
+                bundle_note,
                 "",
                 "To upgrade to a new version:",
                 "",
@@ -934,7 +944,8 @@ def _wait_for_healthy(
         print("All services healthy.")
         return
     raise DeployError(
-        f"Health check timed out after {timeout}s. Run the status command to inspect services."
+        f"Health check timed out after {timeout}s. "
+        "Check service logs with the logs command to diagnose the issue."
     )
 
 
@@ -1268,6 +1279,11 @@ def collect_config(project_dir: Path | None = None) -> DeployConfig:
     # Check for existing deployment and offer to reuse secrets
     env_path = (project_dir or Path.cwd()) / DEFAULT_ENV_FILE
     existing = parse_existing_env(env_path)
+    if not existing.get("SECRET_KEY"):
+        bundle_env_path = (project_dir or Path.cwd()) / DEFAULT_BUNDLE_DIR / DEFAULT_ENV_FILE
+        bundle_existing = parse_existing_env(bundle_env_path)
+        if bundle_existing.get("SECRET_KEY"):
+            existing = bundle_existing
     reuse_secrets = False
     if (
         existing.get("SECRET_KEY")
@@ -1545,8 +1561,24 @@ def main() -> None:
     project_dir = args.project_dir.resolve()
 
     try:
-        if not args.dry_run and shutil.which("docker") is None:
-            raise DeployError("Docker is not installed or not available on PATH")
+        if not args.dry_run:
+            if shutil.which("docker") is None:
+                raise DeployError("Docker is not installed or not available on PATH")
+            try:
+                subprocess.run(
+                    ["docker", "info"],
+                    capture_output=True,
+                    check=True,
+                    timeout=10,
+                )
+            except subprocess.CalledProcessError, subprocess.TimeoutExpired:
+                raise DeployError(
+                    "Docker daemon is not running. "
+                    "Start Docker Desktop or the Docker service and try again."
+                ) from None
+
+        if not args.non_interactive and not args.dry_run:
+            print(f"AgBlogger deployment helper v{_read_version()}\n")
 
         config = config_from_args(args) if args.non_interactive else collect_config(project_dir)
 

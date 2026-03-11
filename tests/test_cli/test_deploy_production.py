@@ -1286,7 +1286,10 @@ def test_main_subprocess_error_includes_command(
     (tmp_path / "docker-compose.yml").write_text("services: {}\n", encoding="utf-8")
     monkeypatch.setattr("cli.deploy_production.shutil.which", lambda _name: "/usr/bin/docker")
 
-    def fake_run(command: list[str], **_kwargs: object) -> None:
+    def fake_run(command: list[str], **_kwargs: object) -> SimpleNamespace:
+        # Let the daemon check pass, fail on subsequent commands
+        if command == ["docker", "info"]:
+            return SimpleNamespace(returncode=0)
         raise sp.CalledProcessError(returncode=1, cmd=command)
 
     monkeypatch.setattr("cli.deploy_production.subprocess.run", fake_run)
@@ -2655,3 +2658,253 @@ class TestCrossArchitectureBuild:
         print_config_summary(config)
         captured = capsys.readouterr().out
         assert "Platform" not in captured
+
+
+# ── Docker daemon check before config collection ─────────────────────
+
+
+class TestDockerDaemonCheck:
+    """main() should verify the Docker daemon is running before collecting config."""
+
+    def test_daemon_not_running_fails_before_config_collection(
+        self,
+        capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        import subprocess as sp
+
+        from cli.deploy_production import main
+
+        monkeypatch.setattr(
+            "sys.argv",
+            [
+                "deploy",
+                "--non-interactive",
+                "--project-dir",
+                str(tmp_path),
+                "--admin-username",
+                "admin",
+                "--admin-password",
+                "strong-password!",
+                "--trusted-hosts",
+                "example.com",
+            ],
+        )
+        monkeypatch.setattr("cli.deploy_production.shutil.which", lambda _name: "/usr/bin/docker")
+
+        def fake_run(command: list[str], **kwargs: object) -> SimpleNamespace:
+            if command == ["docker", "info"]:
+                raise sp.CalledProcessError(1, command)
+            return SimpleNamespace(returncode=0)
+
+        monkeypatch.setattr("cli.deploy_production.subprocess.run", fake_run)
+
+        def _must_not_be_called(_args: object) -> None:
+            raise AssertionError("config_from_args should not be called when daemon is down")
+
+        monkeypatch.setattr("cli.deploy_production.config_from_args", _must_not_be_called)
+
+        with pytest.raises(SystemExit, match="1"):
+            main()
+
+        captured = capsys.readouterr()
+        assert "Docker daemon is not running" in captured.out
+
+    def test_daemon_check_skipped_for_dry_run(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        """dry-run should not check Docker daemon since it only prints config."""
+        from cli.deploy_production import main
+
+        monkeypatch.setattr(
+            "sys.argv",
+            [
+                "deploy",
+                "--dry-run",
+                "--non-interactive",
+                "--project-dir",
+                str(tmp_path),
+                "--admin-username",
+                "admin",
+                "--admin-password",
+                "strong-password!",
+                "--trusted-hosts",
+                "example.com",
+            ],
+        )
+        # Docker binary not even present — should still succeed for dry-run
+        monkeypatch.setattr("cli.deploy_production.shutil.which", lambda _name: None)
+
+        # Should not raise
+        main()
+
+
+# ── Bundle dir credential reuse ──────────────────────────────────────
+
+
+class TestCollectConfigBundleDirReuse:
+    """collect_config should fall back to bundle dir when no project-root env exists."""
+
+    def test_reuses_secrets_from_bundle_dir(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        from cli.deploy_production import collect_config
+
+        # Write .env.production only in the bundle dir, not project root
+        existing_config = _make_config()
+        env_content = build_env_content(existing_config)
+        bundle_dir = tmp_path / DEFAULT_BUNDLE_DIR
+        bundle_dir.mkdir(parents=True)
+        (bundle_dir / DEFAULT_ENV_FILE).write_text(env_content, encoding="utf-8")
+
+        # Simulate: reuse=yes, mode=local, caddy=no, public=no,
+        # port=8000, trusted hosts, proxy ips, docs=no
+        inputs = iter(["y", "", "n", "n", "", "example.com", "", "n"])
+        monkeypatch.setattr("builtins.input", lambda _prompt: next(inputs))
+        monkeypatch.setattr("cli.deploy_production.getpass.getpass", lambda _prompt: "")
+
+        config = collect_config(tmp_path)
+
+        assert config.secret_key == existing_config.secret_key
+        assert config.admin_username == existing_config.admin_username
+        assert config.admin_password == existing_config.admin_password
+
+    def test_prefers_project_root_over_bundle_dir(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        from cli.deploy_production import collect_config
+
+        # Write different configs in both locations
+        root_config = _make_config()
+        root_content = build_env_content(root_config)
+        (tmp_path / DEFAULT_ENV_FILE).write_text(root_content, encoding="utf-8")
+
+        bundle_dir = tmp_path / DEFAULT_BUNDLE_DIR
+        bundle_dir.mkdir(parents=True)
+        bundle_config = DeployConfig(
+            secret_key="bundle_" + "x" * 60,
+            admin_username="bundle_admin",
+            admin_password="bundle-strong-password",
+            trusted_hosts=["example.com"],
+            trusted_proxy_ips=[],
+            host_port=8000,
+            host_bind_ip=PUBLIC_BIND_IP,
+            caddy_config=None,
+            caddy_public=False,
+            expose_docs=False,
+        )
+        (bundle_dir / DEFAULT_ENV_FILE).write_text(
+            build_env_content(bundle_config), encoding="utf-8"
+        )
+
+        # Simulate: reuse=yes, mode=local, caddy=no, public=no,
+        # port=8000, trusted hosts, proxy ips, docs=no
+        inputs = iter(["y", "", "n", "n", "", "example.com", "", "n"])
+        monkeypatch.setattr("builtins.input", lambda _prompt: next(inputs))
+        monkeypatch.setattr("cli.deploy_production.getpass.getpass", lambda _prompt: "")
+
+        config = collect_config(tmp_path)
+
+        # Should use the project-root config, not the bundle one
+        assert config.secret_key == root_config.secret_key
+        assert config.admin_username == root_config.admin_username
+
+
+# ── Health timeout message ───────────────────────────────────────────
+
+
+class TestHealthTimeoutMessage:
+    """Health check timeout should suggest checking logs."""
+
+    def test_timeout_message_mentions_logs(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        from cli.deploy_production import _wait_for_healthy
+
+        config = _make_config()
+
+        # Stub subprocess.run to always return unhealthy status
+        def fake_run(*_args: object, **_kwargs: object) -> SimpleNamespace:
+            return SimpleNamespace(returncode=1, stdout="", stderr="")
+
+        monkeypatch.setattr("cli.deploy_production.subprocess.run", fake_run)
+        monkeypatch.setattr("cli.deploy_production.time.sleep", lambda _: None)
+
+        with pytest.raises(DeployError, match="logs command"):
+            _wait_for_healthy(config, tmp_path, timeout=1, interval=0)
+
+
+# ── Remote README bundle upgrade note ────────────────────────────────
+
+
+class TestRemoteReadmeBundleUpgradeNote:
+    """Remote deployment README should advise replacing the full bundle on upgrade."""
+
+    def test_registry_readme_mentions_full_bundle_replacement(self) -> None:
+        config = _make_config(
+            caddy_config=CaddyConfig(domain="blog.example.com", email=None),
+            host_bind_ip=LOCALHOST_BIND_IP,
+            deployment_mode=DEPLOY_MODE_REGISTRY,
+            image_ref="ghcr.io/example/agblogger:v1",
+        )
+        commands = build_lifecycle_commands(
+            deployment_mode=DEPLOY_MODE_REGISTRY,
+            use_caddy=True,
+            caddy_public=False,
+        )
+        content = _build_remote_readme_content(config, commands)
+        assert "regenerate the full bundle" in content
+        assert "compose files and config may change" in content
+
+    def test_tarball_readme_mentions_full_bundle_replacement(self) -> None:
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="agblogger:v1",
+        )
+        commands = build_lifecycle_commands(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            use_caddy=False,
+            caddy_public=False,
+        )
+        content = _build_remote_readme_content(config, commands)
+        assert "regenerate the full bundle" in content
+
+
+# ── Version banner ───────────────────────────────────────────────────
+
+
+class TestVersionBanner:
+    """Interactive mode should show the AgBlogger version at startup."""
+
+    def test_interactive_mode_prints_version(
+        self,
+        capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        from cli.deploy_production import main
+
+        monkeypatch.setattr(
+            "sys.argv",
+            ["deploy", "--project-dir", str(tmp_path)],
+        )
+        monkeypatch.setattr("cli.deploy_production.shutil.which", lambda _name: "/usr/bin/docker")
+
+        # Stub docker info to succeed
+        def fake_subprocess_run(command: list[str], **kwargs: object) -> SimpleNamespace:
+            return SimpleNamespace(returncode=0)
+
+        monkeypatch.setattr("cli.deploy_production.subprocess.run", fake_subprocess_run)
+
+        # Stub collect_config to return a config, then cancel at confirmation
+        config = _make_config()
+        monkeypatch.setattr("cli.deploy_production.collect_config", lambda _dir: config)
+        monkeypatch.setattr("cli.deploy_production._prompt_yes_no", lambda _prompt, default: False)
+
+        main()
+
+        captured = capsys.readouterr().out
+        assert "AgBlogger deployment helper v" in captured
