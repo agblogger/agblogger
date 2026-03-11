@@ -16,13 +16,13 @@ Authentication is a coupled system spanning backend token logic, cookie handling
 
 ### What to preserve
 
-- **Cookie flags**: `access_token` and `refresh_token` must remain `HttpOnly`, `SameSite=Strict`, and `Secure` outside debug. These are set in `backend/api/auth.py:_set_auth_cookies()`. Do not weaken any of these flags.
-- **Stateless CSRF**: Unsafe `/api/*` methods with cookie auth require `X-CSRF-Token` matching the HMAC-derived token for the current access cookie. The middleware lives in `backend/main.py`, the token helpers live in `backend/services/csrf_service.py`, and the frontend fetches/caches the token via `frontend/src/api/`.
-- **Login origin enforcement**: Validates `Origin`/`Referer` against allowed origins. Configured via `auth_enforce_login_origin` in `backend/config.py`.
-- **Rate limiting**: Sliding-window counters on login (`login:{ip}:{username}`) and refresh (`refresh:{ip}`) endpoints. Do not remove or relax the limits.
-- **Refresh token rotation**: On refresh, the old token is deleted before issuing a new pair. This prevents reuse of stolen tokens after legitimate rotation.
-- **Hashed token storage**: Refresh tokens, PATs, and invite codes are SHA-256 hashed before database storage (`auth_service.hash_token()`). Never store plaintext token values.
-- **Timing-safe comparison**: Username enumeration is mitigated with a dummy bcrypt check on failed lookups. CSRF token comparison uses `secrets.compare_digest()`.
+- **Hardened browser cookies**: Authentication cookies must remain `HttpOnly`, `SameSite=Strict`, and `Secure` outside debug. Do not weaken these flags.
+- **Cookie auth plus CSRF**: Unsafe browser requests under `/api/` must continue to require CSRF protection tied to the authenticated browser session. Do not add cookie-authenticated write endpoints that bypass this model.
+- **Origin checks on login**: Browser login must continue to validate request origin metadata against configured allowed origins.
+- **Rate limiting**: Authentication endpoints must remain rate-limited. Do not remove or materially relax login or refresh throttling.
+- **Refresh token rotation**: Refresh must remain one-time-use from the client's perspective. A successful refresh should invalidate the prior refresh token before issuing a replacement.
+- **No plaintext durable tokens**: Refresh tokens, PATs, invite codes, and similar long-lived secrets must be stored only as one-way hashes unless there is a documented cryptographic reason not to.
+- **Side-channel resistance**: Keep timing-safe comparisons and anti-enumeration behavior for authentication failures.
 
 ### When adding new auth endpoints
 
@@ -34,9 +34,9 @@ Authentication is a coupled system spanning backend token logic, cookie handling
 ### When modifying the login/refresh/logout flow
 
 Touch all three layers together:
-- **Backend**: token creation, cookie setting, CSRF token generation (`backend/api/auth.py`)
-- **Middleware**: CSRF validation logic (`backend/main.py`)
-- **Frontend**: CSRF token fetch/caching and header injection (`frontend/src/api/`)
+- **Backend**: token issuance, cookie handling, and CSRF token generation
+- **Middleware**: CSRF enforcement and request-boundary checks
+- **Frontend**: CSRF token fetch/caching and header injection
 
 Test the full cycle: login sets cookies, authenticated requests include CSRF, refresh rotates tokens, logout clears everything.
 
@@ -63,7 +63,7 @@ Do not inline auth checks like `if not user.is_admin: raise ...` inside handlers
 
 Draft posts and their co-located assets are visible only to their author. This is enforced in:
 - Post listing: filters drafts by matching authenticated user's username against the post's `author` field
-- Content file serving: `backend/api/content.py:_check_draft_access()` returns 404 (not 403) for non-authors to avoid information disclosure
+- Content file serving: returns 404 (not 403) for non-authors to avoid information disclosure
 - Direct post access: same author-matching logic
 
 When adding new endpoints that serve post content or metadata, check whether draft posts should be filtered.
@@ -89,9 +89,9 @@ except OSError as exc:
 
 Use the correct exception type to control what clients see:
 
-- **`InternalServerError`** (`backend/exceptions.py`) — for errors whose details must never reach clients: decryption failures, config validation, infrastructure port conflicts, etc. The global handler returns a generic `"Internal server error"` (500) and logs the full details server-side.
-- **`ExternalServiceError`** (`backend/exceptions.py`) — for external service failures (OAuth, HTTP APIs) where details should be logged but not exposed to clients. The global handler returns `"External service error"` (502).
-- **`ValueError`** — for business logic validation errors that are safe to forward to clients: invalid dates, bad input formats, etc. The global handler returns `str(exc)` as the 422 detail.
+- **`InternalServerError`** (`backend/exceptions.py`) — for errors whose details must never reach clients: decryption failures, config validation, infrastructure port conflicts, and similar internal faults.
+- **`ExternalServiceError`** (`backend/exceptions.py`) — for external service failures (OAuth, HTTP APIs) where details should be logged but not exposed to clients.
+- **`ValueError`** — for business logic validation errors that are safe to forward to clients: invalid dates, bad input formats, and similar user-correctable problems.
 
 Services must never import `HTTPException` from FastAPI. Raise `ValueError`, `InternalServerError`, or `ExternalServiceError` and let the API layer or global handlers translate to HTTP responses.
 
@@ -101,37 +101,37 @@ The global exception handlers in `backend/main.py` catch unhandled errors at the
 
 ### External service interaction
 
-All interactions with external services (pandoc, git, database, filesystem, network) must handle failures gracefully. The pandoc renderer demonstrates the pattern: catch `httpx.NetworkError`, attempt a restart, retry once, then raise `RenderError` with a generic message.
+All interactions with external services (pandoc, git, database, filesystem, network) must handle failures gracefully. Use bounded retries only when the operation is known to be safe to retry, log the real failure server-side, and return a generic client-facing error message.
 
 ## Input Validation and Sanitization
 
 ### HTML sanitization
 
-All Pandoc-rendered HTML passes through the allowlist-based sanitizer (`backend/pandoc/renderer.py:_HtmlSanitizer`) before being served. The sanitizer:
+All rendered HTML derived from markdown must continue to pass through the backend sanitizer before being served. The sanitizer:
 
-- Strips all tags not in `_ALLOWED_TAGS`
-- Allows only `class` and `id` as global attributes, with tag-specific extras (e.g., `href` on `<a>`, `src` on `<img>`)
-- Validates URLs via `_is_safe_url()`: blocks `javascript:`, `data:` (in href/src), and protocol-relative (`//`) URLs
+- Strips tags that are not explicitly allowed
+- Allows only a narrow set of safe attributes, with tag-specific exceptions such as link and image URLs
+- Rejects dangerous URL schemes and protocol-relative (`//`) URLs in navigable or fetchable attributes
 - Escapes all text content and attribute values
 
 When modifying the sanitizer:
 - Never add `script`, `object`, `embed`, `style`, `form`, `input`, or `button` to the allowed tags
-- `iframe` is conditionally allowed only for YouTube embed/shorts URLs (`_YOUTUBE_SRC_RE`). The sanitizer forces sandbox, referrerpolicy, and loading attributes. Never extend iframe support to other domains without updating CSP `frame-src`.
+- `iframe` support, if kept, must stay restricted to explicitly approved embed providers and must remain aligned with CSP `frame-src`
 - Never allow `on*` event handler attributes
 - Never allow `javascript:` or `data:` URL schemes in `href`/`src`
 - Test with XSS payloads: `<script>alert(1)</script>`, `<img onerror=alert(1) src=x>`, `<a href="javascript:alert(1)">`, `<div style="background:url(javascript:alert(1))">`
 
 ### Frontend HTML rendering
 
-The frontend uses `dangerouslySetInnerHTML` in several components (`PostPage`, `EditorPage`, `SearchPage`, `PageViewPage`, `AdminPage`) to render server-provided HTML. This is safe because the backend sanitizes all rendered HTML before serving it. Do not render user-supplied HTML on the frontend without backend sanitization.
+The frontend has a small number of components that render server-provided HTML with `dangerouslySetInnerHTML`. This is safe only because the backend sanitizes rendered HTML before serving it. Do not render user-supplied HTML on the frontend without backend sanitization.
 
 ### Uploaded asset delivery
 
-Files reachable through `/api/content/*` must be treated as untrusted, even when they live under the managed content directory. Active document or script-capable types such as HTML, SVG, PDF, XML/XHTML, JSON, and JavaScript must not be served inline under the application origin. Preserve the current pattern in `backend/api/content.py`: force these responses to download with `Content-Disposition: attachment` and attach a restrictive per-response CSP.
+Files reachable through `/api/content/*` must be treated as untrusted, even when they live under the managed content directory. Active document or script-capable types such as HTML, SVG, PDF, XML/XHTML, JSON, and JavaScript must not be served inline under the application origin. Preserve the current pattern of forcing these responses to download and attaching a restrictive per-response CSP.
 
 ### Path traversal protection
 
-The content file endpoint (`backend/api/content.py:_validate_path()`) uses four layers of defense. When modifying file-serving or path logic:
+The content file endpoint uses multiple layers of defense. When modifying file-serving or path logic:
 1. Maintain the `..` component rejection
 2. Maintain the allowed prefix check (`posts/`, `assets/`)
 3. Use `.resolve()` to follow symlinks before checking containment
@@ -141,7 +141,7 @@ Add regression tests for traversal attempts: `../etc/passwd`, `posts/../../etc/p
 
 ### Sync path boundaries
 
-Sync endpoints must stay narrower than the raw content root. Preserve the managed sync surface in `backend/services/sync_service.py` and `backend/api/sync.py`: `index.toml`, `labels.toml`, top-level `.md` pages, and all non-hidden files recursively under `posts/` and `assets/`. Hidden files and private application state must remain unreachable through sync APIs.
+Sync endpoints must stay narrower than the raw content root. Preserve the managed sync surface: site config, labels, top-level markdown pages, and non-hidden files under managed post and asset trees. Hidden files and private application state must remain unreachable through sync APIs.
 
 ### Pydantic validation
 
@@ -153,7 +153,7 @@ All API request bodies use Pydantic schemas. When adding new endpoints:
 
 ### Credential encryption
 
-Cross-post OAuth credentials are encrypted at rest via Fernet (`backend/services/crypto_service.py`), keyed to the application `SECRET_KEY`. When working with cross-post accounts:
+Cross-post OAuth credentials are encrypted at rest, keyed to the application secret. When working with cross-post accounts:
 - Always use `encrypt_value()` before database writes and `decrypt_value()` after reads
 - Never store raw JSON credentials in the database
 - If decryption or post-decryption parsing fails, fail closed and require the user to reconnect the account; do not fall back to plaintext JSON stored in the database
@@ -167,28 +167,42 @@ Multipart upload routes are protected by request-size limits at both the proxy a
 
 Use `secrets.token_urlsafe()` for all token generation. Do not use `random`, `uuid4`, or other non-cryptographic sources. Follow the existing prefix conventions: `agpat_` for PATs, `aginvite_` for invite codes.
 
+## Outbound Integrations
+
+Outbound requests to social platforms and OAuth providers are a separate trust boundary. Treat all provider-controlled URLs, metadata documents, and token responses as untrusted input.
+
+### Outbound HTTP safety
+
+- Preserve SSRF protections for outbound HTTP clients. Do not replace the hardened outbound client path with a generic client for provider discovery, OAuth flows, or publication requests.
+- Resolve and validate remote destinations at connection time, not just by pre-validating URLs as strings.
+- Do not allow integrations to reach loopback, private, link-local, multicast, reserved, or Unix-socket destinations.
+
+### OAuth and provider flows
+
+- Preserve PKCE, state validation, issuer validation, and equivalent anti-forgery checks for OAuth-style flows.
+- Bind callbacks and token exchanges to the pending authorization state created by the same user flow. Do not accept partially validated callback parameters.
+- Fail closed on malformed or incomplete token responses. Do not infer missing security-relevant fields.
+- Never trust provider metadata or discovery responses without the same outbound-request hardening used for other third-party HTTP calls.
+
 ## Content Security Policy (CSP)
 
-The backend enforces a strict CSP via `backend/config.py:content_security_policy`:
-
-```
-default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';
-img-src 'self' https: data:; font-src 'self' data:; connect-src 'self';
-frame-src https://www.youtube.com https://www.youtube-nocookie.com;
-base-uri 'self'; form-action 'self'; frame-ancestors 'none'
-```
+The backend enforces a strict CSP with a self-hosted resource model and narrowly scoped exceptions for approved content types and embeds.
 
 ### Rules
 
 - **All fonts, scripts, and stylesheets must be self-hosted.** Do not add CDN `@import` or `<link>` tags pointing to third-party domains (e.g., Google Fonts, cdnjs, unpkg). These will be silently blocked in production.
-- **Images** are the exception: `img-src 'self' https: data:` allows external HTTPS images.
-- **Inline styles** are allowed (`'unsafe-inline'`) for Tailwind and KaTeX.
+- **Images** are the main exception: external HTTPS images are allowed, but scripts and styles are not.
+- **Inline styles** are currently allowed for existing frontend rendering needs. Do not broaden script execution allowances to match that exception.
 - If a new third-party resource is genuinely needed, self-host it (e.g., fontsource for fonts, npm packages for libraries) rather than relaxing the CSP.
 - Do not add `'unsafe-eval'` to `script-src`. The custom Semgrep rule (`.semgrep.yml`) blocks `eval()` and `new Function()`.
 - `frame-ancestors 'none'` prevents clickjacking. Do not relax this unless embedding is an explicit requirement.
+- Keep any allowed embed domains aligned between the sanitizer and CSP.
 
 ## Browser Security Headers
 
+- Preserve `X-Content-Type-Options: nosniff` so browsers do not reinterpret responses as a more dangerous content type.
+- Preserve `X-Frame-Options: DENY` and `frame-ancestors 'none'` unless embedding the app becomes an explicit, reviewed requirement.
+- Preserve `Referrer-Policy` unless a concrete integration requires a different policy and the privacy tradeoff has been reviewed.
 - Preserve `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Resource-Policy: same-origin` unless you have a concrete cross-origin integration that requires something weaker.
 - `Permissions-Policy` is deny-by-default for unused browser features. If a frontend change needs a browser capability such as camera, microphone, geolocation, clipboard, fullscreen, or Web Share, update the header in `backend/config.py` and add a regression test proving the intended capability still works.
 
@@ -202,13 +216,9 @@ base-uri 'self'; form-action 'self'; frame-ancestors 'none'
 
 ### Production fail-fast guards
 
-`Settings.validate_runtime_security()` in `backend/config.py` enforces:
-- `SECRET_KEY` not default and >= 32 characters
-- `ADMIN_PASSWORD` not default and >= 8 characters
-- `TRUSTED_HOSTS` non-empty and not a catch-all wildcard
-- `BLUESKY_CLIENT_URL`, when set, is a canonical `https://` origin
+Startup validation enforces basic production security requirements for secrets, admin bootstrap credentials, trusted host configuration, and externally visible OAuth client URLs.
 
-Do not bypass these outside explicit debug/test scenarios. Do not weaken the thresholds.
+Do not bypass these checks outside explicit debug/test scenarios. Do not weaken the minimum requirements without a clear security review.
 
 `docker-compose.yml` requires `SECRET_KEY`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, and `TRUSTED_HOSTS` via `${VAR?message}` syntax. Do not make these optional.
 
@@ -233,6 +243,13 @@ When adding dependencies:
 - The application runs as the non-root `agblogger` user. Do not add `USER root` or `--privileged` flags.
 - The multi-stage build discards the frontend build stage. Do not copy dev dependencies or build tools into the production image.
 - AgBlogger is internal-only in `docker-compose.yml` (`expose: 8000`, not `ports`). Only Caddy publishes ports to the host.
+
+### Subprocess safety
+
+- Prefer argument lists over shell command strings. Do not use shell invocation for operations that can be expressed as fixed argv.
+- Keep executable names fixed and validate any user-influenced refs, paths, or identifiers before passing them to subprocesses.
+- Set timeouts for subprocess calls and handle failure paths without crashing the server.
+- Do not return raw subprocess stderr/stdout to clients when it may expose internal paths, commands, or environment details.
 
 ### API documentation
 
@@ -259,6 +276,12 @@ Every security-related change must include tests. Use this checklist:
 - Forbidden prefix returns 403
 - XSS payload in markdown is sanitized in rendered output
 - Invalid URL schemes (`javascript:`, `data:`) are stripped from href/src
+
+### Outbound integration tests
+- Outbound HTTP protections reject private or loopback destinations
+- OAuth callback with missing, expired, or mismatched state is rejected
+- OAuth callback with issuer or subject mismatch is rejected when those checks apply
+- Malformed provider responses fail closed with a generic client-facing error
 
 ### Error handling tests
 - External service failure returns generic error message, not internal details
