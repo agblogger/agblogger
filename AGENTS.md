@@ -6,6 +6,8 @@ AgBlogger is a markdown-first blogging platform where markdown files with YAML f
 
 **IMPORTANT** Read @docs/arch/index.md for architecture overview. **ALWAYS** read ALL files under docs/arch/ that are relevant to your current task. Read other files in docs/arch/ when you need deeper understanding of application architecture. Update docs/arch/*.md (all relevant files) whenever architecture changes – always keep these files up-to-date with the codebase.
 
+The primary purpose of architecture docs in docs/arch/*.md is to provide agents with a quick but comprehensive overview of the system's architecture and the codebase. Treat the docs as an onboarding guide. When updating, do not add unnecessary brittle implementation details, but do include info on where to find relevant codebase references.
+
 ## Build, Test, and Development Commands
 
 ```bash
@@ -16,7 +18,6 @@ just start backend_port=9000 frontend_port=9173  # Custom ports
 just check            # Full gate: static checks first, then tests
 just check-static     # Static-only gate: backend + frontend + Vulture + Trivy
 just check-extra      # Extra dependency/security checks: full npm audit + Checkov + Gitleaks + CodeQL + Semgrep + Snyk OSS + slow backend tests
-just check-noisy      # Noisy scans kept outside the default gate
 just test             # Test-only gate: backend + frontend tests
 just check-backend    # Backend static checks + backend tests
 just check-backend-static  # Backend static checks only
