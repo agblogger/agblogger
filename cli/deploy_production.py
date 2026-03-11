@@ -29,6 +29,7 @@ DEFAULT_IMAGE_COMPOSE_FILE = "docker-compose.image.yml"
 DEFAULT_IMAGE_NO_CADDY_COMPOSE_FILE = "docker-compose.image.nocaddy.yml"
 DEFAULT_REMOTE_README = "DEPLOY-REMOTE.md"
 DEFAULT_IMAGE_TARBALL = "agblogger-image.tar"
+DEFAULT_REMOTE_PLATFORM = "linux/amd64"
 DEFAULT_BUNDLE_DIR = Path("dist/deploy")
 DEPLOY_MODE_LOCAL = "local"
 DEPLOY_MODE_REGISTRY = "registry"
@@ -116,6 +117,7 @@ class DeployConfig:
     image_ref: str | None = None
     bundle_dir: Path = DEFAULT_BUNDLE_DIR
     tarball_filename: str = DEFAULT_IMAGE_TARBALL
+    platform: str | None = None
 
 
 @dataclass(frozen=True)
@@ -228,6 +230,9 @@ def build_env_content(config: DeployConfig) -> str:
     else:
         lines.append(f"HOST_PORT={config.host_port}")
         lines.append(f"HOST_BIND_IP={config.host_bind_ip}")
+    bluesky_domain = (
+        config.caddy_config.domain if config.caddy_config is not None else "blog.example.com"
+    )
     lines.extend(
         [
             "DEBUG=false",
@@ -239,7 +244,7 @@ def build_env_content(config: DeployConfig) -> str:
             "AUTH_INVITES_ENABLED=true",
             "AUTH_LOGIN_MAX_FAILURES=5",
             "AUTH_RATE_LIMIT_WINDOW_SECONDS=300",
-            "# BLUESKY_CLIENT_URL=https://blog.example.com"
+            f"# BLUESKY_CLIENT_URL=https://{bluesky_domain}"
             "  # Uncomment to enable Bluesky cross-posting",
         ]
     )
@@ -307,6 +312,7 @@ def _agblogger_env_section() -> str:
         "      - AUTH_INVITES_ENABLED=${AUTH_INVITES_ENABLED:-true}\n"
         "      - AUTH_LOGIN_MAX_FAILURES=${AUTH_LOGIN_MAX_FAILURES:-5}\n"
         "      - AUTH_RATE_LIMIT_WINDOW_SECONDS=${AUTH_RATE_LIMIT_WINDOW_SECONDS:-300}\n"
+        "      - BLUESKY_CLIENT_URL=${BLUESKY_CLIENT_URL:-}\n"
     )
 
 
@@ -818,10 +824,14 @@ def write_bundle_files(config: DeployConfig, bundle_dir: Path) -> None:
 # ── Build and scan ───────────────────────────────────────────────────
 
 
-def build_image(project_dir: Path, image_tag: str) -> None:
+def build_image(project_dir: Path, image_tag: str, platform: str | None = None) -> None:
     """Build a Docker image with the requested tag."""
     print(f"Building Docker image ({image_tag})...")
-    _run_docker(project_dir, ["build", "--tag", image_tag, "."])
+    args = ["build"]
+    if platform:
+        args.extend(["--platform", platform])
+    args.extend(["--tag", image_tag, "."])
+    _run_docker(project_dir, args)
 
 
 def scan_image(project_dir: Path, image_tag: str) -> None:
@@ -842,9 +852,9 @@ def scan_image(project_dir: Path, image_tag: str) -> None:
     )
 
 
-def build_and_scan(project_dir: Path, image_tag: str) -> None:
+def build_and_scan(project_dir: Path, image_tag: str, platform: str | None = None) -> None:
     """Build the Docker image and scan with Trivy before deployment."""
-    build_image(project_dir, image_tag)
+    build_image(project_dir, image_tag, platform=platform)
     scan_image(project_dir, image_tag)
 
 
@@ -989,9 +999,9 @@ def deploy(config: DeployConfig, project_dir: Path) -> DeployResult:
         raise DeployError("IMAGE_REF is required for remote deployment modes")
 
     if trivy_available:
-        build_and_scan(project_dir, image_tag)
+        build_and_scan(project_dir, image_tag, platform=config.platform)
     else:
-        build_image(project_dir, image_tag)
+        build_image(project_dir, image_tag, platform=config.platform)
 
     write_bundle_files(config, bundle_dir)
 
@@ -1028,6 +1038,7 @@ def _mask_secrets(config: DeployConfig) -> DeployConfig:
         image_ref=config.image_ref,
         bundle_dir=config.bundle_dir,
         tarball_filename=config.tarball_filename,
+        platform=config.platform,
     )
 
 
@@ -1102,6 +1113,8 @@ def print_config_summary(config: DeployConfig) -> None:
         print(f"  Trusted proxies: {', '.join(config.trusted_proxy_ips)}")
     if config.image_ref:
         print(f"  Image ref:       {config.image_ref}")
+    if config.platform:
+        print(f"  Platform:        {config.platform}")
     print(f"  Expose API docs: {'yes' if config.expose_docs else 'no'}")
     print()
 
@@ -1278,6 +1291,7 @@ def collect_config(project_dir: Path | None = None) -> DeployConfig:
     deployment_mode = _prompt_deployment_mode()
     image_ref: str | None = None
     tarball_filename = DEFAULT_IMAGE_TARBALL
+    platform: str | None = None
     if deployment_mode in {DEPLOY_MODE_REGISTRY, DEPLOY_MODE_TARBALL}:
         image_ref = _prompt_non_empty(
             "Container image reference (e.g., ghcr.io/yourname/agblogger:v1.0)"
@@ -1287,6 +1301,8 @@ def collect_config(project_dir: Path | None = None) -> DeployConfig:
                 "Tarball filename",
                 default=DEFAULT_IMAGE_TARBALL,
             )
+        platform = DEFAULT_REMOTE_PLATFORM
+        print(f"Target platform: {platform} (override with --platform for other architectures).")
 
     use_caddy = _prompt_yes_no(
         (
@@ -1359,6 +1375,7 @@ def collect_config(project_dir: Path | None = None) -> DeployConfig:
         image_ref=image_ref,
         bundle_dir=DEFAULT_BUNDLE_DIR,
         tarball_filename=tarball_filename,
+        platform=platform,
     )
 
 
@@ -1367,6 +1384,9 @@ def collect_config(project_dir: Path | None = None) -> DeployConfig:
 
 def config_from_args(args: argparse.Namespace) -> DeployConfig:
     """Build DeployConfig from CLI arguments for non-interactive mode."""
+    platform = args.platform
+    if platform is None and args.deployment_mode in {DEPLOY_MODE_REGISTRY, DEPLOY_MODE_TARBALL}:
+        platform = DEFAULT_REMOTE_PLATFORM
     secret_key = args.secret_key or secrets.token_urlsafe(64)
     if not args.admin_username:
         raise DeployError("--admin-username is required in non-interactive mode")
@@ -1412,6 +1432,7 @@ def config_from_args(args: argparse.Namespace) -> DeployConfig:
         image_ref=args.image_ref,
         bundle_dir=args.bundle_dir,
         tarball_filename=args.tarball_filename,
+        platform=platform,
     )
 
 
@@ -1508,6 +1529,11 @@ def _parse_args() -> argparse.Namespace:
         "--tarball-filename",
         default=DEFAULT_IMAGE_TARBALL,
         help=f"Image tarball name for tarball deployment mode (default: {DEFAULT_IMAGE_TARBALL}).",
+    )
+    config_group.add_argument(
+        "--platform",
+        help="Target platform for Docker image build (e.g., linux/arm64). "
+        f"Defaults to {DEFAULT_REMOTE_PLATFORM} for remote deployment modes.",
     )
 
     return parser.parse_args()

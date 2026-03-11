@@ -20,6 +20,7 @@ from cli.deploy_production import (
     DEFAULT_IMAGE_NO_CADDY_COMPOSE_FILE,
     DEFAULT_IMAGE_TARBALL,
     DEFAULT_NO_CADDY_COMPOSE_FILE,
+    DEFAULT_REMOTE_PLATFORM,
     DEPLOY_MODE_LOCAL,
     DEPLOY_MODE_REGISTRY,
     DEPLOY_MODE_TARBALL,
@@ -40,6 +41,7 @@ from cli.deploy_production import (
     build_caddyfile_content,
     build_direct_compose_content,
     build_env_content,
+    build_image,
     build_image_compose_content,
     build_image_direct_compose_content,
     build_lifecycle_commands,
@@ -65,6 +67,7 @@ def _make_config(
     expose_docs: bool = False,
     deployment_mode: str = DEPLOY_MODE_LOCAL,
     image_ref: str | None = None,
+    platform: str | None = None,
 ) -> DeployConfig:
     """Build a valid DeployConfig with sensible defaults for tests."""
     return DeployConfig(
@@ -82,6 +85,7 @@ def _make_config(
         image_ref=image_ref,
         bundle_dir=DEFAULT_BUNDLE_DIR,
         tarball_filename=DEFAULT_IMAGE_TARBALL,
+        platform=platform,
     )
 
 
@@ -835,6 +839,7 @@ def test_config_from_args_builds_config_without_caddy() -> None:
         image_ref=None,
         bundle_dir=DEFAULT_BUNDLE_DIR,
         tarball_filename=DEFAULT_IMAGE_TARBALL,
+        platform=None,
     )
 
     config = config_from_args(args)
@@ -864,6 +869,7 @@ def test_config_from_args_builds_config_with_caddy() -> None:
         image_ref=None,
         bundle_dir=DEFAULT_BUNDLE_DIR,
         tarball_filename=DEFAULT_IMAGE_TARBALL,
+        platform=None,
     )
 
     config = config_from_args(args)
@@ -893,6 +899,7 @@ def test_config_from_args_auto_generates_secret_key() -> None:
         image_ref=None,
         bundle_dir=DEFAULT_BUNDLE_DIR,
         tarball_filename=DEFAULT_IMAGE_TARBALL,
+        platform=None,
     )
 
     config = config_from_args(args)
@@ -916,6 +923,7 @@ def test_config_from_args_auto_appends_caddy_domain_to_trusted_hosts() -> None:
         image_ref=None,
         bundle_dir=DEFAULT_BUNDLE_DIR,
         tarball_filename=DEFAULT_IMAGE_TARBALL,
+        platform=None,
     )
 
     config = config_from_args(args)
@@ -939,6 +947,7 @@ def test_config_from_args_raises_on_missing_admin_username() -> None:
         image_ref=None,
         bundle_dir=DEFAULT_BUNDLE_DIR,
         tarball_filename=DEFAULT_IMAGE_TARBALL,
+        platform=None,
     )
 
     with pytest.raises(DeployError, match="--admin-username"):
@@ -965,6 +974,7 @@ def test_config_from_args_raises_on_missing_admin_password(
         image_ref=None,
         bundle_dir=DEFAULT_BUNDLE_DIR,
         tarball_filename=DEFAULT_IMAGE_TARBALL,
+        platform=None,
     )
 
     with pytest.raises(DeployError, match="--admin-password"):
@@ -988,6 +998,7 @@ def test_config_from_args_raises_on_missing_trusted_hosts() -> None:
         image_ref=None,
         bundle_dir=DEFAULT_BUNDLE_DIR,
         tarball_filename=DEFAULT_IMAGE_TARBALL,
+        platform=None,
     )
 
     with pytest.raises(DeployError, match="--trusted-hosts"):
@@ -1011,6 +1022,7 @@ def test_config_from_args_requires_image_ref_for_registry_mode() -> None:
         image_ref=None,
         bundle_dir=DEFAULT_BUNDLE_DIR,
         tarball_filename=DEFAULT_IMAGE_TARBALL,
+        platform=None,
     )
 
     with pytest.raises(DeployError, match="--image-ref"):
@@ -1034,6 +1046,7 @@ def test_config_from_args_builds_registry_mode() -> None:
         image_ref="ghcr.io/example/agblogger:1.2.3",
         bundle_dir=DEFAULT_BUNDLE_DIR,
         tarball_filename=DEFAULT_IMAGE_TARBALL,
+        platform=None,
     )
 
     config = config_from_args(args)
@@ -1119,6 +1132,7 @@ def test_config_from_args_auto_adds_caddy_proxy_subnet() -> None:
         image_ref=None,
         bundle_dir=DEFAULT_BUNDLE_DIR,
         tarball_filename=DEFAULT_IMAGE_TARBALL,
+        platform=None,
     )
 
     config = config_from_args(args)
@@ -1142,6 +1156,7 @@ def test_config_from_args_no_caddy_does_not_add_proxy_subnet() -> None:
         image_ref=None,
         bundle_dir=DEFAULT_BUNDLE_DIR,
         tarball_filename=DEFAULT_IMAGE_TARBALL,
+        platform=None,
     )
 
     config = config_from_args(args)
@@ -1171,6 +1186,7 @@ def test_config_from_args_reads_admin_password_from_env(
         image_ref=None,
         bundle_dir=DEFAULT_BUNDLE_DIR,
         tarball_filename=DEFAULT_IMAGE_TARBALL,
+        platform=None,
     )
 
     config = config_from_args(args)
@@ -2409,3 +2425,233 @@ class TestCollectConfigReusesExistingSecrets:
         dry_run(config)
         captured = capsys.readouterr().out
         assert "Upgrade:" in captured
+
+
+# ── BLUESKY_CLIENT_URL forwarding to container ───────────────────────
+
+
+class TestBlueskyClientUrlForwarding:
+    """BLUESKY_CLIENT_URL must be in compose environment so the container receives it."""
+
+    def test_compose_env_section_includes_bluesky_client_url(self) -> None:
+        from cli.deploy_production import _agblogger_env_section
+
+        section = _agblogger_env_section()
+        assert "BLUESKY_CLIENT_URL=${BLUESKY_CLIENT_URL:-}" in section
+
+    def test_direct_compose_includes_bluesky_client_url(self) -> None:
+        content = build_direct_compose_content()
+        assert "BLUESKY_CLIENT_URL=${BLUESKY_CLIENT_URL:-}" in content
+
+    def test_image_compose_includes_bluesky_client_url(self) -> None:
+        content = build_image_compose_content()
+        assert "BLUESKY_CLIENT_URL=${BLUESKY_CLIENT_URL:-}" in content
+
+
+# ── BLUESKY_CLIENT_URL uses actual Caddy domain ──────────────────────
+
+
+class TestBlueskyPlaceholderDomain:
+    """The commented BLUESKY_CLIENT_URL should use the actual Caddy domain when available."""
+
+    def test_uses_caddy_domain_when_configured(self) -> None:
+        config = _make_config(
+            caddy_config=CaddyConfig(domain="myblog.example.com", email=None),
+            host_bind_ip=LOCALHOST_BIND_IP,
+        )
+        content = build_env_content(config)
+        assert "# BLUESKY_CLIENT_URL=https://myblog.example.com" in content
+
+    def test_uses_generic_domain_without_caddy(self) -> None:
+        config = _make_config()
+        content = build_env_content(config)
+        assert "# BLUESKY_CLIENT_URL=https://blog.example.com" in content
+
+
+# ── Cross-architecture Docker build for remote deployments ───────────
+
+
+class TestCrossArchitectureBuild:
+    """Remote deployments should support cross-architecture Docker builds."""
+
+    def test_build_image_passes_platform_flag(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        commands = _stub_subprocess(monkeypatch)
+        build_image(tmp_path, "test:latest", platform="linux/amd64")
+        assert commands[0][0] == [
+            "docker",
+            "build",
+            "--platform",
+            "linux/amd64",
+            "--tag",
+            "test:latest",
+            ".",
+        ]
+
+    def test_build_image_omits_platform_when_none(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        commands = _stub_subprocess(monkeypatch)
+        build_image(tmp_path, "test:latest")
+        assert "--platform" not in commands[0][0]
+
+    def test_config_from_args_defaults_platform_for_registry(self) -> None:
+        args = argparse.Namespace(
+            secret_key="s" * 64,
+            admin_username="admin",
+            admin_password="strong-password!",
+            caddy_domain=None,
+            caddy_email=None,
+            caddy_public=False,
+            trusted_hosts="example.com",
+            trusted_proxy_ips=None,
+            host_port=8000,
+            bind_public=False,
+            expose_docs=False,
+            deployment_mode=DEPLOY_MODE_REGISTRY,
+            image_ref="ghcr.io/example/agblogger:v1",
+            bundle_dir=DEFAULT_BUNDLE_DIR,
+            tarball_filename=DEFAULT_IMAGE_TARBALL,
+            platform=None,
+        )
+        config = config_from_args(args)
+        assert config.platform == DEFAULT_REMOTE_PLATFORM
+
+    def test_config_from_args_defaults_platform_for_tarball(self) -> None:
+        args = argparse.Namespace(
+            secret_key="s" * 64,
+            admin_username="admin",
+            admin_password="strong-password!",
+            caddy_domain=None,
+            caddy_email=None,
+            caddy_public=False,
+            trusted_hosts="example.com",
+            trusted_proxy_ips=None,
+            host_port=8000,
+            bind_public=False,
+            expose_docs=False,
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="agblogger:v1",
+            bundle_dir=DEFAULT_BUNDLE_DIR,
+            tarball_filename=DEFAULT_IMAGE_TARBALL,
+            platform=None,
+        )
+        config = config_from_args(args)
+        assert config.platform == DEFAULT_REMOTE_PLATFORM
+
+    def test_config_from_args_no_platform_for_local(self) -> None:
+        args = argparse.Namespace(
+            secret_key="s" * 64,
+            admin_username="admin",
+            admin_password="strong-password!",
+            caddy_domain=None,
+            caddy_email=None,
+            caddy_public=False,
+            trusted_hosts="example.com",
+            trusted_proxy_ips=None,
+            host_port=8000,
+            bind_public=False,
+            expose_docs=False,
+            deployment_mode=DEPLOY_MODE_LOCAL,
+            image_ref=None,
+            bundle_dir=DEFAULT_BUNDLE_DIR,
+            tarball_filename=DEFAULT_IMAGE_TARBALL,
+            platform=None,
+        )
+        config = config_from_args(args)
+        assert config.platform is None
+
+    def test_config_from_args_respects_explicit_platform(self) -> None:
+        args = argparse.Namespace(
+            secret_key="s" * 64,
+            admin_username="admin",
+            admin_password="strong-password!",
+            caddy_domain=None,
+            caddy_email=None,
+            caddy_public=False,
+            trusted_hosts="example.com",
+            trusted_proxy_ips=None,
+            host_port=8000,
+            bind_public=False,
+            expose_docs=False,
+            deployment_mode=DEPLOY_MODE_REGISTRY,
+            image_ref="ghcr.io/example/agblogger:v1",
+            bundle_dir=DEFAULT_BUNDLE_DIR,
+            tarball_filename=DEFAULT_IMAGE_TARBALL,
+            platform="linux/arm64",
+        )
+        config = config_from_args(args)
+        assert config.platform == "linux/arm64"
+
+    def test_deploy_registry_passes_platform_to_build(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        (tmp_path / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
+        commands = _stub_subprocess(monkeypatch)
+        _stub_no_trivy(monkeypatch)
+
+        config = _make_config(
+            caddy_config=CaddyConfig(domain="blog.example.com", email=None),
+            host_bind_ip=LOCALHOST_BIND_IP,
+            deployment_mode=DEPLOY_MODE_REGISTRY,
+            image_ref="ghcr.io/example/agblogger:v1",
+            platform="linux/amd64",
+        )
+
+        deploy(config=config, project_dir=tmp_path)
+
+        build_cmd = commands[0][0]
+        assert build_cmd == [
+            "docker",
+            "build",
+            "--platform",
+            "linux/amd64",
+            "--tag",
+            "ghcr.io/example/agblogger:v1",
+            ".",
+        ]
+
+    def test_deploy_tarball_passes_platform_to_build(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        (tmp_path / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
+        commands = _stub_subprocess(monkeypatch)
+        _stub_no_trivy(monkeypatch)
+
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="agblogger:v1",
+            platform="linux/arm64",
+        )
+
+        deploy(config=config, project_dir=tmp_path)
+
+        build_cmd = commands[0][0]
+        assert build_cmd == [
+            "docker",
+            "build",
+            "--platform",
+            "linux/arm64",
+            "--tag",
+            "agblogger:v1",
+            ".",
+        ]
+
+    def test_print_config_summary_shows_platform(self, capsys: pytest.CaptureFixture[str]) -> None:
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_REGISTRY,
+            image_ref="ghcr.io/example/agblogger:v1",
+            platform="linux/amd64",
+        )
+        print_config_summary(config)
+        captured = capsys.readouterr().out
+        assert "linux/amd64" in captured
+
+    def test_print_config_summary_hides_platform_when_none(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        config = _make_config()
+        print_config_summary(config)
+        captured = capsys.readouterr().out
+        assert "Platform" not in captured

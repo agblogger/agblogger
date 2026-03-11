@@ -23,6 +23,7 @@ services:
       - AUTH_INVITES_ENABLED=${AUTH_INVITES_ENABLED:-true}
       - AUTH_LOGIN_MAX_FAILURES=${AUTH_LOGIN_MAX_FAILURES:-5}
       - AUTH_RATE_LIMIT_WINDOW_SECONDS=${AUTH_RATE_LIMIT_WINDOW_SECONDS:-300}
+      - BLUESKY_CLIENT_URL=${BLUESKY_CLIENT_URL:-}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
