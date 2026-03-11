@@ -155,6 +155,42 @@ def _quote_env_value(value: str) -> str:
     return json.dumps(value).replace("$", "\\$")
 
 
+def _unquote_env_value(raw: str) -> str:
+    """Reverse ``_quote_env_value``: undo Docker Compose dollar escaping, then JSON-decode."""
+    raw = raw.strip()
+    if raw.startswith('"'):
+        try:
+            decoded: str = json.loads(raw.replace("\\$", "$"))
+            return decoded
+        except json.JSONDecodeError, ValueError:
+            return raw
+    # Unquoted value — strip inline comments
+    comment_idx = raw.find("  #")
+    if comment_idx >= 0:
+        raw = raw[:comment_idx].strip()
+    return raw
+
+
+def parse_existing_env(env_path: Path) -> dict[str, str]:
+    """Parse key-value pairs from an existing .env.production file."""
+    values: dict[str, str] = {}
+    try:
+        content = env_path.read_text(encoding="utf-8")
+    except OSError:
+        return values
+    for line in content.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        eq_idx = line.find("=")
+        if eq_idx < 0:
+            continue
+        key = line[:eq_idx].strip()
+        raw_value = line[eq_idx + 1 :]
+        values[key] = _unquote_env_value(raw_value)
+    return values
+
+
 COMMAND_TIMEOUT_SECONDS = 1800
 
 
@@ -449,10 +485,14 @@ def build_lifecycle_commands(
         "status": f"{base} ps",
         "logs": f"{base} logs -f",
     }
-    if deployment_mode == DEPLOY_MODE_REGISTRY:
+    if deployment_mode == DEPLOY_MODE_LOCAL:
+        commands["upgrade"] = f"{base} up -d --build"
+    elif deployment_mode == DEPLOY_MODE_REGISTRY:
         commands["pull"] = f"{base} pull"
-    if deployment_mode == DEPLOY_MODE_TARBALL:
+        commands["upgrade"] = f"{base} pull && {base} up -d"
+    elif deployment_mode == DEPLOY_MODE_TARBALL:
         commands["load"] = f"docker load -i {tarball_filename}"
+        commands["upgrade"] = f"docker load -i {tarball_filename} && {base} up -d"
     return commands
 
 
@@ -616,6 +656,11 @@ def _build_remote_readme_content(config: DeployConfig, commands: dict[str, str])
         "",
         "Copy this directory to the remote server, then run the commands below.",
         "",
+        "## Prerequisites",
+        "",
+        "- Docker Engine (20.10+)",
+        "- Docker Compose V2 (`docker compose` subcommand)",
+        "",
         "Blog content is stored in `./content/` (created automatically on first start).",
         "",
     ]
@@ -672,14 +717,21 @@ def _build_remote_readme_content(config: DeployConfig, commands: dict[str, str])
                 "```",
             ]
         )
+    data_note = (
+        "The database volume stores user accounts and settings alongside regenerable"
+        " cache data. Both `./content/` and the `agblogger-db` Docker volume must be"
+        " preserved during upgrades. Schema migrations run automatically on startup."
+    )
     if config.deployment_mode == DEPLOY_MODE_REGISTRY:
         lines.extend(
             [
                 "",
                 "## Upgrading",
                 "",
-                "The database is a regenerable cache — only `./content/` needs to be preserved.",
-                "To upgrade to a new version, update the image tag in `.env.production` and run:",
+                data_note,
+                "",
+                "To upgrade to a new version, update the `AGBLOGGER_IMAGE` tag"
+                " in `.env.production` and run:",
                 "```",
                 f"{commands['pull']}",
                 f"{commands['start']}",
@@ -692,14 +744,31 @@ def _build_remote_readme_content(config: DeployConfig, commands: dict[str, str])
                 "",
                 "## Upgrading",
                 "",
-                "The database is a regenerable cache — only `./content/` needs to be preserved.",
-                "To upgrade to a new version, copy the new tarball to the server and run:",
-                "```",
-                f"{commands['load']}",
-                f"{commands['start']}",
-                "```",
+                data_note,
+                "",
+                "To upgrade to a new version:",
+                "",
+                "1. If the image tag changed, update `AGBLOGGER_IMAGE` in `.env.production`.",
+                "2. Copy the new tarball to the server and run:",
+                "   ```",
+                f"   {commands['load']}",
+                f"   {commands['start']}",
+                "   ```",
             ]
         )
+    lines.extend(
+        [
+            "",
+            "## Rollback",
+            "",
+            "If an upgrade causes problems, restore from the `.bak` backup files created",
+            "during the previous deployment and restart with the previous image:",
+            "```",
+            "cp .env.production.bak .env.production",
+            f"{commands['start']}",
+            "```",
+        ]
+    )
     return "\n".join(lines) + "\n"
 
 
@@ -1003,13 +1072,14 @@ def dry_run(config: DeployConfig) -> None:
     )
     print("=== Lifecycle commands ===")
     if "pull" in commands:
-        print(f"  Pull:   {commands['pull']}")
+        print(f"  Pull:    {commands['pull']}")
     if "load" in commands:
-        print(f"  Load:   {commands['load']}")
-    print(f"  Start:  {commands['start']}")
-    print(f"  Stop:   {commands['stop']}")
-    print(f"  Status: {commands['status']}")
-    print(f"  Logs:   {commands['logs']}")
+        print(f"  Load:    {commands['load']}")
+    print(f"  Start:   {commands['start']}")
+    print(f"  Stop:    {commands['stop']}")
+    print(f"  Status:  {commands['status']}")
+    print(f"  Logs:    {commands['logs']}")
+    print(f"  Upgrade: {commands['upgrade']}")
 
 
 # ── Config summary ───────────────────────────────────────────────────
@@ -1113,15 +1183,28 @@ def _prompt_caddy_domain() -> str:
 def _prompt_trusted_hosts(caddy_domain: str | None) -> list[str]:
     """Prompt for trusted hosts with inline validation."""
     if caddy_domain:
-        print(f"Note: '{caddy_domain}' will be included automatically.")
+        while True:
+            raw_hosts = input(
+                f"Additional trusted hostnames besides '{caddy_domain}'"
+                " (comma-separated, leave blank if none): "
+            ).strip()
+            trusted_hosts = parse_csv_list(raw_hosts)
+            if caddy_domain not in trusted_hosts:
+                trusted_hosts.append(caddy_domain)
+            invalid = [h for h in trusted_hosts if not is_valid_trusted_host(h)]
+            if invalid:
+                print(
+                    f"Invalid host(s): {', '.join(repr(h) for h in invalid)}. "
+                    "Use explicit hosts or '*.example.com' (no catch-all wildcards)."
+                )
+                continue
+            return trusted_hosts
     while True:
         raw_hosts = input(
             "Hostnames/IPs clients will use to reach your blog"
             " (comma-separated, validates the Host header): "
         ).strip()
         trusted_hosts = parse_csv_list(raw_hosts)
-        if caddy_domain and caddy_domain not in trusted_hosts:
-            trusted_hosts.append(caddy_domain)
         if not trusted_hosts:
             print("Provide at least one trusted host.")
             continue
@@ -1165,12 +1248,33 @@ def _prompt_password() -> str:
         return password
 
 
-def collect_config() -> DeployConfig:
+def collect_config(project_dir: Path | None = None) -> DeployConfig:
     """Collect interactive production settings from the user."""
     print("Enter production configuration values for your blog server.")
-    secret_key = _prompt_secret_key()
-    admin_username = _prompt_non_empty("Admin username", default="admin")
-    admin_password = _prompt_password()
+
+    # Check for existing deployment and offer to reuse secrets
+    env_path = (project_dir or Path.cwd()) / DEFAULT_ENV_FILE
+    existing = parse_existing_env(env_path)
+    reuse_secrets = False
+    if (
+        existing.get("SECRET_KEY")
+        and existing.get("ADMIN_USERNAME")
+        and existing.get("ADMIN_PASSWORD")
+    ):
+        print(f"\nFound existing deployment config ({DEFAULT_ENV_FILE}).")
+        reuse_secrets = _prompt_yes_no(
+            "Reuse existing SECRET_KEY and admin credentials?", default=True
+        )
+
+    if reuse_secrets:
+        secret_key = existing["SECRET_KEY"]
+        admin_username = existing["ADMIN_USERNAME"]
+        admin_password = existing["ADMIN_PASSWORD"]
+        print(f"Reusing credentials (admin user: {admin_username}).")
+    else:
+        secret_key = _prompt_secret_key()
+        admin_username = _prompt_non_empty("Admin username", default="admin")
+        admin_password = _prompt_password()
     deployment_mode = _prompt_deployment_mode()
     image_ref: str | None = None
     tarball_filename = DEFAULT_IMAGE_TARBALL
@@ -1418,7 +1522,7 @@ def main() -> None:
         if not args.dry_run and shutil.which("docker") is None:
             raise DeployError("Docker is not installed or not available on PATH")
 
-        config = config_from_args(args) if args.non_interactive else collect_config()
+        config = config_from_args(args) if args.non_interactive else collect_config(project_dir)
 
         if args.dry_run:
             dry_run(config)
@@ -1453,20 +1557,23 @@ def main() -> None:
         print(f"Remote bundle: {result.bundle_path}")
     print("Use these commands to manage the server:")
     if "pull" in result.commands:
-        print(f"  Pull:   {result.commands['pull']}")
+        print(f"  Pull:    {result.commands['pull']}")
     if "load" in result.commands:
-        print(f"  Load:   {result.commands['load']}")
-    print(f"  Start:  {result.commands['start']}")
-    print(f"  Stop:   {result.commands['stop']}")
-    print(f"  Status: {result.commands['status']}")
-    print(f"  Logs:   {result.commands['logs']}")
+        print(f"  Load:    {result.commands['load']}")
+    print(f"  Start:   {result.commands['start']}")
+    print(f"  Stop:    {result.commands['stop']}")
+    print(f"  Status:  {result.commands['status']}")
+    print(f"  Logs:    {result.commands['logs']}")
+    print(f"  Upgrade: {result.commands['upgrade']}")
     if config.deployment_mode == DEPLOY_MODE_LOCAL:
         if config.caddy_config is not None:
             print(f"Open the app at: https://{config.caddy_config.domain}/login")
         else:
             print(f"Open the app at: http://<your-server-host>:{config.host_port}/login")
     else:
-        print("Follow the bundle instructions on the remote server to finish deployment.")
+        print("\nTo copy the bundle to the remote server:")
+        print(f"  scp -r {result.bundle_path} user@your-server:~/agblogger")
+        print("Then follow the instructions in DEPLOY-REMOTE.md on the server.")
 
 
 if __name__ == "__main__":

@@ -15,6 +15,7 @@ from cli.deploy_production import (
     COMPOSE_SUBNET,
     DEFAULT_BUNDLE_DIR,
     DEFAULT_CADDY_PUBLIC_COMPOSE_FILE,
+    DEFAULT_ENV_FILE,
     DEFAULT_IMAGE_COMPOSE_FILE,
     DEFAULT_IMAGE_NO_CADDY_COMPOSE_FILE,
     DEFAULT_IMAGE_TARBALL,
@@ -32,6 +33,7 @@ from cli.deploy_production import (
     _build_remote_readme_content,
     _is_valid_caddy_domain,
     _read_version,
+    _unquote_env_value,
     backup_existing_configs,
     backup_file,
     build_caddy_public_compose_override_content,
@@ -46,6 +48,7 @@ from cli.deploy_production import (
     deploy,
     dry_run,
     parse_csv_list,
+    parse_existing_env,
     print_config_summary,
     write_config_files,
 )
@@ -2135,3 +2138,274 @@ class TestRemoteReadmeUpgradeGuidance:
         content = _build_remote_readme_content(config, commands)
         assert "## Upgrading" in content or "## Upgrade" in content
         assert "load" in content.lower()
+
+
+# ── parse_existing_env / _unquote_env_value ──────────────────────────
+
+
+class TestUnquoteEnvValue:
+    """Reverse of _quote_env_value for parsing existing .env files."""
+
+    def test_unquotes_simple_json_string(self) -> None:
+        assert _unquote_env_value('"hello"') == "hello"
+
+    def test_unquotes_escaped_backslash(self) -> None:
+        assert _unquote_env_value('"pass\\\\word"') == "pass\\word"
+
+    def test_unquotes_escaped_dollar_sign(self) -> None:
+        assert _unquote_env_value('"my\\$ecret"') == "my$ecret"
+
+    def test_returns_unquoted_value_as_is(self) -> None:
+        assert _unquote_env_value("8000") == "8000"
+
+    def test_strips_inline_comments_from_unquoted_values(self) -> None:
+        assert _unquote_env_value("8000  # Only used in no-Caddy mode") == "8000"
+
+
+class TestParseExistingEnv:
+    """Parse key-value pairs from a generated .env.production file."""
+
+    def test_parses_generated_env_file(self, tmp_path: Path) -> None:
+        config = _make_config()
+        env_content = build_env_content(config)
+        env_path = tmp_path / DEFAULT_ENV_FILE
+        env_path.write_text(env_content, encoding="utf-8")
+
+        parsed = parse_existing_env(env_path)
+
+        assert parsed["SECRET_KEY"] == config.secret_key
+        assert parsed["ADMIN_USERNAME"] == config.admin_username
+        assert parsed["ADMIN_PASSWORD"] == config.admin_password
+        assert parsed["DEBUG"] == "false"
+
+    def test_roundtrips_special_characters(self, tmp_path: Path) -> None:
+        config = DeployConfig(
+            secret_key='key$with"special\\chars',
+            admin_username="admin",
+            admin_password="pass$word",
+            trusted_hosts=["example.com"],
+            trusted_proxy_ips=[],
+            host_port=8000,
+            host_bind_ip=PUBLIC_BIND_IP,
+            caddy_config=None,
+            caddy_public=False,
+            expose_docs=False,
+        )
+        env_content = build_env_content(config)
+        env_path = tmp_path / DEFAULT_ENV_FILE
+        env_path.write_text(env_content, encoding="utf-8")
+
+        parsed = parse_existing_env(env_path)
+
+        assert parsed["SECRET_KEY"] == 'key$with"special\\chars'
+        assert parsed["ADMIN_PASSWORD"] == "pass$word"
+
+    def test_returns_empty_dict_for_missing_file(self, tmp_path: Path) -> None:
+        assert parse_existing_env(tmp_path / "nonexistent") == {}
+
+    def test_skips_comments_and_blank_lines(self, tmp_path: Path) -> None:
+        env_path = tmp_path / ".env"
+        env_path.write_text("# comment\n\nKEY=value\n", encoding="utf-8")
+
+        parsed = parse_existing_env(env_path)
+
+        assert parsed == {"KEY": "value"}
+
+
+# ── Upgrade lifecycle command ────────────────────────────────────────
+
+
+class TestUpgradeLifecycleCommand:
+    """build_lifecycle_commands should include an upgrade command."""
+
+    def test_local_mode_upgrade_uses_build_flag(self) -> None:
+        commands = build_lifecycle_commands(
+            deployment_mode=DEPLOY_MODE_LOCAL,
+            use_caddy=True,
+            caddy_public=False,
+        )
+        assert "upgrade" in commands
+        assert "--build" in commands["upgrade"]
+
+    def test_registry_mode_upgrade_pulls_then_starts(self) -> None:
+        commands = build_lifecycle_commands(
+            deployment_mode=DEPLOY_MODE_REGISTRY,
+            use_caddy=True,
+            caddy_public=False,
+        )
+        assert "upgrade" in commands
+        assert "pull" in commands["upgrade"]
+        assert "up -d" in commands["upgrade"]
+
+    def test_tarball_mode_upgrade_loads_then_starts(self) -> None:
+        commands = build_lifecycle_commands(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            use_caddy=False,
+            caddy_public=False,
+        )
+        assert "upgrade" in commands
+        assert "load" in commands["upgrade"]
+        assert "up -d" in commands["upgrade"]
+
+
+# ── DEPLOY-REMOTE.md improvements ────────────────────────────────────
+
+
+class TestRemoteReadmePrerequisites:
+    """Remote readme should list Docker prerequisites."""
+
+    def test_includes_docker_prerequisite(self) -> None:
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_REGISTRY,
+            image_ref="ghcr.io/example/agblogger:v1",
+        )
+        commands = build_lifecycle_commands(
+            deployment_mode=DEPLOY_MODE_REGISTRY,
+            use_caddy=False,
+            caddy_public=False,
+        )
+        content = _build_remote_readme_content(config, commands)
+        assert "## Prerequisites" in content
+        assert "Docker" in content
+        assert "Docker Compose" in content
+
+
+class TestRemoteReadmeDataPreservation:
+    """Remote readme should accurately describe data preservation requirements."""
+
+    def test_does_not_say_database_is_only_a_cache(self) -> None:
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_REGISTRY,
+            image_ref="ghcr.io/example/agblogger:v1",
+        )
+        commands = build_lifecycle_commands(
+            deployment_mode=DEPLOY_MODE_REGISTRY,
+            use_caddy=False,
+            caddy_public=False,
+        )
+        content = _build_remote_readme_content(config, commands)
+        # The old misleading phrase said the database was *only* a regenerable cache
+        assert "the database is a regenerable cache" not in content.lower()
+        assert "only `./content/` needs to be preserved" not in content.lower()
+
+    def test_mentions_database_volume_preservation(self) -> None:
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_REGISTRY,
+            image_ref="ghcr.io/example/agblogger:v1",
+        )
+        commands = build_lifecycle_commands(
+            deployment_mode=DEPLOY_MODE_REGISTRY,
+            use_caddy=False,
+            caddy_public=False,
+        )
+        content = _build_remote_readme_content(config, commands)
+        assert "agblogger-db" in content
+        assert "user accounts" in content.lower()
+
+    def test_tarball_mode_mentions_image_tag_update(self) -> None:
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="agblogger:v1",
+        )
+        commands = build_lifecycle_commands(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            use_caddy=False,
+            caddy_public=False,
+        )
+        content = _build_remote_readme_content(config, commands)
+        assert "AGBLOGGER_IMAGE" in content
+
+
+class TestRemoteReadmeRollback:
+    """Remote readme should include rollback guidance."""
+
+    def test_includes_rollback_section(self) -> None:
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_REGISTRY,
+            image_ref="ghcr.io/example/agblogger:v1",
+        )
+        commands = build_lifecycle_commands(
+            deployment_mode=DEPLOY_MODE_REGISTRY,
+            use_caddy=False,
+            caddy_public=False,
+        )
+        content = _build_remote_readme_content(config, commands)
+        assert "## Rollback" in content
+        assert ".bak" in content
+
+
+# ── Trusted hosts prompt simplification ──────────────────────────────
+
+
+class TestTrustedHostsPromptWithCaddy:
+    """Trusted hosts prompt should be simpler when Caddy domain is set."""
+
+    def test_caddy_domain_only_when_input_empty(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from cli.deploy_production import _prompt_trusted_hosts
+
+        monkeypatch.setattr("builtins.input", lambda _prompt: "")
+        result = _prompt_trusted_hosts("blog.example.com")
+        assert result == ["blog.example.com"]
+
+    def test_caddy_domain_plus_extras(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from cli.deploy_production import _prompt_trusted_hosts
+
+        monkeypatch.setattr("builtins.input", lambda _prompt: "api.example.com")
+        result = _prompt_trusted_hosts("blog.example.com")
+        assert "blog.example.com" in result
+        assert "api.example.com" in result
+
+
+# ── Collect config with existing env ─────────────────────────────────
+
+
+class TestCollectConfigReusesExistingSecrets:
+    """collect_config should detect and offer to reuse existing .env.production secrets."""
+
+    def test_reuses_secrets_when_user_accepts(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        from cli.deploy_production import collect_config
+
+        # Write an existing .env.production
+        existing_config = _make_config()
+        env_content = build_env_content(existing_config)
+        (tmp_path / DEFAULT_ENV_FILE).write_text(env_content, encoding="utf-8")
+
+        # Simulate interactive answers: reuse=yes, mode=local, caddy=no, public=no,
+        # port=8000, trusted hosts=example.com, proxy ips=(none), expose docs=no
+        inputs = iter(["y", "", "n", "n", "", "example.com", "", "n"])
+        monkeypatch.setattr("builtins.input", lambda _prompt: next(inputs))
+        monkeypatch.setattr("cli.deploy_production.getpass.getpass", lambda _prompt: "")
+
+        config = collect_config(tmp_path)
+
+        assert config.secret_key == existing_config.secret_key
+        assert config.admin_username == existing_config.admin_username
+        assert config.admin_password == existing_config.admin_password
+
+    def test_prompts_new_secrets_when_no_existing_env(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        from cli.deploy_production import collect_config
+
+        # Simulate: secret_key=auto, username=admin, password+confirm, mode=local,
+        # caddy=no, public=no, port=8000, trusted hosts=example.com, proxy ips, docs=no
+        inputs = iter(["admin", "", "n", "n", "", "example.com", "", "n"])
+        passwords = iter(["", "strongpass123", "strongpass123"])
+        monkeypatch.setattr("builtins.input", lambda _prompt: next(inputs))
+        monkeypatch.setattr(
+            "cli.deploy_production.getpass.getpass", lambda _prompt: next(passwords)
+        )
+
+        config = collect_config(tmp_path)
+
+        # Should have generated a new secret key
+        assert len(config.secret_key) >= 32
+        assert config.admin_username == "admin"
+
+    def test_dry_run_shows_upgrade_command(self, capsys: pytest.CaptureFixture[str]) -> None:
+        config = _make_config()
+        dry_run(config)
+        captured = capsys.readouterr().out
+        assert "Upgrade:" in captured
