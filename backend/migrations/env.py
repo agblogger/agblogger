@@ -3,21 +3,33 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from logging.config import fileConfig
 
 from alembic import context
 from sqlalchemy import Connection, pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-# Import your models' metadata here once models are defined:
-# from backend.models import Base
-# target_metadata = Base.metadata
-target_metadata = None
+# Import DurableBase so Alembic sees only durable table metadata.
+# Cache tables use a separate CacheBase and are not managed by Alembic.
+from backend.models.base import DurableBase
+
+# Ensure all durable model modules are imported so their tables register
+# on DurableBase.metadata before autogenerate runs.
+import backend.models.user  # noqa: F401
+import backend.models.crosspost  # noqa: F401
+
+target_metadata = DurableBase.metadata
 
 config = context.config
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
+
+# Allow DATABASE_URL env var to override alembic.ini for CLI usage.
+env_url = os.environ.get("DATABASE_URL")
+if env_url:
+    config.set_main_option("sqlalchemy.url", env_url)
 
 
 def run_migrations_offline() -> None:
