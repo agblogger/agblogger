@@ -7,14 +7,14 @@ from typing import TYPE_CHECKING
 from sqlalchemy import ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from backend.models.base import Base
+from backend.models.base import DurableBase
 from backend.schemas.crosspost import CrossPostStatus
 
 if TYPE_CHECKING:
     from backend.models.user import User
 
 
-class SocialAccount(Base):
+class SocialAccount(DurableBase):
     """Connected social media account for cross-posting."""
 
     __tablename__ = "social_accounts"
@@ -34,7 +34,7 @@ class SocialAccount(Base):
     __table_args__ = (UniqueConstraint("user_id", "platform", "account_name"),)
 
 
-class CrossPost(Base):
+class CrossPost(DurableBase):
     """Cross-posting history entry."""
 
     __tablename__ = "cross_posts"

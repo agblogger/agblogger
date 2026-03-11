@@ -7,13 +7,13 @@ from typing import TYPE_CHECKING
 from sqlalchemy import Boolean, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from backend.models.base import Base
+from backend.models.base import DurableBase
 
 if TYPE_CHECKING:
     from backend.models.crosspost import CrossPost, SocialAccount
 
 
-class User(Base):
+class User(DurableBase):
     """Application user."""
 
     __tablename__ = "users"
@@ -49,7 +49,7 @@ class User(Base):
     )
 
 
-class RefreshToken(Base):
+class RefreshToken(DurableBase):
     """JWT refresh token (hashed)."""
 
     __tablename__ = "refresh_tokens"
@@ -65,7 +65,7 @@ class RefreshToken(Base):
     user: Mapped[User] = relationship(back_populates="refresh_tokens")
 
 
-class PersonalAccessToken(Base):
+class PersonalAccessToken(DurableBase):
     """Long-lived API token for CLI and automation."""
 
     __tablename__ = "personal_access_tokens"
@@ -84,7 +84,7 @@ class PersonalAccessToken(Base):
     user: Mapped[User] = relationship(back_populates="personal_access_tokens")
 
 
-class InviteCode(Base):
+class InviteCode(DurableBase):
     """Single-use invitation code for account registration."""
 
     __tablename__ = "invite_codes"
