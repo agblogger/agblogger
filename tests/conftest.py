@@ -167,11 +167,9 @@ async def create_test_client(settings: Settings) -> AsyncGenerator[AsyncClient]:
     Manually performs the work of the application lifespan (DB, FTS, git,
     admin user, cache rebuild) because ASGITransport does not trigger it.
     """
-    from sqlalchemy import text
-
     from backend.database import create_engine as create_db_engine
     from backend.filesystem.content_manager import ContentManager
-    from backend.models.base import Base
+    from backend.main import run_durable_migrations, setup_cache_tables
     from backend.pandoc.renderer import close_renderer, init_renderer
     from backend.pandoc.server import PandocServer
     from backend.services.auth_service import ensure_admin_user
@@ -187,17 +185,8 @@ async def create_test_client(settings: Settings) -> AsyncGenerator[AsyncClient]:
         app.state.session_factory = session_factory
         app.state.settings = settings
 
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-
-        async with session_factory() as session:
-            await session.execute(
-                text(
-                    "CREATE VIRTUAL TABLE IF NOT EXISTS posts_fts USING fts5("
-                    "title, content, content='posts_cache', content_rowid='id')"
-                )
-            )
-            await session.commit()
+        await run_durable_migrations(engine)
+        await setup_cache_tables(engine)
 
         content_manager = ContentManager(content_dir=settings.content_dir)
         app.state.content_manager = content_manager
