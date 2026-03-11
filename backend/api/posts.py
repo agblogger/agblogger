@@ -329,14 +329,22 @@ async def upload_post(
 
         # Write asset files to directory
         post_dir = post_path.parent
-        post_dir.mkdir(parents=True, exist_ok=True)
         written_assets: list[FilePath] = []
-        for name, data in file_data:
-            if name == md_filename:
-                continue
-            dest = post_dir / FilePath(name).name
-            dest.write_bytes(data)
-            written_assets.append(dest)
+        try:
+            post_dir.mkdir(parents=True, exist_ok=True)
+            for name, data in file_data:
+                if name == md_filename:
+                    continue
+                dest = post_dir / FilePath(name).name
+                dest.write_bytes(data)
+                written_assets.append(dest)
+        except OSError as exc:
+            logger.error("Failed to write upload assets for %s: %s", file_path, exc)
+            for asset in written_assets:
+                asset.unlink(missing_ok=True)
+            if post_dir.exists() and not any(post_dir.iterdir()):
+                post_dir.rmdir()
+            raise HTTPException(status_code=500, detail="Failed to write upload files") from exc
 
         serialized = serialize_post(post_data)
         post = PostCache(

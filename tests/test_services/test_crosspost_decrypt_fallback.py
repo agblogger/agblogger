@@ -220,5 +220,5 @@ class TestDuplicateAccountError:
             account_name="test",
             credentials={"token": "x"},
         )
-        with pytest.raises(ValueError, match="Unknown platform"):
+        with pytest.raises(ValueError, match="Unsupported platform"):
             await create_social_account(session, 1, data, TEST_SECRET_KEY)

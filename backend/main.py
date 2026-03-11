@@ -658,6 +658,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             content={"detail": "Database temporarily unavailable"},
         )
 
+    import httpx
+
+    @app.exception_handler(httpx.HTTPError)
+    async def httpx_error_handler(request: Request, exc: httpx.HTTPError) -> JSONResponse:
+        logger.error(
+            "httpx.HTTPError in %s %s: %s", request.method, request.url.path, exc, exc_info=exc
+        )
+        return JSONResponse(
+            status_code=502,
+            content={"detail": "External service request failed"},
+        )
+
     @app.exception_handler(AttributeError)
     async def attribute_error_handler(request: Request, exc: AttributeError) -> JSONResponse:
         logger.error(
@@ -669,6 +681,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def index_error_handler(request: Request, exc: IndexError) -> JSONResponse:
         logger.error(
             "[BUG] IndexError in %s %s: %s", request.method, request.url.path, exc, exc_info=exc
+        )
+        return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+
+    @app.exception_handler(Exception)
+    async def catch_all_handler(request: Request, exc: Exception) -> JSONResponse:
+        logger.error(
+            "Unhandled %s in %s %s: %s",
+            type(exc).__name__,
+            request.method,
+            request.url.path,
+            exc,
+            exc_info=exc,
         )
         return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 

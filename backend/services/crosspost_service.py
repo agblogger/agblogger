@@ -7,12 +7,13 @@ import logging
 from inspect import isawaitable
 from typing import TYPE_CHECKING, TypeVar, cast
 
+import httpx
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from backend.crosspost.base import CrossPostContent, CrossPostResult
 from backend.crosspost.registry import get_poster, list_platforms
-from backend.exceptions import InternalServerError, PostNotFoundError
+from backend.exceptions import ExternalServiceError, InternalServerError, PostNotFoundError
 from backend.models.crosspost import CrossPost, SocialAccount
 from backend.models.post import PostCache
 from backend.schemas.crosspost import CrossPostStatus
@@ -53,7 +54,7 @@ async def create_social_account(
     """
     available = list_platforms()
     if data.platform not in available:
-        msg = f"Unknown platform: {data.platform!r}. Available: {available}"
+        msg = f"Unsupported platform: {data.platform!r}"
         raise ValueError(msg)
 
     now = format_datetime(now_utc())
@@ -242,8 +243,8 @@ async def crosspost(
                 if updated_creds is not None:
                     account.credentials = encrypt_value(json.dumps(updated_creds), secret_key)
                     account.updated_at = now
-        except Exception:
-            logger.exception("Cross-post to %s failed", platform_name)
+        except (ExternalServiceError, httpx.HTTPError, ValueError, RuntimeError, OSError) as exc:
+            logger.error("Cross-post to %s failed: %s", platform_name, exc, exc_info=True)
             publish_result = CrossPostResult(
                 platform_id="",
                 url="",

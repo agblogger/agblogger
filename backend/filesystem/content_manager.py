@@ -156,12 +156,19 @@ class ContentManager:
         return post_data
 
     def write_post(self, rel_path: str, post_data: PostData) -> None:
-        """Write a post to disk."""
+        """Write a post to disk.
+
+        Raises OSError if directory creation or file write fails.
+        """
         from backend.filesystem.frontmatter import serialize_post
 
         full_path = self._validate_path(rel_path)
-        full_path.parent.mkdir(parents=True, exist_ok=True)
-        full_path.write_text(serialize_post(post_data), encoding="utf-8")
+        try:
+            full_path.parent.mkdir(parents=True, exist_ok=True)
+            full_path.write_text(serialize_post(post_data), encoding="utf-8")
+        except OSError:
+            logger.error("Failed to write post to %s", rel_path, exc_info=True)
+            raise
 
     def delete_post(self, rel_path: str, *, delete_assets: bool = False) -> bool:
         """Delete a post from disk.
@@ -171,6 +178,7 @@ class ContentManager:
         Otherwise, only the post file itself is removed.
 
         Returns True if the file existed.
+        Raises OSError if the deletion fails.
         """
         import shutil
 
@@ -178,30 +186,34 @@ class ContentManager:
         if not full_path.exists():
             return False
 
-        if delete_assets and full_path.name == "index.md":
-            # Use the non-resolved path so we can detect if the directory
-            # itself is a symlink (resolve() in _validate_path follows symlinks).
-            raw_post_dir: Path = (self.content_dir / rel_path).parent
-            parent = raw_post_dir.parent
-            if raw_post_dir.is_symlink():
-                # The directory is a symlink (created during title rename);
-                # remove only the symlink, not the target it points to.
-                raw_post_dir.unlink()
+        try:
+            if delete_assets and full_path.name == "index.md":
+                # Use the non-resolved path so we can detect if the directory
+                # itself is a symlink (resolve() in _validate_path follows symlinks).
+                raw_post_dir: Path = (self.content_dir / rel_path).parent
+                parent = raw_post_dir.parent
+                if raw_post_dir.is_symlink():
+                    # The directory is a symlink (created during title rename);
+                    # remove only the symlink, not the target it points to.
+                    raw_post_dir.unlink()
+                else:
+                    resolved_dir = raw_post_dir.resolve()
+                    # Remove symlinks in the parent directory pointing to this directory
+                    try:
+                        for item in parent.iterdir():
+                            try:
+                                if item.is_symlink() and item.resolve() == resolved_dir:
+                                    item.unlink()
+                            except OSError as exc:
+                                logger.warning("Failed to clean up symlink %s: %s", item, exc)
+                    except OSError as exc:
+                        logger.warning("Failed to iterate parent directory %s: %s", parent, exc)
+                    shutil.rmtree(raw_post_dir)
             else:
-                resolved_dir = raw_post_dir.resolve()
-                # Remove symlinks in the parent directory pointing to this directory
-                try:
-                    for item in parent.iterdir():
-                        try:
-                            if item.is_symlink() and item.resolve() == resolved_dir:
-                                item.unlink()
-                        except OSError as exc:
-                            logger.warning("Failed to clean up symlink %s: %s", item, exc)
-                except OSError as exc:
-                    logger.warning("Failed to iterate parent directory %s: %s", parent, exc)
-                shutil.rmtree(raw_post_dir)
-        else:
-            full_path.unlink()
+                full_path.unlink()
+        except OSError:
+            logger.error("Failed to delete post %s", rel_path, exc_info=True)
+            raise
         return True
 
     def read_page(self, page_id: str) -> str | None:
