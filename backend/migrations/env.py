@@ -10,14 +10,14 @@ from alembic import context
 from sqlalchemy import Connection, pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
+# Ensure all durable model modules are imported so their tables register
+# on DurableBase.metadata before autogenerate runs.
+import backend.models.crosspost
+import backend.models.user  # noqa: F401
+
 # Import DurableBase so Alembic sees only durable table metadata.
 # Cache tables use a separate CacheBase and are not managed by Alembic.
 from backend.models.base import DurableBase
-
-# Ensure all durable model modules are imported so their tables register
-# on DurableBase.metadata before autogenerate runs.
-import backend.models.user  # noqa: F401
-import backend.models.crosspost  # noqa: F401
 
 target_metadata = DurableBase.metadata
 
@@ -73,5 +73,8 @@ def run_migrations_online() -> None:
 
 if context.is_offline_mode():
     run_migrations_offline()
+elif (connection := config.attributes.get("connection")) is not None:
+    # Programmatic invocation: the caller already holds a sync connection.
+    do_run_migrations(connection)
 else:
     run_migrations_online()

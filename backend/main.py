@@ -34,7 +34,7 @@ from backend.api.sync import router as sync_router
 from backend.config import Settings, sqlite_database_path
 from backend.database import create_engine
 from backend.filesystem.content_manager import ContentManager
-from backend.models.base import Base
+from backend.models.base import CacheBase
 from backend.services.csrf_service import validate_csrf_token
 from backend.services.rate_limit_service import InMemoryRateLimiter
 from backend.services.upload_limits import get_multipart_body_limit
@@ -44,6 +44,8 @@ if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Awaitable, Callable
     from pathlib import Path
 
+    from sqlalchemy import Connection
+    from sqlalchemy.ext.asyncio import AsyncEngine
     from starlette.responses import Response
     from starlette.types import Message
 
@@ -102,22 +104,48 @@ def ensure_content_dir(content_dir: Path) -> None:
         logger.info("Created missing content scaffold file: %s", labels_toml)
 
 
-async def _ensure_crosspost_user_id_column(app: FastAPI) -> None:
-    """Backfill schema for cross_posts.user_id on pre-existing databases."""
-    try:
-        engine = app.state.engine
-        async with engine.begin() as conn:
-            result = await conn.execute(text("PRAGMA table_info(cross_posts)"))
-            columns = {str(row[1]) for row in result}
-            if "user_id" in columns:
-                return
-            await conn.execute(text("ALTER TABLE cross_posts ADD COLUMN user_id INTEGER"))
-            logger.warning(
-                "Added missing cross_posts.user_id column. Existing history rows remain unscoped."
+async def run_durable_migrations(engine: AsyncEngine) -> None:
+    """Run Alembic migrations for durable tables.
+
+    Passes the sync connection to Alembic via config.attributes so env.py
+    reuses it instead of creating a new engine with asyncio.run().
+
+    The Config object is built without ``config_file_name`` so that env.py
+    skips ``fileConfig()`` and does not reconfigure the application's
+    logging handlers at runtime.
+    """
+    from alembic import command
+    from alembic.config import Config
+
+    alembic_cfg = Config()
+    alembic_cfg.set_main_option("script_location", "backend/migrations")
+
+    def _do_upgrade(sync_conn: Connection) -> None:
+        alembic_cfg.attributes["connection"] = sync_conn
+        command.upgrade(alembic_cfg, "head")
+
+    async with engine.begin() as conn:
+        await conn.run_sync(_do_upgrade)
+
+
+async def setup_cache_tables(engine: AsyncEngine) -> None:
+    """Drop and recreate all cache tables.
+
+    Cache tables use CacheBase and are regenerated from the filesystem
+    on every startup. This replaces hardcoded DROP TABLE statements.
+    """
+    async with engine.begin() as conn:
+        # Drop posts_fts first (virtual table, not in CacheBase metadata).
+        await conn.execute(text("DROP TABLE IF EXISTS posts_fts"))
+        await conn.run_sync(CacheBase.metadata.drop_all)
+        await conn.run_sync(CacheBase.metadata.create_all)
+        # Recreate FTS5 virtual table (not managed by ORM).
+        await conn.execute(
+            text(
+                "CREATE VIRTUAL TABLE IF NOT EXISTS posts_fts USING fts5("
+                "title, content, content='posts_cache', content_rowid='id')"
             )
-    except Exception as exc:
-        logger.error("Failed to ensure crosspost user_id column: %s", exc)
-        raise
+        )
 
 
 @asynccontextmanager
@@ -150,32 +178,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     pandoc_started = False
     try:
         try:
-            async with engine.begin() as conn:
-                # Drop cache tables so create_all always matches current schema.
-                # These are regenerated from the filesystem on every startup.
-                drop_cache_tables_sql = (
-                    "DROP TABLE IF EXISTS post_labels_cache",
-                    "DROP TABLE IF EXISTS label_parents_cache",
-                    "DROP TABLE IF EXISTS posts_fts",
-                    "DROP TABLE IF EXISTS posts_cache",
-                    "DROP TABLE IF EXISTS labels_cache",
-                    "DROP TABLE IF EXISTS sync_manifest",
-                )
-                for statement in drop_cache_tables_sql:
-                    await conn.execute(text(statement))
-                await conn.run_sync(Base.metadata.create_all)
-            await _ensure_crosspost_user_id_column(app)
-
-            async with session_factory() as session:
-                await session.execute(
-                    text(
-                        "CREATE VIRTUAL TABLE IF NOT EXISTS posts_fts USING fts5("
-                        "title, content, content='posts_cache', content_rowid='id')"
-                    )
-                )
-                await session.commit()
+            await run_durable_migrations(engine)
+            await setup_cache_tables(engine)
         except Exception as exc:
-            logger.critical("Failed to create database schema: %s", exc)
+            logger.critical("Failed to set up database schema: %s", exc)
             raise
 
         try:

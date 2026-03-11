@@ -19,7 +19,6 @@ from backend.config import Settings
 from backend.main import create_app
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator
     from pathlib import Path
 
 
@@ -338,36 +337,6 @@ class TestLifespanShutdownSafety:
             renderer._http_client = old_client
 
 
-class TestSchemaBackfillLogging:
-    """_ensure_crosspost_user_id_column logs errors with context."""
-
-    @pytest.mark.asyncio
-    async def test_schema_backfill_logs_on_error(self, caplog: pytest.LogCaptureFixture) -> None:
-        from contextlib import asynccontextmanager
-
-        from backend.main import _ensure_crosspost_user_id_column
-
-        mock_app = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_conn.execute.side_effect = Exception("table not found")
-
-        @asynccontextmanager
-        async def fake_begin() -> AsyncGenerator[AsyncMock]:
-            yield mock_conn
-
-        mock_engine = AsyncMock()
-        mock_engine.begin = fake_begin
-        mock_app.state.engine = mock_engine
-
-        with (
-            caplog.at_level(logging.ERROR, logger="backend.main"),
-            pytest.raises(Exception, match="table not found"),
-        ):
-            await _ensure_crosspost_user_id_column(mock_app)
-
-        assert any("crosspost" in r.message.lower() for r in caplog.records)
-
-
 class TestHealthEndpointLogging:
     """Health endpoint logs warnings on database errors."""
 
@@ -500,7 +469,7 @@ class TestStartupStepLogging:
         with (
             patch("backend.main._configure_logging"),
             patch(
-                "backend.main.Base.metadata.create_all",
+                "backend.main.run_durable_migrations",
                 side_effect=RuntimeError("schema creation failed"),
             ),
             caplog.at_level(logging.CRITICAL, logger="backend.main"),
@@ -522,6 +491,7 @@ class TestStartupStepLogging:
             secret_key="test-secret-key-min-32-characters-long",
             admin_password="testpassword",
             debug=True,
+            database_url=f"sqlite+aiosqlite:///{tmp_path}/test.db",
             frontend_dir=tmp_path / "no-frontend",
             content_dir=tmp_path / "content",
         )
@@ -552,6 +522,7 @@ class TestStartupStepLogging:
             secret_key="test-secret-key-min-32-characters-long",
             admin_password="testpassword",
             debug=True,
+            database_url=f"sqlite+aiosqlite:///{tmp_path}/test.db",
             frontend_dir=tmp_path / "no-frontend",
             content_dir=tmp_path / "content",
         )
