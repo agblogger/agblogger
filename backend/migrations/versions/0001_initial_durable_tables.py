@@ -7,16 +7,19 @@ Create Date: 2026-03-11 12:47:50.873909
 
 from __future__ import annotations
 
-from typing import Sequence, Union
+from typing import TYPE_CHECKING
 
 import sqlalchemy as sa
 from alembic import op
 
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
 # revision identifiers, used by Alembic
 revision: str = "f11ad63c6789"
-down_revision: Union[str, None] = None
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = None
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
@@ -68,12 +71,8 @@ def upgrade() -> None:
         sa.Column("created_at", sa.Text(), nullable=False),
         sa.Column("expires_at", sa.Text(), nullable=False),
         sa.Column("used_at", sa.Text(), nullable=True),
-        sa.ForeignKeyConstraint(
-            ["created_by_user_id"], ["users.id"], ondelete="SET NULL"
-        ),
-        sa.ForeignKeyConstraint(
-            ["used_by_user_id"], ["users.id"], ondelete="SET NULL"
-        ),
+        sa.ForeignKeyConstraint(["created_by_user_id"], ["users.id"], ondelete="SET NULL"),
+        sa.ForeignKeyConstraint(["used_by_user_id"], ["users.id"], ondelete="SET NULL"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("code_hash"),
     )

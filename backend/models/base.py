@@ -19,4 +19,3 @@ class CacheBase(DeclarativeBase):
     Tables: posts_cache, labels_cache, label_parents_cache,
     post_labels_cache, sync_manifest, posts_fts.
     """
-
