@@ -484,6 +484,37 @@ class TestStartupStepLogging:
         )
 
     @pytest.mark.asyncio
+    async def test_cache_setup_failure_logs_critical_with_distinct_message(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        settings = Settings(
+            secret_key="test-secret-key-min-32-characters-long",
+            admin_password="testpassword",
+            debug=True,
+            frontend_dir=tmp_path / "no-frontend",
+            database_url=f"sqlite+aiosqlite:///{tmp_path}/test.db",
+            content_dir=tmp_path / "content",
+        )
+        app = create_app(settings)
+
+        with (
+            patch("backend.main._configure_logging"),
+            patch(
+                "backend.main.setup_cache_tables",
+                side_effect=RuntimeError("table setup failed"),
+            ),
+            caplog.at_level(logging.CRITICAL, logger="backend.main"),
+            suppress(Exception),
+        ):
+            async with app.router.lifespan_context(app):
+                pass
+
+        critical_msgs = [r.message for r in caplog.records if r.levelno >= logging.CRITICAL]
+        assert any("cache" in m.lower() for m in critical_msgs), (
+            f"Expected critical log about cache table failure, got: {critical_msgs}"
+        )
+
+    @pytest.mark.asyncio
     async def test_pandoc_failure_logs_critical_with_context(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ) -> None:

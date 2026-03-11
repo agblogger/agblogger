@@ -147,7 +147,12 @@ async def rebuild_cache(
 
 
 async def ensure_tables(session: AsyncSession) -> None:
-    """Create all tables if they don't exist (for development)."""
+    """Create all tables directly from ORM metadata (test-only shortcut).
+
+    Durable tables created this way bypass Alembic migrations and will not
+    stamp the alembic_version table.  Production startup uses
+    run_durable_migrations() + setup_cache_tables() instead.
+    """
     from backend.models.base import CacheBase, DurableBase
 
     conn = await session.connection()

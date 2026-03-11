@@ -43,8 +43,8 @@ class PostCache(CacheBase):
 class PostsFTS(CacheBase):
     """Full-text search virtual table for posts.
 
-    This model represents the FTS5 virtual table.
-    We create it manually via raw SQL rather than through Alembic.
+    Created manually via raw SQL because SQLAlchemy's create_all cannot
+    produce the CREATE VIRTUAL TABLE statement required by FTS5.
     """
 
     __tablename__ = "posts_fts"

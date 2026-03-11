@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 # Ensure all durable model modules are imported so their tables register
 # on DurableBase.metadata before autogenerate runs.
 import backend.models.crosspost
-import backend.models.user  # noqa: F401
+import backend.models.user
 
 # Import DurableBase so Alembic sees only durable table metadata.
 # Cache tables use a separate CacheBase and are not managed by Alembic.
@@ -39,6 +39,7 @@ def run_migrations_offline() -> None:
         url=url,
         target_metadata=target_metadata,
         literal_binds=True,
+        render_as_batch=True,
         dialect_opts={"paramstyle": "named"},
     )
 
@@ -47,7 +48,7 @@ def run_migrations_offline() -> None:
 
 
 def do_run_migrations(connection: Connection) -> None:
-    context.configure(connection=connection, target_metadata=target_metadata)
+    context.configure(connection=connection, target_metadata=target_metadata, render_as_batch=True)
     with context.begin_transaction():
         context.run_migrations()
 

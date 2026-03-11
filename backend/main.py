@@ -132,10 +132,11 @@ async def setup_cache_tables(engine: AsyncEngine) -> None:
     """Drop and recreate all cache tables.
 
     Cache tables use CacheBase and are regenerated from the filesystem
-    on every startup. This replaces hardcoded DROP TABLE statements.
+    on every startup.
     """
     async with engine.begin() as conn:
-        # Drop posts_fts first (virtual table, not in CacheBase metadata).
+        # Drop posts_fts first (FTS5 virtual table that SQLAlchemy cannot
+        # correctly drop/recreate via metadata.drop_all/create_all).
         await conn.execute(text("DROP TABLE IF EXISTS posts_fts"))
         await conn.run_sync(CacheBase.metadata.drop_all)
         await conn.run_sync(CacheBase.metadata.create_all)
@@ -179,9 +180,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     try:
         try:
             await run_durable_migrations(engine)
+        except Exception as exc:
+            logger.critical("Failed to run database migrations: %s", exc, exc_info=True)
+            raise
+
+        try:
             await setup_cache_tables(engine)
         except Exception as exc:
-            logger.critical("Failed to set up database schema: %s", exc)
+            logger.critical("Failed to set up cache tables: %s", exc, exc_info=True)
             raise
 
         try:
