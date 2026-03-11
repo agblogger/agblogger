@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
+import subprocess
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from enum import StrEnum
@@ -428,15 +429,24 @@ async def merge_post_file(
         merged_body = server_body
         body_conflicted = False
     else:
-        merged_body, body_conflicted = await git_service.merge_file_content(
-            base_body, server_body, client_body
-        )
+        try:
+            merged_body, body_conflicted = await git_service.merge_file_content(
+                base_body, server_body, client_body
+            )
+        except subprocess.TimeoutExpired:
+            logger.warning("Git merge timed out, using server version")
+            merged_body = server_body
+            body_conflicted = True
         if body_conflicted:
             merged_body = server_body
 
     # Reassemble
     merged_post = fm.Post(merged_body, **fm_result.merged)
-    merged_content = fm.dumps(merged_post) + "\n"
+    try:
+        merged_content = fm.dumps(merged_post) + "\n"
+    except yaml.YAMLError as exc:
+        logger.warning("Failed to serialize merged post: %s", exc)
+        merged_content = server
 
     return PostMergeResult(
         merged_content=merged_content,

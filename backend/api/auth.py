@@ -545,7 +545,18 @@ async def update_profile(
                     )
                 except OSError as revert_exc:
                     logger.error("Failed to revert author in posts: %s", revert_exc)
-                await session.rollback()
+                # The user change was already committed, so session.rollback()
+                # is a no-op. Use a fresh session to revert the username.
+                try:
+                    async with session_factory() as revert_session:
+                        result = await revert_session.execute(
+                            select(User).where(User.id == user.id)
+                        )
+                        db_user = result.scalar_one()
+                        db_user.username = old_username
+                        await revert_session.commit()
+                except Exception as db_revert_exc:
+                    logger.error("Failed to revert username in DB: %s", db_revert_exc)
                 raise HTTPException(
                     status_code=500,
                     detail="Failed to update author",

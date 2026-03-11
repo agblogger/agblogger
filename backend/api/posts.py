@@ -346,29 +346,28 @@ async def upload_post(
                 post_dir.rmdir()
             raise HTTPException(status_code=500, detail="Failed to write upload files") from exc
 
-        serialized = serialize_post(post_data)
-        post = PostCache(
-            file_path=file_path,
-            title=post_data.title,
-            author=post_data.author,
-            created_at=post_data.created_at,
-            modified_at=post_data.modified_at,
-            is_draft=post_data.is_draft,
-            content_hash=hash_content(serialized),
-            rendered_excerpt=rendered_excerpt,
-            rendered_html=rendered_html,
-        )
-        session.add(post)
-        await session.flush()
-        await _replace_post_labels(session, post_id=post.id, labels=post_data.labels)
-        await _upsert_post_fts(
-            session,
-            post_id=post.id,
-            title=post_data.title,
-            content=post_data.content,
-        )
-
         try:
+            serialized = serialize_post(post_data)
+            post = PostCache(
+                file_path=file_path,
+                title=post_data.title,
+                author=post_data.author,
+                created_at=post_data.created_at,
+                modified_at=post_data.modified_at,
+                is_draft=post_data.is_draft,
+                content_hash=hash_content(serialized),
+                rendered_excerpt=rendered_excerpt,
+                rendered_html=rendered_html,
+            )
+            session.add(post)
+            await session.flush()
+            await _replace_post_labels(session, post_id=post.id, labels=post_data.labels)
+            await _upsert_post_fts(
+                session,
+                post_id=post.id,
+                title=post_data.title,
+                content=post_data.content,
+            )
             content_manager.write_post(file_path, post_data)
         except OSError as exc:
             logger.error("Failed to write uploaded post %s: %s", file_path, exc)
@@ -378,6 +377,13 @@ async def upload_post(
                 post_dir.rmdir()
             await session.rollback()
             raise HTTPException(status_code=500, detail="Failed to write post file") from exc
+        except Exception:
+            for asset in written_assets:
+                asset.unlink(missing_ok=True)
+            if post_dir.exists() and not any(post_dir.iterdir()):
+                post_dir.rmdir()
+            await session.rollback()
+            raise
 
         await session.commit()
         await session.refresh(post)
@@ -694,15 +700,19 @@ async def create_post_endpoint(
             rendered_excerpt=rendered_excerpt,
             rendered_html=rendered_html,
         )
-        session.add(post)
-        await session.flush()
-        await _replace_post_labels(session, post_id=post.id, labels=body.labels)
-        await _upsert_post_fts(
-            session,
-            post_id=post.id,
-            title=post_data.title,
-            content=post_data.content,
-        )
+        try:
+            session.add(post)
+            await session.flush()
+            await _replace_post_labels(session, post_id=post.id, labels=body.labels)
+            await _upsert_post_fts(
+                session,
+                post_id=post.id,
+                title=post_data.title,
+                content=post_data.content,
+            )
+        except Exception:
+            await session.rollback()
+            raise
 
         try:
             content_manager.write_post(file_path, post_data)
@@ -957,16 +967,10 @@ async def delete_post_endpoint(
         old_content = existing_post_data.content if existing_post_data else ""
 
         delete_draft_directory_assets = existing.is_draft and file_path.endswith("/index.md")
+        should_delete_assets = delete_assets or delete_draft_directory_assets
 
-        try:
-            content_manager.delete_post(
-                file_path,
-                delete_assets=delete_assets or delete_draft_directory_assets,
-            )
-        except OSError as exc:
-            logger.error("Failed to delete post file %s: %s", file_path, exc)
-            raise HTTPException(status_code=500, detail="Failed to delete post file") from exc
-
+        # Delete DB records first and commit, so the database is consistent
+        # even if the subsequent file deletion fails.
         await session.execute(delete(PostLabelCache).where(PostLabelCache.post_id == existing.id))
         await _delete_post_fts(
             session,
@@ -976,4 +980,20 @@ async def delete_post_endpoint(
         )
         await session.delete(existing)
         await session.commit()
+
+        # Delete the file after DB commit. If this fails, the DB is already
+        # correct and the next cache rebuild will clean up any stale references.
+        try:
+            content_manager.delete_post(
+                file_path,
+                delete_assets=should_delete_assets,
+            )
+        except OSError as exc:
+            logger.warning(
+                "Failed to delete post file %s after DB commit "
+                "(will be cleaned up on next cache rebuild): %s",
+                file_path,
+                exc,
+            )
+
         set_git_warning(response, await git_service.try_commit(f"Delete post: {file_path}"))

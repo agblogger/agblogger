@@ -118,7 +118,7 @@ class TestGlobalExceptionHandlers:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.get("/test-value-error")
         assert resp.status_code == 422
-        assert resp.json()["detail"] == "bad input"
+        assert resp.json()["detail"] == "Invalid value"
 
     @pytest.mark.asyncio
     async def test_type_error_returns_500(self, tmp_path: Path) -> None:

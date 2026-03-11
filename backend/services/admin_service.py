@@ -171,18 +171,32 @@ def delete_page(cm: ContentManager, page_id: str, *, delete_file: bool) -> None:
         msg = f"Page '{page_id}' not found"
         raise ValueError(msg)
 
+    # Resolve the file path before modifying config so validation errors
+    # are raised before any state changes.
+    resolved_file_path = None
     if delete_file and page.file:
         try:
-            file_path = cm._validate_path(page.file)
+            resolved_file_path = cm._validate_path(page.file)
         except ValueError as exc:
             msg = f"Page '{page_id}' has an invalid file path"
             raise ValueError(msg) from exc
-        if file_path.exists():
-            file_path.unlink()
 
+    # Update config first so it stays consistent even if file deletion fails.
     updated = cfg.with_pages([p for p in cfg.pages if p.id != page_id])
     write_site_config(cm.content_dir, updated)
     cm.reload_config()
+
+    # Delete the file after config is updated. If deletion fails, the config
+    # is already correct and a cache rebuild will clean up any references.
+    if resolved_file_path is not None and resolved_file_path.exists():
+        try:
+            resolved_file_path.unlink()
+        except OSError as exc:
+            logger.warning(
+                "Failed to delete page file %s (config already updated): %s",
+                resolved_file_path,
+                exc,
+            )
 
 
 def update_page_order(cm: ContentManager, pages: list[PageConfig]) -> None:

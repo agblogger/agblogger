@@ -1350,8 +1350,10 @@ class TestDeletePostOSError:
     """Delete post endpoint handles OSError from filesystem operations."""
 
     @pytest.mark.asyncio
-    async def test_delete_post_oserror_returns_500(self, client: AsyncClient) -> None:
-        """When content_manager.delete_post raises OSError, return 500."""
+    async def test_delete_post_oserror_logged_not_raised(self, client: AsyncClient) -> None:
+        """When content_manager.delete_post raises OSError after DB commit,
+        the error is logged as a warning but the request succeeds (204)
+        because the DB records were already committed."""
         token = await login(client)
         headers = {"Authorization": f"Bearer {token}"}
 
@@ -1378,8 +1380,8 @@ class TestDeletePostOSError:
                 f"/api/posts/{file_path}",
                 headers=headers,
             )
-        assert resp.status_code == 500
-        assert resp.json()["detail"] == "Failed to delete post file"
+        # DB commit already happened, so the request succeeds despite file error
+        assert resp.status_code == 204
 
 
 class TestGetSettings503:

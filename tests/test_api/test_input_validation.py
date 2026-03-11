@@ -191,11 +191,11 @@ class TestDateFilterValidation:
 
 
 class TestValueErrorForwarding:
-    """ValueError handler forwards str(exc) as detail."""
+    """ValueError handler returns a generic message to avoid leaking internals."""
 
     @pytest.mark.asyncio
-    async def test_value_error_detail_forwarded(self, client: AsyncClient) -> None:
-        """The ValueError handler should include the exception message."""
+    async def test_value_error_returns_generic_detail(self, client: AsyncClient) -> None:
+        """The ValueError handler should return a generic message, not the exception text."""
         from unittest.mock import AsyncMock, patch
 
         token = await login(client)
@@ -210,7 +210,7 @@ class TestValueErrorForwarding:
                 headers={"Authorization": f"Bearer {token}"},
             )
         assert resp.status_code == 422
-        assert "custom validation message" in resp.json()["detail"].lower()
+        assert resp.json()["detail"] == "Invalid value"
 
 
 class TestPageIdErrorMessage:

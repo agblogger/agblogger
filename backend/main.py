@@ -84,14 +84,10 @@ def ensure_content_dir(content_dir: Path) -> None:
         msg = f"Content path exists but is not a directory: {content_dir}"
         raise NotADirectoryError(msg)
 
-    if not content_dir.exists():
-        logger.info("Creating default content directory at %s", content_dir)
-        content_dir.mkdir(parents=True)
+    content_dir.mkdir(parents=True, exist_ok=True)
 
     posts_dir = content_dir / "posts"
-    if not posts_dir.exists():
-        posts_dir.mkdir()
-        logger.info("Created missing content scaffold directory: %s", posts_dir)
+    posts_dir.mkdir(exist_ok=True)
 
     index_toml = content_dir / "index.toml"
     if not index_toml.exists():
@@ -573,10 +569,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.exception_handler(ValueError)
     async def value_error_handler(request: Request, exc: ValueError) -> JSONResponse:
         logger.error("ValueError in %s %s: %s", request.method, request.url.path, exc, exc_info=exc)
-        message = str(exc) or "Invalid value"
+        # Always use a generic message. Intentional business-logic ValueErrors are
+        # caught at the endpoint level and return specific messages there. This
+        # global handler is a safety net for unexpected ValueErrors, which may
+        # originate from library code (int(), datetime.fromisoformat(), etc.) and
+        # could leak internal details if str(exc) were forwarded.
         return JSONResponse(
             status_code=422,
-            content={"detail": message},
+            content={"detail": "Invalid value"},
         )
 
     @app.exception_handler(TypeError)

@@ -82,7 +82,8 @@ def serialize_keypair(
         os.chmod(tmp_path, 0o600)
         os.rename(tmp_path, str(path))
     except BaseException:
-        os.unlink(tmp_path)
+        with contextlib.suppress(OSError):
+            os.unlink(tmp_path)
         raise
 
 
@@ -108,7 +109,14 @@ def load_or_create_keypair(
     if path.exists():
         try:
             return _load_existing()
-        except (json.JSONDecodeError, KeyError, TypeError, ValueError, UnicodeDecodeError) as exc:
+        except (
+            json.JSONDecodeError,
+            KeyError,
+            TypeError,
+            ValueError,
+            UnicodeDecodeError,
+            OSError,
+        ) as exc:
             logger.warning("Corrupted keypair file %s, regenerating: %s", path, exc)
             path.unlink(missing_ok=True)
             # Fall through to create a new keypair
@@ -146,6 +154,7 @@ def load_or_create_keypair(
                     TypeError,
                     ValueError,
                     UnicodeDecodeError,
+                    OSError,
                 ) as exc:
                     logger.warning("Corrupted keypair during lock wait: %s", exc)
                     # Fall through to retry — another process may fix it
@@ -163,6 +172,7 @@ def load_or_create_keypair(
                 TypeError,
                 ValueError,
                 UnicodeDecodeError,
+                OSError,
             ) as exc:
                 logger.warning("Corrupted keypair file after lock acquired, regenerating: %s", exc)
         private_key, jwk = generate_es256_keypair()

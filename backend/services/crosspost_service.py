@@ -7,13 +7,12 @@ import logging
 from inspect import isawaitable
 from typing import TYPE_CHECKING, TypeVar, cast
 
-import httpx
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from backend.crosspost.base import CrossPostContent, CrossPostResult
 from backend.crosspost.registry import get_poster, list_platforms
-from backend.exceptions import ExternalServiceError, InternalServerError, PostNotFoundError
+from backend.exceptions import InternalServerError, PostNotFoundError
 from backend.models.crosspost import CrossPost, SocialAccount
 from backend.models.post import PostCache
 from backend.schemas.crosspost import CrossPostStatus
@@ -168,7 +167,17 @@ async def crosspost(
     )
     result = await session.execute(stmt)
     account_rows = await _resolve_maybe_awaitable(result.scalars().all())
-    accounts = {acct.platform: acct for acct in account_rows}
+    accounts: dict[str, SocialAccount] = {}
+    for acct in account_rows:
+        if acct.platform in accounts:
+            logger.warning(
+                "Multiple %s accounts found for user %d; using %s",
+                acct.platform,
+                actor.id,
+                accounts[acct.platform].account_name,
+            )
+        else:
+            accounts[acct.platform] = acct
 
     results: list[CrossPostResult] = []
     now = format_datetime(now_utc())
@@ -243,7 +252,7 @@ async def crosspost(
                 if updated_creds is not None:
                     account.credentials = encrypt_value(json.dumps(updated_creds), secret_key)
                     account.updated_at = now
-        except (ExternalServiceError, httpx.HTTPError, ValueError, RuntimeError, OSError) as exc:
+        except Exception as exc:
             logger.error("Cross-post to %s failed: %s", platform_name, exc, exc_info=True)
             publish_result = CrossPostResult(
                 platform_id="",

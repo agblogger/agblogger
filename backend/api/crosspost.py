@@ -147,6 +147,11 @@ async def create_account_endpoint(
     """Connect a social media account for cross-posting."""
     try:
         account = await create_social_account(session, user.id, body, settings.secret_key)
+    except DuplicateAccountError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

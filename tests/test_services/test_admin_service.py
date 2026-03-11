@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 from unittest.mock import patch
 
@@ -152,13 +153,17 @@ class TestUpdateSiteSettingsWriteError:
 
 
 class TestDeletePageUnlinkError:
-    def test_unlink_error_propagates(self, cm: ContentManager) -> None:
+    def test_unlink_error_logged_not_raised(
+        self, cm: ContentManager, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """File deletion errors are logged as warnings (config is already updated)."""
         about_path = cm.content_dir / "about.md"
         with (
             patch.object(type(about_path), "unlink", side_effect=OSError("permission denied")),
-            pytest.raises(OSError, match="permission denied"),
+            caplog.at_level(logging.WARNING),
         ):
             delete_page(cm, page_id="about", delete_file=True)
+        assert any("permission denied" in r.message for r in caplog.records)
 
 
 class TestUpdatePageOrder:

@@ -326,6 +326,9 @@ async def _render_markdown(
             raise RenderError(msg) from retry_exc
     except httpx.TimeoutException:
         raise RenderError(f"Pandoc rendering timed out after {_RENDER_TIMEOUT}s") from None
+    except httpx.HTTPError as exc:
+        msg = f"Pandoc server communication error: {exc}"
+        raise RenderError(msg) from exc
 
     try:
         data = response.json()

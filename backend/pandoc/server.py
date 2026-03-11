@@ -98,7 +98,7 @@ class PandocServer:
             "--timeout",
             str(self._timeout),
             stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.PIPE,
         )
         logger.info(
             "Spawned pandoc server process (pid=%s, port=%d)",
@@ -157,23 +157,28 @@ class PandocServer:
             f"on port {self._port}"
         )
 
+    async def _start_impl(self) -> None:
+        """Internal start logic. Caller must hold ``self._lock``."""
+        if self.is_running:
+            await self.stop()
+        await self._check_server_support()
+        await self._spawn()
+        await self._wait_for_ready()
+        logger.info("Pandoc server started on %s", self.base_url)
+
     async def start(self) -> None:
         """Start (or restart) the pandoc server.
 
         Checks server support, stops any existing process, spawns a new one,
-        and waits for it to become ready.
+        and waits for it to become ready.  Protected by ``self._lock`` to
+        prevent concurrent callers from spawning multiple processes.
 
         Raises:
             RuntimeError: If pandoc is missing, lacks server support, or
                 the server fails to start.
         """
-        if self.is_running:
-            await self.stop()
-
-        await self._check_server_support()
-        await self._spawn()
-        await self._wait_for_ready()
-        logger.info("Pandoc server started on %s", self.base_url)
+        async with self._lock:
+            await self._start_impl()
 
     async def stop(self) -> None:
         """Stop the pandoc server process. Idempotent.
@@ -204,6 +209,8 @@ class PandocServer:
         """Ensure the pandoc server is running, restarting if needed.
 
         Uses an asyncio lock to prevent concurrent restart attempts.
+        Calls ``_start_impl`` directly to avoid deadlocking on re-entrant
+        lock acquisition (``start()`` also acquires the lock).
         """
         if self.is_running:
             return
@@ -215,4 +222,4 @@ class PandocServer:
                 return
 
             logger.warning("Pandoc server not running, restarting")
-            await self.start()
+            await self._start_impl()

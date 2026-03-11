@@ -109,7 +109,7 @@ class TestSpawn:
                 "--timeout",
                 "10",
                 stdout=asyncio.subprocess.DEVNULL,
-                stderr=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.PIPE,
             )
             assert server._process is mock_proc
 
@@ -303,14 +303,14 @@ class TestEnsureRunning:
         mock_proc.returncode = 1  # exited
         server._process = mock_proc
 
-        with patch.object(server, "start", new_callable=AsyncMock) as mock_start:
+        with patch.object(server, "_start_impl", new_callable=AsyncMock) as mock_start:
             await server.ensure_running()
             mock_start.assert_awaited_once()
 
     async def test_restarts_when_no_process(self) -> None:
         server = PandocServer()
 
-        with patch.object(server, "start", new_callable=AsyncMock) as mock_start:
+        with patch.object(server, "_start_impl", new_callable=AsyncMock) as mock_start:
             await server.ensure_running()
             mock_start.assert_awaited_once()
 
@@ -318,7 +318,7 @@ class TestEnsureRunning:
         server = PandocServer()
         start_count = 0
 
-        async def mock_start() -> None:
+        async def mock_start_impl() -> None:
             nonlocal start_count
             start_count += 1
             # Simulate the start setting up a running process
@@ -327,7 +327,7 @@ class TestEnsureRunning:
             server._process = mock_proc
             await asyncio.sleep(0.1)
 
-        with patch.object(server, "start", side_effect=mock_start):
+        with patch.object(server, "_start_impl", side_effect=mock_start_impl):
             await asyncio.gather(
                 server.ensure_running(),
                 server.ensure_running(),

@@ -15,6 +15,8 @@ class InMemoryRateLimiter:
     Do NOT use from multiple OS threads without external synchronization.
     """
 
+    _MAX_KEYS = 10_000
+
     def __init__(self) -> None:
         self._attempts: dict[str, deque[float]] = {}
 
@@ -49,9 +51,19 @@ class InMemoryRateLimiter:
         """Record one failed attempt."""
         now = datetime.now(UTC).timestamp()
         if key not in self._attempts:
+            if len(self._attempts) >= self._MAX_KEYS:
+                self._prune_all_expired(window_seconds)
             self._attempts[key] = deque()
         attempts = self._attempts[key]
         cutoff = now - window_seconds
         while attempts and attempts[0] < cutoff:
             attempts.popleft()
         attempts.append(now)
+
+    def _prune_all_expired(self, window_seconds: int) -> None:
+        """Remove all fully-expired keys to bound memory usage."""
+        now = datetime.now(UTC).timestamp()
+        cutoff = now - window_seconds
+        expired = [k for k, dq in self._attempts.items() if not dq or dq[-1] < cutoff]
+        for k in expired:
+            del self._attempts[k]

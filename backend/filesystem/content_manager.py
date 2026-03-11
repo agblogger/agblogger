@@ -57,9 +57,15 @@ class ContentManager:
         return self._site_config
 
     def reload_config(self) -> None:
-        """Reload site configuration from disk."""
-        self._site_config = parse_site_config(self.content_dir)
-        self._labels = parse_labels_config(self.content_dir)
+        """Reload site configuration from disk.
+
+        Parses both configs into local variables first so that a failure
+        in either parse leaves the existing state unchanged.
+        """
+        new_site_config = parse_site_config(self.content_dir)
+        new_labels = parse_labels_config(self.content_dir)
+        self._site_config = new_site_config
+        self._labels = new_labels
 
     @property
     def labels(self) -> dict[str, LabelDef]:
@@ -93,7 +99,14 @@ class ContentManager:
                     file_path=rel_path,
                     default_tz=self.site_config.timezone,
                 )
-            except (UnicodeDecodeError, ValueError, yaml.YAMLError, OSError) as exc:
+            except (
+                UnicodeDecodeError,
+                ValueError,
+                yaml.YAMLError,
+                OSError,
+                KeyError,
+                TypeError,
+            ) as exc:
                 logger.warning("Skipping post %s due to parse error: %s", rel_path, exc)
                 continue
             posts.append(post_data)
@@ -150,7 +163,7 @@ class ContentManager:
                 file_path=rel_path,
                 default_tz=self.site_config.timezone,
             )
-        except (UnicodeDecodeError, ValueError, yaml.YAMLError) as exc:
+        except (UnicodeDecodeError, ValueError, yaml.YAMLError, KeyError, TypeError) as exc:
             logger.warning("Failed to parse post %s: %s", rel_path, exc)
             return None
         return post_data
