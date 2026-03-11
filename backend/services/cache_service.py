@@ -148,10 +148,11 @@ async def rebuild_cache(
 
 async def ensure_tables(session: AsyncSession) -> None:
     """Create all tables if they don't exist (for development)."""
-    from backend.models.base import Base
+    from backend.models.base import CacheBase, DurableBase
 
     conn = await session.connection()
-    await conn.run_sync(Base.metadata.create_all)
+    await conn.run_sync(DurableBase.metadata.create_all)
+    await conn.run_sync(CacheBase.metadata.create_all)
 
     # Create FTS table
     await session.execute(
