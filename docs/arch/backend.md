@@ -1,133 +1,85 @@
 # Backend Architecture
 
-## Application Lifecycle (`backend/main.py`)
+## Runtime Shape
 
-The `create_app()` factory:
+The backend is a single FastAPI application that serves three responsibilities:
 
-1. Creates a FastAPI app with a lifespan context manager.
-2. Configures docs/OpenAPI exposure based on environment (`DEBUG` or `EXPOSE_DOCS`).
-3. Adds middleware (all defined inline in `main.py`):
-   - `GZipMiddleware` for response compression (minimum 500 bytes).
-   - Multipart upload-size middleware for `/api/posts/upload`, `/api/posts/*/assets`, and `/api/sync/commit`.
-   - `TrustedHostMiddleware` for host header allowlisting.
-   - CORS middleware for browser origin control.
-   - Cookie CSRF middleware for unsafe methods.
-   - Security headers middleware (`nosniff`, frame deny, referrer policy, COOP, CORP, Permissions-Policy, CSP).
-4. Registers API routers under `/api/`.
-5. Serves the React SPA static files from `frontend/dist/`.
+- the JSON API under `/api`
+- the built React single-page application
+- selected server-rendered HTML entry responses for metadata-sensitive routes
 
-Application version metadata comes from the repo-root `VERSION` file during source-based execution and falls back to installed package metadata when running from an installed wheel. `backend/main.py` uses this shared value for the FastAPI/OpenAPI version, and `/api/health` returns the same version string.
+Application startup initializes the database, content services, git-backed versioning support, authentication state, and the shared markdown renderer before the app begins serving requests.
 
-On startup, the lifespan handler:
+## Architectural Layers
 
-1. Validates production security settings (`validate_runtime_security()`), failing fast for insecure defaults.
-2. Creates the async SQLAlchemy engine and session factory.
-3. Drops all regenerable cache tables (`post_labels_cache`, `label_parents_cache`, `posts_fts`, `posts_cache`, `labels_cache`, `sync_manifest`) so `create_all` always matches the current schema.
-4. Creates all database tables via `Base.metadata.create_all()`.
-5. Applies lightweight schema compatibility updates for `cross_posts.user_id` when needed.
-6. Creates the FTS5 virtual table (`posts_fts`).
-7. Ensures required scaffold entries in the content directory via `ensure_content_dir()`: creates `content/`, `content/posts/`, `content/index.toml`, and `content/labels.toml` when any of them are missing (without overwriting existing files).
-8. Initializes the `ContentManager`.
-9. Initializes the `GitService` (creates a git repo in the content directory if one doesn't exist).
-10. Loads or creates the AT Protocol OAuth ES256 keypair in a private state directory alongside the configured database (outside `content/`) and initializes OAuth state stores for Bluesky, Mastodon, X, and Facebook on `app.state`.
-11. Creates the admin user if it doesn't exist.
-12. Starts the pandoc server (`PandocServer`) and initializes the renderer. Pandoc is a
-    required dependency — if startup fails, the server aborts with a critical log message.
-13. Rebuilds the full database cache from the filesystem.
+The backend follows a layered structure:
 
-## Content Write Lock
+- **API layer**: request handling, dependency injection, and HTTP translation
+- **Service layer**: business logic and orchestration
+- **Filesystem/content layer**: markdown and TOML content management
+- **Persistence layer**: SQLAlchemy models and regenerable cache tables
+- **Rendering layer**: shared server-side markdown rendering
 
-All content-mutating API endpoints (post create/update/delete, admin page CRUD, label CRUD, sync commit) acquire a shared `asyncio.Lock` (`app.state.content_write_lock`) for the full duration of the request. This serializes all content mutations to prevent filesystem race conditions (e.g., concurrent renames, overlapping git commits).
+The filesystem remains the source of truth for content. The database exists primarily to support efficient reads, search, and integration state.
 
-**Known limitation:** The lock is global — all write operations are serialized even when they affect different posts. This is acceptable for a single-user self-hosted blog but would need fine-grained locking (e.g., per-post) to scale to concurrent multi-user editing.
+## Core Runtime Services
 
-## Layered Architecture
+Several long-lived services define the runtime architecture:
 
-```
-┌─────────────────────────────────────┐
-│  API Layer (backend/api/)           │  Route handlers, request/response
-├─────────────────────────────────────┤
-│  Dependencies (backend/api/deps.py)  │  Auth, DB session, settings injection,
-│                                      │  shared content write lock
-├─────────────────────────────────────┤
-│  Services (backend/services/)       │  Business logic
-├─────────────────────────────────────┤
-│  Models (backend/models/)           │  SQLAlchemy ORM
-├─────────────────────────────────────┤
-│  Filesystem (backend/filesystem/)   │  Markdown/TOML parsing, content I/O
-├─────────────────────────────────────┤
-│  Pandoc (backend/pandoc/)           │  HTML rendering
-└─────────────────────────────────────┘
-```
+- **content management** for canonical files
+- **git-backed versioning** for history and merge support
+- **shared rendering** for preview and published HTML
+- **cache rebuild and indexing** for searchable derived state
 
-## API Routes
+Together, these services let the backend translate between durable content files and fast application read paths.
 
-| Router | Prefix | Purpose |
-|--------|--------|---------|
-| `auth` | `/api/auth` | Cookie session login, non-browser token login, invite-based register, refresh/logout, profile updates (username, display name), invite management, PAT management, current user |
-| `posts` | `/api/posts` | Search/list/read for all users; create/update/delete/upload/edit-data/asset-management are admin-only |
-| `labels` | `/api/labels` | Public label reads plus admin-only label CRUD (create, update, delete) |
-| `pages` | `/api/pages` | Site config, rendered page content |
-| `sync` | `/api/sync` | Bidirectional sync protocol (admin-only) |
-| `crosspost` | `/api/crosspost` | Social account management, cross-posting, Bluesky/Mastodon/X/Facebook OAuth flows |
-| `render` | `/api/render` | Server-side Pandoc preview for the admin-only editor |
-| `admin` | `/api/admin` | Site settings, page management, password change (admin-only) |
-| `content` | `/api/content` | File serving for post assets and shared assets with canonical-path draft authorization |
-| `health` | `/api/health` | Health check with DB verification |
+## Rendering Architecture
 
-## Database Models
+Markdown rendering is handled by a long-lived Pandoc server process that is started during backend startup and shared across preview, page rendering, post rendering, excerpts, and other HTML-producing paths.
 
-The database serves as a **cache**, not the source of truth:
+This is an architectural choice, not just an implementation detail:
 
-- **`PostCache`** — Cached post metadata: file path, title, author username (display names resolved via LEFT JOIN against the users table), timestamps (`DateTime(timezone=True)`, stored as UTC), draft status, content hash (SHA-256), rendered excerpt (Pandoc HTML), rendered HTML.
-- **`PostsFTS`** — SQLite FTS5 virtual table for full-text search over title and content. **Limitation:** FTS5's default tokenizer does not segment CJK (Chinese, Japanese, Korean) text, so CJK queries may not return expected results. A custom tokenizer (e.g., `unicode61` with ICU) would be needed for CJK support.
-- **`LabelCache`** — Label with ID, display names (JSON array), and implicit flag.
-- **`LabelParentCache`** — DAG edge table (label_id → parent_id).
-- **`PostLabelCache`** — Many-to-many association between posts and labels.
-- **`User`** — Username, email, password hash, display name, admin flag.
-- **`RefreshToken`** — Hashed refresh token with expiry.
-- **`PersonalAccessToken`** — Hashed long-lived API tokens (PATs), with revocation and optional expiry.
-- **`InviteCode`** — Single-use hashed invite codes for closed registration.
-- **`SocialAccount`** — OAuth credentials per user/platform.
-- **`CrossPost`** — Cross-posting history log scoped to the owning user (`user_id`).
-- **`SyncManifest`** — File state at last sync: path, content hash, file size, mtime.
+- rendering stays behind one backend-controlled boundary for sanitization and output consistency
+- preview and published rendering use the same core pipeline
+- the application avoids paying full Pandoc process startup cost on every render
 
-## Rendering Pipeline
+The backend treats the Pandoc server as runtime infrastructure owned by the application lifecycle rather than as a per-request helper command.
 
-Markdown is rendered to HTML via a long-lived `pandoc server` process managed by `PandocServer` in `backend/pandoc/server.py`. The server binds to `127.0.0.1` on an internal port and accepts JSON POST requests. `render_markdown()` in `renderer.py` sends async HTTP requests via `httpx` with a 10-second per-request timeout. If the server crashes, it is automatically restarted on the next render attempt.
+## Write Coordination
 
-Rendering happens at publish time (during cache rebuild and post create/update), not per-request. The rendered HTML is stored in `PostCache.rendered_html`. A rendered excerpt is also generated from a markdown-preserving truncation (`generate_markdown_excerpt()`) and stored in `PostCache.rendered_excerpt`. Both timeline cards and search results render excerpt HTML client-side with KaTeX math processing via `useRenderedHtml`.
+Content mutations are serialized through a shared application-level write boundary. This prevents filesystem updates, cache refreshes, and history updates from interleaving across posts, pages, labels, and sync operations.
 
-Pandoc output is sanitized through an allowlist HTML sanitizer before storage and before heading-anchor injection. Unsafe tags/attributes and unsafe URL schemes (for example `javascript:`) are stripped.
+Architecturally, this favors correctness and consistency over high write concurrency, which matches the project’s self-hosted editorial model.
 
-Files served by the content API are additionally classified by MIME type at response time. Active content types such as HTML, SVG, PDF, XML/XHTML, and JavaScript are not rendered inline; they are returned as attachments with a restrictive per-response CSP so uploaded or synced assets cannot execute under the app origin.
+## API Surface
 
-Excerpts use a dedicated renderer path (`render_markdown_excerpt()`): Pandoc input disables raw HTML (`markdown-raw_html+...`) and excerpt sanitization is stricter than full-post sanitization. In particular, excerpts strip media-bearing tags such as `<img>` (and task-list `<input>`), preventing list/search pages from triggering remote media fetches while still preserving inline markdown formatting (bold/italic/code/math/links).
+The API is organized around a small set of concerns:
 
-Pandoc conversion settings: Pandoc Markdown with `emoji`, `lists_without_preceding_blankline` and `mark` extensions, output as `html5` with KaTeX math rendering and Pygments syntax highlighting. Note: GitHub-style alerts (`[!NOTE]`, `[!WARNING]`, etc.) are not supported by Pandoc — a Lua filter would be needed to implement them.
+- content reads and writes
+- authentication and account management
+- labels and site configuration
+- preview and rendering
+- sync and cross-posting
+- health and operational endpoints
 
-Features: GitHub Flavored Markdown (tables, task lists, strikethrough), KaTeX math, syntax highlighting (140+ languages), and heading anchor injection.
+Public read paths are broad for published content, while mutations are concentrated behind authorization boundaries.
 
-After rendering and sanitization, `rewrite_relative_urls()` rewrites relative `src` and `href` attributes in the HTML to absolute `/api/content/...` paths based on the post's file path. This allows co-located assets (e.g., `photo.png` next to `index.md`) to be referenced with simple relative paths in markdown and served correctly via the content API.
+## Failure Handling
 
-Lua filter files exist in `backend/pandoc/filters/` as placeholders for future use (callouts, tabsets, video embeds, local link rewriting) but are not currently wired into the rendering pipeline.
+The backend is designed around graceful degradation:
 
-## Open Graph Meta Tags
+- canonical content stays on disk even when derived state needs rebuilds
+- integrations are isolated behind service boundaries
+- internal failures are translated into generic client-facing errors
+- startup validates critical runtime prerequisites up front
 
-Post pages (`/post/{file_path}`) are served with Open Graph and Twitter Card meta tags injected into the SPA's `index.html`. This enables rich link previews on social media (Facebook, LinkedIn, Slack, Discord, iMessage, etc.).
+That reliability model is central to the backend architecture: preserve content, preserve service availability where possible, and keep internal failures from leaking through the HTTP boundary.
 
-The route queries `PostCache` for the post's title, excerpt, author, and timestamps. The excerpt HTML is stripped to plain text for the `og:description` tag. Drafts and missing posts receive the unmodified `index.html` so no metadata is leaked. The base `index.html` is cached in `app.state` after first read.
+## Code Entry Points
 
-Tags injected: `og:title`, `og:description`, `og:url`, `og:type` (article), `og:site_name`, `article:author`, `article:published_time`, `article:modified_time`, `twitter:card` (summary), `twitter:title`, `twitter:description`.
-
-## Exception Conventions
-
-The service layer uses exception types defined in `backend/exceptions.py` to separate internal errors from business logic errors:
-
-- **`InternalServerError`**: For errors whose details must never reach clients — decryption failures, config validation, infrastructure port conflicts. The global handler in `main.py` logs the full message and returns a generic `"Internal server error"` (500).
-- **`ExternalServiceError`** (extends `RuntimeError`): For external service failures (OAuth, HTTP APIs). The global handler logs the full message and returns `"External service error"` (502).
-- **`PostNotFoundError`** (extends `ValueError`): For post-not-found lookups by path or ID.
-- **`BuiltinPageError`** (extends `ValueError`): For attempts to modify built-in pages (timeline, labels).
-- **`ValueError`**: For business logic validation errors that are safe for clients — invalid dates, bad input formats. The global handler returns `str(exc)` as the 422 detail.
-
-Services must not import `HTTPException` from FastAPI. They raise `ValueError`, `InternalServerError`, or `ExternalServiceError`, and the API layer (`backend/api/`) translates to HTTP responses where needed. Global exception handlers in `main.py` serve as a safety net for unhandled exceptions.
+- `backend/main.py` is the main runtime entry point.
+- `backend/api/` contains the HTTP-facing modules grouped by feature area.
+- `backend/services/` contains the orchestration and business-logic layer.
+- `backend/filesystem/` contains the canonical content model.
+- `backend/pandoc/server.py` manages the long-lived Pandoc server process used by the application.
+- `backend/pandoc/renderer.py` exposes the shared markdown-rendering boundary used across backend features.

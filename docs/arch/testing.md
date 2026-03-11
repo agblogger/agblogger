@@ -1,39 +1,44 @@
 # Testing
 
-## Backend (pytest)
+## Strategy
 
-Tests live under `tests/` with shared fixtures in `conftest.py` (tmp content dir, settings, DB engine/session). Modules are organized by layer:
+AgBlogger’s testing architecture mirrors the application architecture:
 
-- **`test_api/`** — API integration tests via `httpx.AsyncClient` + `ASGITransport`: CRUD, security, auth hardening, input validation, cross-posting, content serving, draft visibility, post uploads/renames, and security regressions.
-- **`test_services/`** — Service-layer unit tests: auth, admin, sync, content manager, cross-posting, crypto, datetime, git, slug generation, rate limiting, SSRF protection, TOML/frontmatter parsing, cache rebuild resilience, and startup hardening.
-- **`test_labels/`** — Label DAG operations and label service tests.
-- **`test_rendering/`** — Pandoc integration, frontmatter parsing, HTML sanitization, URL rewriting, and dead-code checks.
-- **`test_cli/`** — CLI tools: sync client, deployment, dev server, mutation testing orchestration, ZAP scanning of the local Caddy-backed build profile (including scoped hook-based hardening and stale-report cleanup), and path safety.
-- **`test_sync/`** — Sync client integration and frontmatter normalization.
+- API-level tests validate behavior at the HTTP boundary
+- service-level tests validate business logic and failure handling
+- content and rendering tests validate the markdown pipeline
+- CLI tests validate operational tooling
+- frontend tests validate route behavior, state management, and user workflows
 
-Configuration in `pyproject.toml`: `asyncio_mode = "auto"`, coverage via `pytest-cov`, `fail_under = 80` with branch coverage enabled.
+This keeps high-value behavior covered without relying only on narrow implementation-level unit tests.
 
-Slow backend tests which take more than 1s to run should be marked @pytest.mark.slow. If a fixture setup takes more than 1s, the entire group of tests using that fixture should be marked @pytest.mark.slow.
+## Backend
 
-Property-based testing is implemented with Hypothesis for high-invariant backend logic:
-- sync plan classification and symmetry invariants
-- front matter merge, normalization, and parsing invariants
-- label DAG cycle-breaking invariants
-- URL/path safety invariants across rendering, sync, content serving, and CLI path resolution
-- auth service token/password invariants
-- crypto service encrypt/decrypt round-trip invariants
-- datetime service parsing invariants
-- slug generation invariants
-- TOML manager round-trip invariants
+Backend testing emphasizes correctness at the boundaries that matter most for the system:
 
-## Frontend (Vitest)
+- content mutations and reads
+- failure handling and graceful degradation
+- security-sensitive behavior
+- sync, rendering, and integration workflows
 
-Vitest with jsdom environment, `@testing-library/react`, and `@testing-library/user-event`. Test setup (`src/test/setup.ts`) fails tests on unexpected `console.error`/`console.warn` output.
+Because the filesystem is authoritative, backend tests focus heavily on preserving content correctly even when caches, external tools, or integrations fail.
 
-Coverage thresholds: statements 80%, branches 70%, functions 80%, lines 80%.
+## Frontend
 
-Property-based testing is implemented with `fast-check` for deterministic frontend logic:
-- share utility invariants (`shareUtils`): URL/query encoding, hostname validation, and platform fallbacks
-- editor transformation invariants (`wrapSelection`): splice correctness, cursor bounds, and block newline semantics
-- label graph invariants (`graphUtils`): cycle detection, depth computation, and descendant traversal
-- cross-post text/url invariants (`crosspostText`): post-path normalization and hashtag truncation/content assembly
+Frontend testing focuses on user-visible behavior in the SPA: navigation, editor workflows, authenticated flows, and UI logic layered on top of backend-rendered content. The goal is to verify application behavior as users experience it rather than to mirror component internals.
+
+## Property-Based and Higher-Invariant Tests
+
+Where the codebase has deterministic, high-invariant logic, tests favor property-based coverage and other approaches that validate whole classes of behavior instead of a small set of fixed examples.
+
+## Quality Gates
+
+Repository-level check commands combine static analysis, automated tests, and additional security validation. The default gate covers normal development checks, while heavier or noisier scans live outside that default path. Architecturally, the point is that correctness and security are verified continuously rather than left to manual review.
+
+## Code Entry Points
+
+- `tests/test_api/` covers HTTP-level backend behavior.
+- `tests/test_services/`, `tests/test_rendering/`, `tests/test_labels/`, and `tests/test_sync/` cover core backend subsystems.
+- `frontend/src/**/__tests__/` and `frontend/src/**/*.test.ts*` cover the SPA.
+- `tests/test_cli/` covers operational tooling.
+- `justfile` defines the repository-level validation gates.

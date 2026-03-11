@@ -1,147 +1,40 @@
 # Data Flow
 
-## Creating a Post (Editor)
+## Canonical Flow
 
-```
-Frontend sends structured data: { title, body, labels, is_draft }
-    → POST /api/posts
-        → Require admin
-        → Backend generates directory path: posts/<date>-<slug>/index.md
-        → Backend sets author from authenticated user
-        → Backend sets created_at and modified_at to now
-        → Constructs PostData from structured fields
-        → serialize_post() assembles YAML front matter + body
-        → write to content/ directory (creates directory)
-        → render full HTML via Pandoc + render excerpt via excerpt-specific Pandoc/sanitizer path
-        → rewrite relative URLs, store in PostCache
-```
+AgBlogger’s data flow is organized around one rule: content on disk is canonical.
 
-## Updating a Post (Editor)
+Content-changing operations follow the same high-level pattern:
 
-```
-Frontend sends structured data: { title, body, labels, is_draft }
-    → PUT /api/posts/{path}
-        → Require admin
-        → Backend uses title from request body
-        → Backend preserves original author and created_at from filesystem
-        → Backend sets modified_at to now
-        → Constructs PostData from structured fields
-        → serialize_post() assembles YAML front matter + body
-        → write to content/ directory
-        → If title slug changed: rename directory, create symlink at old path
-        → render full HTML via Pandoc + render excerpt via excerpt-specific Pandoc/sanitizer path
-        → rewrite relative URLs, update PostCache
-        → Returns new file_path (may differ from request path after rename)
-```
+1. the backend accepts a mutation through the API or sync boundary
+2. the filesystem is updated as the durable source of truth
+3. derived cache and search state is refreshed
+4. read paths serve cached or interpreted views of that canonical content
 
-## Publishing a Post (Filesystem)
+This gives the application fast reads without moving ownership of content into the database.
 
-```
-Write .md file → ContentManager.write_post()
-    → serialize YAML front matter + body
-    → write to content/ directory
-    → rebuild_cache()
-        → parse all .md files
-        → render full HTML via Pandoc + render excerpts via excerpt-specific Pandoc/sanitizer path
-        → populate PostCache + PostsFTS
-        → parse labels.toml
-        → populate LabelCache + PostLabelCache
-```
+## Mutation Paths
 
-## Editing a Post (Loading)
+The editor, uploads, administrative configuration changes, and sync all converge on the same content model. Different entry points may collect different inputs, but they ultimately update the same on-disk structures and then refresh derived state. That convergence is a core architectural choice because it keeps alternate workflows from creating alternate truth models.
 
-```
-GET /api/posts/{path}/edit (admin required)
-    → ContentManager.read_post()
-        → parse .md file from filesystem
-        → return structured JSON: title, body, labels, is_draft, timestamps, author
-```
+## Read Paths
 
-## Reading a Post
+Published post reads, search, labels, and page views are served through backend-controlled representations rather than direct filesystem exposure. This allows one shared boundary for authorization, rendering policy, sanitization, and asset access.
 
-```
-GET /api/posts/{path}
-    → PostService.get_post()
-        → query PostCache (pre-rendered HTML)
-        → return cached metadata + HTML
-```
+## Derived Consumers
 
-## Viewing a Post (Social Media Crawler)
+Several features consume canonical content without becoming authoritative themselves:
 
-```
-GET /post/{file_path}
-    → Query PostCache by file_path
-    → If found and not draft:
-        → Strip HTML from rendered_excerpt for description
-        → Read site_config.title for og:site_name
-        → inject_og_tags() into cached index.html
-        → Return enriched HTML (SPA boots normally)
-    → If not found or draft:
-        → Return unmodified index.html
-```
+- rendered HTML used for publication and preview
+- search and filtering data stored in the cache
+- metadata used for link previews
+- cross-post payloads sent to external platforms
 
-## Uploading a Post (File or Folder)
+These are all downstream views of the same content system rather than separate content stores.
 
-```
-User selects a .md file or a folder (with index.md + assets) on the Timeline page
-    → POST /api/posts/upload (multipart form data)
-        → Require admin
-        → Find the markdown file (index.md preferred, else single .md file)
-        → Parse frontmatter via parse_post() (same as sync/cache rebuild)
-        → Normalize: title from frontmatter → first heading → ?title param → 422
-        → Set created_at, modified_at, author, labels, is_draft with defaults
-        → Generate post directory via generate_post_path()
-        → Write all files (normalized markdown + assets)
-        → Create PostCache, render HTML, update FTS index
-        → Git commit
-        → Return PostDetail → frontend navigates to new post
-    → If 422 with "no_title": frontend shows title prompt, retries with ?title=
-```
+## Code Entry Points
 
-## Uploading Assets (Editor)
-
-```
-Frontend sends multipart file upload
-    → POST /api/posts/{path}/assets
-        → Require admin
-        → Verify post exists in DB cache
-        → Reject flat-file post paths; asset management requires `.../index.md`
-        → Write files to post's directory (10 MB limit per file)
-        → Git commit
-        → Return list of uploaded filenames
-        → Frontend inserts markdown at cursor: ![name](name) for images, [name](name) for others
-```
-
-## Serving Content Files
-
-```
-GET /api/content/{file_path}
-    → Validate path (no traversal, allowed prefixes: posts/, assets/)
-    → Verify resolved path stays within content directory
-    → For draft content files (directory assets and flat draft markdown): require draft author authentication
-    → Return FileResponse with guessed content type
-```
-
-## Deleting a Post
-
-```
-DELETE /api/posts/{path}?delete_assets=true|false
-    → Require admin
-    → If delete_assets=true and post is index.md:
-        → Remove symlinks pointing to directory
-        → Remove entire directory (post + all assets)
-    → If delete_assets=false (default):
-        → Remove only the .md file
-    → Clean up DB cache, FTS index, label associations
-    → Git commit
-```
-
-## Searching
-
-```
-GET /api/posts/search?q=...
-    → PostService.search_posts()
-        → FTS5 MATCH query on posts_fts
-        → join with PostCache for metadata
-        → return ranked results with snippets
-```
+- `backend/api/posts.py`, `backend/api/pages.py`, and related API modules define the entry points for reads and mutations.
+- `backend/filesystem/content_manager.py` owns the canonical on-disk content operations.
+- `backend/services/cache_service.py` and `backend/services/post_service.py` expose the main derived read models.
+- `backend/pandoc/renderer.py` and related rendering code handle the shared HTML rendering path.

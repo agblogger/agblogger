@@ -1,146 +1,86 @@
-# AgBlogger Architecture overview
+# AgBlogger Architecture Overview
 
-AgBlogger is a self-hosted, markdown-first blogging platform. Markdown files with YAML front matter are the authoritative source of truth for all post content and metadata. The SQLite database is a regenerable cache for search and filtering. Configuration lives in TOML files. A bidirectional sync mechanism keeps a local directory and the server in lockstep.
+AgBlogger is a self-hosted, markdown-first blogging platform. Markdown files with YAML front matter, plus TOML configuration files under the content directory, are the authoritative source of truth. The backend builds and maintains a regenerable SQLite cache so the application can provide fast reads, search, filtering, and integration features without making the database authoritative for content.
 
-## Directory Structure
+Read this file first. The rest of `docs/arch/` is meant to work as an onboarding set for agents: use this file for the system shape, then read only the subsystem documents that are relevant to the current task.
 
-```
+## System Shape
+
+The system has four primary architectural parts:
+
+- **Content layer**: markdown posts, pages, labels, and site configuration stored on disk
+- **Application layer**: a FastAPI backend that owns API boundaries, rendering, authorization, and content orchestration
+- **Presentation layer**: a React single-page app for browsing, editing, and administration
+- **Integration layer**: CLI tooling, bidirectional sync, and cross-posting adapters that extend the core content system
+
+The backend serves both the JSON API and the built frontend, so browser clients and automation clients share the same application boundary.
+
+## Repository Structure
+
+The repository is organized around those layers:
+
+```text
 agblogger/
-├── backend/            Python FastAPI backend
-│   ├── api/            Route handlers + dependency injection
-│   ├── crosspost/      Cross-posting platform plugins
-│   ├── filesystem/     Markdown/TOML parsing, content management
-│   ├── migrations/     Alembic migration templates
-│   ├── models/         SQLAlchemy ORM models
-│   ├── pandoc/         Pandoc rendering
-│   ├── schemas/        Pydantic request/response schemas
-│   ├── services/       Business logic layer
-│   ├── config.py       Pydantic settings (from .env)
-│   ├── database.py     Async SQLAlchemy engine
-│   ├── exceptions.py   Application-level exception types
-│   └── main.py         Application factory, middleware, lifespan
-├── frontend/           React 19 + TypeScript SPA
-│   └── src/
-│       ├── api/        HTTP client (ky) + API functions
-│       ├── hooks/      Custom React hooks (auto-save, KaTeX, code blocks, heading tracking)
-│       ├── stores/     Zustand state management
-│       ├── pages/      Route-level page components
-│       └── components/ Reusable UI components
-├── cli/                CLIs: sync, deployment, release, dev server, mutation testing, DAST
-├── tests/              pytest test suite
-├── docs/               Project documentation
-├── VERSION             Source-of-truth application version for releases/runtime metadata
-├── Dockerfile          Multi-stage Docker build
-├── docker-compose.yml  Container orchestration
-├── Caddyfile           Reverse proxy (HTTPS)
-└── pyproject.toml      Python project config
+├── backend/   FastAPI application, services, content logic, rendering, sync, and integrations
+├── frontend/  React SPA for reading, editing, and administration
+├── cli/       Operational tooling such as sync and deployment helpers
+├── tests/     Backend, frontend, and CLI test suites
+└── docs/      Architecture, guidelines, and supporting documentation
 ```
 
-## Tech Stack
+## What To Read Next
 
-- **Backend:** FastAPI + async SQLAlchemy (SQLite/`aiosqlite`), Alembic, Pandoc-based Markdown rendering, JWT+bcrypt auth, and git-based content versioning/sync with semantic front matter merges.
-- **Frontend:** React 19 + Vite + TypeScript, TailwindCSS, Zustand, KaTeX, and graph visualization via `@xyflow/react` + Dagre; textarea editor with server-side Pandoc preview.
-- **Testing:** Pytest + Vitest for functional tests, mutation testing via mutmut (backend) and StrykerJS (frontend), plus Dockerized OWASP ZAP baseline/full DAST scans driven by `just` commands.
-- **Infra/runtime:** Requires Pandoc and git, packages the backend as a server-only wheel for Docker deployment, and supports Docker/Compose with optional Caddy reverse proxy plus remote deployment bundles for registry-push and tarball-transfer workflows.
+- Read [backend.md](backend.md) for backend, API, rendering, filesystem, or service-layer tasks.
+- Read [frontend.md](frontend.md) for SPA, route, state, or browser-session tasks.
+- Read [data-flow.md](data-flow.md) when the task touches canonical content flow, cache updates, or read/write behavior across layers.
+- Read [formats.md](formats.md) when the task touches markdown front matter, site TOML, label TOML, or the structure of the `content/` tree.
+- Read [auth.md](auth.md) and [security.md](security.md) for authentication, authorization, session, validation, or security-sensitive work.
+- Read [sync.md](sync.md) for sync protocol, manifest, merge, or CLI sync tasks.
+- Read [cross-posting.md](cross-posting.md) for provider integrations, connected accounts, or publication-to-social-platform tasks.
+- Read [testing.md](testing.md) when changing tests, validation strategy, or repository quality gates.
+- Read [deployment.md](deployment.md) only for packaging, container, runtime topology, or deployment-helper work.
 
-## Core Concepts
+## Canonical Content Formats
 
-### Markdown as Source of Truth
+The canonical content model lives under `content/`: markdown posts use YAML front matter, `content/index.toml` defines site-wide metadata and top-level pages, and `content/labels.toml` defines the label graph. Read [formats.md](formats.md) when a task depends on those file formats or the shape of the content tree.
 
-The filesystem is the canonical store for all content. The database is entirely regenerable from the files on disk — it is rebuilt on every server startup via `rebuild_cache()`. Post CRUD endpoints also perform incremental cache maintenance for `posts_cache`, `posts_fts`, and `post_labels_cache` so search/filter data stays fresh between full rebuilds.
+## Core Architectural Principles
 
-The `content/` directory is **not version-controlled** (it is in `.gitignore`). On startup, `ensure_content_dir()` in `backend/main.py` backfills a minimal scaffold (`index.toml`, `labels.toml`, `posts/`) whenever entries are missing, even if `content/` already exists.
-
-Example `content/` directory:
-
-```
-content/
-├── index.toml              Site configuration
-├── labels.toml             Label DAG definitions
-├── about.md                Top-level page
-├── posts/
-│   ├── 2026-02-02-hello-world/
-│   │   └── index.md                     Post content
-│   └── 2026-02-20-my-post/
-│       ├── index.md                     Post content
-│       ├── photo.png                    Co-located asset
-│       └── diagram.svg                  Co-located asset
-└── assets/                 Shared assets
-```
-
-Posts use YAML front matter:
-
-```yaml
----
-title: Post Title
-created_at: 2026-02-02 22:21:29.975359+00
-modified_at: 2026-02-02 22:21:35.000000+00
-author: admin
-labels: ["#swe"]
----
-
-Content here...
-```
-
-- **Title** is stored as a `title` field in YAML front matter. For backward compatibility, if `title` is absent, it is extracted from the first `# Heading` in the body, falling back to filename derivation. During sync, missing titles are backfilled from the first heading (or filename), and any matching leading heading is stripped from the body.
-- **Ownership**: `author` stores the username of the post creator. Display names are resolved at query time via a LEFT JOIN against the users table.
-- **Labels** are referenced as `#label-id` strings.
-- **Timestamps** use strict ISO output format; lax input is accepted via pendulum.
-- **Post-per-directory**: Posts created and shipped with AgBlogger use `posts/<date>-<slug>/index.md` with co-located assets. The slug is generated from the title via NFKD unicode normalization → ASCII → lowercase → hyphenated (max 80 chars). Editor file management targets this directory-backed layout.
-- **Directory rename on title change**: When a post's title changes, the directory is renamed to match the new slug. A symlink is created at the old path pointing to the new directory, preserving old URLs.
-- **Directories** under `posts/` are for disk organization only — they have no effect on labels or metadata.
-
-### Label DAG
-
-Labels form a Directed Acyclic Graph where edges point from child to parent (subcategory to supercategory). Labels can have **multiple parents**. They are defined in `content/labels.toml`:
-
-```toml
-[labels.cs]
-names = ["computer science"]
-
-[labels.swe]
-names = ["software engineering", "programming"]
-parent = "#cs"
-
-[labels.quantum]
-names = ["quantum mechanics"]
-parents = ["#math", "#physics"]
-```
-
-Single parent uses `parent = "#id"`, multiple parents use `parents = ["#id1", "#id2"]`. The TOML parser accepts both forms; the writer intelligently chooses singular vs plural.
-
-**Cycle enforcement** operates at two levels:
-- **Cache rebuild / sync** (batch): DFS with back-edge detection in O(V+E). Cycles in `labels.toml` are automatically broken by dropping edges, with warnings returned in the sync response and logged at startup.
-- **API (single-edge additions)**: Recursive CTE checks if the proposed parent is already a descendant of the label, returning 409 on cycle.
-
-Descendant queries use recursive CTEs in SQLite, enabling a "show me all posts in #cs including subcategories" pattern. The graph is visualized and editable in the frontend using React Flow with Dagre auto-layout.
-
-### TOML Configuration
-
-`content/index.toml` defines site-level settings (title, timezone, and page navigation). `content/labels.toml` defines the label hierarchy. Both are read at startup and on cache rebuild.
+- **Filesystem-first content**: posts, pages, labels, and site settings are stored as regular files so backups, inspection, and migration remain simple.
+- **Derived database state**: the SQLite database accelerates queries and search, is rebuilt from disk on startup, and is refreshed incrementally when writes succeed.
+- **Centralized backend policy**: rendering, sanitization, authorization, and write coordination are enforced on the server rather than split across clients.
+- **Single mutation boundary**: content-changing operations share coordinated write handling so filesystem updates, cache refreshes, and versioning stay consistent.
+- **Extensible integrations**: sync and cross-posting are layered on top of the content model instead of redefining it.
 
 ## Key Design Decisions
 
-| Decision | Rationale |
-|----------|-----------|
-| Filesystem as source of truth | Backup by copying files; database is fully regenerable at startup |
-| Async throughout | Non-blocking I/O for file serving and database queries |
-| SQLite FTS5 for search | Zero-config full-text search with good performance |
-| Recursive CTEs for label DAG | SQLite supports them natively; efficient hierarchy traversal |
-| Pandoc server mode | Amortizes Haskell startup cost across all renders; no per-request subprocess cost |
-| JWT with refresh token rotation | Prevents stolen refresh token reuse |
-| SHA-256 based sync | Clock-skew immune, deterministic conflict detection |
-| Git-backed content directory | Provides merge base for hybrid sync merge (`git merge-file` for body); full change history at no extra cost |
-| Single Docker container | Simplest deployment for a self-hosted blog |
+- **Canonical files over canonical database rows**: the filesystem is the source of truth so content stays inspectable, portable, and easy to back up.
+- **SQLite as a derived acceleration layer**: read-heavy features use a cache database, but the system can rebuild that state from canonical files.
+- **Directory-backed posts instead of standalone markdown files**: a post can keep its body and related assets together under one content unit.
+- **Long-lived Pandoc renderer instead of per-request subprocesses**: markdown rendering runs through a shared Pandoc server process so preview and publish paths use one rendering boundary without paying full process-start cost on every render.
+- **Backend-owned mutation flow**: writes, validation, rendering, and authorization stay behind one application boundary instead of being split across clients.
+- **Adapters at the edges**: sync, cross-posting, and CLI tooling extend the core content system instead of redefining it.
 
-## Comprehensive Architectural Description
+## Major Subsystems
 
-- **Backend**: docs/arch/backend.md
-- **Frontend**: docs/arch/frontend.md
-- **Authentication and authorization**: docs/arch/auth.md
-- **Bidirectional sync**: docs/arch/sync.md
-- **Cross-posting and post sharing**: docs/arch/cross-posting.md
-- **Data flow**: docs/arch/data-flow.md
-- **Security**: docs/arch/security.md
-- **Testing**: docs/arch/testing.md
-- **Deployment**: docs/arch/deployment.md
+- **Backend**: request handling, service orchestration, rendering, cache rebuilds, and integration boundaries
+- **Frontend**: route-driven SPA that consumes backend APIs and enhances server-rendered content
+- **Authentication**: cookie-based browser sessions plus token-based access for automation and CLI workflows
+- **Sync**: bidirectional reconciliation between a local content directory and the server-managed content tree
+- **Cross-posting**: adapter-based publishing from canonical blog posts to external social platforms
+- **Deployment and security**: self-hosted container-oriented runtime with layered security controls
+
+## Common Starting Points
+
+- For backend behavior and request lifecycle, start in `backend/main.py`, then move into `backend/api/` and `backend/services/`.
+- For canonical content handling, start in `backend/filesystem/`, then `backend/services/cache_service.py` and `backend/services/post_service.py`.
+- For frontend behavior, start in `frontend/src/App.tsx`, then open the relevant page in `frontend/src/pages/`.
+- For sync and deployment tooling, start in `cli/` alongside the matching subsystem document.
+
+## Code Entry Points
+
+- `backend/main.py` wires up the application, lifespan, middleware, and shared runtime services.
+- `backend/filesystem/` contains the filesystem-backed content model, including markdown front matter and TOML configuration handling.
+- `backend/services/` contains the main orchestration logic for content, auth, sync, rendering, and integrations.
+- `frontend/src/App.tsx` is the SPA entry point, with route-level UI in `frontend/src/pages/`.
+- `cli/` contains the sync and deployment companions that sit on top of the core application architecture.

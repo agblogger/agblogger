@@ -1,38 +1,39 @@
 # Authentication and Authorization
 
-## Token and Session Flow
+## Identity Model
 
-- **Web sessions**: `POST /api/auth/login` issues `access_token` and `refresh_token` as `HttpOnly` cookies and returns only a `csrf_token` in JSON.
-- **Non-browser bearer login**: `POST /api/auth/token-login` returns a short-lived bearer `access_token` for CLI/tests/automation and does not set cookies.
-- **CSRF protection**: Unsafe API methods (`POST/PUT/PATCH/DELETE`) with cookie auth require `X-CSRF-Token` matching a stateless token derived from the current access cookie. The frontend fetches that token from `GET /api/auth/csrf`, caches it in memory, and also receives fresh values from login/refresh responses.
-- **Login origin enforcement**: Login requests with `Origin`/`Referer` must match the app origin or configured CORS origins.
-- **Token-login browser rejection**: `token-login` rejects requests carrying `Origin` or `Referer`, forcing browsers onto the cookie session flow.
-- **Access tokens**: Short-lived (15 min), HS256 JWT containing `{sub: user_id, username, is_admin}` and signed with a derived signing key rather than the raw application secret.
-- **Refresh tokens**: Long-lived (7 days), cryptographically random 48-byte strings. Only SHA-256 hashes are stored in DB. Refresh rotates tokens and revokes the old one.
-- **PATs (Personal Access Tokens)**: Long-lived random tokens (hashed in DB) for CLI/API automation via Bearer auth.
-- **Passwords**: bcrypt hashed.
-- **Password rotation**: Admin password changes require at least 8 characters and revoke all stored refresh tokens and personal access tokens for that user.
-- **Logout**: `POST /api/auth/logout` revokes refresh token (if present) and clears auth cookies.
-- **Trusted proxy handling**: `X-Forwarded-For` is only trusted when the direct peer IP is in `TRUSTED_PROXY_IPS`; otherwise the socket peer IP is used for rate-limit keys.
+AgBlogger supports two access patterns:
 
-## Registration and Abuse Controls
+- **browser sessions** for the web UI
+- **token-based access** for CLI and automation workflows
 
-- **Self-registration** is disabled by default (`AUTH_SELF_REGISTRATION=false`).
-- **Invite-based registration** is enabled by default (`AUTH_INVITES_ENABLED=true`): admins generate single-use invite codes.
-- **Rate limiting** is applied to failed auth attempts on login and refresh endpoints in a sliding window.
+The browser model is intentionally cookie-first so long-lived credentials do not live in readable frontend storage.
 
-## Roles
+## Credential Boundaries
 
-| Role | Access |
-|------|--------|
-| Unauthenticated | Read published (non-draft) posts, labels, pages, search |
-| Authenticated | Above + cross-post and user-scoped account actions |
-| Admin | Above + post create/update/delete/upload/edit-data, render preview, label mutations, sync, and admin panel operations |
+Passwords and long-lived credentials are stored as hashes. Browser sessions use short-lived access credentials with server-managed refresh behavior, while personal access tokens provide a separate path for non-browser clients. This separates interactive browser identity from automation use cases without pushing durable secrets into the SPA.
 
-Public reads require no authentication. The `get_current_user()` dependency returns `None` for unauthenticated requests.
+## Authorization Model
 
-**Draft visibility**: Draft posts and their co-located assets are visible only to their author for read endpoints. The post listing endpoint filters drafts by `author`, which stores the username in post front matter and is cached in `PostCache`. Direct access to draft post pages and content files enforces the same owner-only restriction, including legacy flat draft markdown files under `posts/*.md`. Content authorization is based on the resolved canonical path, so renamed-directory symlinks cannot bypass draft checks. Deleting a directory-backed draft now removes its co-located assets even when `delete_assets=false`, preventing orphaned draft files from becoming public. Editing endpoints are admin-only regardless of draft owner.
+Authorization is enforced at the API boundary with a small role model:
 
-## Admin Bootstrap
+- public readers can access published content
+- authenticated users can perform account-scoped actions
+- admins can mutate shared site content and administrative settings
 
-On startup, `ensure_admin_user()` creates the admin user from `ADMIN_USERNAME` / `ADMIN_PASSWORD` environment variables if no matching user exists.
+Some content also carries an ownership boundary. Draft content is not public, and user-scoped features such as connected social accounts remain isolated to the owning user even though broader editorial workflows stay admin-led.
+
+## Registration Posture
+
+The default operating model is a closed, self-hosted deployment. Registration is admin-controlled, invite flows are available, and rate limiting protects authentication endpoints from abuse. That posture matches the project’s intended use better than an open self-service signup model.
+
+## Bootstrap
+
+The backend can bootstrap an initial admin account from environment configuration during startup. Post metadata stores author identity in a durable content-friendly form, while presentation layers resolve richer profile information when content is read.
+
+## Code Entry Points
+
+- `backend/api/auth.py` exposes the authentication and account-management endpoints.
+- `backend/api/deps.py` contains the shared authentication and authorization dependencies used across the API.
+- `backend/services/auth_service.py` contains the core credential, token, invite, and profile logic.
+- `frontend/src/api/auth.ts` and `frontend/src/stores/authStore.ts` implement the browser-side session integration.

@@ -1,126 +1,44 @@
 # Bidirectional Sync
 
-Hash-based, three-way sync inspired by Unison. Both client and server maintain a **sync manifest** mapping `file_path → (SHA-256 hash, mtime, size)`.
-All `/api/sync/*` endpoints require an authenticated admin user.
+## Model
 
-## Managed Sync Surface
+AgBlogger uses a bidirectional sync model between the server-managed content tree and a local content directory. Sync is manifest-based and conflict-aware, so it reasons about prior shared state instead of blindly mirroring files in one direction.
 
-Sync does not expose or mutate every file under `content/`. The managed surface is intentionally limited to:
+## Managed Scope
 
-- `index.toml`
-- `labels.toml`
-- Top-level `.md` pages such as `about.md`
-- All non-hidden files recursively under `posts/`, including co-located post assets and nested subfolders
-- All non-hidden files recursively under `assets/` (shared site assets)
-
-Hidden files are excluded everywhere, and private application state such as the AT Protocol OAuth keypair lives outside `content/` entirely.
+Sync is intentionally limited to the content surface that AgBlogger treats as portable authoring data: site configuration, labels, pages, posts, and managed assets. Private runtime state and hidden application data are outside the sync boundary.
 
 ## Sync Protocol
 
-```
-Client                                   Server
-  │                                         │
-  │  1. POST /api/sync/status               │
-  │     (client manifest) ──────────────►   │  Compare client manifest
-  │   ◄──────── (sync plan:                 │  vs server manifest
-  │       to_upload, to_download,           │  vs current filesystem
-  │       to_delete_local,                  │
-  │       to_delete_remote)                 │
-  │                                         │
-  │  2. POST /api/sync/commit               │
-  │     (multipart: files +                 │  Write files, run hybrid
-  │      JSON metadata with                 │  merge for conflicting
-  │      deleted_files,                     │  posts, normalize front
-  │      last_sync_commit) ─────────────►   │  matter, git commit, update
-  │   ◄──────── (commit_hash,               │  manifest, rebuild cache
-  │       to_download, conflicts)           │
-  │                                         │
-  │  3. GET /api/sync/download/{path}       │
-  │   ◄──────────────── (file content)      │  Download server-changed
-  │                                         │  and merged files
-```
+The protocol separates planning from mutation. Clients first compare local state, server state, and prior shared state to compute a plan. They then apply uploads, deletions, merges, and downloads through the API. This keeps reconciliation explicit and makes conflicts visible rather than silently overwritten.
 
-## Three-Way Conflict Detection
+One sync run follows this sequence:
 
-| Client vs Manifest | Server vs Manifest | Action |
-|---|---|---|
-| Same | Same | No change |
-| Changed | Same | Upload to server |
-| Same | Changed | Download to client |
-| Changed | Changed (different) | Conflict |
-| New | Not present | Upload |
-| Not present | New | Download |
-| Deleted | Same | Delete on server |
-| Deleted | Changed | Conflict (delete/modify) |
-| Same | Deleted | Delete on client |
-| Changed | Deleted | Conflict (modify/delete) |
+- the client scans the local content tree and sends its current file manifest to the server
+- the server compares client state, current server state, and the last shared manifest to return a plan: uploads, downloads, remote deletions, local deletions, and conflicts
+- the client submits the chosen changes together with the last known shared commit
+- the server applies writes under the normal content mutation boundary, performs content-aware merge handling for markdown posts when needed, updates the server manifest, and returns any files the client should re-download
+- the client downloads the required server versions and updates its local sync metadata
 
-## Front Matter Normalization
+The manifest represents the last agreed shared file state. The last shared commit gives the server a common merge base for conflict handling. When both client and server changed the same markdown post, the server attempts a structured merge rather than treating the file as an opaque blob. When a clean merge is not possible, the server keeps the authoritative server-side result, reports the conflict, and tells the client which files must be downloaded again.
 
-During `sync_commit`, before scanning files and updating the manifest, the server applies `deleted_files` requested by the client and normalizes YAML front matter for uploaded `.md` files under `posts/`. Uploaded files are identified from the multipart form data in the commit request.
+This is a reconcile-and-commit protocol, not a blind mirror and not continuous replication.
 
-- **New posts** (not in old server manifest): missing fields are filled with defaults — `created_at` and `modified_at` set to now.
-- **Edited posts** (in old server manifest): existing fields are preserved, except `modified_at` which is set to the current server time.
-- **Malformed timestamps**: invalid `created_at` / `modified_at` values are treated as missing, replaced with server-time defaults, and reported as warnings in the sync response.
-- **Unrecognized fields** in front matter are preserved in the file but generate warnings in the commit response.
+## Conflict Handling
 
-Recognized front matter fields: `title`, `created_at`, `modified_at`, `author`, `labels`, `draft`.
+Conflicts are resolved with a three-way model using the last agreed state as the merge base. Structured content receives content-aware handling so post metadata and markdown body can be reconciled more intelligently than opaque file blobs. When reconciliation cannot be made cleanly, the system favors preserving content and surfacing the conflict to the client.
 
-## Write Serialization and Graceful Degradation
+## Relationship to Versioning
 
-All content-mutating endpoints (`/api/posts`, `/api/labels`, `/api/admin`, and `/api/sync/commit`)
-share a single application-level async write lock (`app.state.content_write_lock`). This serializes
-filesystem + cache mutation windows across endpoints and prevents cross-endpoint check-then-act races.
+Git supports sync by preserving history and providing merge context, but it does not replace the core content model. The filesystem remains authoritative, and sync participates in the same write coordination boundary as other content mutations.
 
-`sync_commit` degrades gracefully when git commit/HEAD operations fail, returning status `"error"` with
-warning messages in the response. `sync_status` returns `null` for `server_commit` when git HEAD cannot
-be read, logging the failure server-side.
+## Client Boundary
 
-## Git Content Versioning
+The sync client is a separate CLI companion that uses the same authenticated API boundary as the browser and other clients. It does not bypass the application by reading or writing server files directly.
 
-The server's `content/` directory is a git repository. Every file-modifying operation (post create/update/delete, label create/update/delete, sync commit) creates a git commit via `GitService`. This provides:
+## Code Entry Points
 
-- A complete history of all content changes
-- The merge base for three-way conflict resolution during sync
-- The `server_commit` hash returned in sync status, used by clients to track their last sync point
-
-`GitService` (`backend/services/git_service.py`) wraps the git CLI with async calls delegated through `asyncio.to_thread(subprocess.run, ...)`. Repository write operations (`init_repo()`, `commit_all()`) are serialized with a per-repository async lock so concurrent content mutations cannot interleave `git add`, `git diff --cached`, and `git commit`. The repo is initialized on application startup with `git init` if `.git/` doesn't exist.
-
-## Hybrid Merge
-
-When both client and server modify the same `.md` file under `posts/`, the sync protocol performs a hybrid merge that handles front matter and body separately:
-
-1. **Client uploads all changed files** in a single multipart `POST /api/sync/commit` request
-2. **Server reads the base version** from git history at `last_sync_commit`, plus the current server version on disk
-3. **Front matter** is merged semantically via `merge_frontmatter()`:
-   - `modified_at` is excluded from the semantic merge; the subsequent front matter normalization pass sets it to the current server time
-   - `labels` are merged as sets: additions and removals from each side relative to the base are applied together
-   - `title`, `author`, `created_at`, `draft`: if both sides changed differently, server wins and the field is reported as a conflict
-4. **Body** (markdown below front matter) is merged via `git merge-file`. Non-overlapping edits merge cleanly. If body edits overlap, the server body wins and a body conflict is reported
-5. **Reassembly**: merged front matter + merged body are written to disk
-6. **Conflict reporting**: the response includes a `conflicts` list with per-file details (`body_conflicted`, `field_conflicts`)
-
-The server version always wins on unresolvable conflicts. The client is informed so the user knows which changes were dropped. Non-post files that conflict are overwritten by the client version (last-writer-wins).
-
-## CLI Sync Client (`cli/sync_client.py`)
-
-A standalone Python script using httpx with subcommands: `init`, `status`, `sync`. Stores config in `.agblogger.json` (including `last_sync_commit`) and the local manifest in `.agblogger-manifest.json`. The `sync` command calls `POST /api/sync/status` to get the sync plan, uploads all changed files plus deletion metadata in a single multipart `POST /api/sync/commit` request, downloads server-changed and merged files, and reports any conflicts. The returned `commit_hash` is saved for subsequent syncs.
-
-CLI authentication supports either:
-- Interactive username/password prompt (obtaining a JWT access token), or
-- A pre-created PAT via `--pat` (recommended for automation).
-
-For transport security, the CLI requires `https://` for non-localhost servers by default. Plain `http://` is only allowed for localhost, or when explicitly opted in with `--allow-insecure-http`.
-
-## CLI Deployment Helper (`cli/deploy_production.py`)
-
-An interactive deployment script (`agblogger-deploy`) that:
-
-1. Validates Docker/Docker Compose availability.
-2. Prompts for required production settings (`SECRET_KEY`, `ADMIN_*`, `TRUSTED_HOSTS`, optional `TRUSTED_PROXY_IPS`, `HOST_PORT`).
-3. Optionally configures Caddy by asking for a public domain and optional ACME contact email.
-4. Writes `.env.production` with hardened defaults (`DEBUG=false`, `EXPOSE_DOCS=false`, `AUTH_ENFORCE_LOGIN_ORIGIN=true`).
-5. Uses checked-in `docker-compose.yml` as the default Caddy-based deployment and generates `Caddyfile.production` when Caddy is enabled.
-6. For public Caddy exposure, generates `docker-compose.caddy-public.yml` and deploys with `-f docker-compose.yml -f docker-compose.caddy-public.yml`.
-7. When Caddy is disabled, generates `docker-compose.nocaddy.yml` and deploys with `-f docker-compose.nocaddy.yml`.
-8. Prints operational commands for start/stop/status and the correct login URL.
+- `backend/api/sync.py` defines the sync HTTP endpoints.
+- `backend/services/sync_service.py` contains sync planning, merge, and commit orchestration.
+- `backend/sync/` contains sync-specific supporting types and helpers.
+- `cli/sync_client.py` implements the local companion client.
