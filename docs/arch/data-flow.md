@@ -15,11 +15,11 @@ This gives the application fast reads without moving ownership of content into t
 
 ## Mutation Paths
 
-The editor, uploads, administrative configuration changes, and sync all converge on the same content model. Different entry points may collect different inputs, but they ultimately update the same on-disk structures and then refresh derived state. That convergence is a core architectural choice because it keeps alternate workflows from creating alternate truth models.
+The editor, uploads, administrative configuration changes, and sync all converge on the same content model. Different entry points may collect different inputs, but they update the same on-disk structures and then refresh derived state.
 
 ## Read Paths
 
-Published post reads, search, labels, and page views are served through backend-controlled representations rather than direct filesystem exposure. This allows one shared boundary for authorization, rendering policy, sanitization, and asset access.
+Published post reads, search, labels, and page views are served through backend-controlled representations rather than direct filesystem exposure. This keeps authorization, rendering policy, sanitization, and asset access behind one boundary.
 
 ## Derived Consumers
 
@@ -30,7 +30,7 @@ Several features consume canonical content without becoming authoritative themse
 - metadata used for link previews
 - cross-post payloads sent to external platforms
 
-These are all downstream views of the same content system rather than separate content stores.
+These remain derived views of the same content system, not separate content stores.
 
 ## Code Entry Points
 

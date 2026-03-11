@@ -6,11 +6,11 @@ AgBlogger uses a bidirectional sync model between the server-managed content tre
 
 ## Managed Scope
 
-Sync is intentionally limited to the content surface that AgBlogger treats as portable authoring data: site configuration, labels, pages, posts, and managed assets. Private runtime state and hidden application data are outside the sync boundary.
+Sync is limited to the content surface that AgBlogger treats as portable authoring data: site configuration, labels, pages, posts, and managed assets. Private runtime state and hidden application data are outside the sync boundary.
 
 ## Sync Protocol
 
-The protocol separates planning from mutation. Clients first compare local state, server state, and prior shared state to compute a plan. They then apply uploads, deletions, merges, and downloads through the API. This keeps reconciliation explicit and makes conflicts visible rather than silently overwritten.
+The protocol separates planning from mutation. Clients first compare local state, server state, and prior shared state to compute a plan. They then apply uploads, deletions, merges, and downloads through the API.
 
 One sync run follows this sequence:
 
@@ -20,13 +20,13 @@ One sync run follows this sequence:
 - the server applies writes under the normal content mutation boundary, performs content-aware merge handling for markdown posts when needed, updates the server manifest, and returns any files the client should re-download
 - the client downloads the required server versions and updates its local sync metadata
 
-The manifest represents the last agreed shared file state. The last shared commit gives the server a common merge base for conflict handling. When both client and server changed the same markdown post, the server attempts a structured merge rather than treating the file as an opaque blob. When a clean merge is not possible, the server keeps the authoritative server-side result, reports the conflict, and tells the client which files must be downloaded again.
+The manifest represents the last agreed shared file state. The last shared commit gives the server a common merge base for conflict handling. When both client and server changed the same markdown post, the server attempts a structured merge. When a clean merge is not possible, the server keeps the server-side result, reports the conflict, and tells the client which files must be downloaded again.
 
 This is a reconcile-and-commit protocol, not a blind mirror and not continuous replication.
 
 ## Conflict Handling
 
-Conflicts are resolved with a three-way model using the last agreed state as the merge base. Structured content receives content-aware handling so post metadata and markdown body can be reconciled more intelligently than opaque file blobs. When reconciliation cannot be made cleanly, the system favors preserving content and surfacing the conflict to the client.
+Conflicts are resolved with a three-way model using the last agreed state as the merge base. Structured content receives content-aware handling so post metadata and markdown body can be reconciled separately. When reconciliation cannot be made cleanly, the system preserves content and reports the conflict to the client.
 
 ## Relationship to Versioning
 

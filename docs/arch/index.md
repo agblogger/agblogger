@@ -2,7 +2,7 @@
 
 AgBlogger is a self-hosted, markdown-first blogging platform. Markdown files with YAML front matter, plus TOML configuration files under the content directory, are the authoritative source of truth. The backend builds and maintains a regenerable SQLite cache so the application can provide fast reads, search, filtering, and integration features without making the database authoritative for content.
 
-Read this file first. The rest of `docs/arch/` is meant to work as an onboarding set for agents: use this file for the system shape, then read only the subsystem documents that are relevant to the current task.
+Start here for the system shape, then read only the subsystem documents that are relevant to the task.
 
 ## System Shape
 

@@ -8,11 +8,11 @@ AgBlogger is packaged as a single backend runtime plus a built frontend bundle. 
 - an optional reverse proxy in front for TLS termination and public ingress
 - persistent volumes for content and database state
 
-This keeps deployment simple and aligned with the project’s self-hosted target.
+This matches the project's self-hosted deployment model.
 
 ## Runtime Topology
 
-The preferred production topology places a reverse proxy in front of the application and keeps the app itself focused on application concerns. A direct-exposure mode also exists for simpler environments, but the architectural shape stays the same: durable content storage, durable database storage, and one application runtime.
+The preferred production topology places a reverse proxy in front of the application. A direct-exposure mode also exists for simpler environments, but the architectural shape stays the same: durable content storage, durable database storage, and one application runtime.
 
 ## Packaging
 
@@ -20,11 +20,11 @@ The production image contains the backend runtime, the built frontend assets, an
 
 ## Deployment Workflows
 
-The repository includes deployment tooling for local deployments and remote deployments. These workflows differ in how the image and configuration are delivered, but they converge on the same runtime architecture rather than defining separate product variants.
+The repository includes deployment tooling for local and remote deployments. These workflows differ in how they deliver the image and configuration, but they converge on the same runtime architecture.
 
 ## Verification Path
 
-The project also supports a packaged local deployment profile used for deployment-style verification and dynamic scanning. This is intentionally separate from the day-to-day development server so production-like serving paths can be exercised before or alongside real deployments.
+The project also supports a packaged local deployment profile for deployment-style verification and dynamic scanning. It is separate from the day-to-day development server so production-like serving paths can be exercised before or alongside real deployments.
 
 ## Code Entry Points
 

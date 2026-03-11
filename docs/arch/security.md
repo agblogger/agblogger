@@ -22,11 +22,11 @@ Authorization is enforced at the API boundary. Published content is broadly read
 
 ## Content Security
 
-User-authored content is treated as untrusted input. Rendering and sanitization happen on the server, and asset access stays behind controlled application routes instead of direct filesystem exposure. This lets the platform support rich authored content without treating content files as executable application code.
+User-authored content is treated as untrusted input. Rendering and sanitization happen on the server, and asset access stays behind controlled application routes instead of direct filesystem exposure.
 
 ## Filesystem and Sync Boundaries
 
-Filesystem access is constrained to managed content paths, and sync exposes only the subset of the content tree that belongs to the portable authoring model. Private runtime state and hidden files are intentionally outside that boundary.
+Filesystem access is constrained to managed content paths, and sync exposes only the subset of the content tree that belongs to the portable authoring model. Private runtime state and hidden files are outside that boundary.
 
 ## External Integration Security
 
@@ -44,7 +44,7 @@ Security verification is spread across multiple layers:
 - focused regression tests for security-sensitive behavior
 - deployment-style dynamic scanning outside the normal development server path
 
-The architectural goal is to keep security checks part of normal engineering practice rather than a separate late-stage review.
+Security checks are part of normal engineering workflow rather than a separate late-stage review.
 
 ## Code Entry Points
 

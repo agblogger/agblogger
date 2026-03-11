@@ -31,25 +31,23 @@ Several long-lived services define the runtime architecture:
 - **shared rendering** for preview and published HTML
 - **cache rebuild and indexing** for searchable derived state
 
-Together, these services let the backend translate between durable content files and fast application read paths.
+These services connect durable content files to the application's read paths.
 
 ## Rendering Architecture
 
 Markdown rendering is handled by a long-lived Pandoc server process that is started during backend startup and shared across preview, page rendering, post rendering, excerpts, and other HTML-producing paths.
 
-This is an architectural choice, not just an implementation detail:
-
 - rendering stays behind one backend-controlled boundary for sanitization and output consistency
 - preview and published rendering use the same core pipeline
 - the application avoids paying full Pandoc process startup cost on every render
 
-The backend treats the Pandoc server as runtime infrastructure owned by the application lifecycle rather than as a per-request helper command.
+The backend treats the Pandoc server as runtime infrastructure, not a per-request helper command.
 
 ## Write Coordination
 
 Content mutations are serialized through a shared application-level write boundary. This prevents filesystem updates, cache refreshes, and history updates from interleaving across posts, pages, labels, and sync operations.
 
-Architecturally, this favors correctness and consistency over high write concurrency, which matches the project’s self-hosted editorial model.
+This favors correctness and consistency over high write concurrency.
 
 ## API Surface
 
@@ -73,7 +71,7 @@ The backend is designed around graceful degradation:
 - internal failures are translated into generic client-facing errors
 - startup validates critical runtime prerequisites up front
 
-That reliability model is central to the backend architecture: preserve content, preserve service availability where possible, and keep internal failures from leaking through the HTTP boundary.
+The goal is to preserve content, preserve service availability where possible, and keep internal failures from leaking through the HTTP boundary.
 
 ## Code Entry Points
 

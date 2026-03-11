@@ -7,7 +7,7 @@ AgBlogger supports two access patterns:
 - **browser sessions** for the web UI
 - **token-based access** for CLI and automation workflows
 
-The browser model is intentionally cookie-first so long-lived credentials do not live in readable frontend storage.
+Browser auth is cookie-based so long-lived credentials do not live in readable frontend storage.
 
 ## Credential Boundaries
 
@@ -25,7 +25,7 @@ Some content also carries an ownership boundary. Draft content is not public, an
 
 ## Registration Posture
 
-The default operating model is a closed, self-hosted deployment. Registration is admin-controlled, invite flows are available, and rate limiting protects authentication endpoints from abuse. That posture matches the project’s intended use better than an open self-service signup model.
+The default operating model is a closed, self-hosted deployment. Registration is admin-controlled, invite flows are available, and rate limiting protects authentication endpoints from abuse.
 
 ## Bootstrap
 

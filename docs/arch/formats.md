@@ -1,10 +1,10 @@
 # Content Formats
 
-Read this document when a task touches the canonical on-disk content model. It describes the source-of-truth file formats the system operates on: markdown content with YAML front matter, plus TOML files for site configuration and labels.
+Read this document when a task touches the canonical on-disk content model. It describes the file formats used for markdown content, site configuration, and labels.
 
 ## Content Directory Shape
 
-The `content/` directory is the canonical content tree. At a high level it contains:
+The `content/` directory is the canonical content tree. It contains:
 
 ```text
 content/
@@ -14,7 +14,7 @@ content/
 └── posts/            Directory-backed markdown posts with optional co-located assets
 ```
 
-Posts are stored as directory-backed content units so each post can keep its markdown source and related assets together. The tree may also contain internal dotfiles used by local workflows or integrations, but those are not part of the canonical publishing model.
+Posts are stored as directory-backed content units so each post keeps its markdown source and related assets together. The tree may also contain internal dotfiles used by local workflows or integrations, but those are not part of the publishing model.
 
 Example:
 
@@ -51,9 +51,9 @@ Field meanings:
 - `modified_at`: canonical last-modified timestamp used to track content changes
 - `author`: logical author identity associated with the post
 - `labels`: list of label references; each entry points to a label id such as `#architecture`
-- `draft`: publication-state flag; draft posts remain part of canonical content but are treated as unpublished
+- `draft`: publication-state flag; draft posts remain part of canonical content but are unpublished
 
-High-level format notes:
+Format notes:
 
 - the YAML front matter carries canonical metadata
 - the markdown body carries the post content itself
@@ -97,7 +97,7 @@ Field meanings:
 - `pages.title`: human-readable page label shown in navigation or page chrome
 - `pages.file`: optional markdown file path for a page backed by content on disk
 
-High-level format notes:
+Format notes:
 
 - this file is canonical content, not derived runtime configuration
 - it describes site-level structure rather than per-post content
@@ -129,7 +129,7 @@ Field meanings:
 - `parent`: single parent label reference
 - `parents`: multiple parent label references for labels that belong in more than one branch
 
-High-level format notes:
+Format notes:
 
 - labels are referenced elsewhere by `#label-id`
 - the label graph is hierarchical, but multiple parents are allowed

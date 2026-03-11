@@ -2,13 +2,11 @@
 
 ## Role
 
-The frontend is a React single-page application that provides the reading, editing, and administration experience for AgBlogger. It is intentionally thin in the areas that define application policy: the backend remains the source of truth for authentication, authorization, content rendering, and persisted content state.
+The frontend is a React single-page application that provides the reading, editing, and administration experience for AgBlogger. The backend remains the source of truth for authentication, authorization, content rendering, and persisted content state.
 
 ## Application Shape
 
 The SPA is organized around a shared layout and route-driven page components. Public routes focus on browsing published content, labels, and search. Editor and admin-oriented routes handle authoring, account management, and site administration, with the backend enforcing the final authorization boundary for those actions.
-
-This keeps navigation and UI state in the browser while leaving content ownership and policy decisions on the server.
 
 ## State Model
 
@@ -25,11 +23,11 @@ The frontend talks to the backend through a shared HTTP client shaped around the
 
 ## Editing Architecture
 
-The editor is built around structured post authoring instead of raw filesystem manipulation. Metadata editing, markdown editing, preview, and asset management are presented as one workflow over a canonical post unit. Preview rendering is delegated to the backend so the editor and published site share the same rendering and sanitization pipeline.
+The editor is built around structured post authoring instead of raw filesystem manipulation. Metadata editing, markdown editing, preview, and asset management are presented as one workflow over a canonical post unit. Preview rendering is delegated to the backend so the editor and published site use the same rendering and sanitization pipeline.
 
 ## Rendering Model
 
-The frontend does not own markdown rendering. It receives rendered HTML from the backend and then adds browser-only enhancements such as navigation affordances, math hydration, and interaction helpers. That separation keeps presentation enhancements in the client while preserving one authoritative rendering policy on the server.
+The frontend does not own markdown rendering. It receives rendered HTML from the backend and then adds browser-only enhancements such as navigation affordances, math hydration, and interaction helpers.
 
 ## Code Entry Points
 

@@ -10,7 +10,7 @@ AgBlogger’s testing architecture mirrors the application architecture:
 - CLI tests validate operational tooling
 - frontend tests validate route behavior, state management, and user workflows
 
-This keeps high-value behavior covered without relying only on narrow implementation-level unit tests.
+The focus is boundary behavior, not only narrow implementation-level unit tests.
 
 ## Backend
 
@@ -25,7 +25,7 @@ Because the filesystem is authoritative, backend tests focus heavily on preservi
 
 ## Frontend
 
-Frontend testing focuses on user-visible behavior in the SPA: navigation, editor workflows, authenticated flows, and UI logic layered on top of backend-rendered content. The goal is to verify application behavior as users experience it rather than to mirror component internals.
+Frontend testing focuses on user-visible behavior in the SPA: navigation, editor workflows, authenticated flows, and UI logic layered on top of backend-rendered content.
 
 ## Property-Based and Higher-Invariant Tests
 
@@ -33,7 +33,7 @@ Where the codebase has deterministic, high-invariant logic, tests favor property
 
 ## Quality Gates
 
-Repository-level check commands combine static analysis, automated tests, and additional security validation. The default gate covers normal development checks, while heavier or noisier scans live outside that default path. Architecturally, the point is that correctness and security are verified continuously rather than left to manual review.
+Repository-level check commands combine static analysis, automated tests, and additional security validation. The default gate covers normal development checks, while heavier or noisier scans live outside that default path. Correctness and security are verified continuously rather than left to manual review.
 
 ## Code Entry Points
 
