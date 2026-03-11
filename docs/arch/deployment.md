@@ -18,6 +18,10 @@ The preferred production topology places a reverse proxy in front of the applica
 
 The production image contains the backend runtime, the built frontend assets, and the external tools the application depends on at runtime. Containerization preserves the filesystem-first content model by mounting persistent storage for content and database state instead of baking them into the image.
 
+## Schema Migrations
+
+Database schema migrations run programmatically during application startup, before the server begins accepting requests. Durable tables (user accounts, authentication tokens, social account connections) are managed by Alembic, so upgrades apply schema changes without data loss. Cache tables are regenerated from the filesystem on every startup and do not require migrations.
+
 ## Deployment Workflows
 
 The repository includes deployment tooling for local and remote deployments. These workflows differ in how they deliver the image and configuration, but they converge on the same runtime architecture.

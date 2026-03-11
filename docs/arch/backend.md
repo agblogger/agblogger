@@ -17,7 +17,7 @@ The backend follows a layered structure:
 - **API layer**: request handling, dependency injection, and HTTP translation
 - **Service layer**: business logic and orchestration
 - **Filesystem/content layer**: markdown and TOML content management
-- **Persistence layer**: SQLAlchemy models and regenerable cache tables
+- **Persistence layer**: SQLAlchemy models split into durable tables (Alembic-managed) and regenerable cache tables
 - **Rendering layer**: shared server-side markdown rendering
 
 The filesystem remains the source of truth for content. The database exists primarily to support efficient reads, search, and integration state.
@@ -48,6 +48,15 @@ The backend treats the Pandoc server as runtime infrastructure, not a per-reques
 Content mutations are serialized through a shared application-level write boundary. This prevents filesystem updates, cache refreshes, and history updates from interleaving across posts, pages, labels, and sync operations.
 
 This favors correctness and consistency over high write concurrency.
+
+## Database Schema Management
+
+The database uses two separate declarative bases to distinguish durable state from derived cache state:
+
+- **DurableBase** tables (users, tokens, invites, social accounts, cross-posts) are managed by Alembic migrations. Schema changes are applied programmatically during application startup via `alembic upgrade head`. These tables persist across restarts and upgrades.
+- **CacheBase** tables (posts cache, labels cache, label associations, sync manifest) are dropped and recreated on every startup. Their content is rebuilt from the filesystem.
+
+This separation means adding a column to a durable table requires an Alembic migration, while cache table schema changes take effect automatically on the next restart.
 
 ## API Surface
 
