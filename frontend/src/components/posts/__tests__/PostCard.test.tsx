@@ -83,20 +83,6 @@ describe('PostCard', () => {
     expect(screen.getByText('not-a-date')).toBeInTheDocument()
   })
 
-  it('sanitizes script tags from rendered excerpt', () => {
-    renderCard(makePost({ rendered_excerpt: '<p>Safe</p><script>alert("xss")</script>' }))
-    expect(screen.getByText('Safe')).toBeInTheDocument()
-    const excerptEl = screen.getByText('Safe').closest('div')
-    expect(excerptEl?.innerHTML).not.toContain('<script>')
-  })
-
-  it('sanitizes event handler attributes from rendered excerpt', () => {
-    renderCard(makePost({ rendered_excerpt: '<p>Text</p><img onerror="alert(1)" src="x">' }))
-    expect(screen.getByText('Text')).toBeInTheDocument()
-    const excerptEl = screen.getByText('Text').closest('div')
-    expect(excerptEl?.innerHTML).not.toContain('onerror')
-  })
-
   it('is wrapped in React.memo', async () => {
     const { default: PostCardModule } = await import('../PostCard')
     expect((PostCardModule as unknown as { $$typeof: symbol }).$$typeof).toBe(Symbol.for('react.memo'))

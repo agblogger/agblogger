@@ -1,4 +1,3 @@
-import DOMPurify from 'dompurify'
 import { memo } from 'react'
 import { Link } from 'react-router-dom'
 import type { PostSummary } from '@/api/client'
@@ -14,8 +13,7 @@ interface PostCardProps {
 function PostCardInner({ post, index = 0 }: PostCardProps) {
   const postUrl = `/post/${post.file_path}`
   const staggerClass = `stagger-${Math.min(index + 1, 8)}`
-  const rawExcerpt = useRenderedHtml(post.rendered_excerpt)
-  const sanitizedExcerpt = rawExcerpt !== '' ? DOMPurify.sanitize(rawExcerpt) : ''
+  const sanitizedExcerpt = useRenderedHtml(post.rendered_excerpt)
 
   const dateStr = formatRelativeDate(post.created_at)
 

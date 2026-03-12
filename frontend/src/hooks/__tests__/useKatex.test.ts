@@ -1,6 +1,11 @@
 import { describe, it, expect, vi } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
 
+const sanitizeSpy = vi.fn((html: string) => html)
+vi.mock('dompurify', () => ({
+  default: { sanitize: sanitizeSpy },
+}))
+
 vi.mock('katex', () => ({
   default: {
     renderToString: (tex: string, opts: { displayMode?: boolean; throwOnError?: boolean }) => {
@@ -16,6 +21,10 @@ vi.mock('katex/dist/katex.min.css', () => ({}))
 const { useRenderedHtml } = await import('@/hooks/useKatex')
 
 describe('useRenderedHtml', () => {
+  beforeEach(() => {
+    sanitizeSpy.mockClear()
+  })
+
   it('returns empty string for null', () => {
     const { result } = renderHook(() => useRenderedHtml(null))
     expect(result.current).toBe('')
@@ -102,5 +111,22 @@ describe('useRenderedHtml', () => {
     await waitFor(() => {
       expect(result.current).toContain('"text"')
     })
+  })
+
+  it('sanitizes HTML without math through DOMPurify', () => {
+    const html = '<p>Hello</p>'
+    renderHook(() => useRenderedHtml(html))
+    expect(sanitizeSpy).toHaveBeenCalledWith(html)
+  })
+
+  it('sanitizes KaTeX-rendered HTML through DOMPurify', async () => {
+    const html = '<span class="math inline">x</span>'
+    const { result } = renderHook(() => useRenderedHtml(html))
+    await waitFor(() => {
+      expect(result.current).toContain('<rendered-inline>')
+    })
+    expect(sanitizeSpy).toHaveBeenCalledWith(
+      expect.stringContaining('<rendered-inline>'),
+    )
   })
 })

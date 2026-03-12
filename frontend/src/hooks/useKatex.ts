@@ -1,3 +1,4 @@
+import DOMPurify from 'dompurify'
 import { useEffect, useMemo, useState } from 'react'
 
 const MATH_SPAN_RE = /<span class="math (inline|display)">([\s\S]*?)<\/span>/g
@@ -39,6 +40,10 @@ function loadKatex(): Promise<KatexRender> {
  * `<span class="math inline">` and `<span class="math display">`
  * with KaTeX-rendered HTML so React can manage the final DOM.
  *
+ * All output is sanitized with DOMPurify as defense-in-depth —
+ * the backend already sanitizes rendered HTML, but KaTeX inserts
+ * client-generated markup that bypasses that pipeline.
+ *
  * KaTeX (~200KB) is lazy-loaded on first encounter of math content.
  * Until loaded, the raw HTML is returned unchanged.
  *
@@ -57,14 +62,15 @@ export function useRenderedHtml(html: string | null | undefined): string {
 
   return useMemo(() => {
     if (html == null) return ''
-    if (!hasMath || render === null) return html
-    return html.replace(MATH_SPAN_RE, (_match, mode: string, tex: string) => {
+    if (!hasMath || render === null) return DOMPurify.sanitize(html)
+    const rendered = html.replace(MATH_SPAN_RE, (_match, mode: string, tex: string) => {
       const displayMode = mode === 'display'
-      const rendered = render(decodeHtmlEntities(tex.trim()), {
+      const katexHtml = render(decodeHtmlEntities(tex.trim()), {
         throwOnError: false,
         displayMode,
       })
-      return `<span class="math ${mode}">${rendered}</span>`
+      return `<span class="math ${mode}">${katexHtml}</span>`
     })
+    return DOMPurify.sanitize(rendered)
   }, [html, hasMath, render])
 }
