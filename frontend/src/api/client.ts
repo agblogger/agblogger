@@ -90,30 +90,38 @@ const api = ky.create({
     ],
     afterResponse: [
       async (request, _options, response) => {
-        const alreadyRetried = request.headers.get('X-Auth-Retry') === '1'
-        if (response.status === 401 && !request.url.includes('/auth/refresh') && !alreadyRetried) {
-          const refreshed = await refreshAccessToken()
-          if (!refreshed) {
-            return response
-          }
+        if (response.status !== 401) return response
 
-          try {
-            const headers = new Headers(request.headers)
-            headers.set('X-Auth-Retry', '1')
-            if (UNSAFE_METHODS.has(request.method)) {
-              await setCsrfHeader(headers)
-            }
-            const retryRequest = new Request(request, { headers })
-            return await ky(retryRequest, {
-              credentials: 'include',
-              retry: 0,
-            })
-          } catch (retryErr) {
-            console.error('Request retry after refresh failed:', retryErr)
-            return response
-          }
+        // Don't attempt token refresh for auth-check or login endpoints —
+        // a 401 here means the user is not authenticated or gave bad credentials.
+        const alreadyRetried = request.headers.get('X-Auth-Retry') === '1'
+        const isAuthCheck = request.method === 'GET' && request.url.includes('/auth/me')
+        const isLogin = request.url.includes('/auth/login')
+        const isRefresh = request.url.includes('/auth/refresh')
+        if (alreadyRetried || isAuthCheck || isLogin || isRefresh) {
+          return response
         }
-        return response
+
+        const refreshed = await refreshAccessToken()
+        if (!refreshed) {
+          return response
+        }
+
+        try {
+          const headers = new Headers(request.headers)
+          headers.set('X-Auth-Retry', '1')
+          if (UNSAFE_METHODS.has(request.method)) {
+            await setCsrfHeader(headers)
+          }
+          const retryRequest = new Request(request, { headers })
+          return await ky(retryRequest, {
+            credentials: 'include',
+            retry: 0,
+          })
+        } catch (retryErr) {
+          console.error('Request retry after refresh failed:', retryErr)
+          return response
+        }
       },
     ],
   },

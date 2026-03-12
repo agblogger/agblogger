@@ -191,9 +191,20 @@ html {
   font-size: 0.85em;
 }
 
+.prose figure {
+  margin: 1.5rem 0;
+}
+
 .prose img {
   border-radius: 8px;
-  margin: 1.5rem 0;
+}
+
+.prose figcaption {
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--color-muted);
+  margin-top: 0.5rem;
 }
 
 .prose iframe {

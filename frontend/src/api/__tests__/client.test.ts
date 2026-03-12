@@ -148,6 +148,44 @@ describe('client CSRF hooks', () => {
       expect(mockKyPost).not.toHaveBeenCalled()
     })
 
+    it('does not retry GET auth/me (auth check)', async () => {
+      const request = new Request('https://example.com/api/auth/me', { method: 'GET' })
+      const response = new Response('', { status: 401 })
+
+      const result = await capturedHooks!.afterResponse[0](request, {}, response)
+
+      expect(result.status).toBe(401)
+      expect(mockKyPost).not.toHaveBeenCalled()
+    })
+
+    it('does not retry POST auth/login (invalid credentials)', async () => {
+      const request = new Request('https://example.com/api/auth/login', { method: 'POST' })
+      const response = new Response('', { status: 401 })
+
+      const result = await capturedHooks!.afterResponse[0](request, {}, response)
+
+      expect(result.status).toBe(401)
+      expect(mockKyPost).not.toHaveBeenCalled()
+    })
+
+    it('still retries PATCH auth/me (profile update with expired token)', async () => {
+      mockKyGet.mockReturnValue(mockJsonResponse({ csrf_token: 'old-csrf-token' }))
+      mockKyPost.mockReturnValue(mockJsonResponse({ csrf_token: 'new-csrf-token' }))
+      mockKyRequest.mockResolvedValue(new Response('ok', { status: 200 }))
+
+      const request = new Request('https://example.com/api/auth/me', { method: 'PATCH' })
+      await capturedHooks!.beforeRequest[0](request)
+      const response = new Response('', { status: 401 })
+
+      const result = await capturedHooks!.afterResponse[0](request, {}, response)
+
+      expect(result.status).toBe(200)
+      expect(mockKyPost).toHaveBeenCalledWith(
+        'auth/refresh',
+        expect.objectContaining({ prefixUrl: '/api' }),
+      )
+    })
+
     it('returns non-401 responses unchanged', async () => {
       const request = new Request('https://example.com/api/posts', { method: 'GET' })
       const response = new Response('ok', { status: 200 })
