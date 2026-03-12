@@ -133,6 +133,8 @@ const SearchResultItem = memo(function SearchResultItem({ result, index }: { res
       {renderedExcerpt && (
         <div
           className="text-sm text-muted mt-1 line-clamp-2 prose-excerpt"
+          // nosemgrep: typescript.react.security.audit.react-dangerouslysetinnerhtml
+          // Excerpt HTML is rendered and sanitized server-side.
           dangerouslySetInnerHTML={{ __html: renderedExcerpt }}
         />
       )}

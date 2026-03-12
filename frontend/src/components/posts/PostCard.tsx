@@ -33,6 +33,8 @@ function PostCardInner({ post, index = 0 }: PostCardProps) {
             {sanitizedExcerpt !== '' && (
               <div
                 className="mt-2 text-sm text-muted leading-relaxed line-clamp-2 prose-excerpt"
+                // nosemgrep: typescript.react.security.audit.react-dangerouslysetinnerhtml
+                // Excerpt HTML is rendered and sanitized server-side.
                 dangerouslySetInnerHTML={{ __html: sanitizedExcerpt }}
               />
             )}

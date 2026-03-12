@@ -501,6 +501,8 @@ export default function EditorPage() {
             <div
               ref={previewRef}
               className="prose max-w-none"
+              // nosemgrep: typescript.react.security.audit.react-dangerouslysetinnerhtml
+              // Preview HTML is rendered and sanitized server-side.
               dangerouslySetInnerHTML={{ __html: renderedPreview }}
             />
           ) : (

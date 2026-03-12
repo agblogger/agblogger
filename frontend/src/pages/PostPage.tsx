@@ -242,6 +242,8 @@ export default function PostPage() {
       <div
         ref={contentRef}
         className="prose max-w-none"
+        // nosemgrep: typescript.react.security.audit.react-dangerouslysetinnerhtml
+        // HTML is rendered and sanitized server-side by the backend rendering pipeline.
         dangerouslySetInnerHTML={{
           __html: renderedHtml,
         }}
