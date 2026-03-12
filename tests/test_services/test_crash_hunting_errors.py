@@ -225,29 +225,6 @@ class TestMergePostFileTimeoutExpired:
 class TestUpdateLabelCycleDetectionStaleEdges:
     """Cycle detection must use clean state, not stale edges."""
 
-    def test_edges_deleted_before_cycle_check(self) -> None:
-        """Verify that update_label deletes old edges before running cycle detection.
-
-        Before fix: cycle detection runs first (against stale edges), then edges are deleted.
-        After fix: edges are deleted and flushed first, then cycle detection runs on clean state.
-        """
-        import inspect
-
-        from backend.services import label_service
-
-        source = inspect.getsource(label_service.update_label)
-        # Find the positions of the delete and cycle check operations
-        delete_pos = source.find("delete(LabelParentCache)")
-        flush_after_delete_pos = source.find("flush()", delete_pos) if delete_pos != -1 else -1
-        cycle_pos = source.find("would_create_cycle")
-
-        assert delete_pos != -1, "update_label must delete old parent edges"
-        assert cycle_pos != -1, "update_label must check for cycles"
-        assert flush_after_delete_pos != -1, "update_label must flush after deleting edges"
-        assert flush_after_delete_pos < cycle_pos, (
-            "update_label must delete old edges and flush BEFORE checking for cycles"
-        )
-
     async def test_reparent_works_correctly(self, session: AsyncSession) -> None:
         """Changing A->B to A->C should work without issues."""
         label_a = LabelCache(id="#a", names='["A"]')
@@ -284,41 +261,6 @@ class TestUpdateLabelCycleDetectionStaleEdges:
 
 class TestCreatePostFlushRollback:
     """create_post_endpoint must rollback the session if flush or label ops fail."""
-
-    async def test_flush_failure_triggers_rollback(self) -> None:
-        """The DB ops block (flush + labels + FTS) must be wrapped in try/except with rollback.
-
-        Before fix: only the write_post OSError path has a rollback. If flush or
-        _replace_post_labels raises, the exception propagates without rollback.
-        After fix: the DB block is wrapped in try/except that calls session.rollback().
-        """
-        import ast
-        import inspect
-        import textwrap
-
-        from backend.api import posts as posts_mod
-
-        source = inspect.getsource(posts_mod.create_post_endpoint)
-        # Dedent the source so ast.parse can handle it
-        source = textwrap.dedent(source)
-        tree = ast.parse(source)
-
-        # Find try blocks that contain session.flush() calls
-        flush_in_try = False
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Try):
-                try_source = ast.dump(node)
-                if (
-                    "flush" in try_source
-                    and "rollback" in try_source
-                    and "_replace_post_labels" in try_source
-                ):
-                    flush_in_try = True
-
-        assert flush_in_try, (
-            "create_post_endpoint should wrap session.flush() + _replace_post_labels "
-            "in a try/except block that calls session.rollback()"
-        )
 
     @pytest.mark.slow
     async def test_label_failure_does_not_crash_server(self, tmp_path: Path) -> None:

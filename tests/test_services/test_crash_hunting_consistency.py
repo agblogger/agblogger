@@ -10,7 +10,7 @@ import contextlib
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from sqlalchemy import select, text
@@ -101,52 +101,137 @@ def cm(content_dir: Path) -> ContentManager:
 class TestUploadPostOrphanedAssets:
     """If DB operations fail after assets are written, assets must be cleaned up."""
 
-    async def test_assets_cleaned_up_on_flush_failure(
-        self, session: AsyncSession, cm: ContentManager
-    ) -> None:
-        """When session.flush() raises after asset files are written, assets
-        should be cleaned up rather than left orphaned on disk."""
-        posts_dir = cm.content_dir / "posts"
-        post_dir = posts_dir / "2026-03-11-test-post"
-        post_dir.mkdir(parents=True)
+    @pytest.mark.slow
+    async def test_assets_cleaned_up_on_flush_failure(self, tmp_path: Path) -> None:
+        """When session.flush() raises after asset files are written, the
+        upload endpoint must clean up orphaned asset files."""
+        from sqlalchemy.exc import OperationalError
 
-        # Write an asset to simulate the asset-writing phase
-        asset_file = post_dir / "image.png"
-        asset_file.write_bytes(b"fake image data")
+        from backend.config import Settings
+        from tests.conftest import create_test_client
 
-        # Verify cleanup logic works (the same cleanup that upload_post uses
-        # when DB operations or write_post fail after assets are written).
-        assert asset_file.exists()
-        asset_file.unlink(missing_ok=True)
-        if post_dir.exists() and not any(post_dir.iterdir()):
-            post_dir.rmdir()
-        assert not asset_file.exists()
+        content_dir = tmp_path / "content"
+        content_dir.mkdir()
+        (content_dir / "posts").mkdir()
+        (content_dir / "assets").mkdir()
+        (content_dir / "index.toml").write_text(
+            '[site]\ntitle = "Test Blog"\ntimezone = "UTC"\n\n'
+            '[[pages]]\nid = "timeline"\ntitle = "Posts"\n'
+        )
+        (content_dir / "labels.toml").write_text("[labels]\n")
 
-    async def test_assets_cleaned_up_on_replace_labels_failure(
-        self, session: AsyncSession, cm: ContentManager
-    ) -> None:
+        db_path = tmp_path / "test.db"
+        settings = Settings(
+            secret_key="test-secret-key-with-at-least-32-characters",
+            debug=True,
+            database_url=f"sqlite+aiosqlite:///{db_path}",
+            content_dir=content_dir,
+            frontend_dir=tmp_path / "frontend",
+            admin_username="admin",
+            admin_password="admin123",
+        )
+
+        async with create_test_client(settings) as client:
+            token_resp = await client.post(
+                "/api/auth/token-login",
+                json={"username": "admin", "password": "admin123"},
+            )
+            token = token_resp.json()["access_token"]
+            headers = {"Authorization": f"Bearer {token}"}
+
+            # Patch session.flush to raise, simulating a DB failure after
+            # asset files have been written to disk.
+            async def failing_flush(self: AsyncSession, objects: Any = None) -> None:
+                raise OperationalError("disk full", {}, Exception())
+
+            md_content = "---\ntitle: Upload Flush Fail\n---\nBody\n"
+            png_bytes = b"\x89PNG\r\n\x1a\n" + b"\x00" * 50
+
+            with patch.object(AsyncSession, "flush", failing_flush):
+                resp = await client.post(
+                    "/api/posts/upload",
+                    files=[
+                        ("files", ("index.md", md_content.encode(), "text/markdown")),
+                        ("files", ("photo.png", png_bytes, "image/png")),
+                    ],
+                    headers=headers,
+                )
+
+            assert resp.status_code >= 400
+
+            # Verify no orphaned asset directories remain in the posts dir
+            posts_dir = content_dir / "posts"
+            for child in posts_dir.iterdir():
+                if child.is_dir():
+                    asset_files = [f for f in child.iterdir() if f.name != "index.md"]
+                    assert not asset_files, f"Orphaned assets found in {child}: {asset_files}"
+
+    @pytest.mark.slow
+    async def test_assets_cleaned_up_on_replace_labels_failure(self, tmp_path: Path) -> None:
         """When _replace_post_labels raises after assets are written and flush
-        succeeds, assets should still be cleaned up."""
-        posts_dir = cm.content_dir / "posts"
-        post_dir = posts_dir / "2026-03-11-test-post2"
-        post_dir.mkdir(parents=True)
+        succeeds, the upload endpoint must still clean up orphaned assets."""
+        from sqlalchemy.exc import OperationalError
 
-        asset1 = post_dir / "img1.png"
-        asset2 = post_dir / "img2.jpg"
-        asset1.write_bytes(b"data1")
-        asset2.write_bytes(b"data2")
+        from backend.config import Settings
+        from tests.conftest import create_test_client
 
-        written_assets = [asset1, asset2]
+        content_dir = tmp_path / "content"
+        content_dir.mkdir()
+        (content_dir / "posts").mkdir()
+        (content_dir / "assets").mkdir()
+        (content_dir / "index.toml").write_text(
+            '[site]\ntitle = "Test Blog"\ntimezone = "UTC"\n\n'
+            '[[pages]]\nid = "timeline"\ntitle = "Posts"\n'
+        )
+        (content_dir / "labels.toml").write_text("[labels]\n")
 
-        # Simulate cleanup that should happen on DB failure
-        for asset in written_assets:
-            asset.unlink(missing_ok=True)
-        if post_dir.exists() and not any(post_dir.iterdir()):
-            post_dir.rmdir()
+        db_path = tmp_path / "test.db"
+        settings = Settings(
+            secret_key="test-secret-key-with-at-least-32-characters",
+            debug=True,
+            database_url=f"sqlite+aiosqlite:///{db_path}",
+            content_dir=content_dir,
+            frontend_dir=tmp_path / "frontend",
+            admin_username="admin",
+            admin_password="admin123",
+        )
 
-        assert not asset1.exists()
-        assert not asset2.exists()
-        assert not post_dir.exists()
+        async with create_test_client(settings) as client:
+            token_resp = await client.post(
+                "/api/auth/token-login",
+                json={"username": "admin", "password": "admin123"},
+            )
+            token = token_resp.json()["access_token"]
+            headers = {"Authorization": f"Bearer {token}"}
+
+            md_content = "---\ntitle: Upload Labels Fail\n---\nBody\n"
+            img1_bytes = b"\x89PNG\r\n\x1a\n" + b"\x00" * 50
+            img2_bytes = b"\xff\xd8\xff\xe0" + b"\x00" * 50
+
+            # Patch _replace_post_labels to raise after flush succeeds
+            with patch(
+                "backend.api.posts._replace_post_labels",
+                new_callable=AsyncMock,
+                side_effect=OperationalError("table locked", {}, Exception()),
+            ):
+                resp = await client.post(
+                    "/api/posts/upload",
+                    files=[
+                        ("files", ("index.md", md_content.encode(), "text/markdown")),
+                        ("files", ("img1.png", img1_bytes, "image/png")),
+                        ("files", ("img2.jpg", img2_bytes, "image/jpeg")),
+                    ],
+                    headers=headers,
+                )
+
+            assert resp.status_code >= 400
+
+            # Verify no orphaned asset directories remain in the posts dir
+            posts_dir = content_dir / "posts"
+            for child in posts_dir.iterdir():
+                if child.is_dir():
+                    asset_files = [f for f in child.iterdir() if f.name != "index.md"]
+                    assert not asset_files, f"Orphaned assets found in {child}: {asset_files}"
 
 
 # ---------------------------------------------------------------------------
@@ -157,47 +242,74 @@ class TestUploadPostOrphanedAssets:
 class TestDeletePostCommitBeforeFileDelete:
     """DB changes must be committed before the post file is deleted from disk."""
 
-    async def test_file_survives_if_commit_fails(
-        self, session: AsyncSession, cm: ContentManager
-    ) -> None:
-        """If the DB commit were to fail, the file should still exist on disk
-        because the fix reorders to commit first, then delete the file."""
-        from datetime import UTC, datetime
+    @pytest.mark.slow
+    async def test_file_survives_if_commit_fails(self, tmp_path: Path) -> None:
+        """If the DB commit fails during delete, the post file must still
+        exist on disk because commit happens before file deletion."""
+        from sqlalchemy.exc import OperationalError
 
-        # Create a post on disk
-        post_dir = cm.content_dir / "posts" / "2026-03-11-test-delete"
-        post_dir.mkdir(parents=True)
-        post_file = post_dir / "index.md"
-        post_file.write_text("---\ntitle: Test\n---\nContent\n")
+        from backend.config import Settings
+        from tests.conftest import create_test_client
 
-        file_path = "posts/2026-03-11-test-delete/index.md"
-
-        # Create a PostCache record
-        post = PostCache(
-            file_path=file_path,
-            title="Test",
-            author="admin",
-            created_at=datetime.now(UTC),
-            modified_at=datetime.now(UTC),
-            is_draft=False,
-            content_hash="abc123",
+        content_dir = tmp_path / "content"
+        content_dir.mkdir()
+        (content_dir / "posts").mkdir()
+        (content_dir / "assets").mkdir()
+        (content_dir / "index.toml").write_text(
+            '[site]\ntitle = "Test Blog"\ntimezone = "UTC"\n\n'
+            '[[pages]]\nid = "timeline"\ntitle = "Posts"\n'
         )
-        session.add(post)
-        await session.commit()
+        (content_dir / "labels.toml").write_text("[labels]\n")
 
-        # Verify the post exists in DB
-        result = await session.execute(select(PostCache).where(PostCache.file_path == file_path))
-        assert result.scalar_one_or_none() is not None
+        db_path = tmp_path / "test.db"
+        settings = Settings(
+            secret_key="test-secret-key-with-at-least-32-characters",
+            debug=True,
+            database_url=f"sqlite+aiosqlite:///{db_path}",
+            content_dir=content_dir,
+            frontend_dir=tmp_path / "frontend",
+            admin_username="admin",
+            admin_password="admin123",
+        )
 
-        # Verify file exists
-        assert post_file.exists()
+        async with create_test_client(settings) as client:
+            token_resp = await client.post(
+                "/api/auth/token-login",
+                json={"username": "admin", "password": "admin123"},
+            )
+            token = token_resp.json()["access_token"]
+            headers = {"Authorization": f"Bearer {token}"}
 
-        # After the fix, delete_post_endpoint does:
-        # 1. Delete DB records
-        # 2. Commit
-        # 3. Delete file (if fails, just log)
-        # So if step 2 fails, the file is still on disk (correct).
-        # And if step 3 fails, the DB is already correct.
+            # First, create a post via the API so it exists in both DB and disk
+            md_content = "---\ntitle: Delete Commit Fail\n---\nBody content\n"
+            create_resp = await client.post(
+                "/api/posts/upload",
+                files={"files": ("post.md", md_content.encode(), "text/markdown")},
+                headers=headers,
+            )
+            assert create_resp.status_code == 201
+            file_path = create_resp.json()["file_path"]
+            post_file = content_dir / file_path
+
+            assert post_file.exists()
+
+            # Patch session.commit to raise, simulating a DB commit failure.
+            # The delete endpoint calls commit before file deletion, so if
+            # commit fails the file must survive.
+            async def failing_commit(self: AsyncSession) -> None:
+                raise OperationalError("database locked", {}, Exception())
+
+            with patch.object(AsyncSession, "commit", failing_commit):
+                resp = await client.delete(
+                    f"/api/posts/{file_path}",
+                    headers=headers,
+                )
+
+            # The endpoint should return an error
+            assert resp.status_code >= 400
+
+            # The file must still exist on disk since commit failed
+            assert post_file.exists(), "Post file was deleted even though DB commit failed"
 
     async def test_file_delete_failure_after_commit_leaves_db_clean(
         self,

@@ -197,6 +197,17 @@ class TestLabels:
         assert resp.status_code == 200
         data = resp.json()
         assert len(data) >= 1
+        label = data[0]
+        assert "id" in label
+        assert "names" in label
+        assert "is_implicit" in label
+        assert "parents" in label
+        assert "children" in label
+        assert "post_count" in label
+        swe_labels = [lb for lb in data if lb["id"] == "swe"]
+        assert len(swe_labels) == 1
+        assert swe_labels[0]["names"] == ["software engineering"]
+        assert swe_labels[0]["post_count"] >= 1
 
     @pytest.mark.asyncio
     async def test_label_graph(self, client: AsyncClient) -> None:

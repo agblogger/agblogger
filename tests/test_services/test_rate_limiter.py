@@ -79,3 +79,25 @@ class TestInMemoryRateLimiter:
             limited, retry = limiter.is_limited("key1", 3, 10)
             assert not limited
             assert retry == 0
+
+    def test_zero_window_keeps_current_timestamp(self):
+        limiter = InMemoryRateLimiter()
+        with patch("backend.services.rate_limit_service.datetime") as mock_dt:
+            mock_dt.now.return_value.timestamp.return_value = 1000.0
+            for _ in range(3):
+                limiter.add_failure("key1", 0)
+            limited, _ = limiter.is_limited("key1", 3, 0)
+            assert limited
+
+    def test_max_keys_eviction(self):
+        limiter = InMemoryRateLimiter()
+        with patch("backend.services.rate_limit_service.datetime") as mock_dt:
+            mock_dt.now.return_value.timestamp.return_value = 1000.0
+            for i in range(limiter._MAX_KEYS):
+                limiter.add_failure(f"key-{i}", 60)
+            assert len(limiter._attempts) == limiter._MAX_KEYS
+
+            mock_dt.now.return_value.timestamp.return_value = 1070.0
+            limiter.add_failure("overflow-key", 60)
+            assert "overflow-key" in limiter._attempts
+            assert len(limiter._attempts) == 1

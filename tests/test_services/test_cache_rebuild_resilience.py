@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import inspect
 from typing import TYPE_CHECKING
 from unittest.mock import patch
 
@@ -157,14 +156,6 @@ class TestPandocFailureResilience:
 
 class TestRebuildCacheSessionIsolation:
     """rebuild_cache must use its own session to avoid committing the caller's transaction."""
-
-    async def test_rebuild_cache_accepts_session_factory(self) -> None:
-        """rebuild_cache signature must accept a session factory, not a raw session."""
-        sig = inspect.signature(rebuild_cache)
-        params = list(sig.parameters.keys())
-        assert params[0] == "session_factory", (
-            "First parameter should be 'session_factory', not 'session'"
-        )
 
     async def test_rebuild_cache_creates_own_session(
         self,

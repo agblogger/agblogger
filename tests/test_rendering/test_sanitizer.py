@@ -116,6 +116,26 @@ class TestSafeUrls:
         result = _sanitize_html(html)
         assert 'href="mailto:user@example.com"' in result
 
+    def test_vbscript_href_stripped(self) -> None:
+        result = _sanitize_html("<a href=\"vbscript:MsgBox('xss')\">click</a>")
+        assert "vbscript" not in result
+        assert "<a>" in result
+
+    def test_mixed_case_javascript_stripped(self) -> None:
+        result = _sanitize_html('<a href="JaVaScRiPt:alert(1)">click</a>')
+        assert "href" not in result
+        assert "<a>" in result
+
+    def test_entity_encoded_javascript_stripped(self) -> None:
+        result = _sanitize_html('<a href="java&#115;cript:alert(1)">click</a>')
+        assert "href" not in result
+        assert "<a>" in result
+
+    def test_tab_in_protocol_stripped(self) -> None:
+        result = _sanitize_html('<a href="java\tscript:alert(1)">click</a>')
+        assert "href" not in result
+        assert "<a>" in result
+
 
 class TestIdAttribute:
     """Tests for id attribute validation."""

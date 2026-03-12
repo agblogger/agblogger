@@ -62,25 +62,21 @@ class TestPandocServerStartLockProtection:
         from backend.pandoc.server import PandocServer
 
         server = PandocServer(port=13033)
-        call_count = 0
+        events: list[str] = []
 
         async def slow_start_impl() -> None:
-            nonlocal call_count
-            call_count += 1
+            events.append("start")
             await asyncio.sleep(0.05)
+            events.append("end")
 
         with patch.object(server, "_start_impl", side_effect=slow_start_impl):
             await asyncio.gather(server.start(), server.start(), server.start())
 
-        assert call_count == 3, "All three starts should have been called"
-
-    async def test_start_impl_extracted(self) -> None:
-        """_start_impl method should exist for shared logic between start()
-        and ensure_running()."""
-        from backend.pandoc.server import PandocServer
-
-        server = PandocServer(port=13034)
-        assert hasattr(server, "_start_impl"), "PandocServer should have _start_impl method"
+        assert len(events) == 6
+        # Verify serialization: each start must complete before the next begins
+        for i in range(3):
+            assert events[i * 2] == "start"
+            assert events[i * 2 + 1] == "end"
 
     async def test_ensure_running_no_deadlock(self) -> None:
         """ensure_running() must not deadlock when calling internal start logic."""
@@ -170,6 +166,8 @@ class TestEnsureContentDirExistOk:
         content_dir.mkdir()
         # Should not raise
         ensure_content_dir(content_dir)
+        assert content_dir.is_dir()
+        assert (content_dir / "posts").is_dir()
 
     def test_posts_dir_already_exists(self, tmp_path: Path) -> None:
         """Should succeed when posts_dir already exists (no race)."""
@@ -181,6 +179,8 @@ class TestEnsureContentDirExistOk:
         posts_dir.mkdir()
         # Should not raise
         ensure_content_dir(content_dir)
+        assert content_dir.is_dir()
+        assert (content_dir / "posts").is_dir()
 
     def test_creates_content_dir_with_exist_ok(self, tmp_path: Path) -> None:
         """mkdir should use exist_ok=True so concurrent creators don't crash."""

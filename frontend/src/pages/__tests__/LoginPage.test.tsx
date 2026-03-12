@@ -106,4 +106,14 @@ describe('LoginPage', () => {
     expect(usernameLabel).toBeInTheDocument()
     expect(passwordLabel).toBeInTheDocument()
   })
+
+  it('submits login form when pressing Enter in password field', async () => {
+    mockLogin.mockResolvedValue(undefined)
+    renderLogin()
+
+    await userEvent.type(screen.getByLabelText(/Username/), 'admin')
+    await userEvent.type(screen.getByLabelText(/Password/), 'secret{Enter}')
+
+    expect(mockLogin).toHaveBeenCalledWith('admin', 'secret')
+  })
 })

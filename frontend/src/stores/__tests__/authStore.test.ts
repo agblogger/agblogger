@@ -98,5 +98,17 @@ describe('authStore', () => {
       expect(useAuthStore.getState().user).toBeNull()
       expect(mockApiLogout).toHaveBeenCalled()
     })
+
+    it('clears user even when apiLogout fails', async () => {
+      mockApiLogout.mockRejectedValue(new Error('Network failure'))
+      useAuthStore.setState({ user: testUser })
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      await useAuthStore.getState().logout()
+      expect(useAuthStore.getState().user).toBeNull()
+      expect(useAuthStore.getState().isLoggingOut).toBe(false)
+      expect(consoleSpy).toHaveBeenCalledWith('Logout failed:', expect.any(Error))
+      consoleSpy.mockRestore()
+    })
   })
 })

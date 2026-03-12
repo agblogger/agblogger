@@ -96,6 +96,10 @@ class TestCreatePage:
         with pytest.raises(ValueError, match="already exists"):
             create_page(cm, page_id="about", title="About 2")
 
+    def test_path_traversal_in_page_id_rejected(self, cm: ContentManager) -> None:
+        with pytest.raises(OSError):
+            create_page(cm, page_id="../../../etc/passwd", title="Evil")
+
     def test_reserved_builtin_id_raises(self, tmp_path: Path) -> None:
         content_dir = tmp_path / "content"
         content_dir.mkdir()

@@ -204,7 +204,7 @@ class TestContentServing:
     async def test_empty_path_returns_403(self, client: AsyncClient) -> None:
         """An empty or root-level path is forbidden."""
         resp = await client.get("/api/content/")
-        assert resp.status_code in (403, 404)
+        assert resp.status_code == 403
 
     @pytest.mark.asyncio
     async def test_content_disposition_escapes_double_quotes_in_filename(

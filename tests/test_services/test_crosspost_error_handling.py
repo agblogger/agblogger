@@ -137,16 +137,6 @@ class TestSocialAccountCreateDefault:
         )
         assert account.account_name == ""
 
-    def test_account_name_not_none(self) -> None:
-        """SocialAccountCreate.account_name should never be None."""
-        from backend.schemas.crosspost import SocialAccountCreate
-
-        account = SocialAccountCreate(
-            platform="bluesky",
-            credentials={"access_token": "test"},
-        )
-        assert account.account_name is not None
-
     def test_account_name_explicit_value(self) -> None:
         """SocialAccountCreate with explicit account_name should preserve it."""
         from backend.schemas.crosspost import SocialAccountCreate

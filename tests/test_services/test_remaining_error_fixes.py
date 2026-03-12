@@ -17,6 +17,7 @@ import pytest
 from sqlalchemy.exc import OperationalError
 
 if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
     from pathlib import Path
 
 
@@ -176,51 +177,86 @@ class TestPageUpdateAtomicity:
 class TestSyncDeletionOSError:
     """OSError during sync file deletion must log warning, not abort the entire sync."""
 
-    def test_deletion_loop_catches_oserror(self, tmp_path: Path) -> None:
-        """The sync deletion loop now wraps unlink in try/except OSError."""
-        import inspect
-
-        from backend.api import sync as sync_mod
-
-        source = inspect.getsource(sync_mod._sync_commit_inner)
-        # After fix, the deletion loop should catch OSError around unlink
-        assert "except OSError" in source
-        # And it should contain a warning about failed deletion
-        assert "Failed to delete" in source
-
-    async def test_unlink_failure_logged_and_skipped(
+    async def test_unlink_oserror_logged_and_skipped(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ) -> None:
-        """Direct test: simulate the fixed deletion loop pattern."""
-        import logging
+        """Patch Path.unlink to raise OSError and call _sync_commit_inner.
 
-        from backend.api.sync import _resolve_safe_path
+        Verifies the real sync deletion loop logs a warning and continues
+        instead of aborting.
+        """
+        import json
+        import logging
+        from pathlib import Path as _Path
+        from unittest.mock import MagicMock
+
+        from backend.api.sync import _sync_commit_inner
+        from backend.filesystem.content_manager import ContentManager
 
         content_dir = tmp_path / "content"
         content_dir.mkdir()
         (content_dir / "posts").mkdir()
-        target = content_dir / "posts" / "test.md"
-        target.write_text("test content")
+        (content_dir / "assets").mkdir()
+        (content_dir / "index.toml").write_text(
+            '[site]\ntitle = "Test"\ntimezone = "UTC"\n\n'
+            '[[pages]]\nid = "timeline"\ntitle = "Posts"\n'
+        )
+        (content_dir / "labels.toml").write_text("[labels]\n")
 
-        # Simulate the new deletion loop pattern from sync.py
-        sync_warnings: list[str] = []
-        deleted_files = ["posts/test.md"]
+        # Create a file that sync will try to delete
+        target = content_dir / "posts" / "doomed.md"
+        target.write_text("---\ntitle: Doomed\n---\nContent.\n")
 
-        with caplog.at_level(logging.ERROR, logger="backend.api.sync"):
-            for file_path in deleted_files:
-                full_path = _resolve_safe_path(content_dir, file_path)
-                if full_path.exists() and full_path.is_file():
-                    try:
-                        # Simulate failure
-                        raise OSError("permission denied")
-                    except OSError:
-                        sync_warnings.append(f"Failed to delete {file_path.lstrip('/')}")
-                        continue
+        cm = ContentManager(content_dir=content_dir)
 
-        assert len(sync_warnings) == 1
-        assert "Failed to delete" in sync_warnings[0]
-        # File should still exist since unlink failed
+        # Mock git service and session objects
+        mock_git = MagicMock()
+        mock_git.commit_all = AsyncMock()
+        mock_git.head_commit = AsyncMock(return_value="abc123")
+
+        mock_session = AsyncMock()
+        mock_session_factory = MagicMock()
+        mock_user = MagicMock(id=1, username="admin", display_name="Admin")
+
+        metadata = json.dumps({"deleted_files": ["posts/doomed.md"]})
+
+        original_unlink = _Path.unlink
+
+        def _failing_unlink(self: _Path, missing_ok: bool = False) -> None:
+            if self.name == "doomed.md":
+                raise OSError("permission denied")
+            original_unlink(self, missing_ok=missing_ok)
+
+        with (
+            caplog.at_level(logging.ERROR, logger="backend.api.sync"),
+            patch.object(_Path, "unlink", _failing_unlink),
+            patch("backend.api.sync.get_server_manifest", new_callable=AsyncMock, return_value={}),
+            patch("backend.api.sync.scan_content_files", return_value={}),
+            patch("backend.api.sync.update_server_manifest", new_callable=AsyncMock),
+            patch(
+                "backend.services.cache_service.rebuild_cache",
+                new_callable=AsyncMock,
+                return_value=(0, []),
+            ),
+        ):
+            result = await _sync_commit_inner(
+                metadata_json=metadata,
+                upload_files=[],
+                session=mock_session,
+                session_factory=mock_session_factory,
+                content_manager=cm,
+                git_service=mock_git,
+                user=mock_user,
+            )
+
+        # The file should still exist since unlink failed
         assert target.exists()
+
+        # The sync should have continued (not aborted) and reported a warning
+        assert any("Failed to delete" in w for w in result.warnings)
+
+        # Verify it was logged
+        assert any("failed to delete" in r.message.lower() for r in caplog.records)
 
 
 # ── Issue 10: _validate_path does not echo user input ──
@@ -265,13 +301,71 @@ class TestValidatePathNoInputEcho:
 class TestMastodonRegistrationNoStatusCodeLeak:
     """Mastodon app registration failure must not leak the upstream HTTP status code."""
 
-    def test_registration_error_detail_no_status_code(self) -> None:
-        """Verify the crosspost.py code does not include status code in HTTPException detail."""
-        # Direct source-level check: the registration failure detail must be generic
-        import inspect
+    @pytest.mark.slow
+    async def test_registration_failure_does_not_leak_status_code(self, tmp_path: Path) -> None:
+        """Mock Mastodon registration to return non-200 and verify the error detail is generic."""
+        import httpx
 
-        from backend.api import crosspost as crosspost_mod
+        from backend.config import Settings
+        from tests.conftest import create_test_client
 
-        source = inspect.getsource(crosspost_mod)
-        # After fix, should NOT contain the f-string pattern leaking status code
-        assert "App registration failed: {reg_resp.status_code}" not in source
+        content_dir = tmp_path / "content"
+        content_dir.mkdir()
+        (content_dir / "posts").mkdir()
+        (content_dir / "assets").mkdir()
+        (content_dir / "index.toml").write_text(
+            '[site]\ntitle = "Test Blog"\ntimezone = "UTC"\n\n'
+            '[[pages]]\nid = "timeline"\ntitle = "Posts"\n'
+        )
+        (content_dir / "labels.toml").write_text("[labels]\n")
+
+        db_path = tmp_path / "test.db"
+        settings = Settings(
+            secret_key="test-secret-key-with-at-least-32-characters",
+            debug=True,
+            database_url=f"sqlite+aiosqlite:///{db_path}",
+            content_dir=content_dir,
+            frontend_dir=tmp_path / "frontend",
+            admin_username="admin",
+            admin_password="admin123",
+            bluesky_client_url="https://myblog.example.com",
+        )
+
+        async with create_test_client(settings) as client:
+            token_resp = await client.post(
+                "/api/auth/token-login",
+                json={"username": "admin", "password": "admin123"},
+            )
+            token = token_resp.json()["access_token"]
+            headers = {"Authorization": f"Bearer {token}"}
+
+            # Mock the SSRF-safe HTTP client to return a non-200 response
+            from contextlib import asynccontextmanager
+
+            mock_response = httpx.Response(
+                status_code=403,
+                request=httpx.Request("POST", "https://mastodon.social/api/v1/apps"),
+            )
+            mock_http = AsyncMock()
+            mock_http.post = AsyncMock(return_value=mock_response)
+
+            @asynccontextmanager
+            async def mock_ssrf_client(**_kw: object) -> AsyncGenerator[AsyncMock]:
+                yield mock_http
+
+            with patch(
+                "backend.crosspost.ssrf.ssrf_safe_client",
+                mock_ssrf_client,
+            ):
+                resp = await client.post(
+                    "/api/crosspost/mastodon/authorize",
+                    json={"instance_url": "https://mastodon.social"},
+                    headers=headers,
+                )
+
+            assert resp.status_code == 502
+            detail = resp.json()["detail"]
+            # The detail must NOT contain the upstream numeric status code
+            assert "403" not in detail
+            # It should use a generic message
+            assert "registration failed" in detail.lower()

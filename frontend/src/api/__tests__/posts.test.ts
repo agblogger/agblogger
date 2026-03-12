@@ -1,12 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { mockGet } = vi.hoisted(() => ({ mockGet: vi.fn() }))
-
-vi.mock('@/api/client', () => ({
-  default: { get: mockGet },
+const { mockGet, mockPost, mockPut, mockDelete } = vi.hoisted(() => ({
+  mockGet: vi.fn(),
+  mockPost: vi.fn(),
+  mockPut: vi.fn(),
+  mockDelete: vi.fn(),
 }))
 
-import { fetchPosts, searchPosts } from '@/api/posts'
+vi.mock('@/api/client', () => ({
+  default: { get: mockGet, post: mockPost, put: mockPut, delete: mockDelete },
+}))
+
+import { createPost, deletePost, fetchPosts, searchPosts, updatePost } from '@/api/posts'
 
 function mockJsonResponse(payload: unknown) {
   return { json: vi.fn().mockResolvedValue(payload) }
@@ -104,5 +109,73 @@ describe('searchPosts', () => {
     ]
     expect(options.searchParams.q).toBe('test')
     expect(options.searchParams.limit).toBe('50')
+  })
+})
+
+describe('createPost', () => {
+  beforeEach(() => {
+    mockPost.mockReset()
+  })
+
+  it('sends POST with correct JSON body', async () => {
+    const newPost = { title: 'New Post', body: '# Hello', labels: ['swe'], is_draft: false }
+    const responsePost = { file_path: 'new-post', ...newPost }
+    mockPost.mockReturnValue(mockJsonResponse(responsePost))
+
+    await createPost(newPost)
+
+    const [url, options] = mockPost.mock.calls[0] as [string, { json: typeof newPost }]
+    expect(url).toBe('posts')
+    expect(options.json).toEqual(newPost)
+  })
+})
+
+describe('updatePost', () => {
+  beforeEach(() => {
+    mockPut.mockReset()
+  })
+
+  it('sends PUT to correct path with JSON body', async () => {
+    const params = { title: 'Updated', body: '# Updated', labels: ['cs'], is_draft: true }
+    const responsePost = { file_path: 'my-post', ...params }
+    mockPut.mockReturnValue(mockJsonResponse(responsePost))
+
+    await updatePost('my-post', params)
+
+    const [url, options] = mockPut.mock.calls[0] as [string, { json: typeof params }]
+    expect(url).toBe('posts/my-post')
+    expect(options.json).toEqual(params)
+  })
+})
+
+describe('deletePost', () => {
+  beforeEach(() => {
+    mockDelete.mockReset()
+  })
+
+  it('sends DELETE to correct path', async () => {
+    mockDelete.mockResolvedValue(undefined)
+
+    await deletePost('my-post')
+
+    const [url, options] = mockDelete.mock.calls[0] as [
+      string,
+      { searchParams: Record<string, string> | undefined },
+    ]
+    expect(url).toBe('posts/my-post')
+    expect(options.searchParams).toBeUndefined()
+  })
+
+  it('sends delete_assets param when requested', async () => {
+    mockDelete.mockResolvedValue(undefined)
+
+    await deletePost('my-post', true)
+
+    const [url, options] = mockDelete.mock.calls[0] as [
+      string,
+      { searchParams: { delete_assets: string } },
+    ]
+    expect(url).toBe('posts/my-post')
+    expect(options.searchParams).toEqual({ delete_assets: 'true' })
   })
 })

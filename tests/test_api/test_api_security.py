@@ -65,9 +65,7 @@ class TestPageIdValidation:
     @pytest.mark.asyncio
     async def test_path_traversal_rejected(self, client: AsyncClient) -> None:
         resp = await client.get("/api/pages/../../etc/passwd")
-        # The request must not succeed and must not cause a server error
-        assert resp.status_code != 200
-        assert resp.status_code < 500
+        assert resp.status_code == 404
 
     @pytest.mark.asyncio
     async def test_dots_in_page_id_rejected(self, client: AsyncClient) -> None:
@@ -77,9 +75,7 @@ class TestPageIdValidation:
     @pytest.mark.asyncio
     async def test_slash_in_page_id_rejected(self, client: AsyncClient) -> None:
         resp = await client.get("/api/pages/test/page")
-        # The request must not succeed and must not cause a server error
-        assert resp.status_code != 200
-        assert resp.status_code < 500
+        assert resp.status_code == 404
 
     @pytest.mark.asyncio
     async def test_special_chars_rejected(self, client: AsyncClient) -> None:
