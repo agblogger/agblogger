@@ -52,6 +52,7 @@ from cli.deploy_production import (
     parse_csv_list,
     parse_existing_env,
     print_config_summary,
+    write_bundle_files,
     write_config_files,
 )
 
@@ -384,6 +385,7 @@ def test_check_prerequisites_checks_docker_and_compose(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     (tmp_path / "docker-compose.yml").write_text("services: {}\n", encoding="utf-8")
+    (tmp_path / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
     monkeypatch.setattr("cli.deploy_production.shutil.which", lambda _name: "/usr/bin/docker")
     commands = _stub_subprocess(monkeypatch)
 
@@ -633,6 +635,7 @@ def test_deploy_with_local_caddy_runs_base_compose(
 def test_check_prerequisites_requires_docker_compose_file_for_local_mode(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    (tmp_path / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
     monkeypatch.setattr("cli.deploy_production.shutil.which", lambda _name: "/usr/bin/docker")
     with pytest.raises(DeployError, match=r"docker compose file"):
         check_prerequisites(tmp_path, DEPLOY_MODE_LOCAL)
@@ -1284,6 +1287,7 @@ def test_main_subprocess_error_includes_command(
         ],
     )
     (tmp_path / "docker-compose.yml").write_text("services: {}\n", encoding="utf-8")
+    (tmp_path / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
     monkeypatch.setattr("cli.deploy_production.shutil.which", lambda _name: "/usr/bin/docker")
 
     def fake_run(command: list[str], **_kwargs: object) -> SimpleNamespace:
@@ -2651,6 +2655,224 @@ class TestCrossArchitectureBuild:
         captured = capsys.readouterr().out
         assert "linux/amd64" in captured
 
+
+# ── Issue #1: Content directory seeding in bundle ─────────────────────
+
+
+class TestBundleContentDirectory:
+    """Remote bundle should include an empty content/ directory."""
+
+    def test_write_bundle_files_creates_content_directory(self, tmp_path: Path) -> None:
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_REGISTRY,
+            image_ref="ghcr.io/example/agblogger:v1",
+        )
+        bundle_dir = tmp_path / "bundle"
+        write_bundle_files(config, bundle_dir)
+        assert (bundle_dir / "content").is_dir()
+
+    def test_write_bundle_files_preserves_existing_content(self, tmp_path: Path) -> None:
+        bundle_dir = tmp_path / "bundle"
+        bundle_dir.mkdir(parents=True)
+        content_dir = bundle_dir / "content"
+        content_dir.mkdir()
+        (content_dir / "existing-post.md").write_text("# Hello", encoding="utf-8")
+
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_REGISTRY,
+            image_ref="ghcr.io/example/agblogger:v1",
+        )
+        write_bundle_files(config, bundle_dir)
+        assert (content_dir / "existing-post.md").exists()
+
+
+# ── Issue #2: Version marker in bundle ────────────────────────────────
+
+
+class TestBundleVersionMarker:
+    """Remote bundle should contain a version file for upgrade tracking."""
+
+    def test_write_bundle_files_writes_version_file(self, tmp_path: Path) -> None:
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_REGISTRY,
+            image_ref="ghcr.io/example/agblogger:v1",
+        )
+        bundle_dir = tmp_path / "bundle"
+        write_bundle_files(config, bundle_dir)
+        version_file = bundle_dir / "VERSION"
+        assert version_file.exists()
+        version = version_file.read_text(encoding="utf-8").strip()
+        assert version != ""
+        assert version != "unknown"
+
+    def test_remote_readme_mentions_version(self) -> None:
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_REGISTRY,
+            image_ref="ghcr.io/example/agblogger:v1",
+        )
+        commands = build_lifecycle_commands(
+            deployment_mode=DEPLOY_MODE_REGISTRY,
+            use_caddy=False,
+            caddy_public=False,
+        )
+        content = _build_remote_readme_content(config, commands)
+        assert "VERSION" in content
+
+
+# ── Issue #3: Tarball upgrade instructions ────────────────────────────
+
+
+class TestTarballUpgradeInstructions:
+    """Tarball upgrade numbered steps should include replacing bundle files."""
+
+    def test_tarball_upgrade_has_replace_as_numbered_step(self) -> None:
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="agblogger:v1",
+        )
+        commands = build_lifecycle_commands(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            use_caddy=False,
+            caddy_public=False,
+        )
+        content = _build_remote_readme_content(config, commands)
+        upgrade_section = content[content.index("## Upgrading") :]
+        # "Replace" or "replace" should appear in a numbered step, not just prose
+        import re
+
+        numbered_steps = re.findall(r"^\d+\..+", upgrade_section, re.MULTILINE)
+        assert any("replace" in step.lower() or "Replace" in step for step in numbered_steps)
+
+    def test_registry_upgrade_has_replace_as_numbered_step(self) -> None:
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_REGISTRY,
+            image_ref="ghcr.io/example/agblogger:v1",
+        )
+        commands = build_lifecycle_commands(
+            deployment_mode=DEPLOY_MODE_REGISTRY,
+            use_caddy=False,
+            caddy_public=False,
+        )
+        content = _build_remote_readme_content(config, commands)
+        upgrade_section = content[content.index("## Upgrading") :]
+        import re
+
+        numbered_steps = re.findall(r"^\d+\..+", upgrade_section, re.MULTILINE)
+        assert any("replace" in step.lower() or "Replace" in step for step in numbered_steps)
+
+
+# ── Issue #4: Health timeout includes logs command ────────────────────
+
+
+class TestHealthTimeoutLogsCommand:
+    """Health timeout error should include the actual logs command."""
+
+    def test_health_timeout_error_includes_logs_command(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        from cli.deploy_production import _wait_for_healthy
+
+        call_counter = 0
+
+        def fake_monotonic() -> float:
+            nonlocal call_counter
+            call_counter += 1
+            return float(call_counter * 100)
+
+        def fake_run(command: list[str], **_kwargs: object) -> SimpleNamespace:
+            return SimpleNamespace(returncode=0, stdout="agblogger: Up 3 seconds (starting)\n")
+
+        monkeypatch.setattr("cli.deploy_production.subprocess.run", fake_run)
+        monkeypatch.setattr("cli.deploy_production.time.sleep", lambda _s: None)
+        monkeypatch.setattr("cli.deploy_production.time.monotonic", fake_monotonic)
+
+        config = _make_config()
+        with pytest.raises(DeployError, match=r"docker compose.*logs"):
+            _wait_for_healthy(config, tmp_path, timeout=10, interval=1)
+
+
+# ── Issue #6: check_prerequisites validates Dockerfile for local mode ─
+
+
+class TestCheckPrerequisitesDockerfile:
+    """Local mode should verify Dockerfile exists alongside docker-compose.yml."""
+
+    def test_local_mode_requires_dockerfile(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        (tmp_path / "docker-compose.yml").write_text("services: {}\n", encoding="utf-8")
+        # No Dockerfile present
+        monkeypatch.setattr("cli.deploy_production.shutil.which", lambda _name: "/usr/bin/docker")
+        _stub_subprocess(monkeypatch)
+
+        with pytest.raises(DeployError, match="Dockerfile"):
+            check_prerequisites(tmp_path, DEPLOY_MODE_LOCAL)
+
+    def test_local_mode_passes_when_both_exist(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        (tmp_path / "docker-compose.yml").write_text("services: {}\n", encoding="utf-8")
+        (tmp_path / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
+        monkeypatch.setattr("cli.deploy_production.shutil.which", lambda _name: "/usr/bin/docker")
+        commands = _stub_subprocess(monkeypatch)
+
+        check_prerequisites(tmp_path, DEPLOY_MODE_LOCAL)
+
+        assert commands == [
+            (["docker", "--version"], tmp_path, True),
+            (["docker", "compose", "version"], tmp_path, True),
+        ]
+
+
+# ── Issue #7: DNS confirmation prompt ─────────────────────────────────
+
+
+class TestDnsConfirmationPrompt:
+    """Interactive Caddy setup should confirm DNS is configured."""
+
+    def test_caddy_setup_asks_dns_confirmation(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        from cli.deploy_production import collect_config
+
+        # Track all prompts shown to the user to verify DNS prompt presence
+        prompts_shown: list[str] = []
+        # Simulate: no existing env, secret_key=auto, username=admin, password+confirm,
+        # mode=local, caddy=yes, domain, email, caddy_public=yes,
+        # dns_confirmed=yes, trusted hosts, proxy ips, expose docs=no
+        inputs = iter(
+            [
+                "admin",  # admin username
+                "",  # deployment mode (local)
+                "y",  # use caddy
+                "blog.example.com",  # caddy domain
+                "",  # caddy email
+                "y",  # caddy public
+                "y",  # DNS confirmed
+                "",  # additional trusted hosts
+                "",  # additional proxy ips
+                "n",  # expose docs
+            ]
+        )
+        passwords = iter(["", "strongpass123", "strongpass123"])
+
+        def tracking_input(prompt: str) -> str:
+            prompts_shown.append(prompt)
+            return next(inputs)
+
+        monkeypatch.setattr("builtins.input", tracking_input)
+        monkeypatch.setattr(
+            "cli.deploy_production.getpass.getpass", lambda _prompt: next(passwords)
+        )
+
+        config = collect_config(tmp_path)
+
+        assert config.caddy_config is not None
+        assert config.caddy_config.domain == "blog.example.com"
+        # Verify a DNS confirmation prompt was shown
+        dns_prompts = [p for p in prompts_shown if "dns" in p.lower() or "DNS" in p]
+        assert dns_prompts, f"No DNS confirmation prompt found. Prompts shown: {prompts_shown}"
+
     def test_print_config_summary_hides_platform_when_none(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
@@ -2833,7 +3055,7 @@ class TestHealthTimeoutMessage:
         monkeypatch.setattr("cli.deploy_production.subprocess.run", fake_run)
         monkeypatch.setattr("cli.deploy_production.time.sleep", lambda _: None)
 
-        with pytest.raises(DeployError, match="logs command"):
+        with pytest.raises(DeployError, match=r"docker compose.*logs"):
             _wait_for_healthy(config, tmp_path, timeout=1, interval=0)
 
 
@@ -2856,7 +3078,7 @@ class TestRemoteReadmeBundleUpgradeNote:
             caddy_public=False,
         )
         content = _build_remote_readme_content(config, commands)
-        assert "regenerate the full bundle" in content
+        assert "Regenerate the bundle locally and replace all files" in content
         assert "compose files and config may change" in content
 
     def test_tarball_readme_mentions_full_bundle_replacement(self) -> None:
@@ -2870,7 +3092,7 @@ class TestRemoteReadmeBundleUpgradeNote:
             caddy_public=False,
         )
         content = _build_remote_readme_content(config, commands)
-        assert "regenerate the full bundle" in content
+        assert "Regenerate the bundle locally and replace all files" in content
 
 
 # ── Version banner ───────────────────────────────────────────────────

@@ -556,14 +556,13 @@ def _validate_config(config: DeployConfig) -> None:
 
 def check_prerequisites(project_dir: Path, deployment_mode: str = DEPLOY_MODE_LOCAL) -> None:
     """Check required deployment prerequisites."""
+    dockerfile = project_dir / "Dockerfile"
+    if not dockerfile.exists():
+        raise DeployError(f"Missing Dockerfile: {dockerfile}")
     if deployment_mode == DEPLOY_MODE_LOCAL:
         compose_file = project_dir / "docker-compose.yml"
         if not compose_file.exists():
             raise DeployError(f"Missing docker compose file: {compose_file}")
-    else:
-        dockerfile = project_dir / "Dockerfile"
-        if not dockerfile.exists():
-            raise DeployError(f"Missing Dockerfile: {dockerfile}")
     if shutil.which("docker") is None:
         raise DeployError("Docker is not installed or not available on PATH")
 
@@ -728,12 +727,6 @@ def _build_remote_readme_content(config: DeployConfig, commands: dict[str, str])
         " cache data. Both `./content/` and the `agblogger-db` Docker volume must be"
         " preserved during upgrades. Schema migrations run automatically on startup."
     )
-    bundle_note = (
-        "When upgrading, regenerate the full bundle locally and replace all files"
-        " in this directory (compose files and config may change between versions)."
-        " The `./content/` directory and `agblogger-db` Docker volume are not part"
-        " of the bundle and will be preserved automatically."
-    )
     if config.deployment_mode == DEPLOY_MODE_REGISTRY:
         lines.extend(
             [
@@ -742,14 +735,19 @@ def _build_remote_readme_content(config: DeployConfig, commands: dict[str, str])
                 "",
                 data_note,
                 "",
-                bundle_note,
+                "To upgrade to a new version:",
                 "",
-                "To upgrade to a new version, update the `AGBLOGGER_IMAGE` tag"
-                " in `.env.production` and run:",
-                "```",
-                f"{commands['pull']}",
-                f"{commands['start']}",
-                "```",
+                "1. Regenerate the bundle locally and replace all files in this directory"
+                " (compose files and config may change between versions)."
+                " Check the `VERSION` file to see what version generated the current bundle."
+                " The `./content/` directory and `agblogger-db` Docker volume are not part"
+                " of the bundle and will be preserved automatically.",
+                "2. Update the `AGBLOGGER_IMAGE` tag in `.env.production` if it changed.",
+                "3. Pull and restart:",
+                "   ```",
+                f"   {commands['pull']}",
+                f"   {commands['start']}",
+                "   ```",
             ]
         )
     elif config.deployment_mode == DEPLOY_MODE_TARBALL:
@@ -760,12 +758,15 @@ def _build_remote_readme_content(config: DeployConfig, commands: dict[str, str])
                 "",
                 data_note,
                 "",
-                bundle_note,
-                "",
                 "To upgrade to a new version:",
                 "",
-                "1. If the image tag changed, update `AGBLOGGER_IMAGE` in `.env.production`.",
-                "2. Copy the new tarball to the server and run:",
+                "1. Regenerate the bundle locally and replace all files in this directory"
+                " (compose files and config may change between versions)."
+                " Check the `VERSION` file to see what version generated the current bundle."
+                " The `./content/` directory and `agblogger-db` Docker volume are not part"
+                " of the bundle and will be preserved automatically.",
+                "2. If the image tag changed, update `AGBLOGGER_IMAGE` in `.env.production`.",
+                "3. Copy the new tarball to the server and run:",
                 "   ```",
                 f"   {commands['load']}",
                 f"   {commands['start']}",
@@ -792,6 +793,13 @@ def write_bundle_files(config: DeployConfig, bundle_dir: Path) -> None:
     """Write a self-contained remote deployment bundle."""
     bundle_dir.mkdir(parents=True, exist_ok=True)
     _write_env_file(config, bundle_dir)
+
+    # Seed content directory so first-time users have the mount target ready
+    (bundle_dir / "content").mkdir(exist_ok=True)
+
+    # Write version marker for upgrade tracking
+    version = _read_version()
+    (bundle_dir / "VERSION").write_text(version + "\n", encoding="utf-8")
 
     stale_files: list[str] = []
     if config.caddy_config is not None:
@@ -943,9 +951,10 @@ def _wait_for_healthy(
                 continue
         print("All services healthy.")
         return
+    logs_cmd = "docker " + " ".join(_compose_base_args(config)) + " logs"
     raise DeployError(
         f"Health check timed out after {timeout}s. "
-        "Check service logs with the logs command to diagnose the issue."
+        f"Check service logs to diagnose the issue:\n  {logs_cmd}"
     )
 
 
@@ -1341,6 +1350,11 @@ def collect_config(project_dir: Path | None = None) -> DeployConfig:
             default=True,
         )
         host_bind_ip = LOCALHOST_BIND_IP
+        _prompt_yes_no(
+            "Have you configured DNS for this domain?"
+            " Caddy will attempt to provision a TLS certificate on startup",
+            default=True,
+        )
         print(
             "\nNote: Ensure your domain's DNS A/AAAA record points to this server"
             " before starting. Caddy needs to reach Let's Encrypt to provision"
