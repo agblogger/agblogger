@@ -4,9 +4,8 @@
 
 - `check-backend-static`
 - `check-frontend-static`
-- `check-semgrep`
-- `check-trivy`
 - `check-vulture`
+- `check-trivy`
 
 All checks are fail-fast and CI-blocking.
 
@@ -58,26 +57,9 @@ All checks are fail-fast and CI-blocking.
 - Purpose: detect likely dead/unused Python code in runtime modules.
 - Scope: backend and CLI runtime code.
 
-## Runtime Security Static Analysis (`check-semgrep`)
-
-- `semgrep scan` with:
-  - `p/ci`
-  - `p/security-audit`
-  - `p/secrets`
-  - `p/owasp-top-ten`
-  - `p/python`
-  - `p/typescript`
-  - `p/dockerfile`
-  - `p/docker-compose`
-  - `p/supply-chain`
-  - `p/trailofbits`
-  - `.semgrep.yml` (local project rules)
-- Purpose: SAST and security-pattern detection.
-- Scope: `backend/`, `cli/`, `frontend/src/`, `Dockerfile`, `docker-compose.yml` (tests excluded).
-
 ## Trivy Security Scan (`check-trivy`)
 
-- `trivy fs --scanners vuln,misconfig,secret,license --exit-code 1 .`
+- `trivy fs -q --scanners vuln,misconfig,secret,license --exit-code 1 .`
   - Purpose: broad repository security scan in one pass (vulnerabilities, misconfigurations, secrets, and license findings).
   - Scope: repository filesystem, constrained by `trivy.yaml` skip rules.
   - Severity policy: configured in `trivy.yaml` (`UNKNOWN`, `MEDIUM`, `HIGH`, `CRITICAL`; `LOW` suppressed).
@@ -90,7 +72,7 @@ Tests are intentionally split out from static analysis:
   - Optional coverage: `just test coverage=true`
 - `just test-backend` supports optional coverage: `just test-backend coverage=true`
 - `just test-frontend` supports optional coverage: `just test-frontend coverage=true`
-- `just check` runs `just check-static` first, then `just test`
+- `just check` runs `just check-static` first, then `just test` with coverage enforcement
 
 This keeps static analysis and runtime verification available separately while preserving a single full gate.
 
@@ -99,25 +81,30 @@ This keeps static analysis and runtime verification available separately while p
 These are intentionally separate from `just check` and `just check-static`:
 
 - `just check-audit-full`
-  - Runs `npm audit --audit-level=high` in `frontend/`.
-  - Includes development dependencies (unlike `npm run audit`, which uses `--omit=dev`).
+  - Runs `npm audit` in `frontend/`.
+  - Includes development dependencies (unlike `npm run audit`, which uses `--audit-level=high --omit=dev`).
 - `just check-codeql`
   - Rebuilds CodeQL databases and runs CodeQL analysis for Python and JavaScript.
 - `just checkov`
   - Runs `checkov -f Dockerfile -f docker-compose.yml` via `uv run --with checkov`.
   - Scope: infrastructure-as-code checks for the repository Dockerfile and Compose manifest.
 - `just check-gitleaks`
-  - Runs `gitleaks detect --source .` with repo config that excludes `tests/`.
+  - Runs `gitleaks detect --source . --no-banner` with repo config that excludes `tests/`.
   - Scope: repository secret scan over git-tracked content outside backend test fixtures.
 - `just check-gitleaks-full`
-  - Runs `gitleaks detect --source .` with an explicit temporary config that extends Gitleaks' built-in default rules, bypassing the repo `.gitleaks.toml`.
+  - Runs `gitleaks detect --source . --no-banner --verbose` with an explicit temporary config that extends Gitleaks' built-in default rules, bypassing the repo `.gitleaks.toml`.
   - Scope: full repository secret scan, including `tests/`; kept outside the default extra gate because test fixtures intentionally contain fake secrets.
 - `just check-snyk`
   - Runs `snyk code test`.
   - Scope: repository source code SAST via Snyk Code.
   - Test code is excluded via the repo-root `.snyk` policy (`tests/**`, frontend `__tests__`, and `*.test.ts(x)` files).
 - `just check-extra`
-  - Runs only extra checks not covered by `just check`: `check-audit-full` + `checkov` + `check-gitleaks` + `check-codeql` + `snyk test --all-projects`.
+  - Runs extra checks not covered by `just check`: `check-audit-full` + `checkov` + `check-gitleaks` + `check-codeql` + `check-semgrep` + `test-backend-slow` + `snyk test frontend`.
+- `just check-semgrep`
+  - Runs `semgrep scan` with rulesets: `p/ci`, `p/security-audit`, `p/secrets`, `p/owasp-top-ten`, `p/python`, `p/typescript`, `p/dockerfile`, `p/docker-compose`, `p/supply-chain`, `p/trailofbits`, and `.semgrep.yml` (local project rules).
+  - Excludes `typescript.react.security.audit.react-dangerouslysetinnerhtml.react-dangerouslysetinnerhtml` rule.
+  - Scope: `backend/`, `cli/`, `frontend/src/`, `Dockerfile`, `docker-compose.yml` (tests and frontend test files excluded).
+  - Purpose: SAST and security-pattern detection.
 - `just check-noisy`
   - Runs `check-snyk` and `check-gitleaks-full` sequentially, even if the first one reports issues.
   - Returns a failing exit status if either scan reports issues.
