@@ -80,39 +80,50 @@ describe('SocialAccountsPanel', () => {
     expect(screen.getByLabelText('Disconnect alice.bsky.social')).toBeInTheDocument()
   })
 
-  it('orders connected accounts alphabetically by account name', async () => {
+  it('orders connected accounts alphabetically by displayed platform name', async () => {
     mockFetchSocialAccounts.mockResolvedValue([
       {
-        id: 2,
-        platform: 'mastodon',
-        account_name: 'Zulu Account',
+        id: 4,
+        platform: 'x',
+        account_name: 'Alpha X Account',
         created_at: '2026-01-16T10:00:00Z',
       },
       {
         id: 1,
         platform: 'bluesky',
-        account_name: 'Alpha Account',
+        account_name: 'Zulu Bluesky Account',
         created_at: '2026-01-15T10:00:00Z',
       },
       {
-        id: 3,
-        platform: 'x',
-        account_name: 'Bravo Account',
+        id: 2,
+        platform: 'facebook',
+        account_name: 'Bravo Facebook Account',
         created_at: '2026-01-17T10:00:00Z',
+      },
+      {
+        id: 3,
+        platform: 'mastodon',
+        account_name: 'Charlie Mastodon Account',
+        created_at: '2026-01-18T10:00:00Z',
       },
     ])
 
     renderPanel()
 
     await waitFor(() => {
-      expect(screen.getByText('Alpha Account')).toBeInTheDocument()
+      expect(screen.getByText('Zulu Bluesky Account')).toBeInTheDocument()
     })
 
-    const accountNames = screen
-      .getAllByText(/Account$/)
-      .map((element) => element.textContent)
+    const disconnectLabels = screen
+      .getAllByRole('button', { name: /Disconnect / })
+      .map((element) => element.getAttribute('aria-label'))
 
-    expect(accountNames).toEqual(['Alpha Account', 'Bravo Account', 'Zulu Account'])
+    expect(disconnectLabels).toEqual([
+      'Disconnect Zulu Bluesky Account',
+      'Disconnect Bravo Facebook Account',
+      'Disconnect Charlie Mastodon Account',
+      'Disconnect Alpha X Account',
+    ])
   })
 
   it('shows handle input when Connect Bluesky is clicked', async () => {

@@ -30,10 +30,18 @@ interface SocialAccountsPanelProps {
   onBusyChange: (busy: boolean) => void
 }
 
+function getPlatformDisplayName(platform: string): string {
+  if (platform === 'bluesky') return 'Bluesky'
+  if (platform === 'mastodon') return 'Mastodon'
+  if (platform === 'facebook') return 'Facebook'
+  if (platform === 'x') return 'X'
+  return platform
+}
+
 function sortSocialAccounts(accounts: SocialAccount[]): SocialAccount[] {
   return [...accounts].sort((left, right) => {
-    const leftName = (left.account_name ?? left.platform).toLocaleLowerCase()
-    const rightName = (right.account_name ?? right.platform).toLocaleLowerCase()
+    const leftName = getPlatformDisplayName(left.platform).toLocaleLowerCase()
+    const rightName = getPlatformDisplayName(right.platform).toLocaleLowerCase()
     return leftName.localeCompare(rightName)
   })
 }
