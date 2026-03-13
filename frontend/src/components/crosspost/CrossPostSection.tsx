@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Share2 } from 'lucide-react'
 
 import { fetchCrossPostHistory, fetchSocialAccounts } from '@/api/crosspost'
 import type { CrossPostResult, SocialAccount } from '@/api/crosspost'
+import { HTTPError } from '@/api/client'
 import type { PostDetail } from '@/api/client'
 import CrossPostDialog from '@/components/crosspost/CrossPostDialog'
 import CrossPostHistory from '@/components/crosspost/CrossPostHistory'
@@ -27,8 +29,12 @@ export default function CrossPostSection({ filePath, post }: CrossPostSectionPro
     try {
       const history = await fetchCrossPostHistory(filePath)
       setHistoryItems(history.items)
-    } catch {
-      setHistoryError('Failed to load cross-post history. Please try again.')
+    } catch (err) {
+      if (err instanceof HTTPError && err.response.status === 401) {
+        setHistoryError('Session expired. Please log in again.')
+      } else {
+        setHistoryError('Failed to load cross-post history. Please try again.')
+      }
     } finally {
       setHistoryLoading(false)
     }
@@ -51,8 +57,12 @@ export default function CrossPostSection({ filePath, post }: CrossPostSectionPro
       try {
         const accts = await fetchSocialAccounts()
         setAccounts(accts)
-      } catch {
-        setAccountsError('Failed to load connected social accounts. Please try again.')
+      } catch (err) {
+        if (err instanceof HTTPError && err.response.status === 401) {
+          setAccountsError('Session expired. Please log in again.')
+        } else {
+          setAccountsError('Failed to load connected social accounts. Please try again.')
+        }
       } finally {
         setAccountsLoading(false)
       }
@@ -106,12 +116,12 @@ export default function CrossPostSection({ filePath, post }: CrossPostSectionPro
       {!accountsLoading && accounts.length === 0 && accountsError === null && (
         <div className="mt-4 rounded-lg border border-dashed border-border px-4 py-3 text-sm text-muted">
           <p>Connect a social account in Admin &gt; Social to cross-post this post.</p>
-          <a
-            href="/admin?tab=social"
+          <Link
+            to="/admin?tab=social"
             className="mt-2 inline-flex items-center gap-1.5 text-accent hover:underline"
           >
             Connect social account
-          </a>
+          </Link>
         </div>
       )}
       {showDialog && (

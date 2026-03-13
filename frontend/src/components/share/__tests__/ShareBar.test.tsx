@@ -49,6 +49,7 @@ describe('ShareBar', () => {
     await user.click(shareButton)
 
     expect(screen.queryByLabelText('Share on Bluesky')).not.toBeInTheDocument()
+    expect(screen.getByText('Publish this draft to enable sharing.')).toBeInTheDocument()
   })
 
   it('does not show platform buttons directly', () => {

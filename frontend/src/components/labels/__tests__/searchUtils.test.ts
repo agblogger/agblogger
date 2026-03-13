@@ -21,6 +21,18 @@ describe('searchUtils', () => {
     expect(matchesLabelSearch('swe', ['software engineering'], '   ')).toBe(true)
   })
 
+  it('returns false when query matches neither id nor names', () => {
+    expect(matchesLabelSearch('swe', ['software engineering'], 'physics')).toBe(false)
+  })
+
+  it('matches on id when names array is empty', () => {
+    expect(matchesLabelSearch('swe', [], 'swe')).toBe(true)
+  })
+
+  it('returns false for empty names when query does not match id', () => {
+    expect(matchesLabelSearch('swe', [], 'physics')).toBe(false)
+  })
+
   it('filters labels by id or name', () => {
     expect(filterLabelsBySearch(labels, 'science')).toEqual([
       { id: 'cs', names: ['computer science'] },

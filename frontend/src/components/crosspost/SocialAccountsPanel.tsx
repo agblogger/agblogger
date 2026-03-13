@@ -94,8 +94,8 @@ export default function SocialAccountsPanel({ busy, onBusyChange }: SocialAccoun
         try {
           const pages = await fetchFacebookPages(fbPagesState)
           setFacebookPages(pages)
-        } catch {
-          setError('Failed to load Facebook Pages. Please try again.')
+        } catch (err) {
+          setError(await extractErrorDetail(err, 'Failed to load Facebook Pages. Please try again.'))
           setFacebookPageState(null)
         }
       })()

@@ -118,9 +118,13 @@ export default function EditorPage() {
           setAccounts(socialAccounts)
           setSocialAccountsError(null)
         })
-        .catch(() => {
+        .catch((err: unknown) => {
           setAccounts([])
-          setSocialAccountsError('Failed to load connected social accounts. Please try again.')
+          if (err instanceof HTTPError && err.response.status === 401) {
+            setSocialAccountsError('Session expired. Please log in again.')
+          } else {
+            setSocialAccountsError('Failed to load connected social accounts. Please try again.')
+          }
         })
     }
   }, [user])

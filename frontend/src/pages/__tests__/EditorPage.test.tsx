@@ -932,6 +932,74 @@ describe('EditorPage', () => {
     expect(screen.getByRole('button', { name: 'Preview' })).toBeInTheDocument()
   })
 
+  it('shows session expired when fetchSocialAccounts returns 401', async () => {
+    mockFetchSocialAccounts.mockRejectedValue(
+      new (MockHTTPError as unknown as new (s: number) => Error)(401),
+    )
+
+    renderEditor('/editor/new')
+
+    await waitFor(() => {
+      expect(screen.getByText('Session expired. Please log in again.')).toBeInTheDocument()
+    })
+  })
+
+  it('does not open cross-post dialog when saving a draft with platforms selected', async () => {
+    const mockCreatePost = vi.mocked(createPost)
+    mockCreatePost.mockResolvedValue({
+      id: 1,
+      file_path: 'posts/2026-03-13-test/index.md',
+      title: 'Test',
+      author: 'jane',
+      created_at: '2026-03-13 12:00:00+00:00',
+      modified_at: '2026-03-13 12:00:00+00:00',
+      is_draft: true,
+      rendered_excerpt: '',
+      rendered_html: '<p>Test</p>',
+      content: 'Test',
+      labels: [],
+    })
+    mockFetchSocialAccounts.mockResolvedValue([
+      {
+        id: 1,
+        platform: 'bluesky',
+        account_name: 'alice.bsky.social',
+        created_at: '2026-01-15T10:00:00Z',
+      },
+    ])
+
+    const user = userEvent.setup()
+    renderEditor('/editor/new')
+
+    await waitFor(() => {
+      expect(screen.getByText('Cross-post after saving:')).toBeInTheDocument()
+    })
+
+    // Check the platform checkbox first (while not draft)
+    const blueskyCheckbox = screen.getByRole('checkbox', { name: /alice\.bsky\.social/i })
+    await user.click(blueskyCheckbox)
+
+    // Toggle draft on — checkboxes get disabled but selection state is preserved
+    const draftCheckbox = screen.getByRole('checkbox', { name: /draft/i })
+    await user.click(draftCheckbox)
+
+    // Type a title and save
+    await user.type(screen.getByLabelText(/Title/), 'Test')
+    await user.click(screen.getByRole('button', { name: /save/i }))
+
+    await waitFor(() => {
+      expect(mockCreatePost).toHaveBeenCalledWith({
+        title: 'Test',
+        body: '',
+        labels: [],
+        is_draft: true,
+      })
+    })
+
+    // Cross-post dialog should NOT open for drafts
+    expect(screen.queryByRole('heading', { name: 'Cross-post' })).not.toBeInTheDocument()
+  })
+
   it('shows a visible error instead of silently logging when fetchSocialAccounts fails', async () => {
     mockFetchSocialAccounts.mockRejectedValueOnce(new Error('Network error'))
 

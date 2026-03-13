@@ -3,6 +3,13 @@ import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import type { SocialAccount } from '@/api/crosspost'
+import { MockHTTPError } from '@/test/MockHTTPError'
+
+vi.mock('@/api/client', async () => {
+  const { MockHTTPError } = await import('@/test/MockHTTPError')
+  return { HTTPError: MockHTTPError }
+})
+
 import CrossPostDialog from '../CrossPostDialog'
 
 const mockCrossPost = vi.fn()
@@ -185,7 +192,35 @@ describe('CrossPostDialog', () => {
     expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument()
   })
 
-  it('shows error banner when API call fails', async () => {
+  it('shows session expired when cross-post returns 401', async () => {
+    mockCrossPost.mockRejectedValue(new MockHTTPError(401))
+
+    const user = userEvent.setup()
+    renderDialog()
+
+    await user.click(screen.getByRole('button', { name: 'Cross-post' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Session expired. Please log in again.')).toBeInTheDocument()
+    })
+  })
+
+  it('shows parsed error detail for non-401 HTTP errors', async () => {
+    mockCrossPost.mockRejectedValue(
+      new MockHTTPError(422, JSON.stringify({ detail: 'Post content is empty' })),
+    )
+
+    const user = userEvent.setup()
+    renderDialog()
+
+    await user.click(screen.getByRole('button', { name: 'Cross-post' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Post content is empty')).toBeInTheDocument()
+    })
+  })
+
+  it('shows generic error for non-HTTP failures', async () => {
     mockCrossPost.mockRejectedValue(new Error('Network error'))
 
     const user = userEvent.setup()
@@ -194,7 +229,9 @@ describe('CrossPostDialog', () => {
     await user.click(screen.getByRole('button', { name: 'Cross-post' }))
 
     await waitFor(() => {
-      expect(screen.getByText('Failed to cross-post. Please try again.')).toBeInTheDocument()
+      expect(
+        screen.getByText('Failed to cross-post. The server may be unavailable.'),
+      ).toBeInTheDocument()
     })
   })
 

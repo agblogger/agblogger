@@ -2,6 +2,13 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
+import { MockHTTPError } from '@/test/MockHTTPError'
+
+vi.mock('@/api/client', async () => {
+  const { MockHTTPError } = await import('@/test/MockHTTPError')
+  return { HTTPError: MockHTTPError, parseErrorDetail: (await import('@/api/parseError')).parseErrorDetail }
+})
+
 import SocialAccountsPanel from '../SocialAccountsPanel'
 
 const mockFetchSocialAccounts = vi.fn()
@@ -503,6 +510,19 @@ describe('SocialAccountsPanel', () => {
     await waitFor(() => {
       expect(screen.getByText(/Connected/)).toBeInTheDocument()
     })
+  })
+
+  it('shows session expired when Facebook pages fetch returns 401', async () => {
+    window.history.pushState({}, '', '?fb_pages=test-state')
+    mockFetchFacebookPages.mockRejectedValue(new MockHTTPError(401))
+
+    renderPanel()
+
+    await waitFor(() => {
+      expect(screen.getByText('Session expired. Please log in again.')).toBeInTheDocument()
+    })
+
+    window.history.pushState({}, '', '/')
   })
 
   it('cancels Mastodon connect form', async () => {

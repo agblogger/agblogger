@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 
 import { crossPost } from '@/api/crosspost'
 import type { SocialAccount, CrossPostResult } from '@/api/crosspost'
+import { HTTPError } from '@/api/client'
+import { parseErrorDetail } from '@/api/parseError'
 import PlatformIcon from '@/components/crosspost/PlatformIcon'
 import { buildDefaultText } from '@/components/crosspost/crosspostText'
 
@@ -85,8 +87,20 @@ export default function CrossPostDialog({
     try {
       const resultData = await crossPost(postPath, Array.from(selectedPlatforms), text)
       setResults(resultData)
-    } catch {
-      setError('Failed to cross-post. Please try again.')
+    } catch (err) {
+      if (err instanceof HTTPError) {
+        if (err.response.status === 401) {
+          setError('Session expired. Please log in again.')
+        } else {
+          const detail = await parseErrorDetail(
+            err.response,
+            'Failed to cross-post. Please try again.',
+          )
+          setError(detail)
+        }
+      } else {
+        setError('Failed to cross-post. The server may be unavailable.')
+      }
     } finally {
       setPosting(false)
     }
