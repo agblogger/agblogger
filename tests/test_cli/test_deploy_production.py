@@ -830,6 +830,7 @@ def test_config_from_args_builds_config_without_caddy() -> None:
         secret_key="s" * 64,
         admin_username="admin",
         admin_password="strong-password!",
+        admin_display_name=None,
         caddy_domain=None,
         caddy_email=None,
         caddy_public=False,
@@ -860,6 +861,7 @@ def test_config_from_args_builds_config_with_caddy() -> None:
         secret_key=None,
         admin_username="admin",
         admin_password="strong-password!",
+        admin_display_name=None,
         caddy_domain="blog.example.com",
         caddy_email="ops@example.com",
         caddy_public=True,
@@ -890,6 +892,7 @@ def test_config_from_args_auto_generates_secret_key() -> None:
         secret_key=None,
         admin_username="admin",
         admin_password="strong-password!",
+        admin_display_name=None,
         caddy_domain=None,
         caddy_email=None,
         caddy_public=False,
@@ -914,6 +917,7 @@ def test_config_from_args_auto_appends_caddy_domain_to_trusted_hosts() -> None:
         secret_key="s" * 64,
         admin_username="admin",
         admin_password="strong-password!",
+        admin_display_name=None,
         caddy_domain="blog.example.com",
         caddy_email=None,
         caddy_public=False,
@@ -938,6 +942,7 @@ def test_config_from_args_raises_on_missing_admin_username() -> None:
         secret_key="s" * 64,
         admin_username=None,
         admin_password="strong-password!",
+        admin_display_name=None,
         caddy_domain=None,
         caddy_email=None,
         caddy_public=False,
@@ -965,6 +970,7 @@ def test_config_from_args_raises_on_missing_admin_password(
         secret_key="s" * 64,
         admin_username="admin",
         admin_password=None,
+        admin_display_name=None,
         caddy_domain=None,
         caddy_email=None,
         caddy_public=False,
@@ -989,6 +995,7 @@ def test_config_from_args_raises_on_missing_trusted_hosts() -> None:
         secret_key="s" * 64,
         admin_username="admin",
         admin_password="strong-password!",
+        admin_display_name=None,
         caddy_domain=None,
         caddy_email=None,
         caddy_public=False,
@@ -1013,6 +1020,7 @@ def test_config_from_args_requires_image_ref_for_registry_mode() -> None:
         secret_key="s" * 64,
         admin_username="admin",
         admin_password="strong-password!",
+        admin_display_name=None,
         caddy_domain=None,
         caddy_email=None,
         caddy_public=False,
@@ -1037,6 +1045,7 @@ def test_config_from_args_builds_registry_mode() -> None:
         secret_key="s" * 64,
         admin_username="admin",
         admin_password="strong-password!",
+        admin_display_name=None,
         caddy_domain=None,
         caddy_email=None,
         caddy_public=False,
@@ -1123,6 +1132,7 @@ def test_config_from_args_auto_adds_caddy_proxy_subnet() -> None:
         secret_key="s" * 64,
         admin_username="admin",
         admin_password="strong-password!",
+        admin_display_name=None,
         caddy_domain="blog.example.com",
         caddy_email=None,
         caddy_public=False,
@@ -1147,6 +1157,7 @@ def test_config_from_args_no_caddy_does_not_add_proxy_subnet() -> None:
         secret_key="s" * 64,
         admin_username="admin",
         admin_password="strong-password!",
+        admin_display_name=None,
         caddy_domain=None,
         caddy_email=None,
         caddy_public=False,
@@ -1177,6 +1188,7 @@ def test_config_from_args_reads_admin_password_from_env(
         secret_key="s" * 64,
         admin_username="admin",
         admin_password=None,
+        admin_display_name=None,
         caddy_domain=None,
         caddy_email=None,
         caddy_public=False,
@@ -2412,9 +2424,10 @@ class TestCollectConfigReusesExistingSecrets:
     ) -> None:
         from cli.deploy_production import collect_config
 
-        # Simulate: secret_key=auto, username=admin, password+confirm, mode=local,
+        # Simulate: secret_key=auto, username=admin, display_name=admin,
+        # password+confirm, mode=local,
         # caddy=no, public=no, port=8000, trusted hosts=example.com, proxy ips, docs=no
-        inputs = iter(["admin", "", "n", "n", "", "example.com", "", "n"])
+        inputs = iter(["admin", "", "", "n", "n", "", "example.com", "", "n"])
         passwords = iter(["", "strongpass123", "strongpass123"])
         monkeypatch.setattr("builtins.input", lambda _prompt: next(inputs))
         monkeypatch.setattr(
@@ -2508,6 +2521,7 @@ class TestCrossArchitectureBuild:
             secret_key="s" * 64,
             admin_username="admin",
             admin_password="strong-password!",
+            admin_display_name=None,
             caddy_domain=None,
             caddy_email=None,
             caddy_public=False,
@@ -2530,6 +2544,7 @@ class TestCrossArchitectureBuild:
             secret_key="s" * 64,
             admin_username="admin",
             admin_password="strong-password!",
+            admin_display_name=None,
             caddy_domain=None,
             caddy_email=None,
             caddy_public=False,
@@ -2552,6 +2567,7 @@ class TestCrossArchitectureBuild:
             secret_key="s" * 64,
             admin_username="admin",
             admin_password="strong-password!",
+            admin_display_name=None,
             caddy_domain=None,
             caddy_email=None,
             caddy_public=False,
@@ -2574,6 +2590,7 @@ class TestCrossArchitectureBuild:
             secret_key="s" * 64,
             admin_username="admin",
             admin_password="strong-password!",
+            admin_display_name=None,
             caddy_domain=None,
             caddy_email=None,
             caddy_public=False,
@@ -2837,12 +2854,14 @@ class TestDnsConfirmationPrompt:
 
         # Track all prompts shown to the user to verify DNS prompt presence
         prompts_shown: list[str] = []
-        # Simulate: no existing env, secret_key=auto, username=admin, password+confirm,
+        # Simulate: no existing env, secret_key=auto, username=admin,
+        # display_name=admin, password+confirm,
         # mode=local, caddy=yes, domain, email, caddy_public=yes,
         # dns_confirmed=yes, trusted hosts, proxy ips, expose docs=no
         inputs = iter(
             [
                 "admin",  # admin username
+                "",  # admin display name (default=admin)
                 "",  # deployment mode (local)
                 "y",  # use caddy
                 "blog.example.com",  # caddy domain

@@ -371,7 +371,7 @@ async def ensure_admin_user(session: AsyncSession, settings: Settings) -> None:
             username=settings.admin_username,
             email=f"{settings.admin_username}@localhost",
             password_hash=hash_password(settings.admin_password),
-            display_name="Admin",
+            display_name=settings.admin_display_name or settings.admin_username,
             is_admin=True,
             created_at=now,
             updated_at=now,

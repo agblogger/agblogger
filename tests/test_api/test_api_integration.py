@@ -918,7 +918,7 @@ class TestPostCRUD:
         assert data["title"] == "Structured Post"
         assert data["labels"] == ["swe"]
         assert data["is_draft"] is False
-        assert data["author"] == "Admin"  # display_name resolved from users table
+        assert data["author"] == "admin"  # display_name defaults to username
 
     @pytest.mark.asyncio
     async def test_update_post_structured(self, client: AsyncClient) -> None:
@@ -962,7 +962,7 @@ class TestPostCRUD:
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 200
-        assert resp.json()["author"] == "Admin"  # backfilled from editing user
+        assert resp.json()["author"] == "admin"  # backfilled from editing user
 
     @pytest.mark.asyncio
     async def test_create_and_edit_roundtrip(self, client: AsyncClient) -> None:

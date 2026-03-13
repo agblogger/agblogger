@@ -100,6 +100,7 @@ class Settings(BaseSettings):
     # Admin bootstrap
     admin_username: str = "admin"
     admin_password: str = INSECURE_BOOTSTRAP_SENTINEL
+    admin_display_name: str = ""
 
     # Response hardening
     security_headers_enabled: bool = True

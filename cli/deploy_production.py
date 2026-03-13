@@ -113,6 +113,7 @@ class DeployConfig:
     caddy_config: CaddyConfig | None
     caddy_public: bool
     expose_docs: bool
+    admin_display_name: str = ""
     deployment_mode: str = DEPLOY_MODE_LOCAL
     image_ref: str | None = None
     bundle_dir: Path = DEFAULT_BUNDLE_DIR
@@ -223,6 +224,7 @@ def build_env_content(config: DeployConfig) -> str:
         f"SECRET_KEY={_quote_env_value(config.secret_key)}",
         f"ADMIN_USERNAME={_quote_env_value(config.admin_username)}",
         f"ADMIN_PASSWORD={_quote_env_value(config.admin_password)}",
+        f"ADMIN_DISPLAY_NAME={_quote_env_value(config.admin_display_name)}",
     ]
     if use_caddy:
         lines.append(f"HOST_PORT={config.host_port}  # Only used in no-Caddy mode")
@@ -301,6 +303,7 @@ def _agblogger_env_section() -> str:
         "      - SECRET_KEY=${SECRET_KEY?Set SECRET_KEY}\n"
         "      - ADMIN_USERNAME=${ADMIN_USERNAME?Set ADMIN_USERNAME}\n"
         "      - ADMIN_PASSWORD=${ADMIN_PASSWORD?Set ADMIN_PASSWORD}\n"
+        "      - ADMIN_DISPLAY_NAME=${ADMIN_DISPLAY_NAME:-}\n"
         "      - TRUSTED_HOSTS=${TRUSTED_HOSTS?Set TRUSTED_HOSTS}\n"
         "      - TRUSTED_PROXY_IPS=${TRUSTED_PROXY_IPS:-[]}\n"
         "      - CONTENT_DIR=/data/content\n"
@@ -1047,6 +1050,7 @@ def _mask_secrets(config: DeployConfig) -> DeployConfig:
         secret_key=placeholder,
         admin_username=config.admin_username,
         admin_password=placeholder,
+        admin_display_name=config.admin_display_name,
         trusted_hosts=config.trusted_hosts,
         trusted_proxy_ips=config.trusted_proxy_ips,
         host_port=config.host_port,
@@ -1121,6 +1125,7 @@ def print_config_summary(config: DeployConfig) -> None:
     print("\n=== Deployment configuration ===")
     print(f"  Mode:            {config.deployment_mode}")
     print(f"  Admin user:      {config.admin_username}")
+    print(f"  Admin display:   {config.admin_display_name}")
     print(f"  Trusted hosts:   {', '.join(config.trusted_hosts)}")
     if config.caddy_config is not None:
         print(f"  Caddy domain:    {config.caddy_config.domain}")
@@ -1308,10 +1313,12 @@ def collect_config(project_dir: Path | None = None) -> DeployConfig:
         secret_key = existing["SECRET_KEY"]
         admin_username = existing["ADMIN_USERNAME"]
         admin_password = existing["ADMIN_PASSWORD"]
+        admin_display_name = existing.get("ADMIN_DISPLAY_NAME", admin_username)
         print(f"Reusing credentials (admin user: {admin_username}).")
     else:
         secret_key = _prompt_secret_key()
         admin_username = _prompt_non_empty("Admin username", default="admin")
+        admin_display_name = _prompt_non_empty("Admin display name", default=admin_username)
         admin_password = _prompt_password()
     deployment_mode = _prompt_deployment_mode()
     image_ref: str | None = None
@@ -1394,6 +1401,7 @@ def collect_config(project_dir: Path | None = None) -> DeployConfig:
         secret_key=secret_key,
         admin_username=admin_username,
         admin_password=admin_password,
+        admin_display_name=admin_display_name,
         trusted_hosts=trusted_hosts,
         trusted_proxy_ips=proxy_ips,
         host_port=host_port,
@@ -1447,10 +1455,12 @@ def config_from_args(args: argparse.Namespace) -> DeployConfig:
     if caddy_config is not None and COMPOSE_SUBNET not in trusted_proxy_ips:
         trusted_proxy_ips.insert(0, COMPOSE_SUBNET)
 
+    admin_display_name = args.admin_display_name or args.admin_username
     return DeployConfig(
         secret_key=secret_key,
         admin_username=args.admin_username,
         admin_password=admin_password,
+        admin_display_name=admin_display_name,
         trusted_hosts=trusted_hosts,
         trusted_proxy_ips=trusted_proxy_ips,
         host_port=args.host_port,
@@ -1501,6 +1511,10 @@ def _parse_args() -> argparse.Namespace:
     config_group.add_argument(
         "--admin-password",
         help="Initial admin password. Also accepted via ADMIN_PASSWORD env var.",
+    )
+    config_group.add_argument(
+        "--admin-display-name",
+        help="Admin display name (defaults to admin username).",
     )
     config_group.add_argument(
         "--caddy-domain",
