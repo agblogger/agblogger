@@ -3,12 +3,8 @@ interface LabelSearchable {
   names: readonly string[]
 }
 
-function normalizeLabelSearchQuery(query: string): string {
-  return query.trim().toLowerCase()
-}
-
 export function matchesLabelSearch(id: string, names: readonly string[], query: string): boolean {
-  const normalizedQuery = normalizeLabelSearchQuery(query)
+  const normalizedQuery = query.trim().toLowerCase()
   if (normalizedQuery === '') {
     return true
   }

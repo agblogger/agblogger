@@ -19,14 +19,18 @@ const ADMIN_TABS = [
   { key: 'social', label: 'Social' },
 ] as const
 
+type AdminTabKey = (typeof ADMIN_TABS)[number]['key']
+const VALID_TAB_KEYS = new Set<string>(ADMIN_TABS.map((t) => t.key))
+
 export default function AdminPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const user = useAuthStore((s) => s.user)
   const isInitialized = useAuthStore((s) => s.isInitialized)
   const tabParam = new URLSearchParams(location.search).get('tab')
-  const initialTab =
-    tabParam === 'pages' || tabParam === 'account' || tabParam === 'social' ? tabParam : 'settings'
+  const initialTab: AdminTabKey = VALID_TAB_KEYS.has(tabParam ?? '')
+    ? (tabParam as AdminTabKey)
+    : 'settings'
 
   // === Loading state ===
   const [loading, setLoading] = useState(true)

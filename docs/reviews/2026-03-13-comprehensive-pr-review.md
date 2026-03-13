@@ -40,13 +40,13 @@ Four locations used bare `catch` (no error binding), preventing differentiation 
 3. **`EditorPage.test.tsx`** — Added test: save-as-draft with platforms selected should NOT open cross-post dialog
 4. **`label_service.py`** — Unit test for `create_label(session, "test", names=None)` deferred (API layer always provides a list)
 
-### Code Simplification — [code-simplifier] — deferred
+### Code Simplification — [code-simplifier] — all fixed
 
-5. **`CrossPostSection.tsx`** — Collapse duplicated error banner markup into array-driven rendering
-6. **`SocialAccountsPanel.tsx`** — Convert `getPlatformDisplayName` if/else to Record lookup
+5. **`CrossPostSection.tsx`** — Collapsed duplicated error banner markup into array-driven rendering
+6. **`SocialAccountsPanel.tsx`** — Converted `getPlatformDisplayName` if/else to Record lookup
 7. **`SocialAccountsPanel.tsx`** — Use `localeCompare` with `{ sensitivity: 'base' }` instead of manual `toLocaleLowerCase()`
-8. **`AdminPage.tsx`** — Derive tab validation from `ADMIN_TABS` constant
-9. **`searchUtils.ts`** — Inline `normalizeLabelSearchQuery` (single-use wrapper)
+8. **`AdminPage.tsx`** — Derived tab validation from `ADMIN_TABS` constant
+9. **`searchUtils.ts`** — Inlined `normalizeLabelSearchQuery` (single-use wrapper)
 
 ## Strengths
 

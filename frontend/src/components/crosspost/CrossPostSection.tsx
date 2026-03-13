@@ -102,16 +102,11 @@ export default function CrossPostSection({ filePath, post }: CrossPostSectionPro
           </button>
         )}
       </div>
-      {historyError !== null && (
-        <div className="mb-4 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/40 rounded-lg px-4 py-3">
-          {historyError}
+      {[historyError, accountsError].filter(Boolean).map((msg) => (
+        <div key={msg} className="mb-4 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/40 rounded-lg px-4 py-3">
+          {msg}
         </div>
-      )}
-      {accountsError !== null && (
-        <div className="mb-4 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/40 rounded-lg px-4 py-3">
-          {accountsError}
-        </div>
-      )}
+      ))}
       <CrossPostHistory items={historyItems} loading={historyLoading} />
       {!accountsLoading && accounts.length === 0 && accountsError === null && (
         <div className="mt-4 rounded-lg border border-dashed border-border px-4 py-3 text-sm text-muted">
