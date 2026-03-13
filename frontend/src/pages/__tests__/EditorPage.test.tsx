@@ -218,6 +218,18 @@ describe('EditorPage', () => {
     expect(screen.queryByText('Preview')).not.toBeInTheDocument()
   })
 
+  it('shows session expired when post load returns 401', async () => {
+    mockFetchPostForEdit.mockRejectedValue(
+      new (MockHTTPError as unknown as new (s: number) => Error)(401),
+    )
+    renderEditor('/editor/posts/protected.md')
+
+    await waitFor(() => {
+      expect(screen.getByText('Session expired. Please log in again.')).toBeInTheDocument()
+    })
+    expect(screen.queryByText('Save')).not.toBeInTheDocument()
+  })
+
   it('shows generic error page without editor form', async () => {
     mockFetchPostForEdit.mockRejectedValue(new Error('Network error'))
     renderEditor('/editor/posts/broken.md')
@@ -875,6 +887,7 @@ describe('EditorPage', () => {
   })
 
   it('shows 422 with unparseable body as generic validation error', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const mockCreatePost = vi.mocked(createPost)
     mockCreatePost.mockRejectedValue(
       new (MockHTTPError as unknown as new (s: number, b?: string) => Error)(
@@ -895,6 +908,7 @@ describe('EditorPage', () => {
     await waitFor(() => {
       expect(screen.getByText('Validation error. Check your input.')).toBeInTheDocument()
     })
+    warnSpy.mockRestore()
   })
 
   it('enhances code blocks in preview panel', async () => {

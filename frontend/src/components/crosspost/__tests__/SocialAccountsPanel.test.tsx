@@ -6,7 +6,7 @@ import { MockHTTPError } from '@/test/MockHTTPError'
 
 vi.mock('@/api/client', async () => {
   const { MockHTTPError } = await import('@/test/MockHTTPError')
-  return { HTTPError: MockHTTPError, parseErrorDetail: (await import('@/api/parseError')).parseErrorDetail }
+  return { HTTPError: MockHTTPError }
 })
 
 import SocialAccountsPanel from '../SocialAccountsPanel'
@@ -523,6 +523,30 @@ describe('SocialAccountsPanel', () => {
     })
 
     window.history.pushState({}, '', '/')
+  })
+
+  it('shows generic error for 5xx authorization errors instead of parsing response body', async () => {
+    mockFetchSocialAccounts.mockResolvedValue([])
+    mockAuthorizeBluesky.mockRejectedValue(
+      new MockHTTPError(500, JSON.stringify({ detail: 'Internal: OAuth state corrupt' })),
+    )
+    const user = userEvent.setup()
+    renderPanel()
+
+    await waitFor(() => {
+      expect(screen.getByText('Connect Bluesky')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByText('Connect Bluesky'))
+    await user.type(screen.getByPlaceholderText('alice.bsky.social'), 'test.bsky.social')
+    await user.click(screen.getByRole('button', { name: 'Connect' }))
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('Failed to start Bluesky authorization. Please try again.'),
+      ).toBeInTheDocument()
+    })
+    expect(screen.queryByText(/OAuth state corrupt/)).not.toBeInTheDocument()
   })
 
   it('cancels Mastodon connect form', async () => {

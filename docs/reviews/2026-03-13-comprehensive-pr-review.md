@@ -1,9 +1,11 @@
 # Comprehensive PR Review — 2026-03-13
 
-Review of 5 commits against origin/main (42 files, +720/-182 lines).
+Review of 7 commits against origin/main (43 files, +989/-196 lines).
 
 ## Commits Reviewed
 
+- 971a383 refactor: simplify crosspost, admin, and label search code
+- 823b0ad fix: differentiate 401 errors in catch blocks and use client-side navigation
 - 81bf9bf fix: allow empty label names and unify label search
 - d0a121e fix: align password minimum with 8-character policy
 - bf492ae fix: sort social connect options alphabetically
@@ -14,45 +16,50 @@ Review of 5 commits against origin/main (42 files, +720/-182 lines).
 
 None.
 
-## Important Issues (5 found — all fixed)
+## Important Issues (4 found — all fixed)
 
-### 1. Raw `<a href>` instead of React Router `<Link>` — [code-reviewer]
+### 1. `parseErrorDetail` may surface raw backend text on 5xx errors — [silent-failure-hunter]
 
-**`frontend/src/components/crosspost/CrossPostSection.tsx:109-113`**
+`CrossPostDialog.tsx` and `SocialAccountsPanel.tsx` called `parseErrorDetail` for all non-401 HTTP errors including 5xx. If the backend includes internal details (stack traces, SQL, paths) in the `detail` field of a 500 response, those would be shown directly to the user.
 
-Used `<a href="/admin?tab=social">` which causes a full page reload. All other internal navigation uses `<Link>` from `react-router-dom`. Replaced with `<Link to="/admin?tab=social">`.
+**Fix:** Added `status >= 500` guard in both `CrossPostDialog.handlePost` and `SocialAccountsPanel.extractErrorDetail` to return the generic fallback for server errors, only parsing detail for 4xx client errors.
 
-### 2-5. Bare `catch` blocks discard error context — [silent-failure-hunter]
+### 2. `EditorPage` post-load catch block missing 401 differentiation — [silent-failure-hunter]
 
-Four locations used bare `catch` (no error binding), preventing differentiation between session expiry (401), validation errors, and network failures. Fixed to bind errors and differentiate 401 with "Session expired. Please log in again.":
+The post-load catch block differentiated 404 but showed "Failed to load post" for 401 errors, inconsistent with the PR's other catch blocks that show "Session expired. Please log in again."
 
-- **`CrossPostSection.tsx`** — history and accounts fetch catch blocks
-- **`CrossPostDialog.tsx`** — cross-post action catch block (also parses HTTP error details)
-- **`EditorPage.tsx`** — social accounts fetch catch block
-- **`SocialAccountsPanel.tsx`** — Facebook pages fetch catch block (uses `extractErrorDetail`)
+**Fix:** Added `err.response.status === 401` branch in `EditorPage.tsx` post-load catch block.
 
-## Suggestions (9 found)
+### 3. Duplicate React keys in `CrossPostSection` error banners — [code-reviewer]
 
-### Test Coverage Gaps — [test-analyzer] — all fixed
+`CrossPostSection.tsx` used `key={msg}` when rendering error banners from `[historyError, accountsError]`. When both API calls fail with the same error (e.g., both return 401 → "Session expired"), React sees duplicate keys.
 
-1. **`searchUtils.test.ts`** — Added negative-match test and empty-names-array tests
-2. **`ShareBar.test.tsx`** — Added "Publish this draft to enable sharing." assertion when disabled
-3. **`EditorPage.test.tsx`** — Added test: save-as-draft with platforms selected should NOT open cross-post dialog
-4. **`label_service.py`** — Unit test for `create_label(session, "test", names=None)` deferred (API layer always provides a list)
+**Fix:** Deduplicated error messages with `Set` before rendering, so identical messages appear once and keys are always unique.
 
-### Code Simplification — [code-simplifier] — all fixed
+### 4. Test description mismatch in `CrossPostHistory.test.tsx` — [comment-analyzer]
 
-5. **`CrossPostSection.tsx`** — Collapsed duplicated error banner markup into array-driven rendering
-6. **`SocialAccountsPanel.tsx`** — Converted `getPlatformDisplayName` if/else to Record lookup
-7. **`SocialAccountsPanel.tsx`** — Use `localeCompare` with `{ sensitivity: 'base' }` instead of manual `toLocaleLowerCase()`
-8. **`AdminPage.tsx`** — Derived tab validation from `ADMIN_TABS` constant
-9. **`searchUtils.ts`** — Inlined `normalizeLabelSearchQuery` (single-use wrapper)
+Test description said "Not shared yet." but assertion checked "No cross-posts yet."
+
+**Fix:** Updated test description to match the actual assertion.
+
+## Suggestions (from review agents — all addressed)
+
+- ~~`parseErrorDetail` catch block returns fallback silently without logging~~ — Added `console.warn` in catch block
+- 401 error banners show "Please log in again" but provide no link/redirect to login — Deferred (larger UX decision)
+- ~~Duplicated `names_must_be_nonempty_strings` validator across `LabelCreate` and `LabelUpdate`~~ — Extracted shared `_validate_nonempty_names` helper
+- ~~`VALID_TAB_KEYS` typed as `Set<string>` requires unsafe cast to `AdminTabKey`~~ — Changed to `Set<AdminTabKey>`, used `AdminTabKey` for `activeTab` state
+- ~~`extractErrorDetail` is module-private but same 401 pattern repeated in 3 other components~~ — Extracted to `parseError.ts`, used by `SocialAccountsPanel`, `CrossPostDialog`, `CrossPostSection`, `EditorPage`
+- ~~`ShareButton` defines own props instead of importing `ShareProps`~~ — Now imports `ShareProps` from `shareTypes.ts`
+- ~~Missing tests for invalid `?tab=bogus` fallback and tab URL sync via useEffect~~ — Added both tests
+- ~~Review document commit count and line numbers were outdated~~ — Fixed
+- ~~`create_label` docstring doesn't mention `names=None` defaults to empty list~~ — Updated docstring
 
 ## Strengths
 
-- Elimination of explicit silent failures in `CrossPostSection.tsx`
-- Excellent TDD discipline — boundary tests for password policy and empty label names
-- Proper draft gating across share, cross-post, and editor flows
+- Strong TDD discipline — every behavioral change has corresponding tests
+- Excellent error differentiation in `CrossPostDialog.handlePost` (three-branch: 401 / other HTTP / non-HTTP)
 - Clean extraction of label search logic into shared `searchUtils.ts`
-- Social account sorting is deterministic and well-tested
+- Proper draft gating across share, cross-post, and editor flows
 - Architecture docs kept in sync with changes
+- Smart sort-order regression tests (account names deliberately differ from platform names)
+- No `type: ignore`, `noqa`, `eslint-disable`, or `fmt: skip` introduced

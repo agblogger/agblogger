@@ -12,6 +12,14 @@ LABEL_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 LabelIdRef = Annotated[str, Field(min_length=1, max_length=100, pattern=r"^[a-z0-9][a-z0-9-]*$")]
 
 
+def _validate_nonempty_names(v: list[str]) -> list[str]:
+    """Reject empty or whitespace-only display name strings."""
+    for name in v:
+        if not name.strip():
+            raise ValueError("Display names must not be empty or whitespace-only")
+    return v
+
+
 class LabelResponse(BaseModel):
     """Label detail response."""
 
@@ -56,11 +64,7 @@ class LabelCreate(BaseModel):
     @classmethod
     def names_must_be_nonempty_strings(cls, v: list[str]) -> list[str]:
         """Reject empty or whitespace-only name strings."""
-        _ = cls
-        for name in v:
-            if not name.strip():
-                raise ValueError("Display names must not be empty or whitespace-only")
-        return v
+        return _validate_nonempty_names(v)
 
 
 class LabelUpdate(BaseModel):
@@ -73,11 +77,7 @@ class LabelUpdate(BaseModel):
     @classmethod
     def names_must_be_nonempty_strings(cls, v: list[str]) -> list[str]:
         """Reject empty or whitespace-only name strings."""
-        _ = cls
-        for name in v:
-            if not name.strip():
-                raise ValueError("Display names must not be empty or whitespace-only")
-        return v
+        return _validate_nonempty_names(v)
 
 
 class LabelDeleteResponse(BaseModel):

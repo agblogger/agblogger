@@ -205,7 +205,7 @@ describe('CrossPostDialog', () => {
     })
   })
 
-  it('shows parsed error detail for non-401 HTTP errors', async () => {
+  it('shows parsed error detail for non-401 client HTTP errors', async () => {
     mockCrossPost.mockRejectedValue(
       new MockHTTPError(422, JSON.stringify({ detail: 'Post content is empty' })),
     )
@@ -220,6 +220,22 @@ describe('CrossPostDialog', () => {
     })
   })
 
+  it('shows generic error for 5xx HTTP errors instead of parsing response body', async () => {
+    mockCrossPost.mockRejectedValue(
+      new MockHTTPError(500, JSON.stringify({ detail: 'Internal: database connection pool exhausted' })),
+    )
+
+    const user = userEvent.setup()
+    renderDialog()
+
+    await user.click(screen.getByRole('button', { name: 'Cross-post' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Failed to cross-post. Please try again.')).toBeInTheDocument()
+    })
+    expect(screen.queryByText(/database connection pool/)).not.toBeInTheDocument()
+  })
+
   it('shows generic error for non-HTTP failures', async () => {
     mockCrossPost.mockRejectedValue(new Error('Network error'))
 
@@ -230,7 +246,7 @@ describe('CrossPostDialog', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText('Failed to cross-post. The server may be unavailable.'),
+        screen.getByText('Failed to cross-post. Please try again.'),
       ).toBeInTheDocument()
     })
   })

@@ -219,6 +219,41 @@ describe('CrossPostSection', () => {
     })
   })
 
+  it('deduplicates error banners when both fetches fail with identical messages', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    mockFetchCrossPostHistory.mockRejectedValue(new MockHTTPError(401))
+    mockFetchSocialAccounts.mockRejectedValue(new MockHTTPError(401))
+
+    render(<MemoryRouter><CrossPostSection filePath="posts/test.md" post={mockPost} /></MemoryRouter>)
+
+    await waitFor(() => {
+      expect(screen.getByText('Session expired. Please log in again.')).toBeInTheDocument()
+    })
+    // Identical messages should appear exactly once (deduplicated)
+    expect(screen.getAllByText('Session expired. Please log in again.')).toHaveLength(1)
+    // React should not warn about duplicate keys
+    const keyWarnings = errorSpy.mock.calls.filter(
+      (args) => args.some((arg) => typeof arg === 'string' && arg.includes('same key')),
+    )
+    expect(keyWarnings).toHaveLength(0)
+
+    errorSpy.mockRestore()
+  })
+
+  it('shows both error banners when fetches fail with different messages', async () => {
+    mockFetchCrossPostHistory.mockRejectedValue(new MockHTTPError(401))
+    mockFetchSocialAccounts.mockRejectedValue(new Error('Network error'))
+
+    render(<MemoryRouter><CrossPostSection filePath="posts/test.md" post={mockPost} /></MemoryRouter>)
+
+    await waitFor(() => {
+      expect(screen.getByText('Session expired. Please log in again.')).toBeInTheDocument()
+    })
+    expect(
+      screen.getByText('Failed to load connected social accounts. Please try again.'),
+    ).toBeInTheDocument()
+  })
+
   it('disables cross-posting for draft posts', () => {
     render(
       <MemoryRouter>

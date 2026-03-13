@@ -203,6 +203,33 @@ describe('AdminPage', () => {
     })
   })
 
+  it('falls back to settings tab for invalid tab query parameter', async () => {
+    setupLoadSuccess()
+    renderAdmin('/admin?tab=bogus')
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Title *')).toHaveValue('My Blog')
+    })
+    // Settings tab should be active, not any other tab content
+    expect(screen.queryByTestId('social-accounts-panel')).not.toBeInTheDocument()
+  })
+
+  it('syncs active tab when URL search parameter changes', async () => {
+    setupLoadSuccess()
+    const { unmount } = renderAdmin('/admin?tab=settings')
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Title *')).toHaveValue('My Blog')
+    })
+    unmount()
+
+    // Re-render with social tab — should switch to social
+    renderAdmin('/admin?tab=social')
+    await waitFor(() => {
+      expect(screen.getByTestId('social-accounts-panel')).toBeInTheDocument()
+    })
+  })
+
   it('does not display the default author field', async () => {
     setupLoadSuccess()
     renderAdmin()

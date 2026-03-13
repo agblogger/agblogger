@@ -2,15 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { Share2 } from 'lucide-react'
 
 import ShareDropdownContent from './ShareDropdownContent'
+import type { ShareProps } from './shareTypes'
 
-interface ShareButtonProps {
-  title: string
-  author: string | null
-  url: string
-  disabled?: boolean
-}
-
-export default function ShareButton({ title, author, url, disabled = false }: ShareButtonProps) {
+export default function ShareButton({ title, author, url, disabled = false }: ShareProps) {
   const [showDropdown, setShowDropdown] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 

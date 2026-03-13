@@ -1,6 +1,15 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 
-import { parseErrorDetail } from '../parseError'
+import { MockHTTPError } from '@/test/MockHTTPError'
+
+vi.mock('@/api/client', async () => {
+  const { MockHTTPError } = await import('@/test/MockHTTPError')
+  return {
+    HTTPError: MockHTTPError,
+  }
+})
+
+import { parseErrorDetail, extractErrorDetail } from '../parseError'
 
 describe('parseErrorDetail', () => {
   it('returns string detail from response body', async () => {
@@ -69,14 +78,65 @@ describe('parseErrorDetail', () => {
   })
 
   it('returns fallback for invalid JSON', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const response = mockResponse('not json')
     const result = await parseErrorDetail(response, 'fallback')
     expect(result).toBe('fallback')
+    warnSpy.mockRestore()
   })
 
   it('returns fallback for empty array detail', async () => {
     const response = mockResponse(JSON.stringify({ detail: [] }))
     const result = await parseErrorDetail(response, 'fallback')
+    expect(result).toBe('fallback')
+  })
+
+  it('logs a console.warn when response parsing fails', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const response = mockResponse('not json')
+    await parseErrorDetail(response, 'fallback')
+    expect(warnSpy).toHaveBeenCalledOnce()
+    expect(warnSpy).toHaveBeenCalledWith(
+      'parseErrorDetail: failed to parse error response',
+      expect.any(SyntaxError),
+    )
+    warnSpy.mockRestore()
+  })
+})
+
+describe('extractErrorDetail', () => {
+  it('returns session expired message for 401 HTTPError', async () => {
+    const err = new MockHTTPError(401)
+    const result = await extractErrorDetail(err, 'fallback')
+    expect(result).toBe('Session expired. Please log in again.')
+  })
+
+  it('returns fallback for 500 HTTPError without parsing body', async () => {
+    const err = new MockHTTPError(500, JSON.stringify({ detail: 'Internal: pool exhausted' }))
+    const result = await extractErrorDetail(err, 'Server error')
+    expect(result).toBe('Server error')
+  })
+
+  it('returns fallback for 503 HTTPError', async () => {
+    const err = new MockHTTPError(503, JSON.stringify({ detail: 'Service unavailable' }))
+    const result = await extractErrorDetail(err, 'Server error')
+    expect(result).toBe('Server error')
+  })
+
+  it('parses error detail for 4xx HTTPError', async () => {
+    const err = new MockHTTPError(422, JSON.stringify({ detail: 'Validation failed' }))
+    const result = await extractErrorDetail(err, 'fallback')
+    expect(result).toBe('Validation failed')
+  })
+
+  it('returns fallback for non-HTTPError', async () => {
+    const err = new Error('network error')
+    const result = await extractErrorDetail(err, 'fallback')
+    expect(result).toBe('fallback')
+  })
+
+  it('returns fallback for non-Error value', async () => {
+    const result = await extractErrorDetail('string error', 'fallback')
     expect(result).toBe('fallback')
   })
 })

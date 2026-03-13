@@ -4,8 +4,8 @@ import { Share2 } from 'lucide-react'
 
 import { fetchCrossPostHistory, fetchSocialAccounts } from '@/api/crosspost'
 import type { CrossPostResult, SocialAccount } from '@/api/crosspost'
-import { HTTPError } from '@/api/client'
 import type { PostDetail } from '@/api/client'
+import { extractErrorDetail } from '@/api/parseError'
 import CrossPostDialog from '@/components/crosspost/CrossPostDialog'
 import CrossPostHistory from '@/components/crosspost/CrossPostHistory'
 
@@ -30,11 +30,9 @@ export default function CrossPostSection({ filePath, post }: CrossPostSectionPro
       const history = await fetchCrossPostHistory(filePath)
       setHistoryItems(history.items)
     } catch (err) {
-      if (err instanceof HTTPError && err.response.status === 401) {
-        setHistoryError('Session expired. Please log in again.')
-      } else {
-        setHistoryError('Failed to load cross-post history. Please try again.')
-      }
+      setHistoryError(
+        await extractErrorDetail(err, 'Failed to load cross-post history. Please try again.'),
+      )
     } finally {
       setHistoryLoading(false)
     }
@@ -58,11 +56,9 @@ export default function CrossPostSection({ filePath, post }: CrossPostSectionPro
         const accts = await fetchSocialAccounts()
         setAccounts(accts)
       } catch (err) {
-        if (err instanceof HTTPError && err.response.status === 401) {
-          setAccountsError('Session expired. Please log in again.')
-        } else {
-          setAccountsError('Failed to load connected social accounts. Please try again.')
-        }
+        setAccountsError(
+          await extractErrorDetail(err, 'Failed to load connected social accounts. Please try again.'),
+        )
       } finally {
         setAccountsLoading(false)
       }
@@ -102,7 +98,7 @@ export default function CrossPostSection({ filePath, post }: CrossPostSectionPro
           </button>
         )}
       </div>
-      {[historyError, accountsError].filter(Boolean).map((msg) => (
+      {[...new Set([historyError, accountsError].filter((msg): msg is string => msg !== null))].map((msg) => (
         <div key={msg} className="mb-4 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/40 rounded-lg px-4 py-3">
           {msg}
         </div>

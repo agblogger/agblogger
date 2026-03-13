@@ -13,17 +13,9 @@ import {
 } from '@/api/crosspost'
 import type { SocialAccount, FacebookPage } from '@/api/crosspost'
 import { HTTPError } from '@/api/client'
-import { parseErrorDetail } from '@/api/parseError'
+import { extractErrorDetail } from '@/api/parseError'
 import PlatformIcon from '@/components/crosspost/PlatformIcon'
 import { formatDate } from '@/utils/date'
-
-async function extractErrorDetail(err: unknown, fallback: string): Promise<string> {
-  if (err instanceof HTTPError) {
-    if (err.response.status === 401) return 'Session expired. Please log in again.'
-    return parseErrorDetail(err.response, fallback)
-  }
-  return fallback
-}
 
 interface SocialAccountsPanelProps {
   busy: boolean

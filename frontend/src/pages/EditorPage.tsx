@@ -7,7 +7,7 @@ import { fetchPostForEdit, createPost, updatePost } from '@/api/posts'
 import { fetchSocialAccounts } from '@/api/crosspost'
 import type { SocialAccount } from '@/api/crosspost'
 import { HTTPError } from '@/api/client'
-import { parseErrorDetail } from '@/api/parseError'
+import { extractErrorDetail, parseErrorDetail } from '@/api/parseError'
 import api from '@/api/client'
 import { useCodeBlockEnhance } from '@/hooks/useCodeBlockEnhance'
 import { buildEditorDraftStorageKey, useEditorAutoSave } from '@/hooks/useEditorAutoSave'
@@ -101,6 +101,8 @@ export default function EditorPage() {
         .catch((err: unknown) => {
           if (err instanceof HTTPError && err.response.status === 404) {
             setError('Post not found')
+          } else if (err instanceof HTTPError && err.response.status === 401) {
+            setError('Session expired. Please log in again.')
           } else {
             setError('Failed to load post')
           }
@@ -118,13 +120,11 @@ export default function EditorPage() {
           setAccounts(socialAccounts)
           setSocialAccountsError(null)
         })
-        .catch((err: unknown) => {
+        .catch(async (err: unknown) => {
           setAccounts([])
-          if (err instanceof HTTPError && err.response.status === 401) {
-            setSocialAccountsError('Session expired. Please log in again.')
-          } else {
-            setSocialAccountsError('Failed to load connected social accounts. Please try again.')
-          }
+          setSocialAccountsError(
+            await extractErrorDetail(err, 'Failed to load connected social accounts. Please try again.'),
+          )
         })
     }
   }, [user])

@@ -30,7 +30,7 @@ describe('CrossPostHistory', () => {
     expect(screen.getByText('Loading cross-post history...')).toBeInTheDocument()
   })
 
-  it('shows "Not shared yet." when items is empty and not loading', () => {
+  it('shows "No cross-posts yet." when items is empty and not loading', () => {
     render(<CrossPostHistory items={[]} loading={false} />)
     expect(screen.getByText('No cross-posts yet.')).toBeInTheDocument()
   })

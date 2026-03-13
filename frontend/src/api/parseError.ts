@@ -1,3 +1,5 @@
+import { HTTPError } from '@/api/client'
+
 /**
  * Parse the `detail` field from a JSON error response body.
  *
@@ -37,7 +39,25 @@ export async function parseErrorDetail(
     }
 
     return fallback
-  } catch {
+  } catch (parseErr) {
+    console.warn('parseErrorDetail: failed to parse error response', parseErr)
     return fallback
   }
+}
+
+/**
+ * Extract a user-facing error message from an unknown error.
+ *
+ * - 401 HTTPError → "Session expired. Please log in again."
+ * - 5xx HTTPError → returns the provided fallback (avoids leaking internals)
+ * - Other HTTPError → parses the response detail
+ * - Non-HTTPError → returns the provided fallback
+ */
+export async function extractErrorDetail(err: unknown, fallback: string): Promise<string> {
+  if (err instanceof HTTPError) {
+    if (err.response.status === 401) return 'Session expired. Please log in again.'
+    if (err.response.status >= 500) return fallback
+    return parseErrorDetail(err.response, fallback)
+  }
+  return fallback
 }
