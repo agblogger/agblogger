@@ -30,6 +30,14 @@ interface SocialAccountsPanelProps {
   onBusyChange: (busy: boolean) => void
 }
 
+function sortSocialAccounts(accounts: SocialAccount[]): SocialAccount[] {
+  return [...accounts].sort((left, right) => {
+    const leftName = (left.account_name ?? left.platform).toLocaleLowerCase()
+    const rightName = (right.account_name ?? right.platform).toLocaleLowerCase()
+    return leftName.localeCompare(rightName)
+  })
+}
+
 export default function SocialAccountsPanel({ busy, onBusyChange }: SocialAccountsPanelProps) {
   const [accounts, setAccounts] = useState<SocialAccount[]>([])
   const [loading, setLoading] = useState(true)
@@ -91,7 +99,7 @@ export default function SocialAccountsPanel({ busy, onBusyChange }: SocialAccoun
     setError(null)
     try {
       const data = await fetchSocialAccounts()
-      setAccounts(data)
+      setAccounts(sortSocialAccounts(data))
     } catch (err) {
       if (err instanceof HTTPError && err.response.status === 401) {
         setError('Session expired. Please log in again.')

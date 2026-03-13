@@ -98,7 +98,7 @@ export default function CrossPostDialog({
         {results !== null ? (
           // Results view
           <>
-            <h2 className="font-display text-xl text-ink mb-4">Cross-Post Results</h2>
+            <h2 className="font-display text-xl text-ink mb-4">Cross-post results</h2>
             <div className="space-y-3 mb-6">
               {results.map((result) => (
                 <div
@@ -137,7 +137,7 @@ export default function CrossPostDialog({
         ) : (
           // Form view
           <>
-            <h2 className="font-display text-xl text-ink mb-4">Cross-Post</h2>
+            <h2 className="font-display text-xl text-ink mb-4">Cross-post</h2>
 
             {error !== null && (
               <div className="mb-4 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/40 rounded-lg px-4 py-3">
@@ -216,7 +216,7 @@ export default function CrossPostDialog({
                 className="px-4 py-2 text-sm font-medium text-white bg-accent hover:bg-accent-light
                          rounded-lg transition-colors disabled:opacity-50"
               >
-                {posting ? 'Posting...' : 'Post'}
+                {posting ? 'Cross-posting...' : 'Cross-post'}
               </button>
             </div>
           </>

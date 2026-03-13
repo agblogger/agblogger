@@ -206,7 +206,12 @@ export default function PostPage() {
               </div>
             )}
 
-            <ShareButton title={post.title} author={post.author} url={`${window.location.origin}/post/${filePath}`} />
+            <ShareButton
+              title={post.title}
+              author={post.author}
+              url={`${window.location.origin}/post/${filePath}`}
+              disabled={post.is_draft}
+            />
           </div>
 
           {user && (
@@ -249,7 +254,12 @@ export default function PostPage() {
         }}
       />
 
-      <ShareBar title={post.title} author={post.author} url={`${window.location.origin}/post/${filePath}`} />
+      <ShareBar
+        title={post.title}
+        author={post.author}
+        url={`${window.location.origin}/post/${filePath}`}
+        disabled={post.is_draft}
+      />
 
       {user?.is_admin === true && filePath !== undefined && filePath !== '' && (
         <CrossPostSection filePath={filePath} post={post} />

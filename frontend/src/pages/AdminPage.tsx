@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, Link, useLocation } from 'react-router-dom'
 import { Settings, ArrowLeft } from 'lucide-react'
 
 import { useAuthStore } from '@/stores/authStore'
@@ -21,15 +21,21 @@ const ADMIN_TABS = [
 
 export default function AdminPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const user = useAuthStore((s) => s.user)
   const isInitialized = useAuthStore((s) => s.isInitialized)
+  const tabParam = new URLSearchParams(location.search).get('tab')
+  const initialTab =
+    tabParam === 'pages' || tabParam === 'account' || tabParam === 'social' ? tabParam : 'settings'
 
   // === Loading state ===
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
 
   // === Tab navigation ===
-  const [activeTab, setActiveTab] = useState<'settings' | 'pages' | 'account' | 'social'>('settings')
+  const [activeTab, setActiveTab] = useState<'settings' | 'pages' | 'account' | 'social'>(
+    initialTab,
+  )
 
   // === Initial data ===
   const [siteSettings, setSiteSettings] = useState<AdminSiteSettings>({
@@ -79,6 +85,10 @@ export default function AdminPage() {
       }
     })()
   }, [isInitialized, user?.is_admin])
+
+  useEffect(() => {
+    setActiveTab(initialTab)
+  }, [initialTab])
 
   // === Render guards ===
   if (!isInitialized || !user) {

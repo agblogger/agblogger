@@ -7,9 +7,10 @@ interface ShareButtonProps {
   title: string
   author: string | null
   url: string
+  disabled?: boolean
 }
 
-export default function ShareButton({ title, author, url }: ShareButtonProps) {
+export default function ShareButton({ title, author, url, disabled = false }: ShareButtonProps) {
   const [showDropdown, setShowDropdown] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
@@ -31,8 +32,9 @@ export default function ShareButton({ title, author, url }: ShareButtonProps) {
       <button
         onClick={() => setShowDropdown((prev) => !prev)}
         aria-label="Share this post"
-        className="flex items-center gap-1 text-muted transition-colors hover:text-ink"
-        title="Share this post"
+        disabled={disabled}
+        className="flex items-center gap-1 text-muted transition-colors hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
+        title={disabled ? 'Drafts cannot be shared' : 'Share this post'}
       >
         <Share2 size={14} />
         <span className="text-sm">Share</span>

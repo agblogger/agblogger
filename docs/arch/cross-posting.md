@@ -26,9 +26,15 @@ Cross-post payloads are derived from AgBlogger content such as the post title, e
 
 The UI exposes cross-posting in three places:
 
-- account and provider connection management
-- publication actions for individual posts
-- history and status views for prior external publications
+- account and provider connection management in the admin social tab
+- publication actions for individual posts, using explicit cross-post wording that stays distinct from the public share UI
+- history and status views for prior external publications, including a direct path to connect accounts when none are available
+
+The admin social tab presents connected accounts in alphabetical order by visible account name, with the platform name used as a fallback label when an account name is unavailable.
+
+The post-view cross-post section surfaces backend/API load failures to the user instead of silently hiding controls. When no social accounts are connected, the empty state includes a direct link to the admin social tab so authors can connect an account and return to cross-post the current post.
+
+Draft posts are not eligible for browser-side distribution actions. The web UI disables both sharing controls and cross-post actions for drafts, and the editor disables "cross-post after saving" while the draft flag is enabled. Authors must publish the post before sharing or cross-posting.
 
 These are related but distinct concerns.
 

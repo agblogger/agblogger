@@ -331,6 +331,14 @@ describe('PostPage', () => {
     })
     expect(screen.getByText('Draft')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /publish/i })).toBeInTheDocument()
+    const shareButtons = screen.getAllByRole('button', { name: 'Share this post' })
+    expect(shareButtons.length).toBeGreaterThanOrEqual(2)
+    for (const button of shareButtons) {
+      expect(button).toBeDisabled()
+    }
+    expect(screen.getByRole('button', { name: 'Share via email' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Copy link' })).toBeDisabled()
+    expect(screen.getByText('Publish this draft to enable cross-posting.')).toBeInTheDocument()
   })
 
   it('does not show draft badge or publish button for published post', async () => {

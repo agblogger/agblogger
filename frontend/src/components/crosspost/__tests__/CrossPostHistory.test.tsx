@@ -27,12 +27,12 @@ const failedItem: CrossPostResult = {
 describe('CrossPostHistory', () => {
   it('shows loading text when loading is true', () => {
     render(<CrossPostHistory items={[]} loading={true} />)
-    expect(screen.getByText('Loading history...')).toBeInTheDocument()
+    expect(screen.getByText('Loading cross-post history...')).toBeInTheDocument()
   })
 
   it('shows "Not shared yet." when items is empty and not loading', () => {
     render(<CrossPostHistory items={[]} loading={false} />)
-    expect(screen.getByText('Not shared yet.')).toBeInTheDocument()
+    expect(screen.getByText('No cross-posts yet.')).toBeInTheDocument()
   })
 
   it('renders history items with platform name and status', () => {

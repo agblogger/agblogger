@@ -32,6 +32,18 @@ describe('ShareButton', () => {
     expect(screen.getByLabelText('Share this post')).toBeInTheDocument()
   })
 
+  it('disables sharing when the post is a draft', async () => {
+    const user = userEvent.setup()
+    render(<ShareButton {...defaultProps} disabled={true} />)
+
+    const shareButton = screen.getByLabelText('Share this post')
+    expect(shareButton).toBeDisabled()
+
+    await user.click(shareButton)
+
+    expect(screen.queryByLabelText('Share on Bluesky')).not.toBeInTheDocument()
+  })
+
   it('always opens dropdown on click, showing all platform options', async () => {
     const user = userEvent.setup()
     render(<ShareButton {...defaultProps} />)

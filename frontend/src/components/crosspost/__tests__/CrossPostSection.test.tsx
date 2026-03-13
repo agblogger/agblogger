@@ -89,11 +89,11 @@ describe('CrossPostSection', () => {
     render(<CrossPostSection filePath="posts/test.md" post={mockPost} />)
 
     await waitFor(() => {
-      expect(screen.getByText('Share')).toBeInTheDocument()
+      expect(screen.getByText('Cross-post')).toBeInTheDocument()
     })
   })
 
-  it('hides Share button when no accounts', async () => {
+  it('shows a connect-account hint when no accounts are available', async () => {
     mockFetchCrossPostHistory.mockResolvedValue({ items: [] })
     mockFetchSocialAccounts.mockResolvedValue([])
 
@@ -102,7 +102,14 @@ describe('CrossPostSection', () => {
     await waitFor(() => {
       expect(screen.getByTestId('crosspost-history')).toBeInTheDocument()
     })
-    expect(screen.queryByText('Share')).not.toBeInTheDocument()
+    expect(screen.queryByText('Cross-post')).not.toBeInTheDocument()
+    expect(
+      screen.getByText('Connect a social account in Admin > Social to cross-post this post.'),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Connect social account' })).toHaveAttribute(
+      'href',
+      '/admin?tab=social',
+    )
   })
 
   it('displays history items', async () => {
@@ -116,7 +123,7 @@ describe('CrossPostSection', () => {
     })
   })
 
-  it('opens dialog when Share is clicked', async () => {
+  it('opens dialog when Cross-post is clicked', async () => {
     const user = userEvent.setup()
     mockFetchCrossPostHistory.mockResolvedValue({ items: [] })
     mockFetchSocialAccounts.mockResolvedValue(mockAccounts)
@@ -124,10 +131,10 @@ describe('CrossPostSection', () => {
     render(<CrossPostSection filePath="posts/test.md" post={mockPost} />)
 
     await waitFor(() => {
-      expect(screen.getByText('Share')).toBeInTheDocument()
+      expect(screen.getByText('Cross-post')).toBeInTheDocument()
     })
 
-    await user.click(screen.getByText('Share'))
+    await user.click(screen.getByText('Cross-post'))
 
     expect(screen.getByTestId('crosspost-dialog')).toBeInTheDocument()
   })
@@ -140,10 +147,10 @@ describe('CrossPostSection', () => {
     render(<CrossPostSection filePath="posts/test.md" post={mockPost} />)
 
     await waitFor(() => {
-      expect(screen.getByText('Share')).toBeInTheDocument()
+      expect(screen.getByText('Cross-post')).toBeInTheDocument()
     })
 
-    await user.click(screen.getByText('Share'))
+    await user.click(screen.getByText('Cross-post'))
     expect(screen.getByTestId('crosspost-dialog')).toBeInTheDocument()
 
     // Close the dialog
@@ -156,29 +163,44 @@ describe('CrossPostSection', () => {
     expect(mockFetchCrossPostHistory.mock.calls.length).toBeGreaterThanOrEqual(2)
   })
 
-  it('handles history fetch failure gracefully', async () => {
+  it('shows a history error when history fetch fails', async () => {
     mockFetchCrossPostHistory.mockRejectedValue(new Error('Network error'))
     mockFetchSocialAccounts.mockResolvedValue([])
 
     render(<CrossPostSection filePath="posts/test.md" post={mockPost} />)
 
-    // Should still render the section without crashing
     await waitFor(() => {
-      expect(screen.getByText('Cross-posting')).toBeInTheDocument()
+      expect(
+        screen.getByText('Failed to load cross-post history. Please try again.'),
+      ).toBeInTheDocument()
     })
   })
 
-  it('handles accounts fetch failure gracefully', async () => {
+  it('shows an accounts error when social accounts fetch fails', async () => {
     mockFetchCrossPostHistory.mockResolvedValue({ items: [] })
     mockFetchSocialAccounts.mockRejectedValue(new Error('Network error'))
 
     render(<CrossPostSection filePath="posts/test.md" post={mockPost} />)
 
-    // Should still render the section without crashing
     await waitFor(() => {
-      expect(screen.getByText('Cross-posting')).toBeInTheDocument()
+      expect(
+        screen.getByText('Failed to load connected social accounts. Please try again.'),
+      ).toBeInTheDocument()
     })
-    // No Share button since accounts fetch failed
-    expect(screen.queryByText('Share')).not.toBeInTheDocument()
+    expect(screen.queryByText('Cross-post')).not.toBeInTheDocument()
+  })
+
+  it('disables cross-posting for draft posts', () => {
+    render(
+      <CrossPostSection
+        filePath="posts/test.md"
+        post={{ ...mockPost, is_draft: true }}
+      />,
+    )
+
+    expect(screen.getByText('Publish this draft to enable cross-posting.')).toBeInTheDocument()
+    expect(screen.queryByText('Cross-post')).not.toBeInTheDocument()
+    expect(mockFetchCrossPostHistory).not.toHaveBeenCalled()
+    expect(mockFetchSocialAccounts).not.toHaveBeenCalled()
   })
 })

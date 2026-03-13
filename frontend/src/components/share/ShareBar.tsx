@@ -5,7 +5,7 @@ import ShareDropdownContent from './ShareDropdownContent'
 import type { ShareProps } from './shareTypes'
 import { useShareHandlers } from './useShareHandlers'
 
-export default function ShareBar({ title, author, url }: ShareProps) {
+export default function ShareBar({ title, author, url, disabled = false }: ShareProps) {
   const [showDropdown, setShowDropdown] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
@@ -36,7 +36,9 @@ export default function ShareBar({ title, author, url }: ShareProps) {
             <button
               onClick={() => setShowDropdown((prev) => !prev)}
               aria-label="Share this post"
-              className="rounded-lg p-2 text-muted transition-colors hover:bg-paper-warm hover:text-ink"
+              disabled={disabled}
+              title={disabled ? 'Drafts cannot be shared' : 'Share this post'}
+              className="rounded-lg p-2 text-muted transition-colors hover:bg-paper-warm hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Share2 size={18} />
             </button>
@@ -59,7 +61,9 @@ export default function ShareBar({ title, author, url }: ShareProps) {
           <button
             onClick={handleEmailClick}
             aria-label="Share via email"
-            className="rounded-lg p-2 text-muted transition-colors hover:bg-paper-warm hover:text-ink"
+            disabled={disabled}
+            title={disabled ? 'Drafts cannot be shared' : 'Share via email'}
+            className="rounded-lg p-2 text-muted transition-colors hover:bg-paper-warm hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Mail size={18} />
           </button>
@@ -70,7 +74,9 @@ export default function ShareBar({ title, author, url }: ShareProps) {
           <button
             onClick={() => void handleCopy()}
             aria-label="Copy link"
-            className="rounded-lg p-2 text-muted transition-colors hover:bg-paper-warm hover:text-ink"
+            disabled={disabled}
+            title={disabled ? 'Drafts cannot be shared' : 'Copy link'}
+            className="rounded-lg p-2 text-muted transition-colors hover:bg-paper-warm hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
           >
             {copied ? (
               <Check size={18} className="text-green-600 dark:text-green-400" />
@@ -94,6 +100,9 @@ export default function ShareBar({ title, author, url }: ShareProps) {
           </span>
         )}
       </div>
+      {disabled && (
+        <p className="mt-3 text-sm text-muted">Publish this draft to enable sharing.</p>
+      )}
     </div>
   )
 }

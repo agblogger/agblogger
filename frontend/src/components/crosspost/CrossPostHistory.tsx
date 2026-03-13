@@ -13,11 +13,11 @@ function capitalize(s: string): string {
 
 export default function CrossPostHistory({ items, loading }: CrossPostHistoryProps) {
   if (loading) {
-    return <p className="text-sm text-muted">Loading history...</p>
+    return <p className="text-sm text-muted">Loading cross-post history...</p>
   }
 
   if (items.length === 0) {
-    return <p className="text-sm text-muted">Not shared yet.</p>
+    return <p className="text-sm text-muted">No cross-posts yet.</p>
   }
 
   return (

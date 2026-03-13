@@ -63,7 +63,7 @@ describe('CrossPostDialog', () => {
 
   it('does not render when open is false', () => {
     renderDialog({ open: false })
-    expect(screen.queryByText('Cross-Post')).not.toBeInTheDocument()
+    expect(screen.queryByText('Cross-post')).not.toBeInTheDocument()
   })
 
   it('renders platform checkboxes for connected accounts', () => {
@@ -83,7 +83,7 @@ describe('CrossPostDialog', () => {
     expect(screen.getByText(/\/500/)).toBeInTheDocument()
   })
 
-  it('disables post button when over character limit', async () => {
+  it('disables cross-post button when over character limit', async () => {
     const user = userEvent.setup()
     renderDialog({ accounts: [blueskyAccount] })
 
@@ -93,7 +93,7 @@ describe('CrossPostDialog', () => {
     const longText = 'a'.repeat(301)
     await user.type(textarea, longText)
 
-    const postButton = screen.getByRole('button', { name: 'Post' })
+    const postButton = screen.getByRole('button', { name: 'Cross-post' })
     expect(postButton).toBeDisabled()
 
     // Counter's parent container should be red
@@ -101,7 +101,7 @@ describe('CrossPostDialog', () => {
     expect(counter.closest('div')).toHaveClass('text-red-600')
   })
 
-  it('disables post button when no platforms selected', async () => {
+  it('disables cross-post button when no platforms selected', async () => {
     const user = userEvent.setup()
     renderDialog()
 
@@ -111,7 +111,7 @@ describe('CrossPostDialog', () => {
       await user.click(checkbox)
     }
 
-    const postButton = screen.getByRole('button', { name: 'Post' })
+    const postButton = screen.getByRole('button', { name: 'Cross-post' })
     expect(postButton).toBeDisabled()
   })
 
@@ -135,7 +135,7 @@ describe('CrossPostDialog', () => {
     await user.clear(textarea)
     await user.type(textarea, 'Custom post text')
 
-    await user.click(screen.getByRole('button', { name: 'Post' }))
+    await user.click(screen.getByRole('button', { name: 'Cross-post' }))
 
     await waitFor(() => {
       expect(mockCrossPost).toHaveBeenCalledWith(
@@ -171,10 +171,10 @@ describe('CrossPostDialog', () => {
     const user = userEvent.setup()
     renderDialog()
 
-    await user.click(screen.getByRole('button', { name: 'Post' }))
+    await user.click(screen.getByRole('button', { name: 'Cross-post' }))
 
     await waitFor(() => {
-      expect(screen.getByText('Cross-Post Results')).toBeInTheDocument()
+      expect(screen.getByText('Cross-post results')).toBeInTheDocument()
     })
 
     expect(screen.getByText('Posted')).toBeInTheDocument()
@@ -191,7 +191,7 @@ describe('CrossPostDialog', () => {
     const user = userEvent.setup()
     renderDialog()
 
-    await user.click(screen.getByRole('button', { name: 'Post' }))
+    await user.click(screen.getByRole('button', { name: 'Cross-post' }))
 
     await waitFor(() => {
       expect(screen.getByText('Failed to cross-post. Please try again.')).toBeInTheDocument()
@@ -287,18 +287,18 @@ describe('CrossPostDialog', () => {
     const user = userEvent.setup()
     renderDialog({ accounts: [blueskyAccount] })
 
-    await user.click(screen.getByRole('button', { name: 'Post' }))
+    await user.click(screen.getByRole('button', { name: 'Cross-post' }))
 
     // While posting, controls should be disabled
     expect(screen.getByLabelText('Cross-post text')).toBeDisabled()
     expect(screen.getByRole('checkbox')).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Posting...' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Cross-posting...' })).toBeDisabled()
 
     // Resolve to clean up
     resolvePost!([])
     await waitFor(() => {
-      expect(screen.getByText('Cross-Post Results')).toBeInTheDocument()
+      expect(screen.getByText('Cross-post results')).toBeInTheDocument()
     })
   })
 
@@ -316,7 +316,7 @@ describe('CrossPostDialog', () => {
     const longText = 'a'.repeat(281)
     await user.type(textarea, longText)
 
-    const postButton = screen.getByRole('button', { name: 'Post' })
+    const postButton = screen.getByRole('button', { name: 'Cross-post' })
     expect(postButton).toBeDisabled()
 
     const counter = screen.getByText(`${longText.length}/280`)

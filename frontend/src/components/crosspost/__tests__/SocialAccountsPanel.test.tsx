@@ -80,6 +80,41 @@ describe('SocialAccountsPanel', () => {
     expect(screen.getByLabelText('Disconnect alice.bsky.social')).toBeInTheDocument()
   })
 
+  it('orders connected accounts alphabetically by account name', async () => {
+    mockFetchSocialAccounts.mockResolvedValue([
+      {
+        id: 2,
+        platform: 'mastodon',
+        account_name: 'Zulu Account',
+        created_at: '2026-01-16T10:00:00Z',
+      },
+      {
+        id: 1,
+        platform: 'bluesky',
+        account_name: 'Alpha Account',
+        created_at: '2026-01-15T10:00:00Z',
+      },
+      {
+        id: 3,
+        platform: 'x',
+        account_name: 'Bravo Account',
+        created_at: '2026-01-17T10:00:00Z',
+      },
+    ])
+
+    renderPanel()
+
+    await waitFor(() => {
+      expect(screen.getByText('Alpha Account')).toBeInTheDocument()
+    })
+
+    const accountNames = screen
+      .getAllByText(/Account$/)
+      .map((element) => element.textContent)
+
+    expect(accountNames).toEqual(['Alpha Account', 'Bravo Account', 'Zulu Account'])
+  })
+
   it('shows handle input when Connect Bluesky is clicked', async () => {
     mockFetchSocialAccounts.mockResolvedValue([])
     const user = userEvent.setup()

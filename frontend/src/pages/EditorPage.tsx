@@ -46,6 +46,7 @@ export default function EditorPage() {
   const previewRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [accounts, setAccounts] = useState<SocialAccount[]>([])
+  const [socialAccountsError, setSocialAccountsError] = useState<string | null>(null)
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([])
   const [showCrossPostDialog, setShowCrossPostDialog] = useState(false)
   const [mobileTab, setMobileTab] = useState<'edit' | 'preview'>('edit')
@@ -113,9 +114,13 @@ export default function EditorPage() {
   useEffect(() => {
     if (user) {
       fetchSocialAccounts()
-        .then(setAccounts)
-        .catch((err: unknown) => {
-          console.warn('Failed to load social accounts', err)
+        .then((socialAccounts) => {
+          setAccounts(socialAccounts)
+          setSocialAccountsError(null)
+        })
+        .catch(() => {
+          setAccounts([])
+          setSocialAccountsError('Failed to load connected social accounts. Please try again.')
         })
     }
   }, [user])
@@ -162,7 +167,7 @@ export default function EditorPage() {
       if (isNew) {
         void navigate(`/editor/${result.file_path}`, { replace: true })
       }
-      if (selectedPlatforms.length > 0) {
+      if (!isDraft && selectedPlatforms.length > 0) {
         setShowCrossPostDialog(true)
       }
     } catch (err) {
@@ -330,6 +335,12 @@ export default function EditorPage() {
         </div>
       )}
 
+      {socialAccountsError !== null && (
+        <div className="mb-4 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/40 rounded-lg px-4 py-3">
+          {socialAccountsError}
+        </div>
+      )}
+
       {draftAvailable && draftSavedAt !== null && (
         <div className="mb-4 flex items-center justify-between text-sm bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800/40 rounded-lg px-4 py-3">
           <span className="text-sky-800 dark:text-sky-300">
@@ -411,7 +422,7 @@ export default function EditorPage() {
 
         {accounts.length > 0 && (
           <div className="flex items-center gap-4 flex-wrap">
-            <span className="text-xs font-medium text-muted">Share after saving:</span>
+            <span className="text-xs font-medium text-muted">Cross-post after saving:</span>
             {accounts.map((acct) => (
               <label key={acct.id} className="flex items-center gap-1.5 cursor-pointer">
                 <input
@@ -424,13 +435,20 @@ export default function EditorPage() {
                       setSelectedPlatforms((prev) => prev.filter((p) => p !== acct.platform))
                     }
                   }}
-                  disabled={saving}
+                  disabled={saving || isDraft}
                   className="rounded border-border text-accent focus:ring-accent/20"
                 />
                 <PlatformIcon platform={acct.platform} size={14} />
-                <span className="text-sm text-ink">{acct.account_name}</span>
+                <span className={`text-sm ${isDraft ? 'text-muted' : 'text-ink'}`}>
+                  {acct.account_name}
+                </span>
               </label>
             ))}
+            {isDraft && (
+              <span className="text-xs text-muted">
+                Publish the post to enable cross-posting after saving.
+              </span>
+            )}
           </div>
         )}
       </div>

@@ -88,9 +88,9 @@ const defaultPages: AdminPageConfig[] = [
   { id: 'about', title: 'About', file: 'about.md', is_builtin: false, content: '# About' },
 ]
 
-function renderAdmin() {
+function renderAdmin(path = '/admin') {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[path]}>
       <AdminPage />
     </MemoryRouter>,
   )
@@ -192,6 +192,15 @@ describe('AdminPage', () => {
     })
     expect(screen.getByLabelText('Description')).toHaveValue('A test blog')
     expect(screen.getByLabelText('Timezone')).toHaveValue('UTC')
+  })
+
+  it('opens the social tab directly from the tab query parameter', async () => {
+    setupLoadSuccess()
+    renderAdmin('/admin?tab=social')
+
+    await waitFor(() => {
+      expect(screen.getByTestId('social-accounts-panel')).toBeInTheDocument()
+    })
   })
 
   it('does not display the default author field', async () => {

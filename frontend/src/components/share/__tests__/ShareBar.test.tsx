@@ -34,6 +34,23 @@ describe('ShareBar', () => {
     expect(screen.getByLabelText('Copy link')).toBeInTheDocument()
   })
 
+  it('disables all share actions when the post is a draft', async () => {
+    const user = userEvent.setup()
+    render(<ShareBar {...defaultProps} disabled={true} />)
+
+    const shareButton = screen.getByLabelText('Share this post')
+    const emailButton = screen.getByLabelText('Share via email')
+    const copyButton = screen.getByLabelText('Copy link')
+
+    expect(shareButton).toBeDisabled()
+    expect(emailButton).toBeDisabled()
+    expect(copyButton).toBeDisabled()
+
+    await user.click(shareButton)
+
+    expect(screen.queryByLabelText('Share on Bluesky')).not.toBeInTheDocument()
+  })
+
   it('does not show platform buttons directly', () => {
     render(<ShareBar {...defaultProps} />)
     expect(screen.queryByLabelText('Share on Bluesky')).not.toBeInTheDocument()

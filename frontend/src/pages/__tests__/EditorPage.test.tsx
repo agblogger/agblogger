@@ -5,6 +5,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import { fetchPostForEdit, createPost, updatePost } from '@/api/posts'
+import { fetchSocialAccounts } from '@/api/crosspost'
 import type { UserResponse, PostEditResponse, PostDetail } from '@/api/client'
 import { DRAFT_SCHEMA_VERSION } from '@/hooks/useEditorAutoSave'
 
@@ -69,6 +70,7 @@ vi.mock('@/hooks/useKatex', () => ({
 import EditorPage from '../EditorPage'
 
 const mockFetchPostForEdit = vi.mocked(fetchPostForEdit)
+const mockFetchSocialAccounts = vi.mocked(fetchSocialAccounts)
 
 function renderEditor(path = '/editor/new') {
   const router = createMemoryRouter(
@@ -103,6 +105,8 @@ describe('EditorPage', () => {
   beforeEach(() => {
     mockUser = { id: 1, username: 'jane', email: 'jane@test.com', display_name: null, is_admin: true }
     mockFetchPostForEdit.mockReset()
+    mockFetchSocialAccounts.mockReset()
+    mockFetchSocialAccounts.mockResolvedValue([])
     localStorage.clear()
   })
 
@@ -141,6 +145,62 @@ describe('EditorPage', () => {
       expect(screen.getByText('Admin')).toBeInTheDocument()
     })
     expect(mockFetchPostForEdit).toHaveBeenCalledWith('posts/existing.md')
+  })
+
+  it('uses cross-post wording for save-time distribution when accounts are connected', async () => {
+    mockFetchSocialAccounts.mockResolvedValue([
+      {
+        id: 1,
+        platform: 'bluesky',
+        account_name: 'alice.bsky.social',
+        created_at: '2026-01-15T10:00:00Z',
+      },
+    ])
+
+    renderEditor('/editor/new')
+
+    await waitFor(() => {
+      expect(screen.getByText('Cross-post after saving:')).toBeInTheDocument()
+    })
+  })
+
+  it('disables save-time cross-posting when the post is marked as draft', async () => {
+    const user = userEvent.setup()
+    mockFetchSocialAccounts.mockResolvedValue([
+      {
+        id: 1,
+        platform: 'bluesky',
+        account_name: 'alice.bsky.social',
+        created_at: '2026-01-15T10:00:00Z',
+      },
+    ])
+
+    renderEditor('/editor/new')
+
+    await waitFor(() => {
+      expect(screen.getByText('Cross-post after saving:')).toBeInTheDocument()
+    })
+
+    const draftCheckbox = screen.getByRole('checkbox', { name: /draft/i })
+    await user.click(draftCheckbox)
+
+    const crossPostCheckbox = screen.getByRole('checkbox', { name: /alice\.bsky\.social/i })
+    expect(crossPostCheckbox).toBeDisabled()
+    expect(
+      screen.getByText('Publish the post to enable cross-posting after saving.'),
+    ).toBeInTheDocument()
+  })
+
+  it('shows an error when connected social accounts cannot be loaded', async () => {
+    mockFetchSocialAccounts.mockRejectedValue(new Error('Network error'))
+
+    renderEditor('/editor/new')
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('Failed to load connected social accounts. Please try again.'),
+      ).toBeInTheDocument()
+    })
   })
 
   it('shows 404 error page without editor form', async () => {
@@ -872,23 +932,19 @@ describe('EditorPage', () => {
     expect(screen.getByRole('button', { name: 'Preview' })).toBeInTheDocument()
   })
 
-  it('logs warning when fetchSocialAccounts fails', async () => {
-    const { fetchSocialAccounts } = await import('@/api/crosspost')
-    vi.mocked(fetchSocialAccounts).mockRejectedValueOnce(new Error('Network error'))
+  it('shows a visible error instead of silently logging when fetchSocialAccounts fails', async () => {
+    mockFetchSocialAccounts.mockRejectedValueOnce(new Error('Network error'))
 
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     renderEditor('/editor/new')
 
     await waitFor(() => {
-      expect(screen.getByLabelText(/Title/)).toBeInTheDocument()
+      expect(
+        screen.getByText('Failed to load connected social accounts. Please try again.'),
+      ).toBeInTheDocument()
     })
 
-    await waitFor(() => {
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('social accounts'),
-        expect.any(Error),
-      )
-    })
+    expect(warnSpy).not.toHaveBeenCalled()
 
     warnSpy.mockRestore()
   })
