@@ -193,6 +193,25 @@ describe('PostPage', () => {
     expect(screen.queryByText('Delete post?')).not.toBeInTheDocument()
   })
 
+  it('shows unified single-button confirmation dialog for directory-backed post', async () => {
+    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null, is_admin: true }
+    mockFetchPost.mockResolvedValue(draftPost)
+    renderPostPage('/post/posts/2026-03-08-draft/index.md')
+
+    await waitFor(() => {
+      expect(screen.getByText('My Draft')).toBeInTheDocument()
+    })
+    await userEvent.click(screen.getByText('Delete'))
+
+    expect(screen.getByText('Delete post?')).toBeInTheDocument()
+    // Unified warning message (same for all post types)
+    expect(screen.getByText(/This will permanently delete/)).toBeInTheDocument()
+    // Single confirm button — not the two-option UI
+    expect(screen.getByTestId('confirm-delete')).toBeInTheDocument()
+    expect(screen.queryByText('Delete post only')).not.toBeInTheDocument()
+    expect(screen.queryByText('Delete with all files')).not.toBeInTheDocument()
+  })
+
   it('confirming delete navigates to home', async () => {
     mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null, is_admin: true }
     mockFetchPost.mockResolvedValue(postDetail)
@@ -207,7 +226,7 @@ describe('PostPage', () => {
     await userEvent.click(screen.getByTestId('confirm-delete'))
 
     await waitFor(() => {
-      expect(mockDeletePost).toHaveBeenCalledWith('posts/hello.md', false)
+      expect(mockDeletePost).toHaveBeenCalledWith('posts/hello.md', true)
     })
     expect(navigatedTo).toBe('/')
   })
