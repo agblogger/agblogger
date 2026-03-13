@@ -308,9 +308,6 @@ export default function PostPage() {
                   {deleting ? 'Deleting...' : 'Delete'}
                 </button>
               </div>
-              {deleting && (
-                <p className="text-xs text-muted mt-3 text-center">Deleting...</p>
-              )}
             </div>
           </div>,
           document.body,

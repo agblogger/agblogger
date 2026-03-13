@@ -265,6 +265,26 @@ describe('PostPage', () => {
     expect(screen.queryByText('Delete post?')).not.toBeInTheDocument()
   })
 
+  it('shows session expired error on 401 delete failure', async () => {
+    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null, is_admin: true }
+    mockFetchPost.mockResolvedValue(postDetail)
+    mockDeletePost.mockRejectedValue(
+      new (MockHTTPError as unknown as new (s: number) => Error)(401),
+    )
+    renderPostPage()
+
+    await waitFor(() => {
+      expect(screen.getByText('Delete')).toBeInTheDocument()
+    })
+    await userEvent.click(screen.getByText('Delete'))
+    await userEvent.click(screen.getByTestId('confirm-delete'))
+
+    await waitFor(() => {
+      expect(screen.getByText('Session expired. Please log in again.')).toBeInTheDocument()
+    })
+    expect(screen.queryByText('Delete post?')).not.toBeInTheDocument()
+  })
+
   it('renders share button for unauthenticated users', async () => {
     mockFetchPost.mockResolvedValue(postDetail)
     renderPostPage()
