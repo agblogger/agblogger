@@ -452,6 +452,27 @@ class TestAdminPasswordPolicy:
         )
         assert resp.status_code == 422
 
+    @pytest.mark.asyncio
+    async def test_admin_password_change_accepts_password_of_length_8(
+        self, client: AsyncClient
+    ) -> None:
+        token_resp = await client.post(
+            "/api/auth/token-login",
+            json={"username": "admin", "password": "admin123"},
+        )
+        token = token_resp.json()["access_token"]
+
+        resp = await client.put(
+            "/api/admin/password",
+            json={
+                "current_password": "admin123",
+                "new_password": "exactly8",
+                "confirm_password": "exactly8",
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+
 
 class TestPageTraversalGuard:
     @pytest.mark.asyncio

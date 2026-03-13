@@ -726,7 +726,7 @@ describe('AdminPage', () => {
     expect(screen.getByText('New passwords do not match.')).toBeInTheDocument()
   })
 
-  it('validates minimum 12 characters', async () => {
+  it('validates minimum 8 characters', async () => {
     setupLoadSuccess()
     const user = userEvent.setup()
     renderAdmin()
@@ -745,7 +745,7 @@ describe('AdminPage', () => {
     await user.type(screen.getByLabelText(/Confirm New Password/), 'short')
     await user.click(screen.getByRole('button', { name: /change password/i }))
 
-    expect(screen.getByText('New password must be at least 12 characters.')).toBeInTheDocument()
+    expect(screen.getByText('New password must be at least 8 characters.')).toBeInTheDocument()
   })
 
   it('changes password successfully and clears fields', async () => {
@@ -774,6 +774,38 @@ describe('AdminPage', () => {
     expect(screen.getByLabelText(/Current Password/)).toHaveValue('')
     expect(screen.getByLabelText(/^New Password/)).toHaveValue('')
     expect(screen.getByLabelText(/Confirm New Password/)).toHaveValue('')
+  })
+
+  it('accepts an 8-character password', async () => {
+    setupLoadSuccess()
+    mockChangeAdminPassword.mockResolvedValue(undefined)
+    const user = userEvent.setup()
+    renderAdmin()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Account' })).toBeInTheDocument()
+    })
+    await switchToTab(user, 'Account')
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Current Password/)).toBeInTheDocument()
+    })
+
+    await user.type(screen.getByLabelText(/Current Password/), 'oldpassword')
+    await user.type(screen.getByLabelText(/^New Password/), 'exactly8')
+    await user.type(screen.getByLabelText(/Confirm New Password/), 'exactly8')
+    await user.click(screen.getByRole('button', { name: /change password/i }))
+
+    await waitFor(() => {
+      expect(mockChangeAdminPassword).toHaveBeenCalledWith({
+        current_password: 'oldpassword',
+        new_password: 'exactly8',
+        confirm_password: 'exactly8',
+      })
+    })
+    expect(
+      screen.queryByText('New password must be at least 8 characters.'),
+    ).not.toBeInTheDocument()
   })
 
   it('shows 400 error with detail from response', async () => {
@@ -1224,7 +1256,7 @@ describe('AdminPage', () => {
     await switchToTab(user, 'Account')
 
     await waitFor(() => {
-      expect(screen.getByText(/at least 12 characters/i)).toBeInTheDocument()
+      expect(screen.getByText(/at least 8 characters/i)).toBeInTheDocument()
     })
   })
 })

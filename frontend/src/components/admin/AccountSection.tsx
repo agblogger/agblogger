@@ -7,6 +7,8 @@ import { changeAdminPassword } from '@/api/admin'
 import { updateProfile } from '@/api/auth'
 import { useAuthStore } from '@/stores/authStore'
 
+const MIN_PASSWORD_LENGTH = 8
+
 const INPUT_CLASSES =
   'w-full px-3 py-2 bg-paper-warm border border-border rounded-lg text-ink text-sm focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/20 disabled:opacity-50'
 
@@ -95,8 +97,8 @@ export default function AccountSection({ busy, onSaving }: AccountSectionProps) 
       setPasswordError('New passwords do not match.')
       return
     }
-    if (newPassword.length < 12) {
-      setPasswordError('New password must be at least 12 characters.')
+    if (newPassword.length < MIN_PASSWORD_LENGTH) {
+      setPasswordError(`New password must be at least ${MIN_PASSWORD_LENGTH} characters.`)
       return
     }
     setSavingPassword(true)
@@ -280,7 +282,7 @@ export default function AccountSection({ busy, onSaving }: AccountSectionProps) 
               disabled={busy}
               className={INPUT_CLASSES}
             />
-            <p className="text-xs text-muted mt-1">At least 12 characters.</p>
+            <p className="text-xs text-muted mt-1">At least {MIN_PASSWORD_LENGTH} characters.</p>
           </div>
 
           <div>
