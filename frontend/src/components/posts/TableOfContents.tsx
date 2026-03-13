@@ -79,7 +79,7 @@ export default function TableOfContents({ contentRef, variant = 'dropdown' }: Ta
 
   if (variant === 'sidebar') {
     return (
-      <nav className="sticky top-24 max-h-[calc(100vh-8rem)] overflow-y-auto" aria-label="Table of contents">
+      <nav className="sticky top-28 max-h-[calc(100vh-9rem)] overflow-y-auto" aria-label="Table of contents">
         <h3 className="font-display text-sm text-ink mb-3">On this page</h3>
         <ul className="space-y-1 border-l border-border pl-3">
           {headings.map((heading, index) => {
