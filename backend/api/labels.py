@@ -122,7 +122,7 @@ async def create_label_endpoint(
                 raise HTTPException(status_code=404, detail=f"Parent label '{parent_id}' not found")
 
         try:
-            result = await create_label(session, body.id, body.names or None, body.parents or None)
+            result = await create_label(session, body.id, body.names, body.parents)
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
@@ -133,7 +133,7 @@ async def create_label_endpoint(
         labels = dict(content_manager.labels)
         labels[body.id] = LabelDef(
             id=body.id,
-            names=body.names if body.names else [body.id],
+            names=body.names,
             parents=body.parents,
         )
         await _persist_labels_and_commit(
@@ -182,7 +182,7 @@ async def update_label_endpoint(
         labels = dict(content_manager.labels)
         labels[label_id] = LabelDef(
             id=label_id,
-            names=body.names if body.names else [label_id],
+            names=body.names,
             parents=body.parents,
         )
         await _persist_labels_and_commit(

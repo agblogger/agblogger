@@ -66,7 +66,7 @@ class LabelCreate(BaseModel):
 class LabelUpdate(BaseModel):
     """Request to update a label's names and parents."""
 
-    names: list[str] = Field(min_length=1)
+    names: list[str] = Field(default_factory=list)
     parents: list[LabelIdRef] = Field(default_factory=list)
 
     @field_validator("names")

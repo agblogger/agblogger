@@ -1115,7 +1115,23 @@ class TestLabelCRUD:
         assert resp.status_code == 201
         data = resp.json()
         assert data["id"] == "cooking"
-        assert data["names"] == ["cooking"]
+        assert data["names"] == []
+
+    @pytest.mark.asyncio
+    async def test_create_label_preserves_explicit_empty_names(self, client: AsyncClient) -> None:
+        login_resp = await client.post(
+            "/api/auth/token-login",
+            json={"username": "admin", "password": "admin123"},
+        )
+        token = login_resp.json()["access_token"]
+
+        resp = await client.post(
+            "/api/labels",
+            json={"id": "untitled", "names": []},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 201
+        assert resp.json()["names"] == []
 
     @pytest.mark.asyncio
     async def test_create_label_duplicate_returns_409(self, client: AsyncClient) -> None:
@@ -1238,6 +1254,33 @@ class TestLabelCRUD:
         data = resp.json()
         assert set(data["parents"]) == {"math", "physics"}
         assert data["names"] == ["quantum mechanics"]
+
+    @pytest.mark.asyncio
+    async def test_update_label_allows_empty_names(self, client: AsyncClient) -> None:
+        login_resp = await client.post(
+            "/api/auth/token-login",
+            json={"username": "admin", "password": "admin123"},
+        )
+        token = login_resp.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        await client.post(
+            "/api/labels",
+            json={"id": "bare", "names": ["Bare"]},
+            headers=headers,
+        )
+
+        resp = await client.put(
+            "/api/labels/bare",
+            json={"names": [], "parents": []},
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["names"] == []
+
+        get_resp = await client.get("/api/labels/bare")
+        assert get_resp.status_code == 200
+        assert get_resp.json()["names"] == []
 
     @pytest.mark.asyncio
     async def test_update_label_cycle_returns_409(self, client: AsyncClient) -> None:

@@ -73,7 +73,6 @@ export default function LabelSettingsPage() {
   const availableParents = allLabels.filter((l) => !excludedIds.has(l.id))
 
   function handleRemoveName(index: number) {
-    if (names.length <= 1) return
     setNames(names.filter((_, i) => i !== index))
     setError(null)
   }
@@ -98,10 +97,6 @@ export default function LabelSettingsPage() {
 
   async function handleSave() {
     if (labelId === undefined) return
-    if (names.length === 0) {
-      setError('At least one display name is required.')
-      return
-    }
     setSaving(true)
     setError(null)
     try {
@@ -190,7 +185,7 @@ export default function LabelSettingsPage() {
 
       {/* Names section */}
       <section className="mb-8 p-5 bg-paper border border-border rounded-lg">
-        <h2 className="text-sm font-medium text-ink mb-3">Display Names *</h2>
+        <h2 className="text-sm font-medium text-ink mb-3">Display Names</h2>
         <div className="flex flex-wrap gap-2 mb-3">
           {names.map((name, i) => (
             <span
@@ -201,7 +196,7 @@ export default function LabelSettingsPage() {
               {name}
               <button
                 onClick={() => handleRemoveName(i)}
-                disabled={busy || names.length <= 1}
+                disabled={busy}
                 className="ml-0.5 p-0.5 rounded-full hover:bg-black/10 disabled:opacity-30
                          transition-colors"
                 aria-label={`Remove name "${name}"`}
@@ -238,7 +233,7 @@ export default function LabelSettingsPage() {
             Add
           </button>
         </div>
-        <p className="text-xs text-muted mt-2">At least one display name is required.</p>
+        <p className="text-xs text-muted mt-2">Optional aliases shown alongside the label ID.</p>
       </section>
 
       {/* Parents section */}

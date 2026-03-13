@@ -3,6 +3,7 @@ import { X } from 'lucide-react'
 
 import { createLabel, fetchLabels } from '@/api/labels'
 import { HTTPError } from '@/api/client'
+import { filterLabelsBySearch } from '@/components/labels/searchUtils'
 import type { LabelResponse } from '@/api/client'
 import { parseErrorDetail } from '@/api/parseError'
 
@@ -42,9 +43,7 @@ export default function LabelInput({ value, onChange, disabled }: LabelInputProp
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
-  const filtered = allLabels.filter(
-    (l) => !value.includes(l.id) && l.id.toLowerCase().includes(query.toLowerCase()),
-  )
+  const filtered = filterLabelsBySearch(allLabels, query).filter((l) => !value.includes(l.id))
 
   const trimmed = query.trim().toLowerCase().replace(/^#/, '')
   const exactMatch = allLabels.some((l) => l.id === trimmed)

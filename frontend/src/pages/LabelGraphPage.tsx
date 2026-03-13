@@ -24,6 +24,7 @@ import LoadingSpinner from '@/components/LoadingSpinner'
 import { useAuthStore } from '@/stores/authStore'
 import { fetchLabel, fetchLabelGraph, updateLabel } from '@/api/labels'
 import { HTTPError } from '@/api/client'
+import { matchesLabelSearch } from '@/components/labels/searchUtils'
 import type { LabelGraphResponse } from '@/api/client'
 import { computeDepths, wouldCreateCycle } from '@/components/labels/graphUtils'
 
@@ -167,12 +168,9 @@ export default function LabelGraphPage({ viewToggle }: { viewToggle: React.React
   // Search highlight
   const filteredNodes = useMemo(() => {
     if (!search.trim()) return nodes
-    const q = search.toLowerCase()
     return nodes.map((n) => {
       const d = n.data as unknown as LabelNodeData
-      const match =
-        d.label.toLowerCase().includes(q) ||
-        d.names.some((name: string) => name.toLowerCase().includes(q))
+      const match = matchesLabelSearch(d.label, d.names, search)
       return {
         ...n,
         style: match ? {} : { opacity: 0.2 },

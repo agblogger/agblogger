@@ -18,6 +18,10 @@ class TestLabelCreateValidation:
         label = LabelCreate(id="swe", names=["software engineering"])
         assert label.names == ["software engineering"]
 
+    def test_empty_names_list_accepted(self) -> None:
+        label = LabelCreate(id="swe", names=[])
+        assert label.names == []
+
     def test_empty_name_rejected(self) -> None:
         """Issue 32: Empty name strings should be rejected."""
         with pytest.raises(ValidationError, match="empty or whitespace"):
@@ -51,13 +55,14 @@ class TestLabelCreateValidation:
 
 class TestLabelUpdateValidation:
     def test_empty_name_rejected(self) -> None:
-        """Issue 32: Empty names in updates should also be rejected."""
+        """Issue 32: Empty strings in updates should be rejected."""
         with pytest.raises(ValidationError, match="empty or whitespace"):
             LabelUpdate(names=[""])
 
-    def test_at_least_one_name_required(self) -> None:
-        with pytest.raises(ValidationError):
-            LabelUpdate(names=[])
+    def test_empty_names_list_accepted(self) -> None:
+        update = LabelUpdate(names=[], parents=["parent-id"])
+        assert update.names == []
+        assert update.parents == ["parent-id"]
 
     def test_valid_update(self) -> None:
         update = LabelUpdate(names=["new name"], parents=["parent-id"])

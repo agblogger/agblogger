@@ -142,7 +142,7 @@ async def create_label(
     if existing is not None:
         return None
 
-    display_names = names if names else [label_id]
+    display_names = names if names is not None else []
     label = LabelCache(
         id=label_id,
         names=json.dumps(display_names),

@@ -125,7 +125,7 @@ parents = ["#programming", "#python"]
 Field meanings:
 
 - `labels.<id>`: stable label definition keyed by label id
-- `names`: display names or aliases associated with the label
+- `names`: optional display names or aliases associated with the label; the list may be empty
 - `parent`: single parent label reference
 - `parents`: multiple parent label references for labels that belong in more than one branch
 

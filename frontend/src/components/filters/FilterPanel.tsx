@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { X, Calendar, User, Tag } from 'lucide-react'
 import { fetchLabels } from '@/api/labels'
+import { filterLabelsBySearch } from '@/components/labels/searchUtils'
 import { useFilterPanelStore } from '@/stores/filterPanelStore'
 import type { LabelResponse } from '@/api/client'
 
@@ -53,12 +54,7 @@ export default function FilterPanel({ value, onChange }: FilterPanelProps) {
     value.labels.length > 0 || value.author !== '' || value.fromDate !== '' || value.toDate !== ''
 
   const filteredLabels = useMemo(
-    () =>
-      allLabels.filter(
-        (l) =>
-          l.id.toLowerCase().includes(labelSearch.toLowerCase()) ||
-          l.names.some((n) => n.toLowerCase().includes(labelSearch.toLowerCase())),
-      ),
+    () => filterLabelsBySearch(allLabels, labelSearch),
     [allLabels, labelSearch],
   )
 

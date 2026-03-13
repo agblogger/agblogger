@@ -75,6 +75,21 @@ describe('LabelInput', () => {
     expect(screen.queryByText('#math')).not.toBeInTheDocument()
   })
 
+  it('filters labels by name case-insensitively', async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    await renderLabelInput({ onChange })
+
+    const input = screen.getByRole('combobox')
+    await user.type(input, 'Software')
+
+    await waitFor(() => {
+      expect(screen.getByText('#swe')).toBeInTheDocument()
+    })
+    expect(screen.queryByText('#math')).not.toBeInTheDocument()
+    expect(screen.queryByText('#cs')).not.toBeInTheDocument()
+  })
+
   it('selects label on click', async () => {
     const user = userEvent.setup()
     const onChange = vi.fn()

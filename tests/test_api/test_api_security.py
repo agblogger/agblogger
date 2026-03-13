@@ -177,10 +177,10 @@ class TestAuthLogout:
 
 
 class TestLabelCreateEmptyNames:
-    """Issue 32: Creating labels with empty names should be rejected."""
+    """Issue 32: Blank name entries are rejected, but empty name lists are allowed."""
 
     @pytest.mark.asyncio
-    async def test_create_label_empty_names_rejected(self, client: AsyncClient) -> None:
+    async def test_create_label_empty_names_allowed(self, client: AsyncClient) -> None:
         login_resp = await client.post(
             "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
@@ -189,10 +189,11 @@ class TestLabelCreateEmptyNames:
 
         resp = await client.post(
             "/api/labels",
-            json={"id": "test-empty", "names": [""]},
+            json={"id": "test-empty", "names": []},
             headers={"Authorization": f"Bearer {token}"},
         )
-        assert resp.status_code == 422
+        assert resp.status_code == 201
+        assert resp.json()["names"] == []
 
     @pytest.mark.asyncio
     async def test_create_label_whitespace_names_rejected(self, client: AsyncClient) -> None:

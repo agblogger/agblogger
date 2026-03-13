@@ -146,7 +146,7 @@ describe('LabelSettingsPage', () => {
 
     // The remove button should be disabled when only 1 name remains
     const removeBtn = screen.getByLabelText('Remove name "only-name"')
-    expect(removeBtn).toBeDisabled()
+    expect(removeBtn).toBeEnabled()
   })
 
   it('adds a name', async () => {
@@ -283,9 +283,10 @@ describe('LabelSettingsPage', () => {
     })
   })
 
-  it('clears error when user adds a name', async () => {
+  it('allows saving with no display names', async () => {
     mockFetchLabel.mockResolvedValue({ ...testLabel, names: [] })
     mockFetchLabels.mockResolvedValue(allLabels)
+    mockUpdateLabel.mockResolvedValue({ ...testLabel, names: [], parents: ['cs'] })
     const user = userEvent.setup()
     renderSettings()
 
@@ -293,19 +294,14 @@ describe('LabelSettingsPage', () => {
       expect(screen.getByRole('button', { name: /save changes/i })).toBeInTheDocument()
     })
 
-    // Trigger validation error — error + hint text both contain the message
     await user.click(screen.getByRole('button', { name: /save changes/i }))
-    expect(screen.getAllByText('At least one display name is required.')).toHaveLength(2)
-
-    // Type a name and add it
-    await user.type(screen.getByPlaceholderText('Add a display name...'), 'test-name')
-    await user.click(screen.getByRole('button', { name: 'Add' }))
-
-    // Error banner should be gone, only the hint text remains
-    expect(screen.getAllByText('At least one display name is required.')).toHaveLength(1)
+    await waitFor(() => {
+      expect(mockUpdateLabel).toHaveBeenCalledWith('swe', { names: [], parents: ['cs'] })
+    })
+    expect(screen.queryByText('At least one display name is required.')).not.toBeInTheDocument()
   })
 
-  it('shows required indicator on Display Names heading', async () => {
+  it('shows Display Names heading without required indicator', async () => {
     mockFetchLabel.mockResolvedValue(testLabel)
     mockFetchLabels.mockResolvedValue(allLabels)
     renderSettings()
@@ -314,10 +310,8 @@ describe('LabelSettingsPage', () => {
       expect(screen.getByText('software engineering')).toBeInTheDocument()
     })
 
-    const heading = screen.getByText((content, element) => {
-      return element?.tagName === 'H2' && content.includes('Display Names') && content.includes('*')
-    })
-    expect(heading).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 2, name: 'Display Names' })).toBeInTheDocument()
+    expect(screen.queryByText(/at least one display name is required/i)).not.toBeInTheDocument()
   })
 
   it('cancels delete confirmation', async () => {
