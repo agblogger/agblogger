@@ -64,6 +64,26 @@ describe('SocialAccountsPanel', () => {
     expect(screen.getByText('Connect Facebook')).toBeInTheDocument()
   })
 
+  it('orders available connect platforms alphabetically by displayed platform name', async () => {
+    mockFetchSocialAccounts.mockResolvedValue([])
+    renderPanel()
+
+    await waitFor(() => {
+      expect(screen.getByText('Connect Bluesky')).toBeInTheDocument()
+    })
+
+    const connectLabels = screen
+      .getAllByRole('button', { name: /Connect / })
+      .map((element) => element.textContent.trim())
+
+    expect(connectLabels).toEqual([
+      'Connect Bluesky',
+      'Connect Facebook',
+      'Connect Mastodon',
+      'Connect X',
+    ])
+  })
+
   it('shows connected accounts with account name and disconnect button', async () => {
     mockFetchSocialAccounts.mockResolvedValue([
       {

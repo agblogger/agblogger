@@ -375,6 +375,56 @@ export default function SocialAccountsPanel({ busy, onBusyChange }: SocialAccoun
               </div>
             )}
 
+            {/* Facebook connect */}
+            {connectingPlatform === 'facebook' ? (
+              <div className="p-4 bg-paper-warm border border-border rounded-lg space-y-3">
+                <p className="text-xs text-muted">
+                  You will be redirected to Facebook to authorize AgBlogger and select a Page.
+                </p>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => void handleConnectFacebook()}
+                    disabled={allBusy}
+                    className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-accent text-white rounded-lg
+                             hover:bg-accent-light disabled:opacity-50 transition-colors"
+                  >
+                    <Plus size={14} />
+                    {submitting ? 'Connecting...' : 'Connect'}
+                  </button>
+                  <button
+                    onClick={() => setConnectingPlatform(null)}
+                    disabled={allBusy}
+                    className="px-4 py-2 text-sm font-medium border border-border rounded-lg
+                             hover:bg-paper-warm disabled:opacity-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-3 px-4 py-3 border border-dashed border-border rounded-lg">
+                <PlatformIcon platform="facebook" size={20} className="text-muted" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-ink">Facebook</p>
+                  <p className="text-xs text-muted">Post to your Facebook Page</p>
+                </div>
+                <button
+                  onClick={() => {
+                    setConnectingPlatform('facebook')
+                    setError(null)
+                    setSuccess(null)
+                  }}
+                  disabled={allBusy}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium
+                           border border-border rounded-lg hover:bg-paper-warm
+                           disabled:opacity-50 transition-colors"
+                >
+                  <Plus size={12} />
+                  Connect Facebook
+                </button>
+              </div>
+            )}
+
             {/* Mastodon connect */}
             {connectingPlatform === 'mastodon' ? (
               <div className="p-4 bg-paper-warm border border-border rounded-lg space-y-3">
@@ -490,56 +540,6 @@ export default function SocialAccountsPanel({ busy, onBusyChange }: SocialAccoun
                 >
                   <Plus size={12} />
                   Connect X
-                </button>
-              </div>
-            )}
-
-            {/* Facebook connect */}
-            {connectingPlatform === 'facebook' ? (
-              <div className="p-4 bg-paper-warm border border-border rounded-lg space-y-3">
-                <p className="text-xs text-muted">
-                  You will be redirected to Facebook to authorize AgBlogger and select a Page.
-                </p>
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => void handleConnectFacebook()}
-                    disabled={allBusy}
-                    className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-accent text-white rounded-lg
-                             hover:bg-accent-light disabled:opacity-50 transition-colors"
-                  >
-                    <Plus size={14} />
-                    {submitting ? 'Connecting...' : 'Connect'}
-                  </button>
-                  <button
-                    onClick={() => setConnectingPlatform(null)}
-                    disabled={allBusy}
-                    className="px-4 py-2 text-sm font-medium border border-border rounded-lg
-                             hover:bg-paper-warm disabled:opacity-50 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="flex items-center gap-3 px-4 py-3 border border-dashed border-border rounded-lg">
-                <PlatformIcon platform="facebook" size={20} className="text-muted" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-ink">Facebook</p>
-                  <p className="text-xs text-muted">Post to your Facebook Page</p>
-                </div>
-                <button
-                  onClick={() => {
-                    setConnectingPlatform('facebook')
-                    setError(null)
-                    setSuccess(null)
-                  }}
-                  disabled={allBusy}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium
-                           border border-border rounded-lg hover:bg-paper-warm
-                           disabled:opacity-50 transition-colors"
-                >
-                  <Plus size={12} />
-                  Connect Facebook
                 </button>
               </div>
             )}

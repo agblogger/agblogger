@@ -30,7 +30,7 @@ The UI exposes cross-posting in three places:
 - publication actions for individual posts, using explicit cross-post wording that stays distinct from the public share UI
 - history and status views for prior external publications, including a direct path to connect accounts when none are available
 
-The admin social tab presents connected accounts in alphabetical order by displayed platform name, while each row still shows the connected account handle or page name as secondary identity information.
+The admin social tab presents both connected accounts and available connection options in alphabetical order by displayed platform name, while each connected row still shows the linked account handle or page name as secondary identity information.
 
 The post-view cross-post section surfaces backend/API load failures to the user instead of silently hiding controls. When no social accounts are connected, the empty state includes a direct link to the admin social tab so authors can connect an account and return to cross-post the current post.
 
