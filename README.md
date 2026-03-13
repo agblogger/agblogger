@@ -4,10 +4,10 @@ A markdown-first blogging platform where markdown files with YAML front matter a
 
 ## Features
 
-- **Markdown-first** — Pandoc rendering with KaTeX math, syntax highlighting, and custom Lua filters (callouts, tabsets, video embeds)
+- **Markdown-first** — Pandoc rendering with KaTeX math, syntax highlighting, and custom filters (callouts, tabsets, video embeds)
 - **Label DAG** — Hierarchical labels forming a directed acyclic graph with interactive visualization
 - **Bidirectional sync** — SHA-256 hash-based sync with three-way merge and conflict resolution
-- **Cross-posting** — Publish to Bluesky, Mastodon, X (Twitter), LinkedIn, and Facebook
+- **Cross-posting** — Publish to Bluesky, Mastodon, X (Twitter), and Facebook
 - **Full-text search** — SQLite FTS5 index over post content and metadata
 - **Hardened authentication** — HttpOnly cookie sessions for web, invite-based registration, PATs for CLI/API
 
@@ -15,13 +15,13 @@ A markdown-first blogging platform where markdown files with YAML front matter a
 
 | Layer | Technologies |
 |-------|-------------|
-| Backend | Python 3.13+, FastAPI, SQLAlchemy 2.0, SQLite (WAL mode), Pandoc |
+| Backend | Python 3.14+, FastAPI, SQLAlchemy 2.0, SQLite (WAL mode), Pandoc |
 | Frontend | React 19, TypeScript, Vite, TailwindCSS 4, Zustand, React Flow |
 | Infrastructure | Docker, Caddy, uv |
 
 ## Prerequisites
 
-- Python 3.13+
+- Python 3.14+
 - Node.js 20+
 - [Pandoc](https://pandoc.org/installing.html)
 - [uv](https://docs.astral.sh/uv/) (recommended) or pip
@@ -276,7 +276,7 @@ Key deployment variables used by `.env.production`:
 | `HOST_PORT` | `8000` | Host port mapped to container port 8000 in no-Caddy mode |
 | `HOST_BIND_IP` | script-selected | Bind IP for no-Caddy mode |
 
-Cross-posting credentials (Bluesky, Mastodon, X, LinkedIn, Facebook) are configured through additional environment variables documented in `.env.example`.
+Cross-posting credentials (Bluesky, Mastodon, X, Facebook) are configured through additional environment variables documented in `.env.example`.
 
 ### Backup
 
