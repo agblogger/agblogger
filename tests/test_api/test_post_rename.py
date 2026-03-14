@@ -457,3 +457,23 @@ class TestPostRename:
         )
         assert resp.status_code == 200
         assert resp.json()["title"] == "Follow Target"
+
+    @pytest.mark.asyncio
+    async def test_symlink_redirect_rejects_path_traversal(
+        self, client: AsyncClient
+    ) -> None:
+        """GET /api/posts/ with .. segments should return 404, not probe the filesystem."""
+        resp = await client.get("/api/posts/posts/../../etc/passwd")
+        assert resp.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_symlink_redirect_handles_broken_symlink(
+        self, client: AsyncClient, app_settings: Settings
+    ) -> None:
+        """A broken symlink at a post path should return 404, not 500."""
+        posts_dir = app_settings.content_dir / "posts"
+        broken_dir = posts_dir / "broken-link"
+        broken_dir.symlink_to("nonexistent-target")
+
+        resp = await client.get("/api/posts/posts/broken-link/index.md")
+        assert resp.status_code == 404

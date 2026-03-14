@@ -635,20 +635,33 @@ def _resolve_symlink_redirect(file_path: str, content_manager: ContentManager) -
     """Check if a post path resolves through a symlink to a different canonical path.
 
     Returns the resolved canonical path if a symlink redirect is found, None otherwise.
+    Returns None if the resolved path falls outside the content directory,
+    preventing symlink-based traversal.
     """
+    if ".." in file_path.split("/"):
+        return None
+
     full_path = content_manager.content_dir / file_path
-    if not full_path.exists():
+    try:
+        if not full_path.exists():
+            return None
+
+        resolved = full_path.resolve()
+        content_dir_resolved = content_manager.content_dir.resolve()
+
+        if not resolved.is_relative_to(content_dir_resolved):
+            logger.warning(
+                "Symlink for %s resolves outside content directory", file_path
+            )
+            return None
+
+        canonical = str(resolved.relative_to(content_dir_resolved))
+    except OSError as exc:
+        logger.warning("Symlink resolution failed for %s: %s", file_path, exc)
         return None
 
-    resolved = full_path.resolve()
-    content_dir_resolved = content_manager.content_dir.resolve()
-
-    if not resolved.is_relative_to(content_dir_resolved):
-        return None
-
-    canonical = str(resolved.relative_to(content_dir_resolved))
     if canonical == file_path:
-        return None  # No symlink involved
+        return None
 
     return canonical
 
