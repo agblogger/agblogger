@@ -3588,3 +3588,72 @@ def test_reload_shared_caddy_runs_docker_exec(monkeypatch: pytest.MonkeyPatch) -
             "/etc/caddy/Caddyfile",
         ],
     ]
+
+
+# ── Task 13: write_config_files external Caddy mode ──────────────────
+
+
+def test_write_config_files_external_caddy(tmp_path: "Path") -> None:
+    config = _make_config(
+        caddy_mode=CADDY_MODE_EXTERNAL,
+        caddy_config=CaddyConfig(domain="blog.example.com", email=None),
+        host_bind_ip=LOCALHOST_BIND_IP,
+        shared_caddy_config=SharedCaddyConfig(caddy_dir=tmp_path / "caddy", acme_email=None),
+    )
+    write_config_files(config, tmp_path)
+    assert (tmp_path / ".env.production").exists()
+    assert (tmp_path / DEFAULT_EXTERNAL_CADDY_COMPOSE_FILE).exists()
+    assert not (tmp_path / "Caddyfile.production").exists()
+    assert not (tmp_path / DEFAULT_NO_CADDY_COMPOSE_FILE).exists()
+    assert not (tmp_path / DEFAULT_CADDY_PUBLIC_COMPOSE_FILE).exists()
+
+
+# ── Task 14: write_bundle_files external Caddy mode ──────────────────
+
+
+def test_write_bundle_files_external_caddy(tmp_path: "Path") -> None:
+    bundle_dir = tmp_path / "bundle"
+    config = _make_config(
+        caddy_mode=CADDY_MODE_EXTERNAL,
+        caddy_config=CaddyConfig(domain="blog.example.com", email=None),
+        host_bind_ip=LOCALHOST_BIND_IP,
+        shared_caddy_config=SharedCaddyConfig(caddy_dir=tmp_path / "caddy", acme_email=None),
+        deployment_mode=DEPLOY_MODE_REGISTRY,
+        image_ref="ghcr.io/example/agblogger:1.0",
+    )
+    write_bundle_files(config, bundle_dir)
+    assert (bundle_dir / DEFAULT_IMAGE_EXTERNAL_CADDY_COMPOSE_FILE).exists()
+    assert not (bundle_dir / DEFAULT_IMAGE_COMPOSE_FILE).exists()
+    assert not (bundle_dir / DEFAULT_IMAGE_NO_CADDY_COMPOSE_FILE).exists()
+    assert not (bundle_dir / "Caddyfile.production").exists()
+
+
+# ── Task 15: deploy with external Caddy bootstraps shared Caddy ───────
+
+
+def test_deploy_external_caddy_local_bootstraps_and_writes_snippet(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: "Path"
+) -> None:
+    (tmp_path / "docker-compose.yml").write_text("services: {}\n", encoding="utf-8")
+    commands = _stub_subprocess(monkeypatch)
+    _stub_no_trivy(monkeypatch)
+    _stub_docker_inspect_missing(monkeypatch)
+    caddy_dir = tmp_path / "shared-caddy"
+    config = _make_config(
+        caddy_mode=CADDY_MODE_EXTERNAL,
+        caddy_config=CaddyConfig(domain="blog.example.com", email=None),
+        host_bind_ip=LOCALHOST_BIND_IP,
+        shared_caddy_config=SharedCaddyConfig(caddy_dir=caddy_dir, acme_email="ops@example.com"),
+    )
+    monkeypatch.setattr("cli.deploy_production.reload_shared_caddy", lambda: None)
+    result = deploy(config=config, project_dir=tmp_path)
+    # Shared Caddy bootstrapped
+    assert (caddy_dir / "sites").is_dir()
+    assert (caddy_dir / "Caddyfile").exists()
+    # Site snippet written
+    assert (caddy_dir / "sites" / "blog.example.com.caddy").exists()
+    # AgBlogger compose file written
+    assert (tmp_path / DEFAULT_EXTERNAL_CADDY_COMPOSE_FILE).exists()
+    # Lifecycle commands use external caddy compose
+    assert DEFAULT_EXTERNAL_CADDY_COMPOSE_FILE in result.commands["start"]
+    _ = commands

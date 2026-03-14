@@ -826,10 +826,19 @@ def write_config_files(config: DeployConfig, project_dir: Path) -> None:
 
     stale_files: list[str] = []
 
-    if config.caddy_config is not None:
+    if config.caddy_mode == CADDY_MODE_EXTERNAL:
+        compose_path = project_dir / DEFAULT_EXTERNAL_CADDY_COMPOSE_FILE
+        compose_path.write_text(build_external_caddy_compose_content(), encoding="utf-8")
+        stale_files.extend([
+            DEFAULT_NO_CADDY_COMPOSE_FILE,
+            DEFAULT_CADDY_PUBLIC_COMPOSE_FILE,
+            DEFAULT_CADDYFILE,
+        ])
+    elif config.caddy_config is not None:
         caddyfile_path = project_dir / DEFAULT_CADDYFILE
         caddyfile_path.write_text(build_caddyfile_content(config.caddy_config), encoding="utf-8")
         stale_files.append(DEFAULT_NO_CADDY_COMPOSE_FILE)
+        stale_files.append(DEFAULT_EXTERNAL_CADDY_COMPOSE_FILE)
         if config.caddy_public:
             override_path = project_dir / DEFAULT_CADDY_PUBLIC_COMPOSE_FILE
             override_path.write_text(
@@ -841,6 +850,7 @@ def write_config_files(config: DeployConfig, project_dir: Path) -> None:
         no_caddy_path = project_dir / DEFAULT_NO_CADDY_COMPOSE_FILE
         no_caddy_path.write_text(build_direct_compose_content(), encoding="utf-8")
         stale_files.append(DEFAULT_CADDY_PUBLIC_COMPOSE_FILE)
+        stale_files.append(DEFAULT_EXTERNAL_CADDY_COMPOSE_FILE)
 
     for name in stale_files:
         with suppress(FileNotFoundError):
