@@ -1089,150 +1089,90 @@ def _build_remote_readme_content(config: DeployConfig, commands: dict[str, str])
     lines = [
         "# Remote deployment bundle",
         "",
-        "Copy this directory to the remote server, then run the commands below.",
-        "",
         "## Prerequisites",
         "",
         "- Docker Engine (20.10+)",
         "- Docker Compose V2 (`docker compose` subcommand)",
+    ]
+    if config.caddy_config is not None:
+        lines.append(
+            f"- DNS A/AAAA record pointing `{config.caddy_config.domain}`"
+            " to this server (required for TLS certificate provisioning)"
+        )
+    if config.deployment_mode == DEPLOY_MODE_REGISTRY:
+        lines.append(
+            "- Container registry authentication (if using a private registry)"
+        )
+    lines.extend([
         "",
         "Blog content is stored in `./content/` (created automatically on first start).",
         "",
-    ]
-    step = 1
-    if config.deployment_mode == DEPLOY_MODE_REGISTRY:
-        lines.append(
-            f"{step}. Authenticate the remote server to your container registry if needed."
-        )
-        step += 1
-        lines.append(f"{step}. Pull the image:")
-        lines.append("   ```")
-        lines.append(f"   {commands['pull']}")
-        lines.append("   ```")
-        step += 1
-    else:
-        lines.append(f"{step}. Load the image:")
-        lines.append("   ```")
-        lines.append(f"   {commands['load']}")
-        lines.append("   ```")
-        step += 1
-    lines.append(f"{step}. Start the services:")
-    lines.append("   ```")
-    lines.append(f"   {commands['start']}")
-    lines.append("   ```")
-    step += 1
-    lines.append(f"{step}. Verify the services are running:")
-    lines.append("   ```")
-    lines.append(f"   {commands['status']}")
-    lines.append("   ```")
-    lines.extend(
-        [
-            "",
-            "## Management commands",
-            "",
-            f"- Stop: `{commands['stop']}`",
-            f"- Status: `{commands['status']}`",
-            f"- Logs: `{commands['logs']}`",
-        ]
-    )
-    if config.caddy_mode == CADDY_MODE_EXTERNAL and config.shared_caddy_config:
-        lines.extend(
-            [
-                "",
-                "## Shared Caddy Setup",
-                "",
-                "This deployment uses an external shared Caddy reverse proxy.",
-                f"Shared Caddy directory: `{config.shared_caddy_config.caddy_dir}`",
-                "",
-                "The deployment script will bootstrap the shared Caddy instance if it",
-                "is not already running. To manage the shared Caddy separately:",
-                f"  cd {config.shared_caddy_config.caddy_dir}",
-                "  docker compose up -d    # start",
-                "  docker compose down     # stop",
-                "  docker compose logs -f  # logs",
-            ]
-        )
+        "## Getting started",
+        "",
+        "```",
+        "./setup.sh",
+        "```",
+        "",
+        "## Management commands",
+        "",
+        f"- Stop: `{commands['stop']}`",
+        f"- Status: `{commands['status']}`",
+        f"- Logs: `{commands['logs']}`",
+    ])
     if config.caddy_public:
-        lines.extend(
-            [
-                "",
-                "## Firewall",
-                "",
-                "Caddy is configured to listen on ports 80 and 443 on all interfaces.",
-                "Ensure your server firewall allows inbound traffic on these ports and",
-                "blocks all other unnecessary ports. For example, with ufw:",
-                "```",
-                "ufw allow 80/tcp",
-                "ufw allow 443/tcp",
-                "ufw allow 22/tcp  # SSH",
-                "ufw enable",
-                "```",
-            ]
-        )
+        lines.extend([
+            "",
+            "## Firewall",
+            "",
+            "Caddy is configured to listen on ports 80 and 443 on all interfaces.",
+            "Ensure your server firewall allows inbound traffic on these ports and",
+            "blocks all other unnecessary ports. For example, with ufw:",
+            "```",
+            "ufw allow 80/tcp",
+            "ufw allow 443/tcp",
+            "ufw allow 22/tcp  # SSH",
+            "ufw enable",
+            "```",
+        ])
     data_note = (
         "The database volume stores user accounts and settings alongside regenerable"
         " cache data. Both `./content/` and the `agblogger-db` Docker volume must be"
         " preserved during upgrades. Schema migrations run automatically on startup."
     )
+    lines.extend([
+        "",
+        "## Upgrading",
+        "",
+        data_note,
+        "",
+        "To upgrade to a new version:",
+        "",
+        "1. Regenerate the bundle locally and replace all files in this directory"
+        " (compose files and config may change between versions)."
+        " Check the `VERSION` file to see what version generated the current bundle."
+        " The `./content/` directory and `agblogger-db` Docker volume are not part"
+        " of the bundle and will be preserved automatically.",
+    ])
     if config.deployment_mode == DEPLOY_MODE_REGISTRY:
-        lines.extend(
-            [
-                "",
-                "## Upgrading",
-                "",
-                data_note,
-                "",
-                "To upgrade to a new version:",
-                "",
-                "1. Regenerate the bundle locally and replace all files in this directory"
-                " (compose files and config may change between versions)."
-                " Check the `VERSION` file to see what version generated the current bundle."
-                " The `./content/` directory and `agblogger-db` Docker volume are not part"
-                " of the bundle and will be preserved automatically.",
-                "2. Update the `AGBLOGGER_IMAGE` tag in `.env.production` if it changed.",
-                "3. Pull and restart:",
-                "   ```",
-                f"   {commands['pull']}",
-                f"   {commands['start']}",
-                "   ```",
-            ]
+        lines.append(
+            "2. Update the `AGBLOGGER_IMAGE` tag in `.env.production` if it changed."
         )
     elif config.deployment_mode == DEPLOY_MODE_TARBALL:
-        lines.extend(
-            [
-                "",
-                "## Upgrading",
-                "",
-                data_note,
-                "",
-                "To upgrade to a new version:",
-                "",
-                "1. Regenerate the bundle locally and replace all files in this directory"
-                " (compose files and config may change between versions)."
-                " Check the `VERSION` file to see what version generated the current bundle."
-                " The `./content/` directory and `agblogger-db` Docker volume are not part"
-                " of the bundle and will be preserved automatically.",
-                "2. If the image tag changed, update `AGBLOGGER_IMAGE` in `.env.production`.",
-                "3. Copy the new tarball to the server and run:",
-                "   ```",
-                f"   {commands['load']}",
-                f"   {commands['start']}",
-                "   ```",
-            ]
+        lines.append(
+            "2. If the image tag changed, update `AGBLOGGER_IMAGE` in `.env.production`."
         )
-    lines.extend(
-        [
-            "",
-            "## Rollback",
-            "",
-            "If an upgrade causes problems, restore from the `.bak` backup files created",
-            "during the previous deployment and restart with the previous image:",
-            "```",
-            "cp .env.production.bak .env.production",
-            f"{commands['start']}",
-            "```",
-        ]
-    )
+    lines.extend([
+        "3. Run `./setup.sh` again.",
+        "",
+        "## Rollback",
+        "",
+        "If an upgrade causes problems, restore from the `.bak` backup files created",
+        "during the previous deployment and restart with the previous image:",
+        "```",
+        "cp .env.production.bak .env.production",
+        f"{commands['start']}",
+        "```",
+    ])
     return "\n".join(lines) + "\n"
 
 

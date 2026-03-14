@@ -1741,9 +1741,7 @@ class TestRemoteReadmeFormatting:
         )
         content = _build_remote_readme_content(config, commands)
         assert "```" in content
-        assert "Pull the image:" in content
-        assert "Start the services:" in content
-        assert "Verify the services are running:" in content
+        assert "./setup.sh" in content
         assert "## Management commands" in content
 
     def test_tarball_readme_uses_code_blocks(self) -> None:
@@ -1758,7 +1756,7 @@ class TestRemoteReadmeFormatting:
         )
         content = _build_remote_readme_content(config, commands)
         assert "```" in content
-        assert "Load the image:" in content
+        assert "./setup.sh" in content
 
 
 class TestCommandTimeout:
@@ -2227,7 +2225,7 @@ class TestRemoteReadmeUpgradeGuidance:
         )
         content = _build_remote_readme_content(config, commands)
         assert "## Upgrading" in content or "## Upgrade" in content
-        assert "pull" in content.lower()
+        assert "./setup.sh" in content
 
     def test_tarball_readme_includes_upgrade_section(self) -> None:
         config = _make_config(
@@ -2241,7 +2239,7 @@ class TestRemoteReadmeUpgradeGuidance:
         )
         content = _build_remote_readme_content(config, commands)
         assert "## Upgrading" in content or "## Upgrade" in content
-        assert "load" in content.lower()
+        assert "./setup.sh" in content
 
 
 # ── parse_existing_env / _unquote_env_value ──────────────────────────
@@ -3208,8 +3206,8 @@ def test_remote_readme_external_caddy_mentions_shared_setup() -> None:
         caddy_mode=CADDY_MODE_EXTERNAL,
     )
     content = _build_remote_readme_content(config, commands)
-    assert "shared caddy" in content.lower() or "external caddy" in content.lower()
-    assert "/opt/caddy" in content
+    assert "Shared Caddy Setup" not in content
+    assert "deployment script will bootstrap" not in content
 
     def test_daemon_check_skipped_for_dry_run(
         self,
@@ -4100,6 +4098,106 @@ class TestBuildSetupScript:
         script = build_setup_script_content(config)
         assert "/srv/caddy" in script
         assert "/opt/caddy" not in script
+
+
+class TestRemoteReadmeSetupScript:
+    """Remote README should reference setup.sh instead of manual steps."""
+
+    def test_readme_references_setup_script(self) -> None:
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+        )
+        commands = build_lifecycle_commands(
+            deployment_mode=config.deployment_mode,
+            use_caddy=False,
+            caddy_public=False,
+            tarball_filename=config.tarball_filename,
+        )
+        readme = _build_remote_readme_content(config, commands)
+        assert "./setup.sh" in readme
+
+    def test_readme_no_longer_has_manual_load_start_steps(self) -> None:
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+        )
+        commands = build_lifecycle_commands(
+            deployment_mode=config.deployment_mode,
+            use_caddy=False,
+            caddy_public=False,
+            tarball_filename=config.tarball_filename,
+        )
+        readme = _build_remote_readme_content(config, commands)
+        assert "Load the image" not in readme
+        assert "Start the services" not in readme
+        assert "Pull the image" not in readme
+
+    def test_readme_removes_shared_caddy_setup_section(self) -> None:
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+            caddy_config=CaddyConfig(domain="blog.example.com", email=None),
+            caddy_mode=CADDY_MODE_EXTERNAL,
+            shared_caddy_config=SharedCaddyConfig(
+                caddy_dir=Path("/opt/caddy"), acme_email=None
+            ),
+        )
+        commands = build_lifecycle_commands(
+            deployment_mode=config.deployment_mode,
+            use_caddy=False,
+            caddy_public=False,
+            tarball_filename=config.tarball_filename,
+            caddy_mode=CADDY_MODE_EXTERNAL,
+        )
+        readme = _build_remote_readme_content(config, commands)
+        assert "Shared Caddy Setup" not in readme
+        assert "deployment script will bootstrap" not in readme
+
+    def test_readme_includes_dns_notice_for_caddy(self) -> None:
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+            caddy_config=CaddyConfig(domain="blog.example.com", email=None),
+            caddy_mode=CADDY_MODE_BUNDLED,
+        )
+        commands = build_lifecycle_commands(
+            deployment_mode=config.deployment_mode,
+            use_caddy=True,
+            caddy_public=False,
+            tarball_filename=config.tarball_filename,
+        )
+        readme = _build_remote_readme_content(config, commands)
+        assert "DNS" in readme
+
+    def test_readme_omits_dns_notice_for_no_caddy(self) -> None:
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+        )
+        commands = build_lifecycle_commands(
+            deployment_mode=config.deployment_mode,
+            use_caddy=False,
+            caddy_public=False,
+            tarball_filename=config.tarball_filename,
+        )
+        readme = _build_remote_readme_content(config, commands)
+        assert "DNS" not in readme
+
+    def test_readme_upgrade_references_setup_script(self) -> None:
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+        )
+        commands = build_lifecycle_commands(
+            deployment_mode=config.deployment_mode,
+            use_caddy=False,
+            caddy_public=False,
+            tarball_filename=config.tarball_filename,
+        )
+        readme = _build_remote_readme_content(config, commands)
+        upgrade_idx = readme.index("Upgrading")
+        assert "./setup.sh" in readme[upgrade_idx:]
 
 
 class TestSetupScriptInBundle:
