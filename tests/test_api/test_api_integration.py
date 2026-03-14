@@ -1536,6 +1536,26 @@ class TestSearch:
         resp = await client.get("/api/posts/search", params={"q": ""})
         assert resp.status_code == 422
 
+    @pytest.mark.asyncio
+    async def test_search_prefix_matches(self, client: AsyncClient) -> None:
+        """Searching for 'Hell' should match 'Hello World' via prefix matching."""
+        resp = await client.get("/api/posts/search", params={"q": "Hell"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) >= 1
+        titles = [r["title"] for r in data]
+        assert any("Hello" in t for t in titles)
+
+    @pytest.mark.asyncio
+    async def test_search_prefix_multi_word(self, client: AsyncClient) -> None:
+        """Searching for 'Hell Wor' should match 'Hello World' via prefix matching."""
+        resp = await client.get("/api/posts/search", params={"q": "Hell Wor"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) >= 1
+        titles = [r["title"] for r in data]
+        assert any("Hello" in t for t in titles)
+
 
 class TestRegistration:
     @pytest.mark.asyncio

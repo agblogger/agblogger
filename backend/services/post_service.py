@@ -266,8 +266,10 @@ async def get_post(
 
 async def search_posts(session: AsyncSession, query: str, *, limit: int = 20) -> list[SearchResult]:
     """Full-text search for posts."""
-    # Escape FTS5 special characters by wrapping in double quotes
-    safe_query = '"' + query.replace('"', '""') + '"'
+    # Build FTS5 query with prefix matching: each word becomes "word"* so that
+    # e.g. "test" matches "testing". Double-quote wrapping escapes special chars.
+    terms = query.split()
+    safe_query = " ".join('"' + t.replace('"', '""') + '"*' for t in terms if t)
     stmt = text("""
         SELECT p.id, p.file_path, p.title, p.rendered_excerpt, p.created_at,
                rank
