@@ -635,8 +635,14 @@ def _compose_filenames(
     deployment_mode: str,
     use_caddy: bool,
     caddy_public: bool,
+    caddy_mode: str = CADDY_MODE_NONE,
 ) -> list[str]:
     """Return compose filenames for the requested deployment mode."""
+    if caddy_mode == CADDY_MODE_EXTERNAL:
+        if deployment_mode == DEPLOY_MODE_LOCAL:
+            return [DEFAULT_EXTERNAL_CADDY_COMPOSE_FILE]
+        return [DEFAULT_IMAGE_EXTERNAL_CADDY_COMPOSE_FILE]
+
     if deployment_mode == DEPLOY_MODE_LOCAL:
         if use_caddy and caddy_public:
             return ["docker-compose.yml", DEFAULT_CADDY_PUBLIC_COMPOSE_FILE]
@@ -656,9 +662,10 @@ def _compose_base_command(
     use_caddy: bool,
     caddy_public: bool,
     env_filename: str,
+    caddy_mode: str = CADDY_MODE_NONE,
 ) -> str:
     """Build the shared docker compose command prefix for lifecycle commands."""
-    filenames = _compose_filenames(deployment_mode, use_caddy, caddy_public)
+    filenames = _compose_filenames(deployment_mode, use_caddy, caddy_public, caddy_mode=caddy_mode)
     if not filenames:
         return f"docker compose --env-file {env_filename}"
 
@@ -672,9 +679,12 @@ def build_lifecycle_commands(
     caddy_public: bool,
     env_filename: str = DEFAULT_ENV_FILE,
     tarball_filename: str = DEFAULT_IMAGE_TARBALL,
+    caddy_mode: str = CADDY_MODE_NONE,
 ) -> dict[str, str]:
     """Build Docker lifecycle commands shown to the user."""
-    base = _compose_base_command(deployment_mode, use_caddy, caddy_public, env_filename)
+    base = _compose_base_command(
+        deployment_mode, use_caddy, caddy_public, env_filename, caddy_mode=caddy_mode
+    )
     commands = {
         "start": f"{base} up -d",
         "stop": f"{base} down",
