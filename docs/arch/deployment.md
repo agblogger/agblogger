@@ -26,6 +26,8 @@ Database schema migrations run programmatically during application startup, befo
 
 The repository includes deployment tooling for local and remote deployments. These workflows differ in how they deliver the image and configuration, but they converge on the same runtime architecture.
 
+Remote deployment bundles include a `setup.sh` script that automates first-time setup and upgrades. The script handles image loading (tarball) or pulling (registry), external Caddy bootstrapping if configured, container startup, and health checking. It is idempotent — safe to run on both fresh installs and upgrades.
+
 ## Caddy Reverse Proxy Modes
 
 The deployment helper supports three Caddy configurations:
@@ -44,5 +46,5 @@ The project also supports a packaged local deployment profile for deployment-sty
 
 - `Dockerfile` defines the production image.
 - `docker-compose.yml` defines the standard container topology.
-- `cli/deploy_production.py` contains the deployment helper and configuration generation workflow.
+- `cli/deploy_production.py` contains the deployment helper, configuration generation, and `setup.sh` script generation workflow.
 - `tests/test_cli/test_deploy_production.py` covers the deployment helper behavior.
