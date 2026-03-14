@@ -3932,3 +3932,33 @@ class TestBaseComposeAdminDisplayName:
         compose_path = Path(__file__).resolve().parent.parent.parent / "docker-compose.yml"
         content = compose_path.read_text(encoding="utf-8")
         assert "ADMIN_DISPLAY_NAME" in content
+
+
+# ── config_from_args: --caddy-external without --caddy-domain ────────
+
+
+def test_config_from_args_raises_on_caddy_external_without_domain() -> None:
+    args = argparse.Namespace(
+        secret_key="x" * 64,
+        admin_username="admin",
+        admin_password="password1234",
+        admin_display_name="Admin",
+        caddy_domain=None,
+        caddy_email=None,
+        caddy_public=False,
+        caddy_external=True,
+        shared_caddy_dir=DEFAULT_SHARED_CADDY_DIR,
+        shared_caddy_email=None,
+        trusted_hosts="example.com",
+        trusted_proxy_ips=None,
+        host_port=8000,
+        bind_public=False,
+        expose_docs=False,
+        deployment_mode=DEPLOY_MODE_LOCAL,
+        image_ref=None,
+        bundle_dir=DEFAULT_BUNDLE_DIR,
+        tarball_filename=DEFAULT_IMAGE_TARBALL,
+        platform=None,
+    )
+    with pytest.raises(DeployError, match="--caddy-external requires --caddy-domain"):
+        config_from_args(args)

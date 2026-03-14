@@ -1765,6 +1765,8 @@ def config_from_args(args: argparse.Namespace) -> DeployConfig:
             caddy_mode = CADDY_MODE_BUNDLED
             caddy_public = args.caddy_public
             host_bind_ip = LOCALHOST_BIND_IP
+    elif args.caddy_external:
+        raise DeployError("--caddy-external requires --caddy-domain")
     else:
         caddy_mode = CADDY_MODE_NONE
         host_bind_ip = PUBLIC_BIND_IP if args.bind_public else LOCALHOST_BIND_IP
