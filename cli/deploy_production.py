@@ -137,6 +137,8 @@ class DeployConfig:
     bundle_dir: Path = DEFAULT_BUNDLE_DIR
     tarball_filename: str = DEFAULT_IMAGE_TARBALL
     platform: str | None = None
+    caddy_mode: str = CADDY_MODE_NONE
+    shared_caddy_config: SharedCaddyConfig | None = None
 
 
 @dataclass(frozen=True)

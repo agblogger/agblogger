@@ -75,6 +75,8 @@ def _make_config(
     deployment_mode: str = DEPLOY_MODE_LOCAL,
     image_ref: str | None = None,
     platform: str | None = None,
+    caddy_mode: str = CADDY_MODE_NONE,
+    shared_caddy_config: SharedCaddyConfig | None = None,
 ) -> DeployConfig:
     """Build a valid DeployConfig with sensible defaults for tests."""
     return DeployConfig(
@@ -93,6 +95,8 @@ def _make_config(
         bundle_dir=DEFAULT_BUNDLE_DIR,
         tarball_filename=DEFAULT_IMAGE_TARBALL,
         platform=platform,
+        caddy_mode=caddy_mode,
+        shared_caddy_config=shared_caddy_config,
     )
 
 
@@ -3190,3 +3194,61 @@ def test_default_shared_caddy_dir_constant() -> None:
 
 def test_external_caddy_network_name_constant() -> None:
     assert EXTERNAL_CADDY_NETWORK_NAME == "caddy"
+
+
+# ── DeployConfig external caddy fields ──────────────────────────────
+
+
+def test_deploy_config_external_caddy_fields() -> None:
+    from pathlib import Path
+
+    config = DeployConfig(
+        secret_key="x" * 64,
+        admin_username="admin",
+        admin_password="very-strong-password",
+        trusted_hosts=["blog.example.com"],
+        trusted_proxy_ips=[],
+        host_port=8000,
+        host_bind_ip=LOCALHOST_BIND_IP,
+        caddy_config=CaddyConfig(domain="blog.example.com", email=None),
+        caddy_public=False,
+        expose_docs=False,
+        caddy_mode=CADDY_MODE_EXTERNAL,
+        shared_caddy_config=SharedCaddyConfig(
+            caddy_dir=Path("/opt/caddy"), acme_email="ops@example.com"
+        ),
+    )
+    assert config.caddy_mode == CADDY_MODE_EXTERNAL
+    assert config.shared_caddy_config is not None
+    assert config.shared_caddy_config.caddy_dir == Path("/opt/caddy")
+
+
+def test_deploy_config_caddy_mode_defaults_to_none() -> None:
+    config = DeployConfig(
+        secret_key="x" * 64,
+        admin_username="admin",
+        admin_password="very-strong-password",
+        trusted_hosts=["example.com"],
+        trusted_proxy_ips=[],
+        host_port=8000,
+        host_bind_ip=PUBLIC_BIND_IP,
+        caddy_config=None,
+        caddy_public=False,
+        expose_docs=False,
+    )
+    assert config.caddy_mode == CADDY_MODE_NONE
+    assert config.shared_caddy_config is None
+
+
+def test_make_config_bundled_caddy_has_bundled_mode() -> None:
+    config = _make_config(
+        caddy_config=CaddyConfig(domain="blog.example.com", email=None),
+        host_bind_ip=LOCALHOST_BIND_IP,
+        caddy_mode=CADDY_MODE_BUNDLED,
+    )
+    assert config.caddy_mode == CADDY_MODE_BUNDLED
+
+
+def test_make_config_no_caddy_has_none_mode() -> None:
+    config = _make_config()
+    assert config.caddy_mode == CADDY_MODE_NONE
