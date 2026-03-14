@@ -666,7 +666,11 @@ def _resolve_symlink_redirect(file_path: str, content_manager: ContentManager) -
     return canonical
 
 
-@router.get("/{file_path:path}", response_model=PostDetail)
+@router.get(
+    "/{file_path:path}",
+    response_model=PostDetail,
+    responses={301: {"description": "Redirects to the canonical post path after a rename"}},
+)
 async def get_post_endpoint(
     file_path: str,
     session: Annotated[AsyncSession, Depends(get_session)],

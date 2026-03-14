@@ -29,7 +29,7 @@ async def get_page(content_manager: ContentManager, page_id: str) -> PageRespons
         return None
 
     if page_cfg.file is None:
-        # Virtual pages (timeline, labels, etc.) are handled by the frontend
+        # Pages without a backing file are handled entirely by the frontend
         return PageResponse(id=page_cfg.id, title=page_cfg.title, rendered_html="")
 
     raw_content = content_manager.read_page(page_id)

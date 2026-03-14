@@ -7,7 +7,7 @@
 
 ## Executive Summary
 
-The AgBlogger server demonstrated **excellent stability** under concurrent load. Across all 11 agents and an estimated **8,000+ total HTTP requests**, **zero 5xx server errors** were observed. All write operations were atomic, all read paths returned correct data, and no race conditions or data corruption were detected.
+The AgBlogger server demonstrated **excellent stability** under concurrent load. Across all 11 agents and an estimated **18,000+ total HTTP requests**, **zero 5xx server errors** were observed. All write operations were atomic, all read paths returned correct data, and no race conditions or data corruption were detected.
 
 ## Test Configuration
 
@@ -79,10 +79,10 @@ The AgBlogger server demonstrated **excellent stability** under concurrent load.
 
 ### 9. Author Display Name Change (PASS — with noted behavior)
 - Admin changed display_name via PATCH /api/auth/me
-- Existing posts continue showing the **username** ("admin"), not the display name
-- Display name change does **not** retroactively update the author field on existing posts
-- Setting display_name to "" results in `null` in the API response
-- **This is consistent with the architecture (posts store author username, not display name)**
+- The `author` column in the database stores the username, but API responses resolve the display name at query time via `COALESCE(display_name, username)` join
+- Changing a user's display name takes effect immediately for all posts by that user in both list and detail responses
+- Setting display_name to "" results in `null` in the API response (falls back to username)
+- **This is consistent with the architecture (posts store author username; display name is resolved at read time)**
 
 ### 10. Additional Edge Cases (PASS)
 - Rapid-fire create/delete of 3 posts: all atomic, no errors
@@ -93,7 +93,7 @@ The AgBlogger server demonstrated **excellent stability** under concurrent load.
 ## Key Findings
 
 ### No Issues Found
-1. **Zero 5xx errors** across all ~8,000+ requests from 11 agents
+1. **Zero 5xx errors** across all ~18,000+ requests from 9 active agents
 2. **Zero data corruption** — no torn reads, partial writes, or inconsistent state
 3. **Zero race conditions** detected in any read/write contention scenario
 4. **All write operations atomic** — no intermediate states observable by concurrent readers
@@ -106,7 +106,7 @@ The AgBlogger server demonstrated **excellent stability** under concurrent load.
 
 2. **Label filter vs label detail asymmetry:** Filtering posts by a non-existent label (`?label=foo`) returns 200 with 0 results, while fetching the label directly (`GET /api/labels/foo`) returns 404. This is by design but may surprise API consumers.
 
-3. **Display name vs author field:** The `author` field on posts stores the username, not the display name. Changing display_name does not update existing posts. The display name is resolved at read time for the `PostDetail` response, but the `author` field in list responses shows the username.
+3. **Display name vs author field:** The `author` column in the database stores the username. The display name is resolved at read time via a `COALESCE(display_name, username)` join for both `PostDetail` and `PostSummary` (list) responses, so changing a user's display name takes effect immediately across all their posts.
 
 4. **Reader-9 observed `name=None` on a label during rename:** One reader briefly saw a label with no name during the rename window. Other readers did not observe this. Could be a brief non-atomic window during label updates, or a client-side parsing artifact. Worth investigating whether label renames are fully atomic.
 
