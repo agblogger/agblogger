@@ -874,6 +874,7 @@ def _remote_bundle_commands(config: DeployConfig) -> dict[str, str]:
         use_caddy=config.caddy_config is not None,
         caddy_public=config.caddy_public,
         tarball_filename=config.tarball_filename,
+        caddy_mode=config.caddy_mode,
     )
 
 
@@ -1226,6 +1227,18 @@ def deploy(config: DeployConfig, project_dir: Path) -> DeployResult:
     if config.deployment_mode == DEPLOY_MODE_LOCAL:
         write_config_files(config, project_dir)
 
+        if config.caddy_mode == CADDY_MODE_EXTERNAL and config.shared_caddy_config is not None:
+            ensure_shared_caddy(
+                caddy_dir=config.shared_caddy_config.caddy_dir,
+                acme_email=config.shared_caddy_config.acme_email,
+            )
+            if config.caddy_config is not None:
+                write_caddy_site_snippet(
+                    config.caddy_config,
+                    config.shared_caddy_config.caddy_dir,
+                )
+                reload_shared_caddy()
+
         if trivy_available:
             print(f"Building Docker image ({LOCAL_IMAGE_TAG})...")
             _run_docker(project_dir, _compose_build_command(config))
@@ -1240,6 +1253,7 @@ def deploy(config: DeployConfig, project_dir: Path) -> DeployResult:
                 deployment_mode=config.deployment_mode,
                 use_caddy=config.caddy_config is not None,
                 caddy_public=config.caddy_public,
+                caddy_mode=config.caddy_mode,
             ),
             bundle_path=None,
         )
