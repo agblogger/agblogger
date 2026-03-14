@@ -46,6 +46,16 @@ LOCALHOST_BIND_IP = "127.0.0.1"
 HEALTH_POLL_INTERVAL_SECONDS = 5
 HEALTH_POLL_TIMEOUT_SECONDS = 60
 
+CADDY_MODE_BUNDLED = "bundled"
+CADDY_MODE_EXTERNAL = "external"
+CADDY_MODE_NONE = "none"
+CADDY_MODES = {CADDY_MODE_BUNDLED, CADDY_MODE_EXTERNAL, CADDY_MODE_NONE}
+DEFAULT_SHARED_CADDY_DIR = "/opt/caddy"
+EXTERNAL_CADDY_NETWORK_NAME = "caddy"
+SHARED_CADDY_CONTAINER_NAME = "caddy"
+DEFAULT_SHARED_CADDY_COMPOSE_FILE = "docker-compose.yml"
+DEFAULT_SHARED_CADDYFILE = "Caddyfile"
+
 
 def _read_version() -> str:
     """Read the application version from the VERSION file."""
@@ -97,6 +107,14 @@ class CaddyConfig:
 
     domain: str
     email: str | None
+
+
+@dataclass(frozen=True)
+class SharedCaddyConfig:
+    """Settings for a shared, host-level Caddy reverse proxy."""
+
+    caddy_dir: Path
+    acme_email: str | None
 
 
 @dataclass(frozen=True)

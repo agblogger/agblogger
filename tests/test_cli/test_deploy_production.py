@@ -11,6 +11,9 @@ import pytest
 
 from cli.deploy_production import (
     AGBLOGGER_STATIC_IP,
+    CADDY_MODE_BUNDLED,
+    CADDY_MODE_EXTERNAL,
+    CADDY_MODE_NONE,
     CADDY_STATIC_IP,
     COMPOSE_SUBNET,
     DEFAULT_BUNDLE_DIR,
@@ -21,9 +24,11 @@ from cli.deploy_production import (
     DEFAULT_IMAGE_TARBALL,
     DEFAULT_NO_CADDY_COMPOSE_FILE,
     DEFAULT_REMOTE_PLATFORM,
+    DEFAULT_SHARED_CADDY_DIR,
     DEPLOY_MODE_LOCAL,
     DEPLOY_MODE_REGISTRY,
     DEPLOY_MODE_TARBALL,
+    EXTERNAL_CADDY_NETWORK_NAME,
     LOCAL_IMAGE_TAG,
     LOCALHOST_BIND_IP,
     MIN_SECRET_KEY_LENGTH,
@@ -31,6 +36,7 @@ from cli.deploy_production import (
     CaddyConfig,
     DeployConfig,
     DeployError,
+    SharedCaddyConfig,
     _build_remote_readme_content,
     _is_valid_caddy_domain,
     _read_version,
@@ -3149,3 +3155,38 @@ class TestVersionBanner:
 
         captured = capsys.readouterr().out
         assert "AgBlogger deployment helper v" in captured
+
+
+# ── CaddyMode constants and SharedCaddyConfig ────────────────────────
+
+
+def test_shared_caddy_config_has_required_fields() -> None:
+    from pathlib import Path
+
+    config = SharedCaddyConfig(
+        caddy_dir=Path("/opt/caddy"),
+        acme_email="ops@example.com",
+    )
+    assert config.caddy_dir == Path("/opt/caddy")
+    assert config.acme_email == "ops@example.com"
+
+
+def test_shared_caddy_config_optional_email() -> None:
+    from pathlib import Path
+
+    config = SharedCaddyConfig(caddy_dir=Path("/opt/caddy"), acme_email=None)
+    assert config.acme_email is None
+
+
+def test_caddy_mode_constants_are_strings() -> None:
+    assert CADDY_MODE_BUNDLED == "bundled"
+    assert CADDY_MODE_EXTERNAL == "external"
+    assert CADDY_MODE_NONE == "none"
+
+
+def test_default_shared_caddy_dir_constant() -> None:
+    assert DEFAULT_SHARED_CADDY_DIR == "/opt/caddy"
+
+
+def test_external_caddy_network_name_constant() -> None:
+    assert EXTERNAL_CADDY_NETWORK_NAME == "caddy"
