@@ -62,7 +62,7 @@ def _safe_status(raw: str) -> CrossPostStatus:
     try:
         return CrossPostStatus(raw)
     except ValueError:
-        logger.error("Unknown cross-post status %r, defaulting to UNKNOWN", raw)
+        logger.error("Unknown cross-post status %r, defaulting to UNKNOWN", raw, exc_info=True)
         return CrossPostStatus.UNKNOWN
 
 
@@ -119,6 +119,7 @@ async def _upsert_social_account(
                         "Race condition: failed to re-create %s account %s after deletion",
                         platform,
                         account_name,
+                        exc_info=True,
                     )
                     raise HTTPException(
                         status_code=status.HTTP_409_CONFLICT,
@@ -378,7 +379,7 @@ async def bluesky_callback(
             detail="Invalid or expired OAuth state",
         )
     expected_issuer = pending["auth_server_meta"]["issuer"]
-    if iss and iss != expected_issuer:
+    if not iss or iss != expected_issuer:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Issuer mismatch in OAuth callback",

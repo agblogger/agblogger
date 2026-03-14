@@ -8,6 +8,7 @@ import httpx
 
 from backend.crosspost.base import CrossPostContent, CrossPostResult
 from backend.crosspost.http_utils import get_str_field, parse_json_object, require_str_field
+from backend.crosspost.ssrf import ssrf_safe_client
 from backend.exceptions import ExternalServiceError
 
 logger = logging.getLogger(__name__)
@@ -44,7 +45,7 @@ async def exchange_facebook_oauth_token(
     Returns dict with keys: user_access_token, pages (list of dicts).
     Raises FacebookOAuthTokenError on failure.
     """
-    async with httpx.AsyncClient() as http_client:
+    async with ssrf_safe_client() as http_client:
         # Exchange code for short-lived user token
         token_resp = await http_client.post(
             f"{FACEBOOK_GRAPH_API}/oauth/access_token",
@@ -146,7 +147,7 @@ class FacebookCrossPoster:
         if not page_access_token or not page_id:
             return False
 
-        async with httpx.AsyncClient() as client:
+        async with ssrf_safe_client() as client:
             try:
                 resp = await client.get(
                     f"{FACEBOOK_GRAPH_API}/{page_id}",
@@ -173,7 +174,7 @@ class FacebookCrossPoster:
 
         message = _build_facebook_text(content)
 
-        async with httpx.AsyncClient() as client:
+        async with ssrf_safe_client() as client:
             try:
                 resp = await client.post(
                     f"{FACEBOOK_GRAPH_API}/{self._page_id}/feed",
@@ -208,7 +209,7 @@ class FacebookCrossPoster:
         """Check if the Page access token is still valid."""
         if not self._page_access_token:
             return False
-        async with httpx.AsyncClient() as client:
+        async with ssrf_safe_client() as client:
             try:
                 resp = await client.get(
                     f"{FACEBOOK_GRAPH_API}/me",

@@ -1036,7 +1036,11 @@ class TestOAuthErrorLeakage:
         ):
             resp = await client.get(
                 "/api/crosspost/bluesky/callback",
-                params={"code": "test-code", "state": "test-state"},
+                params={
+                    "code": "test-code",
+                    "state": "test-state",
+                    "iss": "https://bsky.social",
+                },
             )
         assert resp.status_code == 502
         detail = resp.json()["detail"]

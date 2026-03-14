@@ -110,7 +110,7 @@ All interactions with external services (pandoc, git, database, filesystem, netw
 All rendered HTML derived from markdown must continue to pass through the backend sanitizer before being served.
 
 When modifying the sanitizer:
-- Never add `script`, `object`, `embed`, `style`, `form`, `input`, or `button` to the allowed tags
+- Never add `script`, `object`, `embed`, `style`, `form`, or `button` to the allowed tags. `input` is allowed only for Pandoc task-list checkboxes, restricted to `type`, `checked`, and `disabled` attributes.
 - `iframe` support, if kept, must stay restricted to explicitly approved embed providers and must remain aligned with CSP `frame-src`
 - Never allow `on*` event handler attributes
 - Never allow `javascript:` or `data:` URL schemes in `href`/`src`

@@ -32,6 +32,7 @@ from backend.crosspost.x import (
     _build_tweet_text,
     exchange_x_oauth_token,
 )
+from tests.test_services._ssrf_helpers import make_fake_ssrf_safe_client
 
 
 class TestRequireStrField:
@@ -174,8 +175,6 @@ class TestMastodonUrlValidation:
                 requested_urls.append(url)
                 return DummyResponse()
 
-        from tests.test_services._ssrf_helpers import make_fake_ssrf_safe_client
-
         monkeypatch.setattr(
             "backend.crosspost.mastodon.ssrf_safe_client",
             make_fake_ssrf_safe_client(FakeClient),
@@ -210,8 +209,6 @@ class TestMastodonUrlValidation:
             async def post(self, url: str, **kwargs) -> DummyResponse:
                 requested_urls.append(url)
                 return DummyResponse()
-
-        from tests.test_services._ssrf_helpers import make_fake_ssrf_safe_client
 
         monkeypatch.setattr(
             "backend.crosspost.mastodon.ssrf_safe_client",
@@ -276,8 +273,6 @@ class TestMastodonOAuthTokenExchange:
             async def post(self, url: str, **kwargs) -> DummyResponse:
                 return DummyResponse()
 
-        from tests.test_services._ssrf_helpers import make_fake_ssrf_safe_client
-
         monkeypatch.setattr(
             "backend.crosspost.mastodon.ssrf_safe_client",
             make_fake_ssrf_safe_client(FakeClient),
@@ -309,8 +304,6 @@ class TestMastodonOAuthTokenExchange:
         class FakeClient:
             async def post(self, url: str, **kwargs) -> DummyResponse:
                 return DummyResponse()
-
-        from tests.test_services._ssrf_helpers import make_fake_ssrf_safe_client
 
         monkeypatch.setattr(
             "backend.crosspost.mastodon.ssrf_safe_client",
@@ -396,8 +389,6 @@ class TestBlueskyCrossPosterOAuth:
 
             async def get(self, url: str, **kwargs: object) -> httpx.Response:
                 return httpx.Response(200, json={})
-
-        from tests.test_services._ssrf_helpers import make_fake_ssrf_safe_client
 
         monkeypatch.setattr(
             "backend.crosspost.bluesky.ssrf_safe_client",
@@ -497,7 +488,10 @@ class TestXCrossPoster:
             async def get(self, url: str, **kwargs) -> DummyResponse:
                 return DummyResponse()
 
-        monkeypatch.setattr("backend.crosspost.x.httpx.AsyncClient", DummyAsyncClient)
+        monkeypatch.setattr(
+            "backend.crosspost.x.ssrf_safe_client",
+            make_fake_ssrf_safe_client(DummyAsyncClient),
+        )
 
         poster = XCrossPoster()
         result = await poster.authenticate(
@@ -548,7 +542,10 @@ class TestXCrossPoster:
                 captured["json"] = kwargs.get("json")
                 return DummyResponse()
 
-        monkeypatch.setattr("backend.crosspost.x.httpx.AsyncClient", DummyAsyncClient)
+        monkeypatch.setattr(
+            "backend.crosspost.x.ssrf_safe_client",
+            make_fake_ssrf_safe_client(DummyAsyncClient),
+        )
 
         poster = XCrossPoster()
         await poster.authenticate(
@@ -623,7 +620,10 @@ class TestXCrossPoster:
                     return Dummy401Response()
                 return DummyTweetResponse()
 
-        monkeypatch.setattr("backend.crosspost.x.httpx.AsyncClient", DummyAsyncClient)
+        monkeypatch.setattr(
+            "backend.crosspost.x.ssrf_safe_client",
+            make_fake_ssrf_safe_client(DummyAsyncClient),
+        )
 
         poster = XCrossPoster()
         await poster.authenticate(
@@ -673,7 +673,10 @@ class TestXOAuthTokenExchange:
             async def post(self, url: str, **kwargs) -> DummyResponse:
                 return DummyResponse()
 
-        monkeypatch.setattr("backend.crosspost.x.httpx.AsyncClient", DummyAsyncClient)
+        monkeypatch.setattr(
+            "backend.crosspost.x.ssrf_safe_client",
+            make_fake_ssrf_safe_client(DummyAsyncClient),
+        )
 
         with pytest.raises(XOAuthTokenError, match="Invalid PKCE verifier"):
             await exchange_x_oauth_token(
@@ -719,7 +722,10 @@ class TestXOAuthTokenExchange:
                 call_count += 1
                 return DummyUserResponse()
 
-        monkeypatch.setattr("backend.crosspost.x.httpx.AsyncClient", DummyAsyncClient)
+        monkeypatch.setattr(
+            "backend.crosspost.x.ssrf_safe_client",
+            make_fake_ssrf_safe_client(DummyAsyncClient),
+        )
 
         with pytest.raises(XOAuthTokenError, match="username"):
             await exchange_x_oauth_token(
@@ -762,7 +768,10 @@ class TestXOAuthTokenExchange:
             async def get(self, url: str, **kwargs) -> DummyUserResponse:
                 return DummyUserResponse()
 
-        monkeypatch.setattr("backend.crosspost.x.httpx.AsyncClient", DummyAsyncClient)
+        monkeypatch.setattr(
+            "backend.crosspost.x.ssrf_safe_client",
+            make_fake_ssrf_safe_client(DummyAsyncClient),
+        )
 
         result = await exchange_x_oauth_token(
             code="test-code",
@@ -805,7 +814,10 @@ class TestXOAuthTokenExchange:
             async def get(self, url: str, **kwargs) -> DummyUserResponse:
                 return DummyUserResponse()
 
-        monkeypatch.setattr("backend.crosspost.x.httpx.AsyncClient", DummyAsyncClient)
+        monkeypatch.setattr(
+            "backend.crosspost.x.ssrf_safe_client",
+            make_fake_ssrf_safe_client(DummyAsyncClient),
+        )
 
         with pytest.raises(XOAuthTokenError, match="Forbidden"):
             await exchange_x_oauth_token(
@@ -848,7 +860,10 @@ class TestXOAuthTokenExchange:
             async def get(self, url: str, **kwargs) -> DummyUserResponse:
                 return DummyUserResponse()
 
-        monkeypatch.setattr("backend.crosspost.x.httpx.AsyncClient", DummyAsyncClient)
+        monkeypatch.setattr(
+            "backend.crosspost.x.ssrf_safe_client",
+            make_fake_ssrf_safe_client(DummyAsyncClient),
+        )
 
         with pytest.raises(XOAuthTokenError, match="non-JSON"):
             await exchange_x_oauth_token(
@@ -921,7 +936,10 @@ class TestXTokenRefresh:
                     return Dummy401Response()
                 return DummyTweetResponse()
 
-        monkeypatch.setattr("backend.crosspost.x.httpx.AsyncClient", DummyAsyncClient)
+        monkeypatch.setattr(
+            "backend.crosspost.x.ssrf_safe_client",
+            make_fake_ssrf_safe_client(DummyAsyncClient),
+        )
 
         poster = XCrossPoster()
         await poster.authenticate(
@@ -996,7 +1014,10 @@ class TestXTokenRefresh:
                     return Dummy401Response()
                 return Dummy401Response()  # Still fails after refresh
 
-        monkeypatch.setattr("backend.crosspost.x.httpx.AsyncClient", DummyAsyncClient)
+        monkeypatch.setattr(
+            "backend.crosspost.x.ssrf_safe_client",
+            make_fake_ssrf_safe_client(DummyAsyncClient),
+        )
 
         poster = XCrossPoster()
         await poster.authenticate(
@@ -1037,7 +1058,10 @@ class TestXValidateCredentials:
             async def get(self, url: str, **kwargs) -> None:
                 raise httpx.ConnectTimeout("Connection timed out")
 
-        monkeypatch.setattr("backend.crosspost.x.httpx.AsyncClient", DummyAsyncClient)
+        monkeypatch.setattr(
+            "backend.crosspost.x.ssrf_safe_client",
+            make_fake_ssrf_safe_client(DummyAsyncClient),
+        )
 
         poster = XCrossPoster()
         poster._access_token = "test_token"
@@ -1118,7 +1142,10 @@ class TestFacebookCrossPoster:
             async def get(self, url: str, **kwargs) -> DummyResponse:
                 return DummyResponse()
 
-        monkeypatch.setattr("backend.crosspost.facebook.httpx.AsyncClient", DummyAsyncClient)
+        monkeypatch.setattr(
+            "backend.crosspost.facebook.ssrf_safe_client",
+            make_fake_ssrf_safe_client(DummyAsyncClient),
+        )
 
         poster = FacebookCrossPoster()
         result = await poster.authenticate(
@@ -1175,7 +1202,10 @@ class TestFacebookCrossPoster:
                 captured["headers"] = kwargs.get("headers")
                 return DummyPostResponse()
 
-        monkeypatch.setattr("backend.crosspost.facebook.httpx.AsyncClient", DummyAsyncClient)
+        monkeypatch.setattr(
+            "backend.crosspost.facebook.ssrf_safe_client",
+            make_fake_ssrf_safe_client(DummyAsyncClient),
+        )
 
         poster = FacebookCrossPoster()
         await poster.authenticate(
@@ -1237,7 +1267,10 @@ class TestFacebookCrossPoster:
                 captured_headers.update(headers)
                 return DummyPostResponse()
 
-        monkeypatch.setattr("backend.crosspost.facebook.httpx.AsyncClient", DummyAsyncClient)
+        monkeypatch.setattr(
+            "backend.crosspost.facebook.ssrf_safe_client",
+            make_fake_ssrf_safe_client(DummyAsyncClient),
+        )
 
         poster = FacebookCrossPoster()
         await poster.authenticate(
@@ -1281,7 +1314,10 @@ class TestFacebookCrossPoster:
                 requested_urls.append(url)
                 return DummyResponse()
 
-        monkeypatch.setattr("backend.crosspost.facebook.httpx.AsyncClient", DummyAsyncClient)
+        monkeypatch.setattr(
+            "backend.crosspost.facebook.ssrf_safe_client",
+            make_fake_ssrf_safe_client(DummyAsyncClient),
+        )
 
         poster = FacebookCrossPoster()
         result = await poster.authenticate(
@@ -1315,7 +1351,10 @@ class TestFacebookCrossPoster:
             async def get(self, url: str, **kwargs) -> DummyResponse:
                 return DummyResponse()
 
-        monkeypatch.setattr("backend.crosspost.facebook.httpx.AsyncClient", DummyAsyncClient)
+        monkeypatch.setattr(
+            "backend.crosspost.facebook.ssrf_safe_client",
+            make_fake_ssrf_safe_client(DummyAsyncClient),
+        )
 
         poster = FacebookCrossPoster()
         result = await poster.authenticate(
@@ -1354,7 +1393,10 @@ class TestFacebookOAuthTokenExchange:
             async def post(self, url: str, **kwargs) -> DummyResponse:
                 return DummyResponse()
 
-        monkeypatch.setattr("backend.crosspost.facebook.httpx.AsyncClient", DummyAsyncClient)
+        monkeypatch.setattr(
+            "backend.crosspost.facebook.ssrf_safe_client",
+            make_fake_ssrf_safe_client(DummyAsyncClient),
+        )
 
         with pytest.raises(FacebookOAuthTokenError, match="invalid_grant"):
             await exchange_facebook_oauth_token(
@@ -1411,7 +1453,10 @@ class TestFacebookOAuthTokenExchange:
             async def get(self, url: str, **kwargs) -> object:
                 return DummyPagesResp()
 
-        monkeypatch.setattr("backend.crosspost.facebook.httpx.AsyncClient", DummyAsyncClient)
+        monkeypatch.setattr(
+            "backend.crosspost.facebook.ssrf_safe_client",
+            make_fake_ssrf_safe_client(DummyAsyncClient),
+        )
 
         with pytest.raises(FacebookOAuthTokenError, match="access_token"):
             await exchange_facebook_oauth_token(
@@ -1469,7 +1514,10 @@ class TestFacebookOAuthTokenExchange:
                 captured_calls.append(("get", url, kwargs))
                 return DummyPagesResp()
 
-        monkeypatch.setattr("backend.crosspost.facebook.httpx.AsyncClient", DummyAsyncClient)
+        monkeypatch.setattr(
+            "backend.crosspost.facebook.ssrf_safe_client",
+            make_fake_ssrf_safe_client(DummyAsyncClient),
+        )
 
         result = await exchange_facebook_oauth_token(
             code="test-code",
@@ -1507,7 +1555,10 @@ class TestFacebookOAuthTokenExchange:
             async def post(self, url: str, **kwargs) -> DummyResponse:
                 return DummyResponse()
 
-        monkeypatch.setattr("backend.crosspost.facebook.httpx.AsyncClient", DummyAsyncClient)
+        monkeypatch.setattr(
+            "backend.crosspost.facebook.ssrf_safe_client",
+            make_fake_ssrf_safe_client(DummyAsyncClient),
+        )
 
         with pytest.raises(FacebookOAuthTokenError, match="non-JSON"):
             await exchange_facebook_oauth_token(
@@ -1536,7 +1587,10 @@ class TestFacebookValidateCredentials:
             async def get(self, url: str, **kwargs) -> None:
                 raise httpx.ConnectTimeout("Connection timed out")
 
-        monkeypatch.setattr("backend.crosspost.facebook.httpx.AsyncClient", DummyAsyncClient)
+        monkeypatch.setattr(
+            "backend.crosspost.facebook.ssrf_safe_client",
+            make_fake_ssrf_safe_client(DummyAsyncClient),
+        )
 
         poster = FacebookCrossPoster()
         poster._page_access_token = "test_token"
@@ -1567,7 +1621,10 @@ class TestFacebookValidateCredentials:
                 captured_kwargs.update(kwargs)
                 return DummyResponse()
 
-        monkeypatch.setattr("backend.crosspost.facebook.httpx.AsyncClient", DummyAsyncClient)
+        monkeypatch.setattr(
+            "backend.crosspost.facebook.ssrf_safe_client",
+            make_fake_ssrf_safe_client(DummyAsyncClient),
+        )
 
         poster = FacebookCrossPoster()
         poster._page_access_token = "secret_token"

@@ -8,6 +8,7 @@ import httpx
 
 from backend.crosspost.base import CrossPostContent, CrossPostResult
 from backend.crosspost.http_utils import get_str_field, parse_json_object, require_str_field
+from backend.crosspost.ssrf import ssrf_safe_client
 from backend.exceptions import ExternalServiceError
 
 logger = logging.getLogger(__name__)
@@ -63,7 +64,7 @@ async def exchange_x_oauth_token(
     Returns dict with keys: access_token, refresh_token, username.
     Raises XOAuthTokenError on failure.
     """
-    async with httpx.AsyncClient() as http_client:
+    async with ssrf_safe_client() as http_client:
         token_resp = await http_client.post(
             "https://api.x.com/2/oauth2/token",
             data={
@@ -150,7 +151,7 @@ class XCrossPoster:
         self._client_id = credentials.get("client_id", "")
         self._client_secret = credentials.get("client_secret", "")
 
-        async with httpx.AsyncClient() as client:
+        async with ssrf_safe_client() as client:
             try:
                 resp = await client.get(
                     "https://api.x.com/2/users/me",
@@ -178,7 +179,7 @@ class XCrossPoster:
         if not self._refresh_token or not self._client_id:
             return False
 
-        async with httpx.AsyncClient() as client:
+        async with ssrf_safe_client() as client:
             try:
                 data: dict[str, str] = {
                     "grant_type": "refresh_token",
@@ -232,7 +233,7 @@ class XCrossPoster:
 
         tweet_text = _build_tweet_text(content)
 
-        async with httpx.AsyncClient() as client:
+        async with ssrf_safe_client() as client:
             try:
                 resp = await client.post(
                     "https://api.x.com/2/tweets",
@@ -276,7 +277,7 @@ class XCrossPoster:
         """Check if current access token is still valid."""
         if not self._access_token:
             return False
-        async with httpx.AsyncClient() as client:
+        async with ssrf_safe_client() as client:
             try:
                 resp = await client.get(
                     "https://api.x.com/2/users/me",

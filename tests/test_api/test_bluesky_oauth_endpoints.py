@@ -134,7 +134,7 @@ class TestCallbackEndpoint:
         async with create_test_client(test_settings) as client:
             resp = await client.get(
                 "/api/crosspost/bluesky/callback",
-                params={"code": "auth-code", "state": "state-1"},
+                params={"code": "auth-code", "state": "state-1", "iss": "https://auth.example.com"},
                 follow_redirects=False,
             )
 
