@@ -1025,7 +1025,17 @@ def write_bundle_files(config: DeployConfig, bundle_dir: Path) -> None:
     (bundle_dir / "VERSION").write_text(version + "\n", encoding="utf-8")
 
     stale_files: list[str] = []
-    if config.caddy_config is not None:
+    if config.caddy_mode == CADDY_MODE_EXTERNAL:
+        (bundle_dir / DEFAULT_IMAGE_EXTERNAL_CADDY_COMPOSE_FILE).write_text(
+            build_image_external_caddy_compose_content(), encoding="utf-8"
+        )
+        stale_files.extend([
+            DEFAULT_CADDYFILE,
+            DEFAULT_CADDY_PUBLIC_COMPOSE_FILE,
+            DEFAULT_IMAGE_COMPOSE_FILE,
+            DEFAULT_IMAGE_NO_CADDY_COMPOSE_FILE,
+        ])
+    elif config.caddy_config is not None:
         (bundle_dir / DEFAULT_CADDYFILE).write_text(
             build_caddyfile_content(config.caddy_config), encoding="utf-8"
         )
@@ -1033,6 +1043,7 @@ def write_bundle_files(config: DeployConfig, bundle_dir: Path) -> None:
             build_image_compose_content(), encoding="utf-8"
         )
         stale_files.append(DEFAULT_IMAGE_NO_CADDY_COMPOSE_FILE)
+        stale_files.append(DEFAULT_IMAGE_EXTERNAL_CADDY_COMPOSE_FILE)
         if config.caddy_public:
             (bundle_dir / DEFAULT_CADDY_PUBLIC_COMPOSE_FILE).write_text(
                 build_caddy_public_compose_override_content(), encoding="utf-8"
@@ -1048,6 +1059,7 @@ def write_bundle_files(config: DeployConfig, bundle_dir: Path) -> None:
                 DEFAULT_CADDYFILE,
                 DEFAULT_CADDY_PUBLIC_COMPOSE_FILE,
                 DEFAULT_IMAGE_COMPOSE_FILE,
+                DEFAULT_IMAGE_EXTERNAL_CADDY_COMPOSE_FILE,
             ]
         )
 
