@@ -325,6 +325,12 @@ def build_caddy_site_snippet(config: CaddyConfig) -> str:
     return _caddy_site_block_body(config.domain)
 
 
+def build_shared_caddyfile_content(acme_email: str | None) -> str:
+    """Build the root Caddyfile for a shared Caddy instance."""
+    global_block = f"{{\n    email {acme_email}\n}}\n\n" if acme_email else ""
+    return f"{global_block}import /etc/caddy/sites/*.caddy\n"
+
+
 def _agblogger_env_section() -> str:
     """Return the environment YAML block shared across all compose files."""
     return (

@@ -52,6 +52,7 @@ from cli.deploy_production import (
     build_image_compose_content,
     build_image_direct_compose_content,
     build_lifecycle_commands,
+    build_shared_caddyfile_content,
     check_prerequisites,
     config_from_args,
     deploy,
@@ -3332,3 +3333,18 @@ def test_build_caddy_site_snippet_includes_hsts() -> None:
     caddy = CaddyConfig(domain="blog.example.com", email=None)
     content = build_caddy_site_snippet(caddy)
     assert "Strict-Transport-Security" in content
+
+
+# ── build_shared_caddyfile_content ───────────────────────────────────
+
+
+def test_build_shared_caddyfile_with_email() -> None:
+    content = build_shared_caddyfile_content(acme_email="ops@example.com")
+    assert "email ops@example.com" in content
+    assert "import /etc/caddy/sites/*.caddy" in content
+
+
+def test_build_shared_caddyfile_without_email() -> None:
+    content = build_shared_caddyfile_content(acme_email=None)
+    assert "email" not in content
+    assert "import /etc/caddy/sites/*.caddy" in content
