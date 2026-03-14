@@ -97,5 +97,5 @@ Always start a dev server with `just start` (unsanboxed). Remember to stop a run
 - **IMPORTANT**: Keep ALL files under docs/arch/ in sync with the codebase. Update them after any frontend or backend architecture changes, addition of major new features, workflow changes.
 - Avoid code duplication. Abstract common logic into parameterized functions.
 - Do NOT try to circumvent static analysis tools. Adapt the code to pass `just check` properly - do not ignore checks or suppress rules. If you absolutely need to bypass a static analysis tool, ALWAYS ask the user for approval and explain why this is necessary.
-- When saving a plan, put it in docs/plans/. When saving a spec, put it in docs/specs/.
+- When saving a plan, put it in docs/plans/. When saving a spec or a design doc, put it in docs/specs/.
 - When finished, verify with `just check`.
