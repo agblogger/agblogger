@@ -4028,3 +4028,27 @@ class TestBuildSetupScript:
         assert "(healthy)" in script
         # No Caddy bootstrapping
         assert "caddy reload" not in script
+
+    def test_registry_no_caddy_pulls_image(self) -> None:
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_REGISTRY,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+        )
+        script = build_setup_script_content(config)
+        assert "pull" in script
+        assert "docker load" not in script
+        assert "caddy reload" not in script
+
+    def test_tarball_bundled_caddy_has_no_caddy_bootstrap(self) -> None:
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+            caddy_config=CaddyConfig(domain="blog.example.com", email="admin@example.com"),
+            caddy_mode=CADDY_MODE_BUNDLED,
+            caddy_public=True,
+        )
+        script = build_setup_script_content(config)
+        assert "docker load -i" in script
+        # Bundled Caddy starts via compose, no separate bootstrap
+        assert "/opt/caddy" not in script
+        assert "caddy reload" not in script
