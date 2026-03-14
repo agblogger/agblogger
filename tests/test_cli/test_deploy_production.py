@@ -3922,3 +3922,13 @@ def test_deploy_external_caddy_full_flow(monkeypatch: pytest.MonkeyPatch, tmp_pa
     # Docker commands: shared caddy compose up + agblogger compose up
     compose_up_calls = [(cmd, cwd) for cmd, cwd, _ in commands if "up" in cmd]
     assert len(compose_up_calls) == 2  # shared caddy + agblogger
+
+
+# ── Base docker-compose.yml ADMIN_DISPLAY_NAME ───────────────────────
+
+
+class TestBaseComposeAdminDisplayName:
+    def test_base_compose_includes_admin_display_name(self) -> None:
+        compose_path = Path(__file__).resolve().parent.parent.parent / "docker-compose.yml"
+        content = compose_path.read_text(encoding="utf-8")
+        assert "ADMIN_DISPLAY_NAME" in content
