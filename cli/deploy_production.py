@@ -1417,6 +1417,7 @@ def collect_config(project_dir: Path | None = None) -> DeployConfig:
         default=False,
     )
 
+    caddy_mode = CADDY_MODE_BUNDLED if use_caddy else CADDY_MODE_NONE
     return DeployConfig(
         secret_key=secret_key,
         admin_username=admin_username,
@@ -1434,6 +1435,7 @@ def collect_config(project_dir: Path | None = None) -> DeployConfig:
         bundle_dir=DEFAULT_BUNDLE_DIR,
         tarball_filename=tarball_filename,
         platform=platform,
+        caddy_mode=caddy_mode,
     )
 
 
@@ -1475,6 +1477,7 @@ def config_from_args(args: argparse.Namespace) -> DeployConfig:
     if caddy_config is not None and COMPOSE_SUBNET not in trusted_proxy_ips:
         trusted_proxy_ips.insert(0, COMPOSE_SUBNET)
 
+    caddy_mode = CADDY_MODE_BUNDLED if args.caddy_domain else CADDY_MODE_NONE
     admin_display_name = args.admin_display_name or args.admin_username
     return DeployConfig(
         secret_key=secret_key,
@@ -1493,6 +1496,7 @@ def config_from_args(args: argparse.Namespace) -> DeployConfig:
         bundle_dir=args.bundle_dir,
         tarball_filename=args.tarball_filename,
         platform=platform,
+        caddy_mode=caddy_mode,
     )
 
 

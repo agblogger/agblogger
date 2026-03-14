@@ -3252,3 +3252,56 @@ def test_make_config_bundled_caddy_has_bundled_mode() -> None:
 def test_make_config_no_caddy_has_none_mode() -> None:
     config = _make_config()
     assert config.caddy_mode == CADDY_MODE_NONE
+
+
+# ── caddy_mode in config construction paths ──────────────────────────
+
+
+def test_config_from_args_sets_bundled_mode_when_caddy_domain_given() -> None:
+    args = argparse.Namespace(
+        secret_key="s" * 64,
+        admin_username="admin",
+        admin_password="strong-password!",
+        admin_display_name=None,
+        caddy_domain="blog.example.com",
+        caddy_email=None,
+        caddy_public=False,
+        trusted_hosts="blog.example.com",
+        trusted_proxy_ips=None,
+        host_port=8000,
+        bind_public=False,
+        expose_docs=False,
+        deployment_mode=DEPLOY_MODE_LOCAL,
+        image_ref=None,
+        bundle_dir=DEFAULT_BUNDLE_DIR,
+        tarball_filename=DEFAULT_IMAGE_TARBALL,
+        platform=None,
+    )
+
+    config = config_from_args(args)
+    assert config.caddy_mode == CADDY_MODE_BUNDLED
+
+
+def test_config_from_args_sets_none_mode_when_no_caddy_domain() -> None:
+    args = argparse.Namespace(
+        secret_key="s" * 64,
+        admin_username="admin",
+        admin_password="strong-password!",
+        admin_display_name=None,
+        caddy_domain=None,
+        caddy_email=None,
+        caddy_public=False,
+        trusted_hosts="example.com",
+        trusted_proxy_ips=None,
+        host_port=8000,
+        bind_public=False,
+        expose_docs=False,
+        deployment_mode=DEPLOY_MODE_LOCAL,
+        image_ref=None,
+        bundle_dir=DEFAULT_BUNDLE_DIR,
+        tarball_filename=DEFAULT_IMAGE_TARBALL,
+        platform=None,
+    )
+
+    config = config_from_args(args)
+    assert config.caddy_mode == CADDY_MODE_NONE
