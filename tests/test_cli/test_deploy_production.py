@@ -14,12 +14,15 @@ from cli.deploy_production import (
     CADDY_MODE_BUNDLED,
     CADDY_MODE_EXTERNAL,
     CADDY_MODE_NONE,
+    CADDY_MODES,
     CADDY_STATIC_IP,
     COMPOSE_SUBNET,
     DEFAULT_BUNDLE_DIR,
     DEFAULT_CADDY_PUBLIC_COMPOSE_FILE,
     DEFAULT_ENV_FILE,
+    DEFAULT_EXTERNAL_CADDY_COMPOSE_FILE,
     DEFAULT_IMAGE_COMPOSE_FILE,
+    DEFAULT_IMAGE_EXTERNAL_CADDY_COMPOSE_FILE,
     DEFAULT_IMAGE_NO_CADDY_COMPOSE_FILE,
     DEFAULT_IMAGE_TARBALL,
     DEFAULT_NO_CADDY_COMPOSE_FILE,
@@ -42,6 +45,7 @@ from cli.deploy_production import (
     _is_valid_caddy_domain,
     _read_version,
     _unquote_env_value,
+    _validate_config,
     backup_existing_configs,
     backup_file,
     build_caddy_public_compose_override_content,
@@ -2396,6 +2400,68 @@ class TestRemoteReadmeRollback:
         content = _build_remote_readme_content(config, commands)
         assert "## Rollback" in content
         assert ".bak" in content
+
+
+# ── Task 10: Validation for external Caddy mode ──────────────────────
+
+
+def test_validate_config_external_caddy_requires_caddy_config() -> None:
+    config = _make_config(caddy_mode=CADDY_MODE_EXTERNAL, caddy_config=None)
+    with pytest.raises(DeployError, match="requires a domain"):
+        _validate_config(config)
+
+
+def test_validate_config_external_caddy_requires_shared_caddy_config() -> None:
+    config = _make_config(
+        caddy_mode=CADDY_MODE_EXTERNAL,
+        caddy_config=CaddyConfig(domain="blog.example.com", email=None),
+        host_bind_ip=LOCALHOST_BIND_IP,
+        shared_caddy_config=None,
+    )
+    with pytest.raises(DeployError, match="shared Caddy configuration"):
+        _validate_config(config)
+
+
+def test_validate_config_external_caddy_valid() -> None:
+    from pathlib import Path
+
+    config = _make_config(
+        caddy_mode=CADDY_MODE_EXTERNAL,
+        caddy_config=CaddyConfig(domain="blog.example.com", email=None),
+        host_bind_ip=LOCALHOST_BIND_IP,
+        shared_caddy_config=SharedCaddyConfig(caddy_dir=Path("/opt/caddy"), acme_email=None),
+    )
+    _validate_config(config)  # Should not raise
+
+
+def test_validate_config_rejects_invalid_caddy_mode() -> None:
+    config = _make_config(caddy_mode="invalid")
+    with pytest.raises(DeployError, match="caddy_mode"):
+        _validate_config(config)
+
+
+# ── Task 11: Compose filename helpers and lifecycle commands ─────────
+
+
+def test_build_lifecycle_commands_for_external_caddy_local() -> None:
+    commands = build_lifecycle_commands(
+        deployment_mode=DEPLOY_MODE_LOCAL,
+        use_caddy=False,
+        caddy_public=False,
+        caddy_mode=CADDY_MODE_EXTERNAL,
+    )
+    assert DEFAULT_EXTERNAL_CADDY_COMPOSE_FILE in commands["start"]
+
+
+def test_build_lifecycle_commands_for_external_caddy_registry() -> None:
+    commands = build_lifecycle_commands(
+        deployment_mode=DEPLOY_MODE_REGISTRY,
+        use_caddy=False,
+        caddy_public=False,
+        caddy_mode=CADDY_MODE_EXTERNAL,
+    )
+    assert DEFAULT_IMAGE_EXTERNAL_CADDY_COMPOSE_FILE in commands["start"]
+    assert "pull" in commands
 
 
 # ── Trusted hosts prompt simplification ──────────────────────────────

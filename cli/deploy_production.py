@@ -27,6 +27,8 @@ DEFAULT_NO_CADDY_COMPOSE_FILE = "docker-compose.nocaddy.yml"
 DEFAULT_CADDY_PUBLIC_COMPOSE_FILE = "docker-compose.caddy-public.yml"
 DEFAULT_IMAGE_COMPOSE_FILE = "docker-compose.image.yml"
 DEFAULT_IMAGE_NO_CADDY_COMPOSE_FILE = "docker-compose.image.nocaddy.yml"
+DEFAULT_EXTERNAL_CADDY_COMPOSE_FILE = "docker-compose.external-caddy.yml"
+DEFAULT_IMAGE_EXTERNAL_CADDY_COMPOSE_FILE = "docker-compose.image.external-caddy.yml"
 DEFAULT_REMOTE_README = "DEPLOY-REMOTE.md"
 DEFAULT_IMAGE_TARBALL = "agblogger-image.tar"
 DEFAULT_REMOTE_PLATFORM = "linux/amd64"
@@ -723,6 +725,17 @@ def _validate_config(config: DeployConfig) -> None:
             raise DeployError("Caddy contact email must contain '@'")
     if config.caddy_public and config.caddy_config is None:
         raise DeployError("Caddy public exposure requires Caddy to be enabled")
+    if config.caddy_mode not in CADDY_MODES:
+        raise DeployError(
+            f"caddy_mode must be one of: {', '.join(sorted(CADDY_MODES))}"
+        )
+    if config.caddy_mode == CADDY_MODE_EXTERNAL:
+        if config.caddy_config is None:
+            raise DeployError("External Caddy mode requires a domain (caddy_config)")
+        if config.shared_caddy_config is None:
+            raise DeployError(
+                "External Caddy mode requires shared Caddy configuration"
+            )
     if config.deployment_mode not in DEPLOY_MODES:
         raise DeployError(f"DEPLOYMENT_MODE must be one of: {', '.join(sorted(DEPLOY_MODES))}")
     if config.deployment_mode in {DEPLOY_MODE_REGISTRY, DEPLOY_MODE_TARBALL}:
