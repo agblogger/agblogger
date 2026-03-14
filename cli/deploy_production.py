@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import getpass
+import ipaddress
 import json
 import os
 import re
@@ -13,7 +14,7 @@ import subprocess
 import sys
 import time
 from contextlib import suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from backend.validation import is_valid_trusted_host
@@ -59,6 +60,7 @@ SHARED_CADDY_CONTAINER_NAME = "caddy"
 DEFAULT_SHARED_CADDY_COMPOSE_FILE = "docker-compose.yml"
 DEFAULT_SHARED_CADDYFILE = "Caddyfile"
 CADDY_NETWORK_SUBNET_PLACEHOLDER = "__CADDY_NETWORK_SUBNET__"
+EXTERNAL_CADDY_SUBNET_INSPECT_FORMAT = "{{with index .IPAM.Config 0}}{{.Subnet}}{{end}}"
 
 
 def _read_version() -> str:
@@ -520,7 +522,7 @@ def build_setup_script_content(config: DeployConfig) -> str:
         )
 
         # Detect subnet and replace placeholder in .env.production
-        inspect_fmt = "{{{{range .IPAM.Config}}}}{{{{.Subnet}}}}{{{{end}}}}"
+        inspect_fmt = EXTERNAL_CADDY_SUBNET_INSPECT_FORMAT.replace("{", "{{").replace("}", "}}")
         subnet_cmd = (
             f"CADDY_SUBNET=$(docker network inspect"
             f' {EXTERNAL_CADDY_NETWORK_NAME} --format "{inspect_fmt}")'
@@ -594,6 +596,32 @@ def build_setup_script_content(config: DeployConfig) -> str:
             ),
             '    echo "  [${ELAPSED}s] agblogger: $HEALTH"',
             '    if [ "$HEALTH" = "healthy" ]; then',
+        ]
+    )
+    bundled_caddy_enabled = (
+        config.caddy_config is not None and config.caddy_mode == CADDY_MODE_BUNDLED
+    )
+    if bundled_caddy_enabled:
+        lines.extend(
+            [
+                f"        CADDY_ID=$({compose_cmd} ps -q caddy 2>/dev/null)",
+                '        if [ -z "$CADDY_ID" ]; then',
+                '            echo "  [${ELAPSED}s] caddy container not running yet"',
+                "            continue",
+                "        fi",
+                (
+                    "        CADDY_RUNNING=$(docker inspect"
+                    ' --format "{{.State.Running}}"'
+                    ' "$CADDY_ID" 2>/dev/null || echo "false")'
+                ),
+                '        if [ "$CADDY_RUNNING" != "true" ]; then',
+                '            echo "  [${ELAPSED}s] caddy container not running yet"',
+                "            continue",
+                "        fi",
+            ]
+        )
+    lines.extend(
+        [
             '        echo "All services healthy."',
             "        exit 0",
             "    fi",
@@ -870,6 +898,55 @@ def reload_shared_caddy() -> None:
         timeout=30,
     )
     print("Shared Caddy reloaded.")
+
+
+def _detect_external_caddy_subnet(project_dir: Path) -> str:
+    """Return the first configured subnet for the shared Caddy Docker network."""
+    result = subprocess.run(
+        [
+            "docker",
+            "network",
+            "inspect",
+            EXTERNAL_CADDY_NETWORK_NAME,
+            "--format",
+            EXTERNAL_CADDY_SUBNET_INSPECT_FORMAT,
+        ],
+        cwd=project_dir,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    if result.returncode != 0:
+        stderr = result.stderr.strip()
+        msg = "Failed to detect shared Caddy Docker network subnet"
+        if stderr:
+            msg = f"{msg}: {stderr}"
+        raise DeployError(msg)
+    subnet = result.stdout.strip()
+    if not subnet:
+        raise DeployError("Shared Caddy Docker network does not expose a usable subnet")
+    try:
+        ipaddress.ip_network(subnet, strict=False)
+    except ValueError as exc:
+        msg = f"Shared Caddy Docker network returned invalid subnet {subnet!r}"
+        raise DeployError(msg) from exc
+    return subnet
+
+
+def _resolve_external_caddy_proxy_config(config: DeployConfig, project_dir: Path) -> DeployConfig:
+    """Replace the external Caddy subnet placeholder with the live Docker subnet."""
+    if config.caddy_mode != CADDY_MODE_EXTERNAL:
+        return config
+    if CADDY_NETWORK_SUBNET_PLACEHOLDER not in config.trusted_proxy_ips:
+        return config
+
+    subnet = _detect_external_caddy_subnet(project_dir)
+    resolved_proxy_ips: list[str] = []
+    for entry in config.trusted_proxy_ips:
+        candidate = subnet if entry == CADDY_NETWORK_SUBNET_PLACEHOLDER else entry
+        if candidate not in resolved_proxy_ips:
+            resolved_proxy_ips.append(candidate)
+    return replace(config, trusted_proxy_ips=resolved_proxy_ips)
 
 
 # ── Compose helpers ──────────────────────────────────────────────────
@@ -1443,19 +1520,25 @@ def deploy(config: DeployConfig, project_dir: Path) -> DeployResult:
         print(msg)
 
     if config.deployment_mode == DEPLOY_MODE_LOCAL:
-        write_config_files(config, project_dir)
-
         if config.caddy_mode == CADDY_MODE_EXTERNAL and config.shared_caddy_config is not None:
             ensure_shared_caddy(
                 caddy_dir=config.shared_caddy_config.caddy_dir,
                 acme_email=config.shared_caddy_config.acme_email,
             )
-            if config.caddy_config is not None:
-                write_caddy_site_snippet(
-                    config.caddy_config,
-                    config.shared_caddy_config.caddy_dir,
-                )
-                reload_shared_caddy()
+            config = _resolve_external_caddy_proxy_config(config, project_dir)
+
+        write_config_files(config, project_dir)
+
+        if (
+            config.caddy_mode == CADDY_MODE_EXTERNAL
+            and config.shared_caddy_config is not None
+            and config.caddy_config is not None
+        ):
+            write_caddy_site_snippet(
+                config.caddy_config,
+                config.shared_caddy_config.caddy_dir,
+            )
+            reload_shared_caddy()
 
         if trivy_available:
             print(f"Building Docker image ({LOCAL_IMAGE_TAG})...")

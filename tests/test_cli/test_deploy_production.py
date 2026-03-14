@@ -90,6 +90,7 @@ def _make_config(
     platform: str | None = None,
     caddy_mode: str = CADDY_MODE_NONE,
     shared_caddy_config: SharedCaddyConfig | None = None,
+    trusted_proxy_ips: list[str] | None = None,
 ) -> DeployConfig:
     """Build a valid DeployConfig with sensible defaults for tests."""
     return DeployConfig(
@@ -97,7 +98,7 @@ def _make_config(
         admin_username="admin",
         admin_password="very-strong-password",
         trusted_hosts=["example.com"],
-        trusted_proxy_ips=[],
+        trusted_proxy_ips=trusted_proxy_ips or [],
         host_port=8000,
         host_bind_ip=host_bind_ip,
         caddy_config=caddy_config,
@@ -3826,6 +3827,37 @@ def test_deploy_external_caddy_local_bootstraps_and_writes_snippet(
     _ = commands
 
 
+def test_deploy_external_caddy_local_replaces_proxy_subnet_placeholder(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    (tmp_path / "docker-compose.yml").write_text("services: {}\n", encoding="utf-8")
+    _stub_subprocess(monkeypatch)
+    _stub_no_trivy(monkeypatch)
+    _stub_docker_inspect_missing(monkeypatch)
+    monkeypatch.setattr("cli.deploy_production.reload_shared_caddy", lambda: None)
+    monkeypatch.setattr(
+        "cli.deploy_production._detect_external_caddy_subnet",
+        lambda _project_dir: "172.31.0.0/16",
+    )
+
+    config = _make_config(
+        caddy_mode=CADDY_MODE_EXTERNAL,
+        caddy_config=CaddyConfig(domain="blog.example.com", email=None),
+        host_bind_ip=LOCALHOST_BIND_IP,
+        trusted_proxy_ips=[CADDY_NETWORK_SUBNET_PLACEHOLDER, "10.0.0.0/8"],
+        shared_caddy_config=SharedCaddyConfig(
+            caddy_dir=tmp_path / "shared-caddy",
+            acme_email="ops@example.com",
+        ),
+    )
+
+    deploy(config=config, project_dir=tmp_path)
+
+    env_content = (tmp_path / DEFAULT_ENV_FILE).read_text(encoding="utf-8")
+    assert CADDY_NETWORK_SUBNET_PLACEHOLDER not in env_content
+    assert 'TRUSTED_PROXY_IPS=["172.31.0.0/16","10.0.0.0/8"]' in env_content
+
+
 # ── Task 19: _wait_for_healthy skips bundled caddy in external mode ───
 
 
@@ -4051,6 +4083,19 @@ class TestBuildSetupScript:
         assert "/opt/caddy" not in script
         assert "caddy reload" not in script
 
+    def test_bundled_caddy_waits_for_caddy_service_before_success(self) -> None:
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+            caddy_config=CaddyConfig(domain="blog.example.com", email="admin@example.com"),
+            caddy_mode=CADDY_MODE_BUNDLED,
+            caddy_public=True,
+        )
+        script = build_setup_script_content(config)
+        assert "CADDY_ID=$(" in script
+        assert ".State.Running" in script
+        assert "caddy container not running yet" in script
+
     def test_external_caddy_bootstraps_shared_caddy(self) -> None:
         config = _make_config(
             deployment_mode=DEPLOY_MODE_TARBALL,
@@ -4083,6 +4128,21 @@ class TestBuildSetupScript:
         assert "reverse_proxy agblogger:8000" in script
         # Caddy reload
         assert "caddy reload" in script
+
+    def test_external_caddy_detects_single_subnet_from_network(self) -> None:
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+            caddy_config=CaddyConfig(domain="blog.example.com", email="admin@example.com"),
+            caddy_mode=CADDY_MODE_EXTERNAL,
+            shared_caddy_config=SharedCaddyConfig(
+                caddy_dir=Path("/opt/caddy"),
+                acme_email="admin@example.com",
+            ),
+        )
+        script = build_setup_script_content(config)
+        assert "index .IPAM.Config 0" in script
+        assert "range .IPAM.Config" not in script
 
     def test_external_caddy_uses_custom_caddy_dir(self) -> None:
         config = _make_config(
