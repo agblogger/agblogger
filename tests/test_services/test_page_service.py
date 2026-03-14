@@ -61,9 +61,14 @@ class TestGetPage:
         assert result.title == "Posts"
         assert result.rendered_html == ""
 
-    async def test_returns_none_when_page_has_no_file(self, cm: ContentManager) -> None:
+    async def test_returns_empty_html_for_virtual_page_without_file(
+        self, cm: ContentManager
+    ) -> None:
         result = await get_page(cm, "nofile")
-        assert result is None
+        assert result is not None
+        assert result.id == "nofile"
+        assert result.title == "No File Page"
+        assert result.rendered_html == ""
 
     async def test_returns_none_when_file_does_not_exist(
         self, content_dir: Path, cm: ContentManager

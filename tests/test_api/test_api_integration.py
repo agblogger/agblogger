@@ -2023,13 +2023,11 @@ class TestLabelPosts:
         assert "Hello World" in titles
 
     @pytest.mark.asyncio
-    async def test_label_posts_nonexistent_label_returns_empty(self, client: AsyncClient) -> None:
-        """GET /api/labels/nope/posts returns 200 with empty posts list."""
+    async def test_label_posts_nonexistent_label_returns_404(self, client: AsyncClient) -> None:
+        """GET /api/labels/nope/posts returns 404 when label does not exist."""
         resp = await client.get("/api/labels/nope/posts")
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["posts"] == []
-        assert data["total"] == 0
+        assert resp.status_code == 404
+        assert resp.json()["detail"] == "Label not found"
 
     @pytest.mark.asyncio
     async def test_label_posts_includes_descendant_labels(self, client: AsyncClient) -> None:

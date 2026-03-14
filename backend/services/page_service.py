@@ -28,12 +28,9 @@ async def get_page(content_manager: ContentManager, page_id: str) -> PageRespons
     if page_cfg is None:
         return None
 
-    if page_cfg.id == "timeline":
-        # Timeline is handled by the frontend
-        return PageResponse(id="timeline", title=page_cfg.title, rendered_html="")
-
     if page_cfg.file is None:
-        return None
+        # Virtual pages (timeline, labels, etc.) are handled by the frontend
+        return PageResponse(id=page_cfg.id, title=page_cfg.title, rendered_html="")
 
     raw_content = content_manager.read_page(page_id)
     if raw_content is None:

@@ -359,7 +359,7 @@ class TestPostRename:
         path_b = data_b["file_path"]
         path_c = data_c["file_path"]
 
-        # Rename B to "Alpha" → directory should get a -2 suffix
+        # Rename B to "Alpha" -> directory should get a -2 suffix
         resp_b = await client.put(
             f"/api/posts/{path_b}",
             json={
@@ -374,7 +374,7 @@ class TestPostRename:
         new_path_b = resp_b.json()["file_path"]
         assert "-2" in new_path_b
 
-        # Rename C to "Alpha" → directory should get a -3 suffix
+        # Rename C to "Alpha" -> directory should get a -3 suffix
         resp_c = await client.put(
             f"/api/posts/{path_c}",
             json={
@@ -397,3 +397,63 @@ class TestPostRename:
         assert (app_settings.content_dir / path_a).exists()
         assert (app_settings.content_dir / new_path_b).exists()
         assert (app_settings.content_dir / new_path_c).exists()
+
+    @pytest.mark.asyncio
+    async def test_old_api_path_redirects_to_new_path(
+        self, client: AsyncClient, app_settings: Settings
+    ) -> None:
+        """GET /api/posts/{old_path} should 301 redirect to new path after rename."""
+        token = await _login(client)
+        data = await _create_post(client, token, "Redirect Source")
+        original_path = data["file_path"]
+
+        resp = await client.put(
+            f"/api/posts/{original_path}",
+            json={
+                "title": "Redirect Target",
+                "body": "Some content here.\n",
+                "labels": [],
+                "is_draft": False,
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+        new_path = resp.json()["file_path"]
+        assert new_path != original_path
+
+        # GET the old path - should redirect
+        resp = await client.get(
+            f"/api/posts/{original_path}",
+            follow_redirects=False,
+        )
+        assert resp.status_code == 301
+        assert new_path in resp.headers["location"]
+
+    @pytest.mark.asyncio
+    async def test_old_api_path_redirect_serves_correct_post(
+        self, client: AsyncClient, app_settings: Settings
+    ) -> None:
+        """Following the redirect from old path should serve the renamed post."""
+        token = await _login(client)
+        data = await _create_post(client, token, "Follow Source")
+        original_path = data["file_path"]
+
+        resp = await client.put(
+            f"/api/posts/{original_path}",
+            json={
+                "title": "Follow Target",
+                "body": "Some content here.\n",
+                "labels": [],
+                "is_draft": False,
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+
+        # GET the old path with follow_redirects=True
+        resp = await client.get(
+            f"/api/posts/{original_path}",
+            follow_redirects=True,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["title"] == "Follow Target"

@@ -12,6 +12,7 @@ from typing import Annotated, Literal
 
 import yaml
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, UploadFile
+from fastapi.responses import RedirectResponse
 from sqlalchemy import delete, select, text
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -630,17 +631,46 @@ async def rename_asset(
         )
 
 
+def _resolve_symlink_redirect(file_path: str, content_manager: ContentManager) -> str | None:
+    """Check if a post path resolves through a symlink to a different canonical path.
+
+    Returns the resolved canonical path if a symlink redirect is found, None otherwise.
+    """
+    full_path = content_manager.content_dir / file_path
+    if not full_path.exists():
+        return None
+
+    resolved = full_path.resolve()
+    content_dir_resolved = content_manager.content_dir.resolve()
+
+    if not resolved.is_relative_to(content_dir_resolved):
+        return None
+
+    canonical = str(resolved.relative_to(content_dir_resolved))
+    if canonical == file_path:
+        return None  # No symlink involved
+
+    return canonical
+
+
 @router.get("/{file_path:path}", response_model=PostDetail)
 async def get_post_endpoint(
     file_path: str,
     session: Annotated[AsyncSession, Depends(get_session)],
     user: Annotated[User | None, Depends(get_current_user)],
-) -> PostDetail:
+    content_manager: Annotated[ContentManager, Depends(get_content_manager)],
+) -> PostDetail | RedirectResponse:
     """Get a single post by file path."""
     post = await get_post(session, file_path, draft_owner_username=user.username if user else None)
-    if post is None:
-        raise HTTPException(status_code=404, detail="Post not found")
-    return post
+    if post is not None:
+        return post
+
+    # Check if the path resolves through a symlink to a renamed post
+    resolved = _resolve_symlink_redirect(file_path, content_manager)
+    if resolved is not None:
+        return RedirectResponse(url=f"/api/posts/{resolved}", status_code=301)
+
+    raise HTTPException(status_code=404, detail="Post not found")
 
 
 @router.post("", response_model=PostDetail, status_code=201)
