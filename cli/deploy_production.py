@@ -1257,6 +1257,17 @@ def write_bundle_files(config: DeployConfig, bundle_dir: Path) -> None:
         encoding="utf-8",
     )
 
+    # Write idempotent setup script
+    setup_path = bundle_dir / DEFAULT_SETUP_SCRIPT
+    setup_path.write_text(build_setup_script_content(config), encoding="utf-8")
+    try:
+        setup_path.chmod(setup_path.stat().st_mode | 0o755)
+    except OSError as exc:
+        print(
+            f"WARNING: Could not set executable permission on {DEFAULT_SETUP_SCRIPT}: {exc}",
+            file=sys.stderr,
+        )
+
 
 # ── Build and scan ───────────────────────────────────────────────────
 

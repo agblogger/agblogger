@@ -4100,3 +4100,18 @@ class TestBuildSetupScript:
         script = build_setup_script_content(config)
         assert "/srv/caddy" in script
         assert "/opt/caddy" not in script
+
+
+class TestSetupScriptInBundle:
+    def test_write_bundle_files_creates_executable_setup_script(self, tmp_path: Path) -> None:
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+        )
+        bundle_dir = tmp_path / "bundle"
+        write_bundle_files(config, bundle_dir)
+        setup_path = bundle_dir / DEFAULT_SETUP_SCRIPT
+        assert setup_path.exists()
+        assert setup_path.read_text(encoding="utf-8").startswith("#!/usr/bin/env bash")
+        # Check executable permission
+        assert setup_path.stat().st_mode & 0o111 != 0
