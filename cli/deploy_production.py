@@ -1100,79 +1100,81 @@ def _build_remote_readme_content(config: DeployConfig, commands: dict[str, str])
             " to this server (required for TLS certificate provisioning)"
         )
     if config.deployment_mode == DEPLOY_MODE_REGISTRY:
-        lines.append(
-            "- Container registry authentication (if using a private registry)"
-        )
-    lines.extend([
-        "",
-        "Blog content is stored in `./content/` (created automatically on first start).",
-        "",
-        "## Getting started",
-        "",
-        "```",
-        "./setup.sh",
-        "```",
-        "",
-        "## Management commands",
-        "",
-        f"- Stop: `{commands['stop']}`",
-        f"- Status: `{commands['status']}`",
-        f"- Logs: `{commands['logs']}`",
-    ])
+        lines.append("- Container registry authentication (if using a private registry)")
+    lines.extend(
+        [
+            "",
+            "Blog content is stored in `./content/` (created automatically on first start).",
+            "",
+            "## Getting started",
+            "",
+            "```",
+            "./setup.sh",
+            "```",
+            "",
+            "## Management commands",
+            "",
+            f"- Stop: `{commands['stop']}`",
+            f"- Status: `{commands['status']}`",
+            f"- Logs: `{commands['logs']}`",
+        ]
+    )
     if config.caddy_public:
-        lines.extend([
-            "",
-            "## Firewall",
-            "",
-            "Caddy is configured to listen on ports 80 and 443 on all interfaces.",
-            "Ensure your server firewall allows inbound traffic on these ports and",
-            "blocks all other unnecessary ports. For example, with ufw:",
-            "```",
-            "ufw allow 80/tcp",
-            "ufw allow 443/tcp",
-            "ufw allow 22/tcp  # SSH",
-            "ufw enable",
-            "```",
-        ])
+        lines.extend(
+            [
+                "",
+                "## Firewall",
+                "",
+                "Caddy is configured to listen on ports 80 and 443 on all interfaces.",
+                "Ensure your server firewall allows inbound traffic on these ports and",
+                "blocks all other unnecessary ports. For example, with ufw:",
+                "```",
+                "ufw allow 80/tcp",
+                "ufw allow 443/tcp",
+                "ufw allow 22/tcp  # SSH",
+                "ufw enable",
+                "```",
+            ]
+        )
     data_note = (
         "The database volume stores user accounts and settings alongside regenerable"
         " cache data. Both `./content/` and the `agblogger-db` Docker volume must be"
         " preserved during upgrades. Schema migrations run automatically on startup."
     )
-    lines.extend([
-        "",
-        "## Upgrading",
-        "",
-        data_note,
-        "",
-        "To upgrade to a new version:",
-        "",
-        "1. Regenerate the bundle locally and replace all files in this directory"
-        " (compose files and config may change between versions)."
-        " Check the `VERSION` file to see what version generated the current bundle."
-        " The `./content/` directory and `agblogger-db` Docker volume are not part"
-        " of the bundle and will be preserved automatically.",
-    ])
+    lines.extend(
+        [
+            "",
+            "## Upgrading",
+            "",
+            data_note,
+            "",
+            "To upgrade to a new version:",
+            "",
+            "1. Regenerate the bundle locally and replace all files in this directory"
+            " (compose files and config may change between versions)."
+            " Check the `VERSION` file to see what version generated the current bundle."
+            " The `./content/` directory and `agblogger-db` Docker volume are not part"
+            " of the bundle and will be preserved automatically.",
+        ]
+    )
     if config.deployment_mode == DEPLOY_MODE_REGISTRY:
-        lines.append(
-            "2. Update the `AGBLOGGER_IMAGE` tag in `.env.production` if it changed."
-        )
+        lines.append("2. Update the `AGBLOGGER_IMAGE` tag in `.env.production` if it changed.")
     elif config.deployment_mode == DEPLOY_MODE_TARBALL:
-        lines.append(
-            "2. If the image tag changed, update `AGBLOGGER_IMAGE` in `.env.production`."
-        )
-    lines.extend([
-        "3. Run `./setup.sh` again.",
-        "",
-        "## Rollback",
-        "",
-        "If an upgrade causes problems, restore from the `.bak` backup files created",
-        "during the previous deployment and restart with the previous image:",
-        "```",
-        "cp .env.production.bak .env.production",
-        f"{commands['start']}",
-        "```",
-    ])
+        lines.append("2. If the image tag changed, update `AGBLOGGER_IMAGE` in `.env.production`.")
+    lines.extend(
+        [
+            "3. Run `./setup.sh` again.",
+            "",
+            "## Rollback",
+            "",
+            "If an upgrade causes problems, restore from the `.bak` backup files created",
+            "during the previous deployment and restart with the previous image:",
+            "```",
+            "cp .env.production.bak .env.production",
+            f"{commands['start']}",
+            "```",
+        ]
+    )
     return "\n".join(lines) + "\n"
 
 

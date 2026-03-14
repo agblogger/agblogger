@@ -4139,9 +4139,7 @@ class TestRemoteReadmeSetupScript:
             image_ref="ghcr.io/example/agblogger:v1.0",
             caddy_config=CaddyConfig(domain="blog.example.com", email=None),
             caddy_mode=CADDY_MODE_EXTERNAL,
-            shared_caddy_config=SharedCaddyConfig(
-                caddy_dir=Path("/opt/caddy"), acme_email=None
-            ),
+            shared_caddy_config=SharedCaddyConfig(caddy_dir=Path("/opt/caddy"), acme_email=None),
         )
         commands = build_lifecycle_commands(
             deployment_mode=config.deployment_mode,
