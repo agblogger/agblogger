@@ -3962,3 +3962,12 @@ def test_config_from_args_raises_on_caddy_external_without_domain() -> None:
     )
     with pytest.raises(DeployError, match="--caddy-external requires --caddy-domain"):
         config_from_args(args)
+
+
+# ── write_config_files: content directory seeding ────────────────────
+
+
+def test_write_config_files_creates_content_directory(tmp_path: Path) -> None:
+    config = _make_config()
+    write_config_files(config, tmp_path)
+    assert (tmp_path / "content").is_dir()

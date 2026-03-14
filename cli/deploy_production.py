@@ -819,6 +819,7 @@ def _write_env_file(config: DeployConfig, target_dir: Path) -> None:
 def write_config_files(config: DeployConfig, project_dir: Path) -> None:
     """Write local deployment config files and clean up stale alternatives."""
     _write_env_file(config, project_dir)
+    (project_dir / "content").mkdir(exist_ok=True)
 
     stale_files: list[str] = []
 
