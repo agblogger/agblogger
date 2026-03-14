@@ -35,7 +35,6 @@ Always start a dev server with `just start` (unsanboxed). Remember to stop a run
 ### Python (backend/, cli/, tests/)
 
 - Formatting: ruff (line length 100)
-- Linting: ruff + import-linter
 - Typing: strict discipline (`mypy` strict + `basedpyright`); modern union syntax (`str | None`, `dict[str, Any]`, `list[str]`)
 - Do NOT use `type: ignore` comments. If ignoring a type rule is necessary, ALWAYS ask the user for permission and explain why.
 - Do NOT use `noqa` comment. If ignoring a lint rule is necessary, ALWAYS ask the user for permission and explain why.
@@ -45,7 +44,6 @@ Always start a dev server with `just start` (unsanboxed). Remember to stop a run
 ### TypeScript (frontend/src/)
 
 - Formatting: ESLint with typescript-eslint (type-checked rules); avoid `eslint-disable-line`
-- Static hygiene: keep dependency-cruiser and knip checks passing
 - Naming & style: `PascalCase.tsx` components, `camelCase.ts` utilities/stores; `PascalCase` types/interfaces, `fetch` prefix for API functions, `handle` prefix for event handlers; Tailwind with semantic color tokens; follow existing patterns in the codebase
 
 ## Testing Guidelines
