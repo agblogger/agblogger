@@ -22,6 +22,7 @@ from backend.services.auth_service import (
     create_refresh_token_value,
     create_tokens,
     decode_access_token,
+    ensure_admin_user,
     hash_password,
     hash_token,
     refresh_tokens,
@@ -357,3 +358,46 @@ class TestInviteConsumption:
 
         assert consumed_again is False
         assert any("already consumed" in record.message for record in caplog.records)
+
+
+class TestEnsureAdminUser:
+    """Tests for admin user bootstrap with display name configuration."""
+
+    @pytest.mark.asyncio
+    async def test_uses_explicit_display_name(
+        self, session: AsyncSession, test_settings: Settings
+    ) -> None:
+        """When admin_display_name is set, use it instead of username."""
+        test_settings.admin_display_name = "Jane Doe"
+        await ensure_admin_user(session, test_settings)
+
+        stmt = select(User).where(User.username == test_settings.admin_username)
+        result = await session.execute(stmt)
+        admin = result.scalar_one()
+        assert admin.display_name == "Jane Doe"
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_username_when_display_name_empty(
+        self, session: AsyncSession, test_settings: Settings
+    ) -> None:
+        """When admin_display_name is empty, fall back to admin_username."""
+        test_settings.admin_display_name = ""
+        await ensure_admin_user(session, test_settings)
+
+        stmt = select(User).where(User.username == test_settings.admin_username)
+        result = await session.execute(stmt)
+        admin = result.scalar_one()
+        assert admin.display_name == test_settings.admin_username
+
+    @pytest.mark.asyncio
+    async def test_strips_whitespace_from_display_name(
+        self, session: AsyncSession, test_settings: Settings
+    ) -> None:
+        """Whitespace-only display names should fall back to username."""
+        test_settings.admin_display_name = "   "
+        await ensure_admin_user(session, test_settings)
+
+        stmt = select(User).where(User.username == test_settings.admin_username)
+        result = await session.execute(stmt)
+        admin = result.scalar_one()
+        assert admin.display_name == test_settings.admin_username

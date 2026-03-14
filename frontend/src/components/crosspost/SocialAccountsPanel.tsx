@@ -12,7 +12,6 @@ import {
   selectFacebookPage,
 } from '@/api/crosspost'
 import type { SocialAccount, FacebookPage } from '@/api/crosspost'
-import { HTTPError } from '@/api/client'
 import { extractErrorDetail } from '@/api/parseError'
 import PlatformIcon from '@/components/crosspost/PlatformIcon'
 import { formatDate } from '@/utils/date'
@@ -22,7 +21,9 @@ interface SocialAccountsPanelProps {
   onBusyChange: (busy: boolean) => void
 }
 
-const PLATFORM_DISPLAY_NAMES: Record<string, string> = {
+type PlatformKey = 'bluesky' | 'facebook' | 'mastodon' | 'x'
+
+const PLATFORM_DISPLAY_NAMES: Record<PlatformKey, string> = {
   bluesky: 'Bluesky',
   facebook: 'Facebook',
   mastodon: 'Mastodon',
@@ -30,7 +31,7 @@ const PLATFORM_DISPLAY_NAMES: Record<string, string> = {
 }
 
 function getPlatformDisplayName(platform: string): string {
-  return PLATFORM_DISPLAY_NAMES[platform] ?? platform
+  return (PLATFORM_DISPLAY_NAMES as Record<string, string>)[platform] ?? platform
 }
 
 function sortSocialAccounts(accounts: SocialAccount[]): SocialAccount[] {
@@ -106,11 +107,7 @@ export default function SocialAccountsPanel({ busy, onBusyChange }: SocialAccoun
       const data = await fetchSocialAccounts()
       setAccounts(sortSocialAccounts(data))
     } catch (err) {
-      if (err instanceof HTTPError && err.response.status === 401) {
-        setError('Session expired. Please log in again.')
-      } else {
-        setError('Failed to load social accounts.')
-      }
+      setError(await extractErrorDetail(err, 'Failed to load social accounts.'))
     } finally {
       setLoading(false)
     }
@@ -210,11 +207,7 @@ export default function SocialAccountsPanel({ busy, onBusyChange }: SocialAccoun
       setDeleteConfirmId(null)
       setSuccess('Account disconnected.')
     } catch (err) {
-      if (err instanceof HTTPError && err.response.status === 401) {
-        setError('Session expired. Please log in again.')
-      } else {
-        setError('Failed to disconnect account. Please try again.')
-      }
+      setError(await extractErrorDetail(err, 'Failed to disconnect account. Please try again.'))
     } finally {
       setDeleting(false)
     }

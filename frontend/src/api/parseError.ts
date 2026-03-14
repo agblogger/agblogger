@@ -59,5 +59,6 @@ export async function extractErrorDetail(err: unknown, fallback: string): Promis
     if (err.response.status >= 500) return fallback
     return parseErrorDetail(err.response, fallback)
   }
+  console.error('extractErrorDetail: unexpected non-HTTP error', err)
   return fallback
 }

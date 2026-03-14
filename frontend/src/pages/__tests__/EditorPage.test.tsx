@@ -192,6 +192,7 @@ describe('EditorPage', () => {
   })
 
   it('shows an error when connected social accounts cannot be loaded', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
     mockFetchSocialAccounts.mockRejectedValue(new Error('Network error'))
 
     renderEditor('/editor/new')
@@ -1015,6 +1016,7 @@ describe('EditorPage', () => {
   })
 
   it('shows a visible error instead of silently logging when fetchSocialAccounts fails', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
     mockFetchSocialAccounts.mockRejectedValueOnce(new Error('Network error'))
 
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})

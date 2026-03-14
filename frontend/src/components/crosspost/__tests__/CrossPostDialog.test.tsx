@@ -237,6 +237,7 @@ describe('CrossPostDialog', () => {
   })
 
   it('shows generic error for non-HTTP failures', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
     mockCrossPost.mockRejectedValue(new Error('Network error'))
 
     const user = userEvent.setup()

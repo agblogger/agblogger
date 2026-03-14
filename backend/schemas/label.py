@@ -13,7 +13,10 @@ LabelIdRef = Annotated[str, Field(min_length=1, max_length=100, pattern=r"^[a-z0
 
 
 def _validate_nonempty_names(v: list[str]) -> list[str]:
-    """Reject empty or whitespace-only display name strings."""
+    """Reject individual name entries that are empty or whitespace-only.
+
+    An empty list is allowed (labels need not have display names).
+    """
     for name in v:
         if not name.strip():
             raise ValueError("Display names must not be empty or whitespace-only")

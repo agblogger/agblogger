@@ -171,6 +171,7 @@ describe('CrossPostSection', () => {
   })
 
   it('shows a history error when history fetch fails', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
     mockFetchCrossPostHistory.mockRejectedValue(new Error('Network error'))
     mockFetchSocialAccounts.mockResolvedValue([])
 
@@ -184,6 +185,7 @@ describe('CrossPostSection', () => {
   })
 
   it('shows an accounts error when social accounts fetch fails', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
     mockFetchCrossPostHistory.mockResolvedValue({ items: [] })
     mockFetchSocialAccounts.mockRejectedValue(new Error('Network error'))
 
@@ -241,6 +243,7 @@ describe('CrossPostSection', () => {
   })
 
   it('shows both error banners when fetches fail with different messages', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
     mockFetchCrossPostHistory.mockRejectedValue(new MockHTTPError(401))
     mockFetchSocialAccounts.mockRejectedValue(new Error('Network error'))
 

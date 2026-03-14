@@ -136,7 +136,7 @@ async def create_label(
 ) -> LabelResponse | None:
     """Create a new label. Returns None if it already exists.
 
-    When *names* is None the label is created with an empty display-name list.
+    When *names* is None or an empty list, the label is created with no display names.
     Raises ValueError if adding a parent would create a cycle.
     """
     existing = await session.get(LabelCache, label_id)

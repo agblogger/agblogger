@@ -130,14 +130,46 @@ describe('extractErrorDetail', () => {
   })
 
   it('returns fallback for non-HTTPError', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const err = new Error('network error')
     const result = await extractErrorDetail(err, 'fallback')
     expect(result).toBe('fallback')
+    errorSpy.mockRestore()
   })
 
   it('returns fallback for non-Error value', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const result = await extractErrorDetail('string error', 'fallback')
     expect(result).toBe('fallback')
+    errorSpy.mockRestore()
+  })
+
+  it('logs console.error for non-HTTPError exceptions', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const err = new TypeError('Cannot read properties of undefined')
+    await extractErrorDetail(err, 'fallback')
+    expect(errorSpy).toHaveBeenCalledOnce()
+    expect(errorSpy).toHaveBeenCalledWith(
+      'extractErrorDetail: unexpected non-HTTP error',
+      err,
+    )
+    errorSpy.mockRestore()
+  })
+
+  it('does not log console.error for HTTPError exceptions', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const err = new MockHTTPError(500)
+    await extractErrorDetail(err, 'fallback')
+    expect(errorSpy).not.toHaveBeenCalled()
+    errorSpy.mockRestore()
+  })
+
+  it('returns fallback for 4xx HTTPError with unparseable body', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const err = new MockHTTPError(422, 'not json at all')
+    const result = await extractErrorDetail(err, 'Something went wrong')
+    expect(result).toBe('Something went wrong')
+    warnSpy.mockRestore()
   })
 })
 

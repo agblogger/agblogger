@@ -244,6 +244,7 @@ describe('SocialAccountsPanel', () => {
   })
 
   it('shows error when fetching accounts fails', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
     mockFetchSocialAccounts.mockRejectedValue(new Error('Network error'))
     renderPanel()
     await waitFor(() => {
@@ -341,6 +342,7 @@ describe('SocialAccountsPanel', () => {
   })
 
   it('shows Bluesky connect form and submits handle', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
     mockFetchSocialAccounts.mockResolvedValue([])
     mockAuthorizeBluesky.mockRejectedValue(new Error('Network'))
     const user = userEvent.setup()
@@ -366,6 +368,7 @@ describe('SocialAccountsPanel', () => {
   })
 
   it('shows Mastodon connect form and submits instance URL', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
     mockFetchSocialAccounts.mockResolvedValue([])
     mockAuthorizeMastodon.mockRejectedValue(new Error('Network'))
     const user = userEvent.setup()
@@ -389,6 +392,7 @@ describe('SocialAccountsPanel', () => {
   })
 
   it('submits X authorization on Connect click', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
     mockFetchSocialAccounts.mockResolvedValue([])
     mockAuthorizeX.mockRejectedValue(new Error('Network'))
     const user = userEvent.setup()
@@ -411,6 +415,7 @@ describe('SocialAccountsPanel', () => {
   })
 
   it('submits Facebook authorization on Connect click', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
     mockFetchSocialAccounts.mockResolvedValue([])
     mockAuthorizeFacebook.mockRejectedValue(new Error('Network'))
     const user = userEvent.setup()
@@ -472,6 +477,7 @@ describe('SocialAccountsPanel', () => {
   })
 
   it('shows disconnect error', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
     mockFetchSocialAccounts.mockResolvedValue([
       {
         id: 1,
@@ -547,6 +553,115 @@ describe('SocialAccountsPanel', () => {
       ).toBeInTheDocument()
     })
     expect(screen.queryByText(/OAuth state corrupt/)).not.toBeInTheDocument()
+  })
+
+  it('shows parsed 4xx error detail when loading accounts fails with client error', async () => {
+    mockFetchSocialAccounts.mockRejectedValue(
+      new MockHTTPError(403, JSON.stringify({ detail: 'Social accounts feature is disabled' })),
+    )
+    renderPanel()
+    await waitFor(() => {
+      expect(screen.getByText('Social accounts feature is disabled')).toBeInTheDocument()
+    })
+  })
+
+  it('shows generic fallback when loading accounts fails with 5xx', async () => {
+    mockFetchSocialAccounts.mockRejectedValue(
+      new MockHTTPError(500, JSON.stringify({ detail: 'Internal: database pool exhausted' })),
+    )
+    renderPanel()
+    await waitFor(() => {
+      expect(screen.getByText('Failed to load social accounts.')).toBeInTheDocument()
+    })
+    expect(screen.queryByText(/database pool exhausted/)).not.toBeInTheDocument()
+  })
+
+  it('shows session expired when loading accounts returns 401', async () => {
+    mockFetchSocialAccounts.mockRejectedValue(new MockHTTPError(401))
+    renderPanel()
+    await waitFor(() => {
+      expect(screen.getByText('Session expired. Please log in again.')).toBeInTheDocument()
+    })
+  })
+
+  it('shows parsed 4xx error detail when disconnect fails with client error', async () => {
+    mockFetchSocialAccounts.mockResolvedValue([
+      {
+        id: 1,
+        platform: 'bluesky',
+        account_name: 'alice.bsky.social',
+        created_at: '2026-01-15T10:00:00Z',
+      },
+    ])
+    mockDeleteSocialAccount.mockRejectedValue(
+      new MockHTTPError(403, JSON.stringify({ detail: 'Permission denied' })),
+    )
+    const user = userEvent.setup()
+    renderPanel()
+
+    await waitFor(() => {
+      expect(screen.getByText('alice.bsky.social')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByLabelText('Disconnect alice.bsky.social'))
+    await user.click(screen.getByText('Confirm'))
+
+    await waitFor(() => {
+      expect(screen.getByText('Permission denied')).toBeInTheDocument()
+    })
+  })
+
+  it('shows generic fallback when disconnect fails with 5xx', async () => {
+    mockFetchSocialAccounts.mockResolvedValue([
+      {
+        id: 1,
+        platform: 'bluesky',
+        account_name: 'alice.bsky.social',
+        created_at: '2026-01-15T10:00:00Z',
+      },
+    ])
+    mockDeleteSocialAccount.mockRejectedValue(
+      new MockHTTPError(500, JSON.stringify({ detail: 'Internal: connection reset' })),
+    )
+    const user = userEvent.setup()
+    renderPanel()
+
+    await waitFor(() => {
+      expect(screen.getByText('alice.bsky.social')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByLabelText('Disconnect alice.bsky.social'))
+    await user.click(screen.getByText('Confirm'))
+
+    await waitFor(() => {
+      expect(screen.getByText('Failed to disconnect account. Please try again.')).toBeInTheDocument()
+    })
+    expect(screen.queryByText(/connection reset/)).not.toBeInTheDocument()
+  })
+
+  it('shows session expired when disconnect returns 401', async () => {
+    mockFetchSocialAccounts.mockResolvedValue([
+      {
+        id: 1,
+        platform: 'bluesky',
+        account_name: 'alice.bsky.social',
+        created_at: '2026-01-15T10:00:00Z',
+      },
+    ])
+    mockDeleteSocialAccount.mockRejectedValue(new MockHTTPError(401))
+    const user = userEvent.setup()
+    renderPanel()
+
+    await waitFor(() => {
+      expect(screen.getByText('alice.bsky.social')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByLabelText('Disconnect alice.bsky.social'))
+    await user.click(screen.getByText('Confirm'))
+
+    await waitFor(() => {
+      expect(screen.getByText('Session expired. Please log in again.')).toBeInTheDocument()
+    })
   })
 
   it('cancels Mastodon connect form', async () => {

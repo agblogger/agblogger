@@ -92,6 +92,8 @@ export default function PostPage() {
       } catch (err) {
         if (err instanceof HTTPError && err.response.status === 404) {
           setLoadError('Post not found')
+        } else if (err instanceof HTTPError && err.response.status === 401) {
+          setLoadError('Session expired. Please log in again.')
         } else {
           setLoadError('Failed to load post. Please try again later.')
         }

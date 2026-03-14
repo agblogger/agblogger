@@ -39,6 +39,11 @@ vi.mock('@/components/labels/LabelChip', () => ({
   default: ({ labelId }: { labelId: string }) => <span data-testid="label">{labelId}</span>,
 }))
 
+vi.mock('@/api/crosspost', () => ({
+  fetchCrossPostHistory: vi.fn().mockResolvedValue({ items: [] }),
+  fetchSocialAccounts: vi.fn().mockResolvedValue([]),
+}))
+
 vi.mock('@/components/posts/TableOfContents', () => ({
   default: ({ contentRef }: { contentRef: React.RefObject<HTMLElement | null> }) => (
     <div data-testid="toc" data-has-ref={!!contentRef.current} />
@@ -141,6 +146,17 @@ describe('PostPage', () => {
       expect(screen.getByText('404')).toBeInTheDocument()
     })
     expect(screen.getByText('Post not found')).toBeInTheDocument()
+  })
+
+  it('shows session expired error when loading post returns 401', async () => {
+    mockFetchPost.mockRejectedValue(
+      new (MockHTTPError as unknown as new (s: number) => Error)(401),
+    )
+    renderPostPage()
+
+    await waitFor(() => {
+      expect(screen.getByText('Session expired. Please log in again.')).toBeInTheDocument()
+    })
   })
 
   it('hides delete button when not authenticated', async () => {
@@ -246,6 +262,7 @@ describe('PostPage', () => {
   })
 
   it('shows error on delete failure', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
     mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null, is_admin: true }
     mockFetchPost.mockResolvedValue(postDetail)
     mockDeletePost.mockRejectedValue(new Error('Network error'))
@@ -432,6 +449,7 @@ describe('PostPage', () => {
   })
 
   it('shows error message on publish failure', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
     mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null, is_admin: true }
     mockFetchPost.mockResolvedValue(draftPost)
     mockFetchPostForEdit.mockRejectedValue(new Error('Network error'))
