@@ -6,6 +6,7 @@ import argparse
 import re
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import patch
 
 import pytest
@@ -40,6 +41,7 @@ from cli.deploy_production import (
     PUBLIC_BIND_IP,
     SHARED_CADDY_CONTAINER_NAME,
     CaddyConfig,
+    CaddyMode,
     DeployConfig,
     DeployError,
     SharedCaddyConfig,
@@ -88,7 +90,7 @@ def _make_config(
     deployment_mode: str = DEPLOY_MODE_LOCAL,
     image_ref: str | None = None,
     platform: str | None = None,
-    caddy_mode: str = CADDY_MODE_NONE,
+    caddy_mode: CaddyMode = CADDY_MODE_NONE,
     shared_caddy_config: SharedCaddyConfig | None = None,
     trusted_proxy_ips: list[str] | None = None,
 ) -> DeployConfig:
@@ -1705,14 +1707,14 @@ class TestEnvContentCaddyComments:
             host_bind_ip=LOCALHOST_BIND_IP,
         )
         content = build_env_content(config)
-        assert "HOST_PORT=8000  # Only used in no-Caddy mode" in content
-        assert "HOST_BIND_IP=127.0.0.1  # Only used in no-Caddy mode" in content
+        assert "HOST_PORT=8000  # Not used in Caddy modes" in content
+        assert "HOST_BIND_IP=127.0.0.1  # Not used in Caddy modes" in content
 
     def test_no_caddy_mode_omits_comment(self) -> None:
         config = _make_config()
         content = build_env_content(config)
         assert "HOST_PORT=8000\n" in content
-        assert "# Only used in no-Caddy mode" not in content
+        assert "# Not used in Caddy modes" not in content
 
 
 class TestEnvContentBlueskyComment:
@@ -2469,8 +2471,21 @@ def test_validate_config_external_caddy_valid() -> None:
     _validate_config(config)  # Should not raise
 
 
+def test_validate_config_rejects_invalid_shared_acme_email() -> None:
+    config = _make_config(
+        caddy_mode=CADDY_MODE_EXTERNAL,
+        caddy_config=CaddyConfig(domain="blog.example.com", email="ops@example.com"),
+        host_bind_ip=LOCALHOST_BIND_IP,
+        shared_caddy_config=SharedCaddyConfig(
+            caddy_dir=Path("/opt/caddy"), acme_email="notanemail"
+        ),
+    )
+    with pytest.raises(DeployError, match="Shared Caddy ACME email must contain"):
+        _validate_config(config)
+
+
 def test_validate_config_rejects_invalid_caddy_mode() -> None:
-    config = _make_config(caddy_mode="invalid")
+    config = _make_config(caddy_mode=cast("CaddyMode", "invalid"))
     with pytest.raises(DeployError, match="caddy_mode"):
         _validate_config(config)
 
@@ -3087,6 +3102,36 @@ class TestDockerDaemonCheck:
         captured = capsys.readouterr()
         assert "Docker daemon is not running" in captured.out
 
+    def test_daemon_check_skipped_for_dry_run(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        """dry-run should not check Docker daemon since it only prints config."""
+        from cli.deploy_production import main
+
+        monkeypatch.setattr(
+            "sys.argv",
+            [
+                "deploy",
+                "--dry-run",
+                "--non-interactive",
+                "--project-dir",
+                str(tmp_path),
+                "--admin-username",
+                "admin",
+                "--admin-password",
+                "strong-password!",
+                "--trusted-hosts",
+                "example.com",
+            ],
+        )
+        # Docker binary not even present — should still succeed for dry-run
+        monkeypatch.setattr("cli.deploy_production.shutil.which", lambda _name: None)
+
+        # Should not raise
+        main()
+
 
 # ── Task 16: config_from_args external Caddy ─────────────────────────
 
@@ -3207,36 +3252,6 @@ def test_remote_readme_external_caddy_mentions_shared_setup() -> None:
     assert "Shared Caddy Setup" not in content
     assert "deployment script will bootstrap" not in content
 
-    def test_daemon_check_skipped_for_dry_run(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-        tmp_path: Path,
-    ) -> None:
-        """dry-run should not check Docker daemon since it only prints config."""
-        from cli.deploy_production import main
-
-        monkeypatch.setattr(
-            "sys.argv",
-            [
-                "deploy",
-                "--dry-run",
-                "--non-interactive",
-                "--project-dir",
-                str(tmp_path),
-                "--admin-username",
-                "admin",
-                "--admin-password",
-                "strong-password!",
-                "--trusted-hosts",
-                "example.com",
-            ],
-        )
-        # Docker binary not even present — should still succeed for dry-run
-        monkeypatch.setattr("cli.deploy_production.shutil.which", lambda _name: None)
-
-        # Should not raise
-        main()
-
 
 # ── Bundle dir credential reuse ──────────────────────────────────────
 
@@ -3307,6 +3322,56 @@ class TestCollectConfigBundleDirReuse:
         # Should use the project-root config, not the bundle one
         assert config.secret_key == root_config.secret_key
         assert config.admin_username == root_config.admin_username
+
+
+class TestCollectConfigExternalCaddy:
+    """collect_config should handle external Caddy mode interactive flow."""
+
+    def test_external_caddy_collects_shared_config(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        from cli.deploy_production import collect_config
+
+        # Simulate: no reuse, mode=local, caddy=external,
+        # domain=blog.example.com, email=ops@example.com, public=no,
+        # shared dir=/opt/caddy, acme email=(use default from caddy email),
+        # trusted hosts=blog.example.com, extra proxy ips=(none), docs=no
+        inputs = iter(
+            [
+                "admin",  # admin username
+                "",  # admin display name (default=admin)
+                "local",  # deployment mode
+                "external",  # caddy mode
+                "blog.example.com",  # caddy domain
+                "ops@example.com",  # caddy email
+                "/opt/caddy",  # shared caddy dir
+                "",  # acme email (use default)
+                "blog.example.com",  # trusted hosts
+                "",  # extra proxy ips
+                "n",  # expose docs
+            ]
+        )
+        getpass_inputs = iter(
+            [
+                "x" * 64,  # secret key (≥32 chars)
+                "strong-password!",  # admin password
+                "strong-password!",  # admin password confirmation
+            ]
+        )
+        monkeypatch.setattr("builtins.input", lambda _prompt: next(inputs))
+        monkeypatch.setattr(
+            "cli.deploy_production.getpass.getpass",
+            lambda _prompt: next(getpass_inputs),
+        )
+
+        config = collect_config(tmp_path)
+
+        assert config.caddy_mode == CADDY_MODE_EXTERNAL
+        assert config.caddy_config is not None
+        assert config.caddy_config.domain == "blog.example.com"
+        assert config.shared_caddy_config is not None
+        assert config.shared_caddy_config.caddy_dir == Path("/opt/caddy")
+        assert config.shared_caddy_config.acme_email == "ops@example.com"
 
 
 # ── Health timeout message ───────────────────────────────────────────
@@ -3756,6 +3821,27 @@ def test_reload_shared_caddy_runs_docker_exec(monkeypatch: pytest.MonkeyPatch) -
             "/etc/caddy/Caddyfile",
         ],
     ]
+
+
+class TestReloadSharedCaddyFailure:
+    """reload_shared_caddy should wrap subprocess errors in DeployError."""
+
+    def test_raises_deploy_error_on_subprocess_failure(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import subprocess as sp
+
+        from cli.deploy_production import DeployError, reload_shared_caddy
+
+        def fake_run(*_args, **kwargs):
+            exc = sp.CalledProcessError(1, ["docker", "exec", "caddy", "caddy", "reload"])
+            exc.stderr = "adapt: syntax error"
+            raise exc
+
+        monkeypatch.setattr("cli.deploy_production.subprocess.run", fake_run)
+
+        with pytest.raises(DeployError, match="Failed to reload shared Caddy"):
+            reload_shared_caddy()
 
 
 # ── Task 13: write_config_files external Caddy mode ──────────────────

@@ -16,6 +16,7 @@ import time
 from contextlib import suppress
 from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import Final, Literal
 
 from backend.validation import is_valid_trusted_host
 
@@ -50,10 +51,11 @@ LOCALHOST_BIND_IP = "127.0.0.1"
 HEALTH_POLL_INTERVAL_SECONDS = 5
 HEALTH_POLL_TIMEOUT_SECONDS = 60
 
-CADDY_MODE_BUNDLED = "bundled"
-CADDY_MODE_EXTERNAL = "external"
-CADDY_MODE_NONE = "none"
+CADDY_MODE_BUNDLED: Final = "bundled"
+CADDY_MODE_EXTERNAL: Final = "external"
+CADDY_MODE_NONE: Final = "none"
 CADDY_MODES = {CADDY_MODE_BUNDLED, CADDY_MODE_EXTERNAL, CADDY_MODE_NONE}
+CaddyMode = Literal["bundled", "external", "none"]
 DEFAULT_SHARED_CADDY_DIR = "/opt/caddy"
 EXTERNAL_CADDY_NETWORK_NAME = "caddy"
 SHARED_CADDY_CONTAINER_NAME = "caddy"
@@ -146,8 +148,13 @@ class DeployConfig:
     bundle_dir: Path = DEFAULT_BUNDLE_DIR
     tarball_filename: str = DEFAULT_IMAGE_TARBALL
     platform: str | None = None
-    caddy_mode: str = CADDY_MODE_NONE
+    caddy_mode: CaddyMode = CADDY_MODE_NONE
     shared_caddy_config: SharedCaddyConfig | None = None
+
+    @property
+    def use_bundled_caddy(self) -> bool:
+        """Whether a bundled (non-external) Caddy reverse proxy is configured."""
+        return self.caddy_config is not None and self.caddy_mode != CADDY_MODE_EXTERNAL
 
 
 @dataclass(frozen=True)
@@ -256,8 +263,8 @@ def build_env_content(config: DeployConfig) -> str:
         f"ADMIN_DISPLAY_NAME={_quote_env_value(config.admin_display_name)}",
     ]
     if use_caddy:
-        lines.append(f"HOST_PORT={config.host_port}  # Only used in no-Caddy mode")
-        lines.append(f"HOST_BIND_IP={config.host_bind_ip}  # Only used in no-Caddy mode")
+        lines.append(f"HOST_PORT={config.host_port}  # Not used in Caddy modes")
+        lines.append(f"HOST_BIND_IP={config.host_bind_ip}  # Not used in Caddy modes")
     else:
         lines.append(f"HOST_PORT={config.host_port}")
         lines.append(f"HOST_BIND_IP={config.host_bind_ip}")
@@ -374,7 +381,7 @@ def build_setup_script_content(config: DeployConfig) -> str:
     """Build an idempotent setup script for remote deployment bundles."""
     compose_flags = _compose_filenames(
         config.deployment_mode,
-        use_caddy=config.caddy_config is not None and config.caddy_mode != CADDY_MODE_EXTERNAL,
+        use_caddy=config.use_bundled_caddy,
         caddy_public=config.caddy_public,
         caddy_mode=config.caddy_mode,
     )
@@ -532,6 +539,14 @@ def build_setup_script_content(config: DeployConfig) -> str:
             [
                 "# Detect Caddy network subnet for trusted proxy configuration",
                 subnet_cmd,
+                'if [ -z "$CADDY_SUBNET" ]; then',
+                (
+                    '    echo "Error: Could not detect Caddy network subnet.'
+                    " Ensure the caddy Docker network exists"
+                    ' and has IPAM configured." >&2'
+                ),
+                "    exit 1",
+                "fi",
                 sed_cmd,
                 "",
             ]
@@ -659,7 +674,7 @@ def _agblogger_env_section() -> str:
 
 
 def _agblogger_healthcheck_section(*, include_network: bool = False) -> str:
-    """Return the restart + healthcheck YAML block for agblogger services."""
+    """Return the restart + healthcheck YAML block, with optional static-IP network assignment."""
     block = (
         "    restart: unless-stopped\n"
         "    healthcheck:\n"
@@ -730,7 +745,7 @@ def build_direct_compose_content() -> str:
 
 
 def build_image_compose_content() -> str:
-    """Build an image-only Caddy-first compose file for remote deployment."""
+    """Build an image-based compose file with bundled Caddy reverse proxy for remote deployment."""
     return (
         "services:\n"
         "  agblogger:\n"
@@ -846,6 +861,7 @@ def _is_container_running(container_name: str) -> bool:
         ["docker", "inspect", "--format", "{{.State.Running}}", container_name],
         capture_output=True,
         text=True,
+        timeout=10,
     )
     return result.returncode == 0 and "true" in result.stdout.strip().lower()
 
@@ -857,8 +873,14 @@ def ensure_shared_caddy(caddy_dir: Path, acme_email: str | None) -> None:
         return
 
     print(f"Bootstrapping shared Caddy at {caddy_dir}...")
-    caddy_dir.mkdir(parents=True, exist_ok=True)
-    (caddy_dir / "sites").mkdir(exist_ok=True)
+    try:
+        caddy_dir.mkdir(parents=True, exist_ok=True)
+        (caddy_dir / "sites").mkdir(exist_ok=True)
+    except OSError as exc:
+        raise DeployError(
+            f"Cannot create shared Caddy directory {caddy_dir}: {exc}. "
+            "Check permissions or choose a different path with --shared-caddy-dir."
+        ) from exc
 
     caddyfile_path = caddy_dir / DEFAULT_SHARED_CADDYFILE
     if not caddyfile_path.exists():
@@ -877,26 +899,39 @@ def write_caddy_site_snippet(caddy_config: CaddyConfig, caddy_dir: Path) -> None
     """Write a Caddy site snippet for AgBlogger into the shared sites directory."""
     sites_dir = caddy_dir / "sites"
     snippet_path = sites_dir / f"{caddy_config.domain}.caddy"
-    snippet_path.write_text(build_caddy_site_snippet(caddy_config), encoding="utf-8")
+    try:
+        snippet_path.write_text(build_caddy_site_snippet(caddy_config), encoding="utf-8")
+    except OSError as exc:
+        raise DeployError(f"Failed to write Caddy site snippet to {snippet_path}: {exc}") from exc
     print(f"Wrote Caddy site snippet: {snippet_path}")
 
 
 def reload_shared_caddy() -> None:
     """Reload the shared Caddy container to pick up config changes."""
     print("Reloading shared Caddy configuration...")
-    subprocess.run(
-        [
-            "docker",
-            "exec",
-            SHARED_CADDY_CONTAINER_NAME,
-            "caddy",
-            "reload",
-            "--config",
-            "/etc/caddy/Caddyfile",
-        ],
-        check=True,
-        timeout=30,
-    )
+    try:
+        subprocess.run(
+            [
+                "docker",
+                "exec",
+                SHARED_CADDY_CONTAINER_NAME,
+                "caddy",
+                "reload",
+                "--config",
+                "/etc/caddy/Caddyfile",
+            ],
+            check=True,
+            timeout=30,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        stderr_hint = exc.stderr[:300] if exc.stderr else "(no output)"
+        raise DeployError(
+            f"Failed to reload shared Caddy configuration. "
+            f"Check the site snippet syntax in the shared Caddy sites directory.\n"
+            f"Caddy output: {stderr_hint}"
+        ) from exc
     print("Shared Caddy reloaded.")
 
 
@@ -956,7 +991,7 @@ def _compose_filenames(
     deployment_mode: str,
     use_caddy: bool,
     caddy_public: bool,
-    caddy_mode: str = CADDY_MODE_NONE,
+    caddy_mode: CaddyMode = CADDY_MODE_NONE,
 ) -> list[str]:
     """Return compose filenames for the requested deployment mode."""
     if caddy_mode == CADDY_MODE_EXTERNAL:
@@ -983,7 +1018,7 @@ def _compose_base_command(
     use_caddy: bool,
     caddy_public: bool,
     env_filename: str,
-    caddy_mode: str = CADDY_MODE_NONE,
+    caddy_mode: CaddyMode = CADDY_MODE_NONE,
 ) -> str:
     """Build the shared docker compose command prefix for lifecycle commands."""
     filenames = _compose_filenames(deployment_mode, use_caddy, caddy_public, caddy_mode=caddy_mode)
@@ -1000,7 +1035,7 @@ def build_lifecycle_commands(
     caddy_public: bool,
     env_filename: str = DEFAULT_ENV_FILE,
     tarball_filename: str = DEFAULT_IMAGE_TARBALL,
-    caddy_mode: str = CADDY_MODE_NONE,
+    caddy_mode: CaddyMode = CADDY_MODE_NONE,
 ) -> dict[str, str]:
     """Build Docker lifecycle commands shown to the user."""
     base = _compose_base_command(
@@ -1063,6 +1098,11 @@ def _validate_config(config: DeployConfig) -> None:
             raise DeployError("External Caddy mode requires a domain (caddy_config)")
         if config.shared_caddy_config is None:
             raise DeployError("External Caddy mode requires shared Caddy configuration")
+        if (
+            config.shared_caddy_config.acme_email
+            and "@" not in config.shared_caddy_config.acme_email
+        ):
+            raise DeployError("Shared Caddy ACME email must contain '@'")
     if config.deployment_mode not in DEPLOY_MODES:
         raise DeployError(f"DEPLOYMENT_MODE must be one of: {', '.join(sorted(DEPLOY_MODES))}")
     if config.deployment_mode in {DEPLOY_MODE_REGISTRY, DEPLOY_MODE_TARBALL}:
@@ -1424,7 +1464,7 @@ def _compose_base_args(config: DeployConfig) -> list[str]:
     args = ["compose", "--env-file", ".env.production"]
     for filename in _compose_filenames(
         DEPLOY_MODE_LOCAL,
-        use_caddy=config.caddy_config is not None and config.caddy_mode != CADDY_MODE_EXTERNAL,
+        use_caddy=config.use_bundled_caddy,
         caddy_public=config.caddy_public,
         caddy_mode=config.caddy_mode,
     ):
@@ -1455,7 +1495,7 @@ def _wait_for_healthy(
     base = _compose_base_args(config)
     start = time.monotonic()
     deadline = start + timeout
-    use_caddy = config.caddy_config is not None and config.caddy_mode != CADDY_MODE_EXTERNAL
+    use_caddy = config.use_bundled_caddy
     print("Waiting for services to become healthy...")
     while time.monotonic() < deadline:
         time.sleep(interval)
@@ -1772,7 +1812,7 @@ def _is_valid_caddy_domain(domain: str) -> bool:
     return _DOMAIN_RE.match(domain) is not None
 
 
-def _prompt_caddy_mode() -> str:
+def _prompt_caddy_mode() -> CaddyMode:
     """Prompt for Caddy reverse proxy mode."""
     print("\nCaddy reverse proxy configuration:")
     print("  bundled  - Deploy a Caddy container alongside AgBlogger (default)")
@@ -1782,8 +1822,12 @@ def _prompt_caddy_mode() -> str:
         value = input("Caddy mode [bundled/external/none] [bundled]: ").strip().lower()
         if not value:
             return CADDY_MODE_BUNDLED
-        if value in CADDY_MODES:
-            return value
+        if value == CADDY_MODE_BUNDLED:
+            return CADDY_MODE_BUNDLED
+        if value == CADDY_MODE_EXTERNAL:
+            return CADDY_MODE_EXTERNAL
+        if value == CADDY_MODE_NONE:
+            return CADDY_MODE_NONE
         print("Please choose bundled, external, or none.")
 
 
@@ -2039,6 +2083,7 @@ def config_from_args(args: argparse.Namespace) -> DeployConfig:
     caddy_config: CaddyConfig | None = None
     caddy_public = False
     shared_caddy_config: SharedCaddyConfig | None = None
+    caddy_mode: CaddyMode
     if args.caddy_domain:
         caddy_config = CaddyConfig(domain=args.caddy_domain, email=args.caddy_email)
         if args.caddy_external:

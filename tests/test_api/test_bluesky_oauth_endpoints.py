@@ -57,6 +57,82 @@ class TestCallbackEndpoint:
             )
             assert resp.status_code == 400
 
+    async def test_rejects_callback_with_missing_iss(
+        self, test_settings: Settings, monkeypatch
+    ) -> None:
+        """Regression: missing iss parameter must be rejected (issuer confusion attack)."""
+        test_settings.bluesky_client_url = "https://myblog.example.com"
+
+        pending_state = {
+            "pkce_verifier": "pkce-verifier",
+            "dpop_nonce": "nonce",
+            "user_id": 123,
+            "did": "did:plc:abc123",
+            "handle": "alice.bsky.social",
+            "auth_server_meta": {
+                "issuer": "https://auth.example.com",
+                "token_endpoint": "https://auth.example.com/oauth/token",
+                "pds_url": "https://pds.example.com",
+            },
+        }
+
+        def mock_pop(_store: object, state: str) -> dict[str, object] | None:
+            if state == "valid-state":
+                return pending_state
+            return None
+
+        monkeypatch.setattr("backend.crosspost.bluesky_oauth_state.OAuthStateStore.pop", mock_pop)
+
+        async with create_test_client(test_settings) as client:
+            resp = await client.get(
+                "/api/crosspost/bluesky/callback",
+                params={"code": "auth-code", "state": "valid-state"},
+                follow_redirects=False,
+            )
+
+        assert resp.status_code == 400
+        assert "Issuer mismatch" in resp.json()["detail"]
+
+    async def test_rejects_callback_with_wrong_iss(
+        self, test_settings: Settings, monkeypatch
+    ) -> None:
+        """Regression: wrong iss parameter must be rejected (issuer confusion attack)."""
+        test_settings.bluesky_client_url = "https://myblog.example.com"
+
+        pending_state = {
+            "pkce_verifier": "pkce-verifier",
+            "dpop_nonce": "nonce",
+            "user_id": 123,
+            "did": "did:plc:abc123",
+            "handle": "alice.bsky.social",
+            "auth_server_meta": {
+                "issuer": "https://auth.example.com",
+                "token_endpoint": "https://auth.example.com/oauth/token",
+                "pds_url": "https://pds.example.com",
+            },
+        }
+
+        def mock_pop(_store: object, state: str) -> dict[str, object] | None:
+            if state == "valid-state":
+                return pending_state
+            return None
+
+        monkeypatch.setattr("backend.crosspost.bluesky_oauth_state.OAuthStateStore.pop", mock_pop)
+
+        async with create_test_client(test_settings) as client:
+            resp = await client.get(
+                "/api/crosspost/bluesky/callback",
+                params={
+                    "code": "auth-code",
+                    "state": "valid-state",
+                    "iss": "https://evil.example.com",
+                },
+                follow_redirects=False,
+            )
+
+        assert resp.status_code == 400
+        assert "Issuer mismatch" in resp.json()["detail"]
+
     async def test_duplicate_account_only_replaces_matching_handle(
         self, test_settings: Settings, monkeypatch
     ) -> None:
