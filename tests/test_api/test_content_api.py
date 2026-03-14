@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 import pytest
@@ -205,6 +206,28 @@ class TestContentServing:
         """An empty or root-level path returns opaque 404."""
         resp = await client.get("/api/content/")
         assert resp.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_path_traversal_logs_warning(
+        self, client: AsyncClient, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Path traversal attempts should be logged at WARNING level.
+
+        Use a percent-encoded slash (%2F) so the HTTP client does not normalize
+        away the ``..`` segment before the request reaches the server.
+        """
+        with caplog.at_level(logging.WARNING, logger="backend.api.content"):
+            await client.get("/api/content/posts/..%2Findex.toml")
+        assert any("Path traversal" in r.message for r in caplog.records)
+
+    @pytest.mark.asyncio
+    async def test_disallowed_prefix_logs_warning(
+        self, client: AsyncClient, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Disallowed prefix requests should be logged at WARNING level."""
+        with caplog.at_level(logging.WARNING, logger="backend.api.content"):
+            await client.get("/api/content/index.toml")
+        assert any("Disallowed content prefix" in r.message for r in caplog.records)
 
     @pytest.mark.asyncio
     async def test_content_disposition_escapes_double_quotes_in_filename(

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import mimetypes
 from pathlib import Path
 from typing import Annotated
@@ -17,6 +18,8 @@ from backend.models.post import PostCache
 from backend.models.user import User
 
 router = APIRouter(prefix="/api/content", tags=["content"])
+
+logger = logging.getLogger(__name__)
 
 _ALLOWED_PREFIXES = ("posts/", "assets/")
 _ATTACHMENT_MEDIA_TYPES = frozenset(
@@ -49,10 +52,12 @@ def _validate_path(file_path: str, content_dir: Path) -> Path:
     )
 
     if ".." in file_path.split("/"):
+        logger.warning("Path traversal attempt blocked: %s", file_path)
         raise not_found
 
     # Check allowed prefixes
     if not file_path.startswith(_ALLOWED_PREFIXES):
+        logger.warning("Disallowed content prefix requested: %s", file_path)
         raise not_found
 
     # Resolve the full path (follows symlinks)
@@ -60,6 +65,7 @@ def _validate_path(file_path: str, content_dir: Path) -> Path:
 
     # Verify resolved path stays within the content directory
     if not full_path.is_relative_to(content_dir.resolve()):
+        logger.warning("Resolved path escapes content directory: %s", file_path)
         raise not_found
 
     return full_path
