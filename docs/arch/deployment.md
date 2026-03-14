@@ -26,6 +26,16 @@ Database schema migrations run programmatically during application startup, befo
 
 The repository includes deployment tooling for local and remote deployments. These workflows differ in how they deliver the image and configuration, but they converge on the same runtime architecture.
 
+## Caddy Reverse Proxy Modes
+
+The deployment helper supports three Caddy configurations:
+
+- **Bundled** (default): a dedicated Caddy container is deployed alongside AgBlogger in the same compose stack. Suitable for single-service servers.
+- **External**: AgBlogger joins a shared Caddy instance that lives in a separate compose stack at a configurable host directory (default `/opt/caddy/`). Each service drops a site snippet into the shared `sites/` directory. The deployment script bootstraps the shared Caddy if it doesn't exist. Suitable for multi-service servers with distinct subdomains.
+- **None**: no Caddy; AgBlogger is exposed directly. Suitable when another reverse proxy is already in place.
+
+The external Caddy mode uses `docker exec caddy caddy reload` to apply configuration changes without restarting the container.
+
 ## Verification Path
 
 The project also supports a packaged local deployment profile for deployment-style verification and dynamic scanning. It is separate from the day-to-day development server so production-like serving paths can be exercised before or alongside real deployments.
