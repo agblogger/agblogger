@@ -28,6 +28,7 @@ from cli.deploy_production import (
     DEFAULT_IMAGE_TARBALL,
     DEFAULT_NO_CADDY_COMPOSE_FILE,
     DEFAULT_REMOTE_PLATFORM,
+    DEFAULT_SETUP_SCRIPT,
     DEFAULT_SHARED_CADDY_DIR,
     DEPLOY_MODE_LOCAL,
     DEPLOY_MODE_REGISTRY,
@@ -60,6 +61,7 @@ from cli.deploy_production import (
     build_image_direct_compose_content,
     build_image_external_caddy_compose_content,
     build_lifecycle_commands,
+    build_setup_script_content,
     build_shared_caddy_compose_content,
     build_shared_caddyfile_content,
     check_prerequisites,
@@ -4003,3 +4005,26 @@ def test_config_from_args_external_caddy_uses_placeholder_not_compose_subnet() -
     config = config_from_args(args)
     assert CADDY_NETWORK_SUBNET_PLACEHOLDER in config.trusted_proxy_ips
     assert COMPOSE_SUBNET not in config.trusted_proxy_ips
+
+
+class TestBuildSetupScript:
+    def test_tarball_no_caddy_loads_image_and_starts(self) -> None:
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+        )
+        script = build_setup_script_content(config)
+        assert script.startswith("#!/usr/bin/env bash")
+        assert "set -euo pipefail" in script
+        # Preflight
+        assert "docker info" in script
+        # Load image
+        assert "docker load -i" in script
+        assert DEFAULT_IMAGE_TARBALL in script
+        # Start
+        assert "docker compose" in script
+        assert "up -d" in script
+        # Health check
+        assert "(healthy)" in script
+        # No Caddy bootstrapping
+        assert "caddy reload" not in script
