@@ -563,6 +563,42 @@ def build_image_external_caddy_compose_content() -> str:
     )
 
 
+# ── Shared Caddy bootstrap ───────────────────────────────────────────
+
+
+def _is_container_running(container_name: str) -> bool:
+    """Check if a Docker container exists and is running."""
+    result = subprocess.run(
+        ["docker", "inspect", "--format", "{{.State.Running}}", container_name],
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode == 0 and "true" in result.stdout.strip().lower()
+
+
+def ensure_shared_caddy(caddy_dir: Path, acme_email: str | None) -> None:
+    """Bootstrap or verify a shared Caddy reverse proxy at the given directory."""
+    if _is_container_running(SHARED_CADDY_CONTAINER_NAME):
+        print(f"Shared Caddy container '{SHARED_CADDY_CONTAINER_NAME}' is already running.")
+        return
+
+    print(f"Bootstrapping shared Caddy at {caddy_dir}...")
+    caddy_dir.mkdir(parents=True, exist_ok=True)
+    (caddy_dir / "sites").mkdir(exist_ok=True)
+
+    caddyfile_path = caddy_dir / DEFAULT_SHARED_CADDYFILE
+    if not caddyfile_path.exists():
+        caddyfile_path.write_text(build_shared_caddyfile_content(acme_email), encoding="utf-8")
+
+    compose_path = caddy_dir / DEFAULT_SHARED_CADDY_COMPOSE_FILE
+    if not compose_path.exists():
+        compose_path.write_text(build_shared_caddy_compose_content(), encoding="utf-8")
+
+    print("Starting shared Caddy container...")
+    _run_command(["docker", "compose", "up", "-d"], caddy_dir)
+    print("Shared Caddy container started.")
+
+
 # ── Compose helpers ──────────────────────────────────────────────────
 
 

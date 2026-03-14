@@ -60,6 +60,7 @@ from cli.deploy_production import (
     config_from_args,
     deploy,
     dry_run,
+    ensure_shared_caddy,
     parse_csv_list,
     parse_existing_env,
     print_config_summary,
@@ -136,6 +137,16 @@ def _stub_with_trivy(monkeypatch: pytest.MonkeyPatch) -> None:
         "cli.deploy_production.shutil.which",
         lambda name: "/usr/bin/trivy" if name == "trivy" else "/usr/bin/docker",
     )
+
+
+def _stub_docker_inspect_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Stub _is_container_running to return False."""
+    monkeypatch.setattr("cli.deploy_production._is_container_running", lambda _name: False)
+
+
+def _stub_docker_inspect_running(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Stub _is_container_running to return True."""
+    monkeypatch.setattr("cli.deploy_production._is_container_running", lambda _name: True)
 
 
 # ── parse_csv_list ───────────────────────────────────────────────────
@@ -3415,3 +3426,49 @@ def test_build_image_external_caddy_compose_joins_external_network() -> None:
     content = build_image_external_caddy_compose_content()
     assert f"name: {EXTERNAL_CADDY_NETWORK_NAME}" in content
     assert "external: true" in content
+
+
+# ── ensure_shared_caddy ──────────────────────────────────────────────
+
+
+def test_ensure_shared_caddy_creates_directory_structure(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    commands = _stub_subprocess(monkeypatch)
+    _stub_docker_inspect_missing(monkeypatch)
+    caddy_dir = tmp_path / "caddy"
+    ensure_shared_caddy(caddy_dir=caddy_dir, acme_email="ops@example.com")
+    assert (caddy_dir / "sites").is_dir()
+    assert (caddy_dir / "Caddyfile").exists()
+    assert "import /etc/caddy/sites/*.caddy" in (caddy_dir / "Caddyfile").read_text("utf-8")
+    assert "email ops@example.com" in (caddy_dir / "Caddyfile").read_text("utf-8")
+    assert (caddy_dir / "docker-compose.yml").exists()
+    _ = commands  # captured but not inspected here
+
+
+def test_ensure_shared_caddy_starts_container(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    commands = _stub_subprocess(monkeypatch)
+    _stub_docker_inspect_missing(monkeypatch)
+    caddy_dir = tmp_path / "caddy"
+    ensure_shared_caddy(caddy_dir=caddy_dir, acme_email=None)
+    compose_up_calls = [(cmd, cwd) for cmd, cwd, _ in commands if "compose" in cmd and "up" in cmd]
+    assert len(compose_up_calls) == 1
+    assert compose_up_calls[0][1] == caddy_dir
+
+
+def test_ensure_shared_caddy_skips_if_already_running(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    commands = _stub_subprocess(monkeypatch)
+    _stub_docker_inspect_running(monkeypatch)
+    caddy_dir = tmp_path / "caddy"
+    caddy_dir.mkdir()
+    (caddy_dir / "sites").mkdir()
+    (caddy_dir / "Caddyfile").write_text("existing", encoding="utf-8")
+    (caddy_dir / "docker-compose.yml").write_text("existing", encoding="utf-8")
+    ensure_shared_caddy(caddy_dir=caddy_dir, acme_email=None)
+    compose_up_calls = [cmd for cmd, _, _ in commands if "up" in cmd]
+    assert len(compose_up_calls) == 0
+
