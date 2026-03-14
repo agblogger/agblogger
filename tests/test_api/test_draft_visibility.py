@@ -308,3 +308,94 @@ class TestDraftContentFileVisibility:
         asset_path = f"{Path(file_path).parent}/secret.txt"
         leaked_resp = await client.get(f"/api/content/{asset_path}")
         assert leaked_resp.status_code == 404
+
+
+class TestRenamedDraftRedirectVisibility:
+    """Renamed draft post redirects must preserve draft confidentiality."""
+
+    @staticmethod
+    async def _create_and_rename_draft(
+        client: AsyncClient,
+        headers: dict[str, str],
+    ) -> tuple[str, str]:
+        create_resp = await client.post(
+            "/api/posts",
+            json={
+                "title": "Private Redirect Source",
+                "body": "Secret draft",
+                "labels": [],
+                "is_draft": True,
+            },
+            headers=headers,
+        )
+        assert create_resp.status_code == 201
+        original_path = create_resp.json()["file_path"]
+
+        rename_resp = await client.put(
+            f"/api/posts/{original_path}",
+            json={
+                "title": "Private Redirect Target",
+                "body": "Secret draft",
+                "labels": [],
+                "is_draft": True,
+            },
+            headers=headers,
+        )
+        assert rename_resp.status_code == 200
+        return original_path, rename_resp.json()["file_path"]
+
+    @pytest.mark.asyncio
+    async def test_renamed_draft_old_api_path_returns_404_for_unauthenticated(
+        self, client: AsyncClient
+    ) -> None:
+        """Unauthenticated callers must not learn the renamed draft path."""
+        token = await _login(client, "admin", "admin123")
+        original_path, _new_path = await self._create_and_rename_draft(
+            client,
+            _auth_headers(token),
+        )
+
+        leaked_resp = await client.get(f"/api/posts/{original_path}", follow_redirects=False)
+
+        assert leaked_resp.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_renamed_draft_old_api_path_returns_404_for_wrong_user(
+        self, client: AsyncClient
+    ) -> None:
+        """A different authenticated user must not learn the renamed draft path."""
+        token = await _login(client, "admin", "admin123")
+        original_path, _new_path = await self._create_and_rename_draft(
+            client,
+            _auth_headers(token),
+        )
+        other_token = await _register_and_login(client, "other5", "other5@test.com", "password1234")
+
+        leaked_resp = await client.get(
+            f"/api/posts/{original_path}",
+            headers=_auth_headers(other_token),
+            follow_redirects=False,
+        )
+
+        assert leaked_resp.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_renamed_draft_old_api_path_redirects_for_author(
+        self, client: AsyncClient
+    ) -> None:
+        """The draft author may use the compatibility redirect for renamed drafts."""
+        token = await _login(client, "admin", "admin123")
+        original_path, new_path = await self._create_and_rename_draft(
+            client,
+            _auth_headers(token),
+        )
+
+        redirect_resp = await client.get(
+            f"/api/posts/{original_path}",
+            headers=_auth_headers(token),
+            follow_redirects=False,
+        )
+
+        assert redirect_resp.status_code == 301
+        assert redirect_resp.headers["location"] == f"/api/posts/{new_path}"
+        assert redirect_resp.headers["cache-control"] == "private, no-store"

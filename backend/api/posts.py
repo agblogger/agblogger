@@ -676,14 +676,26 @@ async def get_post_endpoint(
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
 ) -> PostDetail | RedirectResponse:
     """Get a single post by file path."""
-    post = await get_post(session, file_path, draft_owner_username=user.username if user else None)
+    draft_owner_username = user.username if user else None
+    post = await get_post(session, file_path, draft_owner_username=draft_owner_username)
     if post is not None:
         return post
 
     # Check if the path resolves through a symlink to a renamed post
     resolved = _resolve_symlink_redirect(file_path, content_manager)
     if resolved is not None:
-        return RedirectResponse(url=f"/api/posts/{resolved}", status_code=301)
+        redirect_target = await get_post(
+            session,
+            resolved,
+            draft_owner_username=draft_owner_username,
+        )
+        if redirect_target is not None:
+            headers = {"Cache-Control": "private, no-store"} if redirect_target.is_draft else None
+            return RedirectResponse(
+                url=f"/api/posts/{resolved}",
+                status_code=301,
+                headers=headers,
+            )
 
     raise HTTPException(status_code=404, detail="Post not found")
 
