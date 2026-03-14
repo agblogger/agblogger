@@ -3863,9 +3863,7 @@ def test_wait_for_healthy_skips_caddy_check_in_external_mode(
 # ── Task 21: end-to-end deploy with external Caddy ────────────────────
 
 
-def test_deploy_external_caddy_full_flow(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_deploy_external_caddy_full_flow(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Full local deploy with external Caddy: bootstrap, snippet, compose, start."""
     (tmp_path / "docker-compose.yml").write_text("services: {}\n", encoding="utf-8")
     commands = _stub_subprocess(monkeypatch)
@@ -3922,7 +3920,5 @@ def test_deploy_external_caddy_full_flow(
     assert DEFAULT_EXTERNAL_CADDY_COMPOSE_FILE in result.commands["start"]
 
     # Docker commands: shared caddy compose up + agblogger compose up
-    compose_up_calls = [
-        (cmd, cwd) for cmd, cwd, _ in commands if "up" in cmd
-    ]
+    compose_up_calls = [(cmd, cwd) for cmd, cwd, _ in commands if "up" in cmd]
     assert len(compose_up_calls) == 2  # shared caddy + agblogger
