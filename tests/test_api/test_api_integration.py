@@ -1537,6 +1537,13 @@ class TestSearch:
         assert resp.status_code == 422
 
     @pytest.mark.asyncio
+    async def test_search_whitespace_only_returns_empty(self, client: AsyncClient) -> None:
+        """Whitespace-only search query should return empty results, not crash."""
+        resp = await client.get("/api/posts/search", params={"q": "   "})
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    @pytest.mark.asyncio
     async def test_search_prefix_matches(self, client: AsyncClient) -> None:
         """Searching for 'Hell' should match 'Hello World' via prefix matching."""
         resp = await client.get("/api/posts/search", params={"q": "Hell"})
