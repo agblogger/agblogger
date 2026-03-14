@@ -107,12 +107,7 @@ All interactions with external services (pandoc, git, database, filesystem, netw
 
 ### HTML sanitization
 
-All rendered HTML derived from markdown must continue to pass through the backend sanitizer before being served. The sanitizer:
-
-- Strips tags that are not explicitly allowed
-- Allows only a narrow set of safe attributes, with tag-specific exceptions such as link and image URLs
-- Rejects dangerous URL schemes and protocol-relative (`//`) URLs in navigable or fetchable attributes
-- Escapes all text content and attribute values
+All rendered HTML derived from markdown must continue to pass through the backend sanitizer before being served.
 
 When modifying the sanitizer:
 - Never add `script`, `object`, `embed`, `style`, `form`, `input`, or `button` to the allowed tags
@@ -186,15 +181,10 @@ Outbound requests to social platforms and OAuth providers are a separate trust b
 
 ## Content Security Policy (CSP)
 
-The backend enforces a strict CSP with a self-hosted resource model and narrowly scoped exceptions for approved content types and embeds.
-
-### Rules
-
 - **All fonts, scripts, and stylesheets must be self-hosted.** Do not add CDN `@import` or `<link>` tags pointing to third-party domains (e.g., Google Fonts, cdnjs, unpkg). These will be silently blocked in production.
 - **Images** are the main exception: external HTTPS images are allowed, but scripts and styles are not.
 - **Inline styles** are currently allowed for existing frontend rendering needs. Do not broaden script execution allowances to match that exception.
 - If a new third-party resource is genuinely needed, self-host it (e.g., fontsource for fonts, npm packages for libraries) rather than relaxing the CSP.
-- Do not add `'unsafe-eval'` to `script-src`. The custom Semgrep rule (`.semgrep.yml`) blocks `eval()` and `new Function()`.
 - `frame-ancestors 'none'` prevents clickjacking. Do not relax this unless embedding is an explicit requirement.
 - Keep any allowed embed domains aligned between the sanitizer and CSP.
 
@@ -216,11 +206,7 @@ The backend enforces a strict CSP with a self-hosted resource model and narrowly
 
 ### Production fail-fast guards
 
-Startup validation enforces basic production security requirements for secrets, admin bootstrap credentials, trusted host configuration, and externally visible OAuth client URLs.
-
-Do not bypass these checks outside explicit debug/test scenarios. Do not weaken the minimum requirements without a clear security review.
-
-`docker-compose.yml` requires `SECRET_KEY`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, and `TRUSTED_HOSTS` via `${VAR?message}` syntax. Do not make these optional.
+Startup validation enforces basic production security requirements for secrets, admin bootstrap credentials, trusted host configuration, and externally visible OAuth client URLs. Do not bypass these checks outside explicit debug/test scenarios. Do not weaken the minimum requirements without a clear security review.
 
 ## Logging
 
@@ -228,20 +214,12 @@ Do not bypass these checks outside explicit debug/test scenarios. Do not weaken 
 - Never log plaintext passwords, tokens, invite codes, or decrypted credentials.
 - Use `exc_info=True` (or pass the exception directly) for error-level logs so the traceback is captured.
 
-## Dependency Security
-
-When adding dependencies:
-- Run `just check-static` to verify no new vulnerabilities are introduced.
-- For Python: `uv add <package>` then `uv run pip-audit`.
-- For npm: `cd frontend && npm install <package>` then `npm audit`.
-- Font packages using OFL-1.1 are already allowlisted in `trivy.yaml`. Other non-standard licenses may need explicit acknowledgment.
-
 ## Infrastructure
 
 ### Docker
 
 - The application runs as the non-root `agblogger` user. Do not add `USER root` or `--privileged` flags.
-- The multi-stage build discards the frontend build stage. Do not copy dev dependencies or build tools into the production image.
+- Do not copy dev dependencies or build tools into the production image.
 - AgBlogger is internal-only in `docker-compose.yml` (`expose: 8000`, not `ports`). Only Caddy publishes ports to the host.
 
 ### Subprocess safety
@@ -250,39 +228,3 @@ When adding dependencies:
 - Keep executable names fixed and validate any user-influenced refs, paths, or identifiers before passing them to subprocesses.
 - Set timeouts for subprocess calls and handle failure paths without crashing the server.
 - Do not return raw subprocess stderr/stdout to clients when it may expose internal paths, commands, or environment details.
-
-### API documentation
-
-OpenAPI docs (`/docs`, `/redoc`, `/openapi.json`) are disabled by default in production (`expose_docs=False`). Do not enable them in production unless explicitly required.
-
-## Testing Security Changes
-
-Every security-related change must include tests. Use this checklist:
-
-### Authentication tests
-- Unauthenticated request returns 401
-- Invalid credentials return 401
-- Expired token returns 401
-- Revoked token returns 401
-- Rate-limited request returns 429 with `Retry-After` header
-- Cross-origin login returns 403
-
-### Authorization tests
-- Non-admin accessing admin endpoint returns 403
-- Non-author accessing draft content returns 404
-
-### Input validation tests
-- Path traversal (`..`) returns 400
-- Forbidden prefix returns 403
-- XSS payload in markdown is sanitized in rendered output
-- Invalid URL schemes (`javascript:`, `data:`) are stripped from href/src
-
-### Outbound integration tests
-- Outbound HTTP protections reject private or loopback destinations
-- OAuth callback with missing, expired, or mismatched state is rejected
-- OAuth callback with issuer or subject mismatch is rejected when those checks apply
-- Malformed provider responses fail closed with a generic client-facing error
-
-### Error handling tests
-- External service failure returns generic error message, not internal details
-- Exception traceback is not present in response body
