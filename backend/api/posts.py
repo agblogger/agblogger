@@ -650,9 +650,7 @@ def _resolve_symlink_redirect(file_path: str, content_manager: ContentManager) -
         content_dir_resolved = content_manager.content_dir.resolve()
 
         if not resolved.is_relative_to(content_dir_resolved):
-            logger.warning(
-                "Symlink for %s resolves outside content directory", file_path
-            )
+            logger.warning("Symlink for %s resolves outside content directory", file_path)
             return None
 
         canonical = str(resolved.relative_to(content_dir_resolved))

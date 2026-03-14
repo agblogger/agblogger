@@ -459,9 +459,7 @@ class TestPostRename:
         assert resp.json()["title"] == "Follow Target"
 
     @pytest.mark.asyncio
-    async def test_symlink_redirect_rejects_path_traversal(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_symlink_redirect_rejects_path_traversal(self, client: AsyncClient) -> None:
         """GET /api/posts/ with .. segments should return 404, not probe the filesystem."""
         resp = await client.get("/api/posts/posts/../../etc/passwd")
         assert resp.status_code == 404
