@@ -331,6 +331,36 @@ def build_shared_caddyfile_content(acme_email: str | None) -> str:
     return f"{global_block}import /etc/caddy/sites/*.caddy\n"
 
 
+def build_shared_caddy_compose_content() -> str:
+    """Build the compose file for a shared Caddy reverse proxy."""
+    return (
+        "services:\n"
+        "  caddy:\n"
+        "    image: caddy:2\n"
+        "    container_name: caddy\n"
+        "    ports:\n"
+        '      - "80:80"\n'
+        '      - "443:443"\n'
+        "    volumes:\n"
+        "      - ./Caddyfile:/etc/caddy/Caddyfile:ro\n"
+        "      - ./sites:/etc/caddy/sites:ro\n"
+        "      - caddy-data:/data\n"
+        "      - caddy-config:/config\n"
+        "    restart: unless-stopped\n"
+        "    networks:\n"
+        f"      - {EXTERNAL_CADDY_NETWORK_NAME}\n"
+        "\n"
+        "volumes:\n"
+        "  caddy-data:\n"
+        "  caddy-config:\n"
+        "\n"
+        "networks:\n"
+        f"  {EXTERNAL_CADDY_NETWORK_NAME}:\n"
+        f"    name: {EXTERNAL_CADDY_NETWORK_NAME}\n"
+        "    driver: bridge\n"
+    )
+
+
 def _agblogger_env_section() -> str:
     """Return the environment YAML block shared across all compose files."""
     return (

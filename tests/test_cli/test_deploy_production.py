@@ -52,6 +52,7 @@ from cli.deploy_production import (
     build_image_compose_content,
     build_image_direct_compose_content,
     build_lifecycle_commands,
+    build_shared_caddy_compose_content,
     build_shared_caddyfile_content,
     check_prerequisites,
     config_from_args,
@@ -3348,3 +3349,30 @@ def test_build_shared_caddyfile_without_email() -> None:
     content = build_shared_caddyfile_content(acme_email=None)
     assert "email" not in content
     assert "import /etc/caddy/sites/*.caddy" in content
+
+
+# ── build_shared_caddy_compose_content ──────────────────────────────
+
+
+def test_build_shared_caddy_compose_has_caddy_service() -> None:
+    content = build_shared_caddy_compose_content()
+    assert "caddy:" in content
+    assert "image: caddy:2" in content
+    assert '"80:80"' in content
+    assert '"443:443"' in content
+
+
+def test_build_shared_caddy_compose_has_sites_volume() -> None:
+    content = build_shared_caddy_compose_content()
+    assert "./sites:/etc/caddy/sites:ro" in content
+    assert "./Caddyfile:/etc/caddy/Caddyfile:ro" in content
+
+
+def test_build_shared_caddy_compose_defines_external_network() -> None:
+    content = build_shared_caddy_compose_content()
+    assert f"name: {EXTERNAL_CADDY_NETWORK_NAME}" in content
+
+
+def test_build_shared_caddy_compose_has_restart_policy() -> None:
+    content = build_shared_caddy_compose_content()
+    assert "restart: unless-stopped" in content
