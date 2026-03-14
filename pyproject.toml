@@ -23,7 +23,7 @@ dependencies = [
     # TOML writing (reading via stdlib tomllib)
     "tomli-w>=1.1",
     # Auth
-    "pyjwt>=2.10",
+    "pyjwt>=2.12",
     "cryptography>=45.0",
     "bcrypt>=4.0",
     # Validation & settings
