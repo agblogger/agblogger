@@ -48,9 +48,11 @@ from cli.deploy_production import (
     build_caddyfile_content,
     build_direct_compose_content,
     build_env_content,
+    build_external_caddy_compose_content,
     build_image,
     build_image_compose_content,
     build_image_direct_compose_content,
+    build_image_external_caddy_compose_content,
     build_lifecycle_commands,
     build_shared_caddy_compose_content,
     build_shared_caddyfile_content,
@@ -3376,3 +3378,40 @@ def test_build_shared_caddy_compose_defines_external_network() -> None:
 def test_build_shared_caddy_compose_has_restart_policy() -> None:
     content = build_shared_caddy_compose_content()
     assert "restart: unless-stopped" in content
+
+
+# ── build_external_caddy_compose_content ─────────────────────────────
+
+
+def test_build_external_caddy_compose_joins_external_network() -> None:
+    content = build_external_caddy_compose_content()
+    assert f"name: {EXTERNAL_CADDY_NETWORK_NAME}" in content
+    assert "external: true" in content
+    assert "caddy:" not in content.split("networks:")[0]
+
+
+def test_build_external_caddy_compose_exposes_port_internally() -> None:
+    content = build_external_caddy_compose_content()
+    assert "expose:" in content
+    assert '"8000"' in content
+    assert "ports:" not in content
+
+
+def test_build_external_caddy_compose_has_build_directive() -> None:
+    content = build_external_caddy_compose_content()
+    assert "build: ." in content
+
+
+# ── build_image_external_caddy_compose_content ───────────────────────
+
+
+def test_build_image_external_caddy_compose_uses_image_ref() -> None:
+    content = build_image_external_caddy_compose_content()
+    assert "${AGBLOGGER_IMAGE?Set AGBLOGGER_IMAGE}" in content
+    assert "build:" not in content
+
+
+def test_build_image_external_caddy_compose_joins_external_network() -> None:
+    content = build_image_external_caddy_compose_content()
+    assert f"name: {EXTERNAL_CADDY_NETWORK_NAME}" in content
+    assert "external: true" in content

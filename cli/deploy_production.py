@@ -506,6 +506,63 @@ def build_caddy_public_compose_override_content() -> str:
     return 'services:\n  caddy:\n    ports:\n      - "80:80"\n      - "443:443"\n'
 
 
+def _external_caddy_network_block() -> str:
+    """Return the network YAML block for joining an external Caddy network."""
+    return (
+        "networks:\n"
+        f"  {EXTERNAL_CADDY_NETWORK_NAME}:\n"
+        f"    name: {EXTERNAL_CADDY_NETWORK_NAME}\n"
+        "    external: true\n"
+    )
+
+
+def build_external_caddy_compose_content() -> str:
+    """Build a local-build AgBlogger compose file for use with an external Caddy proxy."""
+    return (
+        "services:\n"
+        "  agblogger:\n"
+        "    build: .\n"
+        f"    image: {LOCAL_IMAGE_TAG}\n"
+        "    user: root\n"
+        "    expose:\n"
+        '      - "8000"\n'
+        "    volumes:\n"
+        "      - ./content:/data/content\n"
+        "      - agblogger-db:/data/db\n"
+        + _agblogger_env_section()
+        + _agblogger_healthcheck_section()
+        + "    networks:\n"
+        f"      - {EXTERNAL_CADDY_NETWORK_NAME}\n"
+        "\n"
+        "volumes:\n"
+        "  agblogger-db:\n"
+        "\n" + _external_caddy_network_block()
+    )
+
+
+def build_image_external_caddy_compose_content() -> str:
+    """Build an image-only AgBlogger compose file for use with an external Caddy proxy."""
+    return (
+        "services:\n"
+        "  agblogger:\n"
+        '    image: "${AGBLOGGER_IMAGE?Set AGBLOGGER_IMAGE}"\n'
+        "    user: root\n"
+        "    expose:\n"
+        '      - "8000"\n'
+        "    volumes:\n"
+        "      - ./content:/data/content\n"
+        "      - agblogger-db:/data/db\n"
+        + _agblogger_env_section()
+        + _agblogger_healthcheck_section()
+        + "    networks:\n"
+        f"      - {EXTERNAL_CADDY_NETWORK_NAME}\n"
+        "\n"
+        "volumes:\n"
+        "  agblogger-db:\n"
+        "\n" + _external_caddy_network_block()
+    )
+
+
 # ── Compose helpers ──────────────────────────────────────────────────
 
 
