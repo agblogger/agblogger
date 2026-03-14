@@ -44,6 +44,7 @@ from cli.deploy_production import (
     backup_existing_configs,
     backup_file,
     build_caddy_public_compose_override_content,
+    build_caddy_site_snippet,
     build_caddyfile_content,
     build_direct_compose_content,
     build_env_content,
@@ -3305,3 +3306,29 @@ def test_config_from_args_sets_none_mode_when_no_caddy_domain() -> None:
 
     config = config_from_args(args)
     assert config.caddy_mode == CADDY_MODE_NONE
+
+
+# ── build_caddy_site_snippet ─────────────────────────────────────────
+
+
+def test_build_caddy_site_snippet_contains_domain_block() -> None:
+    caddy = CaddyConfig(domain="blog.example.com", email="ops@example.com")
+    content = build_caddy_site_snippet(caddy)
+    assert "blog.example.com {" in content
+    assert "reverse_proxy agblogger:8000" in content
+    assert "email" not in content.split("{")[0]
+
+
+def test_build_caddy_site_snippet_includes_request_body_limits() -> None:
+    caddy = CaddyConfig(domain="blog.example.com", email=None)
+    content = build_caddy_site_snippet(caddy)
+    assert "@postUpload" in content
+    assert "max_size 55MB" in content
+    assert "@syncCommit" in content
+    assert "max_size 100MB" in content
+
+
+def test_build_caddy_site_snippet_includes_hsts() -> None:
+    caddy = CaddyConfig(domain="blog.example.com", email=None)
+    content = build_caddy_site_snippet(caddy)
+    assert "Strict-Transport-Security" in content

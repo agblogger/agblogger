@@ -275,12 +275,10 @@ def build_env_content(config: DeployConfig) -> str:
     return "\n".join(lines) + "\n"
 
 
-def build_caddyfile_content(config: CaddyConfig) -> str:
-    """Build Caddyfile content for HTTPS reverse proxy with request body limits."""
-    global_block = f"{{\n    email {config.email}\n}}\n\n" if config.email else ""
+def _caddy_site_block_body(domain: str) -> str:
+    """Return the full Caddyfile site block for a given domain."""
     return (
-        f"{global_block}"
-        f"{config.domain} {{\n"
+        f"{domain} {{\n"
         "    @postUpload path /api/posts/upload\n"
         "    request_body @postUpload {\n"
         "        max_size 55MB\n"
@@ -314,6 +312,17 @@ def build_caddyfile_content(config: CaddyConfig) -> str:
         "    encode gzip zstd\n"
         "}\n"
     )
+
+
+def build_caddyfile_content(config: CaddyConfig) -> str:
+    """Build Caddyfile content for HTTPS reverse proxy with request body limits."""
+    global_block = f"{{\n    email {config.email}\n}}\n\n" if config.email else ""
+    return f"{global_block}{_caddy_site_block_body(config.domain)}"
+
+
+def build_caddy_site_snippet(config: CaddyConfig) -> str:
+    """Build a per-domain Caddyfile snippet without the global email block."""
+    return _caddy_site_block_body(config.domain)
 
 
 def _agblogger_env_section() -> str:
