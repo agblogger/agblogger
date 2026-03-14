@@ -1690,7 +1690,16 @@ def collect_config(project_dir: Path | None = None) -> DeployConfig:
 
     trusted_hosts = _prompt_trusted_hosts(caddy_config.domain if caddy_config else None)
 
-    if caddy_mode != CADDY_MODE_NONE:
+    if caddy_mode == CADDY_MODE_EXTERNAL:
+        proxy_ips = [CADDY_NETWORK_SUBNET_PLACEHOLDER]
+        print("Caddy proxy subnet will be auto-detected from the Docker network at deploy time.")
+        extra_proxy_ips = parse_csv_list(
+            input("Additional trusted proxy IPs (comma-separated, optional): ").strip()
+        )
+        for ip in extra_proxy_ips:
+            if ip not in proxy_ips:
+                proxy_ips.append(ip)
+    elif caddy_mode != CADDY_MODE_NONE:
         proxy_ips = [COMPOSE_SUBNET]
         print(f"Caddy proxy subnet ({COMPOSE_SUBNET}) auto-configured as a trusted proxy.")
         extra_proxy_ips = parse_csv_list(
