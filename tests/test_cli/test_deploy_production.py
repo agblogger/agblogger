@@ -3356,6 +3356,7 @@ class TestRemoteReadmeBundleUpgradeNote:
         content = _build_remote_readme_content(config, commands)
         assert "Regenerate the bundle locally and replace all files" in content
         assert "compose files and config may change" in content
+        assert "Preserve your `.env.production`" in content
 
     def test_tarball_readme_mentions_full_bundle_replacement(self) -> None:
         config = _make_config(
@@ -3369,6 +3370,7 @@ class TestRemoteReadmeBundleUpgradeNote:
         )
         content = _build_remote_readme_content(config, commands)
         assert "Regenerate the bundle locally and replace all files" in content
+        assert "Preserve your `.env.production`" in content
 
 
 # ── Version banner ───────────────────────────────────────────────────
@@ -4023,7 +4025,8 @@ class TestBuildSetupScript:
         assert "docker compose" in script
         assert "up -d" in script
         # Health check
-        assert "(healthy)" in script
+        assert "docker inspect" in script
+        assert '"healthy"' in script
         # No Caddy bootstrapping
         assert "caddy reload" not in script
 
@@ -4098,6 +4101,54 @@ class TestBuildSetupScript:
         script = build_setup_script_content(config)
         assert "/srv/caddy" in script
         assert "/opt/caddy" not in script
+
+    def test_preflight_checks_docker_compose_v2(self) -> None:
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+        )
+        script = build_setup_script_content(config)
+        assert "docker compose version" in script
+
+    def test_backs_up_env_production(self) -> None:
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+        )
+        script = build_setup_script_content(config)
+        assert "cp .env.production .env.production.bak" in script
+
+    def test_displays_version_on_fresh_install(self) -> None:
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+        )
+        script = build_setup_script_content(config)
+        assert "Installing AgBlogger" in script
+        assert "Upgrading AgBlogger" in script
+
+    def test_external_caddy_reload_failure_exits(self) -> None:
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+            caddy_config=CaddyConfig(domain="blog.example.com", email="admin@example.com"),
+            caddy_mode=CADDY_MODE_EXTERNAL,
+            shared_caddy_config=SharedCaddyConfig(
+                caddy_dir=Path("/opt/caddy"),
+                acme_email="admin@example.com",
+            ),
+        )
+        script = build_setup_script_content(config)
+        assert "if ! docker exec caddy caddy reload" in script
+
+    def test_health_check_uses_docker_inspect(self) -> None:
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+        )
+        script = build_setup_script_content(config)
+        assert "docker inspect" in script
+        assert ".State.Health.Status" in script
 
 
 class TestRemoteReadmeSetupScript:
@@ -4196,6 +4247,20 @@ class TestRemoteReadmeSetupScript:
         readme = _build_remote_readme_content(config, commands)
         upgrade_idx = readme.index("Upgrading")
         assert "./setup.sh" in readme[upgrade_idx:]
+
+    def test_readme_mentions_env_backup(self) -> None:
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+        )
+        commands = build_lifecycle_commands(
+            deployment_mode=config.deployment_mode,
+            use_caddy=False,
+            caddy_public=False,
+            tarball_filename=config.tarball_filename,
+        )
+        readme = _build_remote_readme_content(config, commands)
+        assert "backs up `.env.production`" in readme
 
 
 class TestSetupScriptInBundle:

@@ -395,8 +395,31 @@ def build_setup_script_content(config: DeployConfig) -> str:
         '    echo "Error: Docker daemon is not running." >&2',
         "    exit 1",
         "fi",
+        "if ! docker compose version &>/dev/null; then",
+        '    echo "Error: Docker Compose V2 is not available.'
+        ' Install the Docker Compose plugin." >&2',
+        "    exit 1",
+        "fi",
         "",
     ]
+
+    # Backup and version info
+    lines.extend(
+        [
+            "# ── Backup and version info ──────────────────────────────────────────",
+            "if [ -f .env.production ]; then",
+            "    cp .env.production .env.production.bak",
+            '    echo "Backed up .env.production to .env.production.bak"',
+            "fi",
+            'NEW_VERSION=$(cat VERSION 2>/dev/null || echo "unknown")',
+            f"if {compose_cmd} ps -q agblogger 2>/dev/null | grep -q .; then",
+            '    echo "Upgrading AgBlogger to v${NEW_VERSION}..."',
+            "else",
+            '    echo "Installing AgBlogger v${NEW_VERSION}..."',
+            "fi",
+            "",
+        ]
+    )
 
     # Load/pull image
     if config.deployment_mode == DEPLOY_MODE_TARBALL:
@@ -523,7 +546,10 @@ def build_setup_script_content(config: DeployConfig) -> str:
         lines.extend(
             [
                 'echo "Reloading Caddy configuration..."',
-                reload_cmd,
+                f"if ! {reload_cmd}; then",
+                '    echo "Error: Failed to reload Caddy configuration." >&2',
+                "    exit 1",
+                "fi",
                 "",
             ]
         )
@@ -549,16 +575,18 @@ def build_setup_script_content(config: DeployConfig) -> str:
             "while [ $ELAPSED -lt $TIMEOUT ]; do",
             "    sleep $INTERVAL",
             "    ELAPSED=$((ELAPSED + INTERVAL))",
+            f"    CONTAINER_ID=$({compose_cmd} ps -q agblogger 2>/dev/null)",
+            '    if [ -z "$CONTAINER_ID" ]; then',
+            '        echo "  [${ELAPSED}s] agblogger container not found"',
+            "        continue",
+            "    fi",
             (
-                f"    STATUS=$({compose_cmd} ps"
-                ' --format "{{{{.Service}}}}: {{{{.Status}}}}"'
-                ' 2>/dev/null || echo "query failed")'
+                "    HEALTH=$(docker inspect"
+                ' --format "{{.State.Health.Status}}"'
+                ' "$CONTAINER_ID" 2>/dev/null || echo "unknown")'
             ),
-            '    echo "  [${ELAPSED}s] $STATUS"',
-            (
-                '    if echo "$STATUS" | grep -q "agblogger:"'
-                ' && echo "$STATUS" | grep -q "(healthy)"; then'
-            ),
+            '    echo "  [${ELAPSED}s] agblogger: $HEALTH"',
+            '    if [ "$HEALTH" = "healthy" ]; then',
             '        echo "All services healthy."',
             "        exit 0",
             "    fi",
@@ -1148,10 +1176,14 @@ def _build_remote_readme_content(config: DeployConfig, commands: dict[str, str])
             "",
             data_note,
             "",
+            "`setup.sh` automatically backs up `.env.production` before each run.",
+            "",
             "To upgrade to a new version:",
             "",
             "1. Regenerate the bundle locally and replace all files in this directory"
-            " (compose files and config may change between versions)."
+            " **except `.env.production`** (compose files and config may change between"
+            " versions). Preserve your `.env.production` to keep your existing secrets"
+            " and credentials."
             " Check the `VERSION` file to see what version generated the current bundle."
             " The `./content/` directory and `agblogger-db` Docker volume are not part"
             " of the bundle and will be preserved automatically.",
