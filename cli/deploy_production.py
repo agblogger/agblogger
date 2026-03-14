@@ -400,6 +400,13 @@ def build_setup_script_content(config: DeployConfig) -> str:
         ' Install the Docker Compose plugin." >&2',
         "    exit 1",
         "fi",
+        "if [ ! -f .env.production ]; then",
+        '    echo "Error: .env.production not found.'
+        ' This file is required and should be part of the deployment bundle." >&2',
+        "    exit 1",
+        "fi",
+        "# Ensure secrets file is not world-readable regardless of transfer method",
+        "chmod 600 .env.production",
         "",
     ]
 
@@ -1137,7 +1144,7 @@ def _build_remote_readme_content(config: DeployConfig, commands: dict[str, str])
             "## Getting started",
             "",
             "```",
-            "./setup.sh",
+            "bash setup.sh",
             "```",
             "",
             "## Management commands",
@@ -1195,7 +1202,7 @@ def _build_remote_readme_content(config: DeployConfig, commands: dict[str, str])
         lines.append("2. If the image tag changed, update `AGBLOGGER_IMAGE` in `.env.production`.")
     lines.extend(
         [
-            "3. Run `./setup.sh` again.",
+            "3. Run `bash setup.sh` again.",
             "",
             "## Rollback",
             "",
@@ -1843,15 +1850,11 @@ def collect_config(project_dir: Path | None = None) -> DeployConfig:
             default=True,
         )
         host_bind_ip = LOCALHOST_BIND_IP
-        _prompt_yes_no(
-            "Have you configured DNS for this domain?"
-            " Caddy will attempt to provision a TLS certificate on startup",
-            default=True,
-        )
         print(
-            "\nNote: Ensure your domain's DNS A/AAAA record points to this server"
-            " before starting. Caddy needs to reach Let's Encrypt to provision"
-            " TLS certificates.\n"
+            f"\n** IMPORTANT: Before starting, ensure your domain's DNS A/AAAA record"
+            f" points {caddy_domain} to this server."
+            f" Caddy will attempt to provision a TLS certificate from Let's Encrypt"
+            f" on startup and will fail if DNS is not configured.\n"
         )
     elif caddy_mode == CADDY_MODE_EXTERNAL:
         caddy_domain = _prompt_caddy_domain()

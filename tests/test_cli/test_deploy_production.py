@@ -1741,7 +1741,7 @@ class TestRemoteReadmeFormatting:
         )
         content = _build_remote_readme_content(config, commands)
         assert "```" in content
-        assert "./setup.sh" in content
+        assert "setup.sh" in content
         assert "## Management commands" in content
 
     def test_tarball_readme_uses_code_blocks(self) -> None:
@@ -1756,7 +1756,7 @@ class TestRemoteReadmeFormatting:
         )
         content = _build_remote_readme_content(config, commands)
         assert "```" in content
-        assert "./setup.sh" in content
+        assert "setup.sh" in content
 
 
 class TestCommandTimeout:
@@ -2225,7 +2225,7 @@ class TestRemoteReadmeUpgradeGuidance:
         )
         content = _build_remote_readme_content(config, commands)
         assert "## Upgrading" in content or "## Upgrade" in content
-        assert "./setup.sh" in content
+        assert "setup.sh" in content
 
     def test_tarball_readme_includes_upgrade_section(self) -> None:
         config = _make_config(
@@ -2239,7 +2239,7 @@ class TestRemoteReadmeUpgradeGuidance:
         )
         content = _build_remote_readme_content(config, commands)
         assert "## Upgrading" in content or "## Upgrade" in content
-        assert "./setup.sh" in content
+        assert "setup.sh" in content
 
 
 # ── parse_existing_env / _unquote_env_value ──────────────────────────
@@ -2981,20 +2981,21 @@ class TestCheckPrerequisitesDockerfile:
 # ── Issue #7: DNS confirmation prompt ─────────────────────────────────
 
 
-class TestDnsConfirmationPrompt:
-    """Interactive Caddy setup should confirm DNS is configured."""
+class TestDnsInfoMessage:
+    """Interactive Caddy setup should print a DNS info message."""
 
-    def test_caddy_setup_asks_dns_confirmation(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    def test_caddy_setup_prints_dns_info(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         from cli.deploy_production import collect_config
 
-        # Track all prompts shown to the user to verify DNS prompt presence
-        prompts_shown: list[str] = []
         # Simulate: no existing env, secret_key=auto, username=admin,
         # display_name=admin, password+confirm,
         # mode=local, caddy=bundled, domain, email, caddy_public=yes,
-        # dns_confirmed=yes, trusted hosts, proxy ips, expose docs=no
+        # trusted hosts, proxy ips, expose docs=no
         inputs = iter(
             [
                 "admin",  # admin username
@@ -3004,7 +3005,6 @@ class TestDnsConfirmationPrompt:
                 "blog.example.com",  # caddy domain
                 "",  # caddy email
                 "y",  # caddy public
-                "y",  # DNS confirmed
                 "",  # additional trusted hosts
                 "",  # additional proxy ips
                 "n",  # expose docs
@@ -3012,11 +3012,7 @@ class TestDnsConfirmationPrompt:
         )
         passwords = iter(["", "strongpass123", "strongpass123"])
 
-        def tracking_input(prompt: str) -> str:
-            prompts_shown.append(prompt)
-            return next(inputs)
-
-        monkeypatch.setattr("builtins.input", tracking_input)
+        monkeypatch.setattr("builtins.input", lambda _prompt: next(inputs))
         monkeypatch.setattr(
             "cli.deploy_production.getpass.getpass", lambda _prompt: next(passwords)
         )
@@ -3025,9 +3021,10 @@ class TestDnsConfirmationPrompt:
 
         assert config.caddy_config is not None
         assert config.caddy_config.domain == "blog.example.com"
-        # Verify a DNS confirmation prompt was shown
-        dns_prompts = [p for p in prompts_shown if "dns" in p.lower() or "DNS" in p]
-        assert dns_prompts, f"No DNS confirmation prompt found. Prompts shown: {prompts_shown}"
+        # Verify a DNS info message was printed
+        output = capsys.readouterr().out
+        assert "DNS" in output
+        assert "blog.example.com" in output
 
     def test_print_config_summary_hides_platform_when_none(
         self, capsys: pytest.CaptureFixture[str]
@@ -4166,7 +4163,7 @@ class TestRemoteReadmeSetupScript:
             tarball_filename=config.tarball_filename,
         )
         readme = _build_remote_readme_content(config, commands)
-        assert "./setup.sh" in readme
+        assert "setup.sh" in readme
 
     def test_readme_no_longer_has_manual_load_start_steps(self) -> None:
         config = _make_config(
@@ -4246,7 +4243,7 @@ class TestRemoteReadmeSetupScript:
         )
         readme = _build_remote_readme_content(config, commands)
         upgrade_idx = readme.index("Upgrading")
-        assert "./setup.sh" in readme[upgrade_idx:]
+        assert "setup.sh" in readme[upgrade_idx:]
 
     def test_readme_mentions_env_backup(self) -> None:
         config = _make_config(
