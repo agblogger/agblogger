@@ -3824,3 +3824,105 @@ def test_deploy_external_caddy_local_bootstraps_and_writes_snippet(
     # Lifecycle commands use external caddy compose
     assert DEFAULT_EXTERNAL_CADDY_COMPOSE_FILE in result.commands["start"]
     _ = commands
+
+
+# ── Task 19: _wait_for_healthy skips bundled caddy in external mode ───
+
+
+def test_wait_for_healthy_skips_caddy_check_in_external_mode(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """In external Caddy mode, _wait_for_healthy should only check agblogger, not caddy."""
+    from cli.deploy_production import _wait_for_healthy
+
+    config = _make_config(
+        caddy_mode=CADDY_MODE_EXTERNAL,
+        caddy_config=CaddyConfig(domain="blog.example.com", email=None),
+        host_bind_ip=LOCALHOST_BIND_IP,
+        shared_caddy_config=SharedCaddyConfig(caddy_dir=Path("/opt/caddy"), acme_email=None),
+    )
+    call_count = 0
+
+    def fake_run(command: list[str], **kwargs: object) -> SimpleNamespace:
+        nonlocal call_count
+        call_count += 1
+        if "ps" in command:
+            return SimpleNamespace(
+                returncode=0,
+                stdout="agblogger: Up (healthy)\n",
+            )
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr("cli.deploy_production.subprocess.run", fake_run)
+    monkeypatch.setattr("cli.deploy_production.time.sleep", lambda _: None)
+
+    # Should NOT raise even though there's no caddy container in output
+    _wait_for_healthy(config, tmp_path, timeout=10, interval=1)
+
+
+# ── Task 21: end-to-end deploy with external Caddy ────────────────────
+
+
+def test_deploy_external_caddy_full_flow(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Full local deploy with external Caddy: bootstrap, snippet, compose, start."""
+    (tmp_path / "docker-compose.yml").write_text("services: {}\n", encoding="utf-8")
+    commands = _stub_subprocess(monkeypatch)
+    _stub_no_trivy(monkeypatch)
+    _stub_docker_inspect_missing(monkeypatch)
+    monkeypatch.setattr("cli.deploy_production.reload_shared_caddy", lambda: None)
+
+    caddy_dir = tmp_path / "shared-caddy"
+    config = DeployConfig(
+        secret_key="x" * 64,
+        admin_username="admin",
+        admin_password="very-strong-password",
+        trusted_hosts=["blog.example.com"],
+        trusted_proxy_ips=[],
+        host_port=8000,
+        host_bind_ip=LOCALHOST_BIND_IP,
+        caddy_config=CaddyConfig(domain="blog.example.com", email="ops@example.com"),
+        caddy_public=False,
+        expose_docs=False,
+        deployment_mode=DEPLOY_MODE_LOCAL,
+        image_ref=None,
+        bundle_dir=DEFAULT_BUNDLE_DIR,
+        tarball_filename=DEFAULT_IMAGE_TARBALL,
+        caddy_mode=CADDY_MODE_EXTERNAL,
+        shared_caddy_config=SharedCaddyConfig(
+            caddy_dir=caddy_dir,
+            acme_email="ops@example.com",
+        ),
+    )
+
+    result = deploy(config=config, project_dir=tmp_path)
+
+    # Shared Caddy bootstrapped
+    assert (caddy_dir / "sites").is_dir()
+    caddyfile = (caddy_dir / "Caddyfile").read_text("utf-8")
+    assert "import /etc/caddy/sites/*.caddy" in caddyfile
+    assert "email ops@example.com" in caddyfile
+
+    # Site snippet written
+    snippet = (caddy_dir / "sites" / "blog.example.com.caddy").read_text("utf-8")
+    assert "blog.example.com {" in snippet
+    assert "reverse_proxy agblogger:8000" in snippet
+
+    # AgBlogger compose file written (external caddy variant)
+    assert (tmp_path / DEFAULT_EXTERNAL_CADDY_COMPOSE_FILE).exists()
+    compose = (tmp_path / DEFAULT_EXTERNAL_CADDY_COMPOSE_FILE).read_text("utf-8")
+    assert "external: true" in compose
+
+    # No bundled Caddy files
+    assert not (tmp_path / "Caddyfile.production").exists()
+    assert not (tmp_path / DEFAULT_CADDY_PUBLIC_COMPOSE_FILE).exists()
+
+    # Lifecycle commands reference external caddy compose
+    assert DEFAULT_EXTERNAL_CADDY_COMPOSE_FILE in result.commands["start"]
+
+    # Docker commands: shared caddy compose up + agblogger compose up
+    compose_up_calls = [
+        (cmd, cwd) for cmd, cwd, _ in commands if "up" in cmd
+    ]
+    assert len(compose_up_calls) == 2  # shared caddy + agblogger

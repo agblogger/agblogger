@@ -1147,8 +1147,9 @@ def _compose_base_args(config: DeployConfig) -> list[str]:
     args = ["compose", "--env-file", ".env.production"]
     for filename in _compose_filenames(
         DEPLOY_MODE_LOCAL,
-        use_caddy=config.caddy_config is not None,
+        use_caddy=config.caddy_config is not None and config.caddy_mode != CADDY_MODE_EXTERNAL,
         caddy_public=config.caddy_public,
+        caddy_mode=config.caddy_mode,
     ):
         args.extend(["-f", filename])
     return args
@@ -1177,7 +1178,7 @@ def _wait_for_healthy(
     base = _compose_base_args(config)
     start = time.monotonic()
     deadline = start + timeout
-    use_caddy = config.caddy_config is not None
+    use_caddy = config.caddy_config is not None and config.caddy_mode != CADDY_MODE_EXTERNAL
     print("Waiting for services to become healthy...")
     while time.monotonic() < deadline:
         time.sleep(interval)
