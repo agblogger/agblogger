@@ -387,11 +387,11 @@ def build_setup_script_content(config: DeployConfig) -> str:
         'cd "$(dirname "$0")"',
         "",
         "# ── Preflight checks ────────────────────────────────────────────────",
-        'if ! command -v docker &>/dev/null; then',
+        "if ! command -v docker &>/dev/null; then",
         '    echo "Error: Docker is not installed." >&2',
         "    exit 1",
         "fi",
-        'if ! docker info &>/dev/null; then',
+        "if ! docker info &>/dev/null; then",
         '    echo "Error: Docker daemon is not running." >&2',
         "    exit 1",
         "fi",
@@ -400,19 +400,23 @@ def build_setup_script_content(config: DeployConfig) -> str:
 
     # Load/pull image
     if config.deployment_mode == DEPLOY_MODE_TARBALL:
-        lines.extend([
-            "# ── Load image ───────────────────────────────────────────────────────",
-            f'echo "Loading Docker image from {config.tarball_filename}..."',
-            f"docker load -i {config.tarball_filename}",
-            "",
-        ])
+        lines.extend(
+            [
+                "# ── Load image ───────────────────────────────────────────────────────",
+                f'echo "Loading Docker image from {config.tarball_filename}..."',
+                f"docker load -i {config.tarball_filename}",
+                "",
+            ]
+        )
     elif config.deployment_mode == DEPLOY_MODE_REGISTRY:
-        lines.extend([
-            "# ── Pull image ───────────────────────────────────────────────────────",
-            'echo "Pulling Docker image..."',
-            f"{compose_cmd} pull",
-            "",
-        ])
+        lines.extend(
+            [
+                "# ── Pull image ───────────────────────────────────────────────────────",
+                'echo "Pulling Docker image..."',
+                f"{compose_cmd} pull",
+                "",
+            ]
+        )
 
     # Bootstrap shared Caddy (external mode only)
     if (
@@ -428,104 +432,142 @@ def build_setup_script_content(config: DeployConfig) -> str:
         site_snippet = build_caddy_site_snippet(config.caddy_config)
         domain = config.caddy_config.domain
 
-        lines.extend([
-            "# ── Bootstrap shared Caddy ───────────────────────────────────────────",
-            f'echo "Setting up shared Caddy reverse proxy..."',
-            f"mkdir -p {caddy_dir}/sites",
-            "",
-        ])
+        lines.extend(
+            [
+                "# ── Bootstrap shared Caddy ───────────────────────────────────────────",
+                'echo "Setting up shared Caddy reverse proxy..."',
+                f"mkdir -p {caddy_dir}/sites",
+                "",
+            ]
+        )
 
         # Write shared Caddyfile if not exists
-        lines.extend([
-            f"if [ ! -f {caddy_dir}/{DEFAULT_SHARED_CADDYFILE} ]; then",
-            f"    cat > {caddy_dir}/{DEFAULT_SHARED_CADDYFILE} <<'CADDYFILE_EOF'",
-            caddyfile_content.rstrip("\n"),
-            "CADDYFILE_EOF",
-            "fi",
-            "",
-        ])
+        lines.extend(
+            [
+                f"if [ ! -f {caddy_dir}/{DEFAULT_SHARED_CADDYFILE} ]; then",
+                f"    cat > {caddy_dir}/{DEFAULT_SHARED_CADDYFILE} <<'CADDYFILE_EOF'",
+                caddyfile_content.rstrip("\n"),
+                "CADDYFILE_EOF",
+                "fi",
+                "",
+            ]
+        )
 
         # Write shared docker-compose.yml if not exists
-        lines.extend([
-            f"if [ ! -f {caddy_dir}/{DEFAULT_SHARED_CADDY_COMPOSE_FILE} ]; then",
-            f"    cat > {caddy_dir}/{DEFAULT_SHARED_CADDY_COMPOSE_FILE} <<'COMPOSE_EOF'",
-            caddy_compose_content.rstrip("\n"),
-            "COMPOSE_EOF",
-            "fi",
-            "",
-        ])
+        lines.extend(
+            [
+                f"if [ ! -f {caddy_dir}/{DEFAULT_SHARED_CADDY_COMPOSE_FILE} ]; then",
+                f"    cat > {caddy_dir}/{DEFAULT_SHARED_CADDY_COMPOSE_FILE} <<'COMPOSE_EOF'",
+                caddy_compose_content.rstrip("\n"),
+                "COMPOSE_EOF",
+                "fi",
+                "",
+            ]
+        )
 
         # Create Docker network if not exists
-        lines.extend([
-            f"if ! docker network inspect {EXTERNAL_CADDY_NETWORK_NAME} &>/dev/null; then",
-            f'    echo "Creating Docker network {EXTERNAL_CADDY_NETWORK_NAME}..."',
-            f"    docker network create {EXTERNAL_CADDY_NETWORK_NAME}",
-            "fi",
-            "",
-        ])
+        lines.extend(
+            [
+                f"if ! docker network inspect {EXTERNAL_CADDY_NETWORK_NAME} &>/dev/null; then",
+                f'    echo "Creating Docker network {EXTERNAL_CADDY_NETWORK_NAME}..."',
+                f"    docker network create {EXTERNAL_CADDY_NETWORK_NAME}",
+                "fi",
+                "",
+            ]
+        )
 
         # Start shared Caddy if not running
-        lines.extend([
-            f'if ! docker ps --format "{{{{.Names}}}}" | grep -q "^{SHARED_CADDY_CONTAINER_NAME}$"; then',
-            f'    echo "Starting shared Caddy..."',
-            f"    (cd {caddy_dir} && docker compose up -d)",
-            "fi",
-            "",
-        ])
+        container = SHARED_CADDY_CONTAINER_NAME
+        ps_check = f'if ! docker ps --format "{{{{.Names}}}}" | grep -q "^{container}$"; then'
+        lines.extend(
+            [
+                ps_check,
+                '    echo "Starting shared Caddy..."',
+                f"    (cd {caddy_dir} && docker compose up -d)",
+                "fi",
+                "",
+            ]
+        )
 
         # Detect subnet and replace placeholder in .env.production
-        lines.extend([
-            "# Detect Caddy network subnet for trusted proxy configuration",
-            f'CADDY_SUBNET=$(docker network inspect {EXTERNAL_CADDY_NETWORK_NAME} --format "{{{{range .IPAM.Config}}}}{{{{.Subnet}}}}{{{{end}}}}")',
-            f'sed -i "s|{CADDY_NETWORK_SUBNET_PLACEHOLDER}|$CADDY_SUBNET|" .env.production',
-            "",
-        ])
+        inspect_fmt = "{{{{range .IPAM.Config}}}}{{{{.Subnet}}}}{{{{end}}}}"
+        subnet_cmd = (
+            f"CADDY_SUBNET=$(docker network inspect"
+            f' {EXTERNAL_CADDY_NETWORK_NAME} --format "{inspect_fmt}")'
+        )
+        sed_cmd = f'sed -i "s|{CADDY_NETWORK_SUBNET_PLACEHOLDER}|$CADDY_SUBNET|" .env.production'
+        lines.extend(
+            [
+                "# Detect Caddy network subnet for trusted proxy configuration",
+                subnet_cmd,
+                sed_cmd,
+                "",
+            ]
+        )
 
         # Write site snippet
-        lines.extend([
-            f"# Write site snippet for {domain}",
-            f"cat > {caddy_dir}/sites/{domain}.caddy <<'SITE_EOF'",
-            site_snippet.rstrip("\n"),
-            "SITE_EOF",
-            "",
-        ])
+        lines.extend(
+            [
+                f"# Write site snippet for {domain}",
+                f"cat > {caddy_dir}/sites/{domain}.caddy <<'SITE_EOF'",
+                site_snippet.rstrip("\n"),
+                "SITE_EOF",
+                "",
+            ]
+        )
 
         # Reload Caddy
-        lines.extend([
-            f'echo "Reloading Caddy configuration..."',
-            f"docker exec {SHARED_CADDY_CONTAINER_NAME} caddy reload --config /etc/caddy/Caddyfile",
-            "",
-        ])
+        reload_cmd = (
+            f"docker exec {SHARED_CADDY_CONTAINER_NAME} caddy reload --config /etc/caddy/Caddyfile"
+        )
+        lines.extend(
+            [
+                'echo "Reloading Caddy configuration..."',
+                reload_cmd,
+                "",
+            ]
+        )
 
     # Start/restart AgBlogger
-    lines.extend([
-        "# ── Start services ───────────────────────────────────────────────────",
-        'echo "Starting AgBlogger..."',
-        f"{compose_cmd} up -d",
-        "",
-    ])
+    lines.extend(
+        [
+            "# ── Start services ───────────────────────────────────────────────────",
+            'echo "Starting AgBlogger..."',
+            f"{compose_cmd} up -d",
+            "",
+        ]
+    )
 
     # Health check
-    lines.extend([
-        "# ── Health check ─────────────────────────────────────────────────────",
-        'echo "Waiting for services to become healthy..."',
-        "TIMEOUT=60",
-        "INTERVAL=5",
-        "ELAPSED=0",
-        "while [ $ELAPSED -lt $TIMEOUT ]; do",
-        "    sleep $INTERVAL",
-        "    ELAPSED=$((ELAPSED + INTERVAL))",
-        f'    STATUS=$({compose_cmd} ps --format "{{{{.Service}}}}: {{{{.Status}}}}" 2>/dev/null || echo "query failed")',
-        '    echo "  [${ELAPSED}s] $STATUS"',
-        '    if echo "$STATUS" | grep -q "agblogger:" && echo "$STATUS" | grep -q "(healthy)"; then',
-        '        echo "All services healthy."',
-        "        exit 0",
-        "    fi",
-        "done",
-        'echo "Error: Health check timed out after ${TIMEOUT}s." >&2',
-        f'echo "Check logs: {compose_cmd} logs" >&2',
-        "exit 1",
-    ])
+    lines.extend(
+        [
+            "# ── Health check ─────────────────────────────────────────────────────",
+            'echo "Waiting for services to become healthy..."',
+            "TIMEOUT=60",
+            "INTERVAL=5",
+            "ELAPSED=0",
+            "while [ $ELAPSED -lt $TIMEOUT ]; do",
+            "    sleep $INTERVAL",
+            "    ELAPSED=$((ELAPSED + INTERVAL))",
+            (
+                f"    STATUS=$({compose_cmd} ps"
+                ' --format "{{{{.Service}}}}: {{{{.Status}}}}"'
+                ' 2>/dev/null || echo "query failed")'
+            ),
+            '    echo "  [${ELAPSED}s] $STATUS"',
+            (
+                '    if echo "$STATUS" | grep -q "agblogger:"'
+                ' && echo "$STATUS" | grep -q "(healthy)"; then'
+            ),
+            '        echo "All services healthy."',
+            "        exit 0",
+            "    fi",
+            "done",
+            'echo "Error: Health check timed out after ${TIMEOUT}s." >&2',
+            f'echo "Check logs: {compose_cmd} logs" >&2',
+            "exit 1",
+        ]
+    )
 
     return "\n".join(lines) + "\n"
 
