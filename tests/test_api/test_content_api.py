@@ -80,32 +80,32 @@ class TestContentServing:
 
     @pytest.mark.asyncio
     async def test_path_traversal_is_blocked(self, client: AsyncClient) -> None:
-        """Path traversal attempts with .. are blocked.
+        """Path traversal attempts with .. return opaque 404.
 
-        Starlette normalizes ``posts/../index.toml`` to ``index.toml`` before
-        the handler sees it, so the request is rejected as 403 (disallowed
-        prefix) rather than 400.  Either way the traversal is blocked.
+        All rejection paths (traversal, disallowed prefix, resolved-outside-root)
+        return 404 so the response is indistinguishable from a genuinely missing
+        file regardless of encoding technique.
         """
         resp = await client.get("/api/content/posts/../index.toml")
-        assert resp.status_code in (400, 403)
+        assert resp.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_path_traversal_encoded_returns_400(self, client: AsyncClient) -> None:
-        """Path traversal with encoded segments is rejected with 400."""
+    async def test_path_traversal_encoded_returns_404(self, client: AsyncClient) -> None:
+        """Path traversal with encoded segments returns opaque 404."""
         resp = await client.get("/api/content/posts/..%2Findex.toml")
-        assert resp.status_code == 400
+        assert resp.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_disallowed_prefix_returns_403(self, client: AsyncClient) -> None:
-        """Accessing files outside posts/ and assets/ returns 403."""
+    async def test_disallowed_prefix_returns_404(self, client: AsyncClient) -> None:
+        """Accessing files outside posts/ and assets/ returns opaque 404."""
         resp = await client.get("/api/content/index.toml")
-        assert resp.status_code == 403
+        assert resp.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_labels_toml_returns_403(self, client: AsyncClient) -> None:
-        """Accessing labels.toml is forbidden."""
+    async def test_labels_toml_returns_404(self, client: AsyncClient) -> None:
+        """Accessing labels.toml returns opaque 404."""
         resp = await client.get("/api/content/labels.toml")
-        assert resp.status_code == 403
+        assert resp.status_code == 404
 
     @pytest.mark.asyncio
     async def test_no_auth_required(self, client: AsyncClient, tmp_content_dir: Path) -> None:
@@ -198,13 +198,13 @@ class TestContentServing:
         (post_dir / "secret.txt").symlink_to(outside_file)
 
         resp = await client.get("/api/content/posts/escape/secret.txt")
-        assert resp.status_code == 400
+        assert resp.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_empty_path_returns_403(self, client: AsyncClient) -> None:
-        """An empty or root-level path is forbidden."""
+    async def test_empty_path_returns_404(self, client: AsyncClient) -> None:
+        """An empty or root-level path returns opaque 404."""
         resp = await client.get("/api/content/")
-        assert resp.status_code == 403
+        assert resp.status_code == 404
 
     @pytest.mark.asyncio
     async def test_content_disposition_escapes_double_quotes_in_filename(

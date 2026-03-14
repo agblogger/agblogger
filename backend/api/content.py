@@ -40,29 +40,27 @@ def _validate_path(file_path: str, content_dir: Path) -> Path:
     Returns the resolved absolute path on success.
     Raises HTTPException on validation failure.
     """
-    # Reject path traversal attempts
+    # Reject path traversal attempts — return 404 (not 400/403) so the
+    # response is indistinguishable from a genuinely missing file regardless
+    # of whether the client used literal or URL-encoded traversal sequences.
+    not_found = HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="File not found",
+    )
+
     if ".." in file_path.split("/"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Path traversal is not allowed",
-        )
+        raise not_found
 
     # Check allowed prefixes
     if not file_path.startswith(_ALLOWED_PREFIXES):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access to this path is not allowed",
-        )
+        raise not_found
 
     # Resolve the full path (follows symlinks)
     full_path = (content_dir / file_path).resolve()
 
     # Verify resolved path stays within the content directory
     if not full_path.is_relative_to(content_dir.resolve()):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Path traversal is not allowed",
-        )
+        raise not_found
 
     return full_path
 

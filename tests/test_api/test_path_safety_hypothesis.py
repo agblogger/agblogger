@@ -222,7 +222,7 @@ class TestPathBoundaryProperties:
         try:
             resolved = _validate_path(file_path, content_dir)
         except HTTPException as exc:
-            assert exc.status_code in {400, 403}
+            assert exc.status_code == 404
         else:
             assert resolved.is_relative_to(content_dir.resolve())
             assert file_path.startswith(("posts/", "assets/"))
