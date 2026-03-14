@@ -599,6 +599,33 @@ def ensure_shared_caddy(caddy_dir: Path, acme_email: str | None) -> None:
     print("Shared Caddy container started.")
 
 
+def write_caddy_site_snippet(caddy_config: CaddyConfig, caddy_dir: Path) -> None:
+    """Write a Caddy site snippet for AgBlogger into the shared sites directory."""
+    sites_dir = caddy_dir / "sites"
+    snippet_path = sites_dir / f"{caddy_config.domain}.caddy"
+    snippet_path.write_text(build_caddy_site_snippet(caddy_config), encoding="utf-8")
+    print(f"Wrote Caddy site snippet: {snippet_path}")
+
+
+def reload_shared_caddy() -> None:
+    """Reload the shared Caddy container to pick up config changes."""
+    print("Reloading shared Caddy configuration...")
+    subprocess.run(
+        [
+            "docker",
+            "exec",
+            SHARED_CADDY_CONTAINER_NAME,
+            "caddy",
+            "reload",
+            "--config",
+            "/etc/caddy/Caddyfile",
+        ],
+        check=True,
+        timeout=30,
+    )
+    print("Shared Caddy reloaded.")
+
+
 # ── Compose helpers ──────────────────────────────────────────────────
 
 

@@ -33,6 +33,7 @@ from cli.deploy_production import (
     LOCALHOST_BIND_IP,
     MIN_SECRET_KEY_LENGTH,
     PUBLIC_BIND_IP,
+    SHARED_CADDY_CONTAINER_NAME,
     CaddyConfig,
     DeployConfig,
     DeployError,
@@ -64,7 +65,9 @@ from cli.deploy_production import (
     parse_csv_list,
     parse_existing_env,
     print_config_summary,
+    reload_shared_caddy,
     write_bundle_files,
+    write_caddy_site_snippet,
     write_config_files,
 )
 
@@ -3472,3 +3475,50 @@ def test_ensure_shared_caddy_skips_if_already_running(
     compose_up_calls = [cmd for cmd, _, _ in commands if "up" in cmd]
     assert len(compose_up_calls) == 0
 
+
+# ── write_caddy_site_snippet / reload_shared_caddy ───────────────────
+
+
+def test_write_caddy_site_snippet_creates_file(tmp_path: Path) -> None:
+    sites_dir = tmp_path / "sites"
+    sites_dir.mkdir()
+    caddy_config = CaddyConfig(domain="blog.example.com", email=None)
+    write_caddy_site_snippet(caddy_config, tmp_path)
+    snippet_path = sites_dir / "blog.example.com.caddy"
+    assert snippet_path.exists()
+    content = snippet_path.read_text(encoding="utf-8")
+    assert "blog.example.com {" in content
+    assert "reverse_proxy agblogger:8000" in content
+
+
+def test_write_caddy_site_snippet_overwrites_existing(tmp_path: Path) -> None:
+    sites_dir = tmp_path / "sites"
+    sites_dir.mkdir()
+    snippet_path = sites_dir / "blog.example.com.caddy"
+    snippet_path.write_text("old content", encoding="utf-8")
+    caddy_config = CaddyConfig(domain="blog.example.com", email=None)
+    write_caddy_site_snippet(caddy_config, tmp_path)
+    assert "old content" not in snippet_path.read_text(encoding="utf-8")
+    assert "blog.example.com {" in snippet_path.read_text(encoding="utf-8")
+
+
+def test_reload_shared_caddy_runs_docker_exec(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run(command: list[str], **kwargs: object) -> SimpleNamespace:
+        calls.append(command)
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr("cli.deploy_production.subprocess.run", fake_run)
+    reload_shared_caddy()
+    assert calls == [
+        [
+            "docker",
+            "exec",
+            SHARED_CADDY_CONTAINER_NAME,
+            "caddy",
+            "reload",
+            "--config",
+            "/etc/caddy/Caddyfile",
+        ],
+    ]
