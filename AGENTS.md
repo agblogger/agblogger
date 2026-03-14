@@ -14,17 +14,12 @@ The primary purpose of architecture docs in docs/arch/*.md is to provide agents 
 just start            # Start backend (:8000) + frontend (:5173) in the background (run unsandboxed)
 just stop             # Stop the running dev server
 just health           # Check if dev server is healthy (backend + frontend)
-just start backend_port=9000 frontend_port=9173  # Custom ports
-just check            # Full gate: static checks first, then tests
-just check-static     # Static-only gate: backend + frontend + Vulture + Trivy
-just check-extra      # Extra dependency/security checks: full npm audit + Checkov + Gitleaks + CodeQL + Semgrep + Snyk OSS + slow backend tests
-just test             # Test-only gate: backend + frontend tests
+just check            # Full gate: static checks first, then tests (excludes slow tests)
+just check-extra      # Extra dependency/security checks + slow backend tests
+just test             # Test-only gate: backend + frontend tests (excludes slow tests)
 just check-backend    # Backend static checks + backend tests
-just check-backend-static  # Backend static checks only
 just test-backend     # Backend tests only (excludes slow tests)
-just test-backend-slow # Backend slow tests only (marked @pytest.mark.slow)
 just check-frontend   # Frontend static checks + frontend tests
-just check-frontend-static # Frontend static checks only
 just test-frontend    # Frontend tests only
 ```
 
@@ -53,21 +48,8 @@ Always start a dev server with `just start` (unsanboxed). Remember to stop a run
 - **IMPORTANT**: For every bug found, add a regression test that fails because of the bug, then fix the bug and ensure the test passes.
 - Use property-based testing (Hypothesis, fast-check) for deterministic logic. Abstract high-invariant logic into independent pure functions to enable property-based testing.
 - Avoid brittle tests. Test user workflows, not implementation details.
-- Tests which take more than 1s to run should be marked @pytest.mark.slow.
-- Coverage targets 80%, branches 70%.
-
-### Backend (pytest)
-
-- Structure: `tests/test_<category>/test_<module>.py`; `Test` prefix classes; descriptive `test_<what>()` functions
-- All tests are async (`asyncio_mode = "auto"`); fixtures in `conftest.py` with async generators
-- API tests use `httpx.AsyncClient` with `ASGITransport`; plain `assert` statements
-- Slow backend tests which take more than 1s to run should be marked @pytest.mark.slow. If a fixture setup takes more than 1s, the entire group of tests using that fixture should be marked @pytest.mark.slow.
-
-### Frontend (Vitest)
-
-- jsdom environment with `@testing-library/react` and `@testing-library/user-event`
-- Test files colocated or in `__tests__/` directories
-- Use `render()`, `screen`, `userEvent` from testing-library
+- Backend tests which take more than 1s to run should be marked @pytest.mark.slow. If a fixture setup takes more than 1s, the entire group of tests using that fixture should be marked @pytest.mark.slow.
+- Coverage target 80%, branches 70%.
 
 ## Commit & Pull Request Guidelines
 
