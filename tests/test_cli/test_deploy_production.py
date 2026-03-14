@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import re
+from pathlib import Path
 from types import SimpleNamespace
-from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import pytest
@@ -14,7 +15,6 @@ from cli.deploy_production import (
     CADDY_MODE_BUNDLED,
     CADDY_MODE_EXTERNAL,
     CADDY_MODE_NONE,
-    CADDY_MODES,
     CADDY_STATIC_IP,
     COMPOSE_SUBNET,
     DEFAULT_BUNDLE_DIR,
@@ -74,9 +74,6 @@ from cli.deploy_production import (
     write_caddy_site_snippet,
     write_config_files,
 )
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 def _make_config(
@@ -867,6 +864,9 @@ def test_config_from_args_builds_config_without_caddy() -> None:
         caddy_domain=None,
         caddy_email=None,
         caddy_public=False,
+        caddy_external=False,
+        shared_caddy_dir=DEFAULT_SHARED_CADDY_DIR,
+        shared_caddy_email=None,
         trusted_hosts="example.com,www.example.com",
         trusted_proxy_ips=None,
         host_port=9000,
@@ -898,6 +898,9 @@ def test_config_from_args_builds_config_with_caddy() -> None:
         caddy_domain="blog.example.com",
         caddy_email="ops@example.com",
         caddy_public=True,
+        caddy_external=False,
+        shared_caddy_dir=DEFAULT_SHARED_CADDY_DIR,
+        shared_caddy_email=None,
         trusted_hosts="blog.example.com",
         trusted_proxy_ips="10.0.0.1",
         host_port=8000,
@@ -929,6 +932,9 @@ def test_config_from_args_auto_generates_secret_key() -> None:
         caddy_domain=None,
         caddy_email=None,
         caddy_public=False,
+        caddy_external=False,
+        shared_caddy_dir=DEFAULT_SHARED_CADDY_DIR,
+        shared_caddy_email=None,
         trusted_hosts="example.com",
         trusted_proxy_ips=None,
         host_port=8000,
@@ -954,6 +960,9 @@ def test_config_from_args_auto_appends_caddy_domain_to_trusted_hosts() -> None:
         caddy_domain="blog.example.com",
         caddy_email=None,
         caddy_public=False,
+        caddy_external=False,
+        shared_caddy_dir=DEFAULT_SHARED_CADDY_DIR,
+        shared_caddy_email=None,
         trusted_hosts="other.example.com",
         trusted_proxy_ips=None,
         host_port=8000,
@@ -979,6 +988,9 @@ def test_config_from_args_raises_on_missing_admin_username() -> None:
         caddy_domain=None,
         caddy_email=None,
         caddy_public=False,
+        caddy_external=False,
+        shared_caddy_dir=DEFAULT_SHARED_CADDY_DIR,
+        shared_caddy_email=None,
         trusted_hosts="example.com",
         trusted_proxy_ips=None,
         host_port=8000,
@@ -1007,6 +1019,9 @@ def test_config_from_args_raises_on_missing_admin_password(
         caddy_domain=None,
         caddy_email=None,
         caddy_public=False,
+        caddy_external=False,
+        shared_caddy_dir=DEFAULT_SHARED_CADDY_DIR,
+        shared_caddy_email=None,
         trusted_hosts="example.com",
         trusted_proxy_ips=None,
         host_port=8000,
@@ -1032,6 +1047,9 @@ def test_config_from_args_raises_on_missing_trusted_hosts() -> None:
         caddy_domain=None,
         caddy_email=None,
         caddy_public=False,
+        caddy_external=False,
+        shared_caddy_dir=DEFAULT_SHARED_CADDY_DIR,
+        shared_caddy_email=None,
         trusted_hosts=None,
         trusted_proxy_ips=None,
         host_port=8000,
@@ -1057,6 +1075,9 @@ def test_config_from_args_requires_image_ref_for_registry_mode() -> None:
         caddy_domain=None,
         caddy_email=None,
         caddy_public=False,
+        caddy_external=False,
+        shared_caddy_dir=DEFAULT_SHARED_CADDY_DIR,
+        shared_caddy_email=None,
         trusted_hosts="example.com",
         trusted_proxy_ips=None,
         host_port=8000,
@@ -1082,6 +1103,9 @@ def test_config_from_args_builds_registry_mode() -> None:
         caddy_domain=None,
         caddy_email=None,
         caddy_public=False,
+        caddy_external=False,
+        shared_caddy_dir=DEFAULT_SHARED_CADDY_DIR,
+        shared_caddy_email=None,
         trusted_hosts="example.com",
         trusted_proxy_ips=None,
         host_port=8000,
@@ -1169,6 +1193,9 @@ def test_config_from_args_auto_adds_caddy_proxy_subnet() -> None:
         caddy_domain="blog.example.com",
         caddy_email=None,
         caddy_public=False,
+        caddy_external=False,
+        shared_caddy_dir=DEFAULT_SHARED_CADDY_DIR,
+        shared_caddy_email=None,
         trusted_hosts="blog.example.com",
         trusted_proxy_ips=None,
         host_port=8000,
@@ -1194,6 +1221,9 @@ def test_config_from_args_no_caddy_does_not_add_proxy_subnet() -> None:
         caddy_domain=None,
         caddy_email=None,
         caddy_public=False,
+        caddy_external=False,
+        shared_caddy_dir=DEFAULT_SHARED_CADDY_DIR,
+        shared_caddy_email=None,
         trusted_hosts="example.com",
         trusted_proxy_ips=None,
         host_port=8000,
@@ -1225,6 +1255,9 @@ def test_config_from_args_reads_admin_password_from_env(
         caddy_domain=None,
         caddy_email=None,
         caddy_public=False,
+        caddy_external=False,
+        shared_caddy_dir=DEFAULT_SHARED_CADDY_DIR,
+        shared_caddy_email=None,
         trusted_hosts="example.com",
         trusted_proxy_ips=None,
         host_port=8000,
@@ -2502,9 +2535,9 @@ class TestCollectConfigReusesExistingSecrets:
         env_content = build_env_content(existing_config)
         (tmp_path / DEFAULT_ENV_FILE).write_text(env_content, encoding="utf-8")
 
-        # Simulate interactive answers: reuse=yes, mode=local, caddy=no, public=no,
+        # Simulate interactive answers: reuse=yes, mode=local, caddy=none, public=no,
         # port=8000, trusted hosts=example.com, proxy ips=(none), expose docs=no
-        inputs = iter(["y", "", "n", "n", "", "example.com", "", "n"])
+        inputs = iter(["y", "", "none", "n", "", "example.com", "", "n"])
         monkeypatch.setattr("builtins.input", lambda _prompt: next(inputs))
         monkeypatch.setattr("cli.deploy_production.getpass.getpass", lambda _prompt: "")
 
@@ -2521,8 +2554,8 @@ class TestCollectConfigReusesExistingSecrets:
 
         # Simulate: secret_key=auto, username=admin, display_name=admin,
         # password+confirm, mode=local,
-        # caddy=no, public=no, port=8000, trusted hosts=example.com, proxy ips, docs=no
-        inputs = iter(["admin", "", "", "n", "n", "", "example.com", "", "n"])
+        # caddy=none, public=no, port=8000, trusted hosts=example.com, proxy ips, docs=no
+        inputs = iter(["admin", "", "", "n", "none", "n", "", "example.com", "", "n"])
         passwords = iter(["", "strongpass123", "strongpass123"])
         monkeypatch.setattr("builtins.input", lambda _prompt: next(inputs))
         monkeypatch.setattr(
@@ -2620,6 +2653,9 @@ class TestCrossArchitectureBuild:
             caddy_domain=None,
             caddy_email=None,
             caddy_public=False,
+            caddy_external=False,
+            shared_caddy_dir=DEFAULT_SHARED_CADDY_DIR,
+            shared_caddy_email=None,
             trusted_hosts="example.com",
             trusted_proxy_ips=None,
             host_port=8000,
@@ -2643,6 +2679,9 @@ class TestCrossArchitectureBuild:
             caddy_domain=None,
             caddy_email=None,
             caddy_public=False,
+            caddy_external=False,
+            shared_caddy_dir=DEFAULT_SHARED_CADDY_DIR,
+            shared_caddy_email=None,
             trusted_hosts="example.com",
             trusted_proxy_ips=None,
             host_port=8000,
@@ -2666,6 +2705,9 @@ class TestCrossArchitectureBuild:
             caddy_domain=None,
             caddy_email=None,
             caddy_public=False,
+            caddy_external=False,
+            shared_caddy_dir=DEFAULT_SHARED_CADDY_DIR,
+            shared_caddy_email=None,
             trusted_hosts="example.com",
             trusted_proxy_ips=None,
             host_port=8000,
@@ -2689,6 +2731,9 @@ class TestCrossArchitectureBuild:
             caddy_domain=None,
             caddy_email=None,
             caddy_public=False,
+            caddy_external=False,
+            shared_caddy_dir=DEFAULT_SHARED_CADDY_DIR,
+            shared_caddy_email=None,
             trusted_hosts="example.com",
             trusted_proxy_ips=None,
             host_port=8000,
@@ -2850,8 +2895,6 @@ class TestTarballUpgradeInstructions:
         content = _build_remote_readme_content(config, commands)
         upgrade_section = content[content.index("## Upgrading") :]
         # "Replace" or "replace" should appear in a numbered step, not just prose
-        import re
-
         numbered_steps = re.findall(r"^\d+\..+", upgrade_section, re.MULTILINE)
         assert any("replace" in step.lower() or "Replace" in step for step in numbered_steps)
 
@@ -2867,8 +2910,6 @@ class TestTarballUpgradeInstructions:
         )
         content = _build_remote_readme_content(config, commands)
         upgrade_section = content[content.index("## Upgrading") :]
-        import re
-
         numbered_steps = re.findall(r"^\d+\..+", upgrade_section, re.MULTILINE)
         assert any("replace" in step.lower() or "Replace" in step for step in numbered_steps)
 
@@ -2951,14 +2992,14 @@ class TestDnsConfirmationPrompt:
         prompts_shown: list[str] = []
         # Simulate: no existing env, secret_key=auto, username=admin,
         # display_name=admin, password+confirm,
-        # mode=local, caddy=yes, domain, email, caddy_public=yes,
+        # mode=local, caddy=bundled, domain, email, caddy_public=yes,
         # dns_confirmed=yes, trusted hosts, proxy ips, expose docs=no
         inputs = iter(
             [
                 "admin",  # admin username
                 "",  # admin display name (default=admin)
                 "",  # deployment mode (local)
-                "y",  # use caddy
+                "bundled",  # caddy mode
                 "blog.example.com",  # caddy domain
                 "",  # caddy email
                 "y",  # caddy public
@@ -3047,6 +3088,126 @@ class TestDockerDaemonCheck:
         captured = capsys.readouterr()
         assert "Docker daemon is not running" in captured.out
 
+
+# ── Task 16: config_from_args external Caddy ─────────────────────────
+
+
+def test_config_from_args_external_caddy() -> None:
+    args = argparse.Namespace(
+        secret_key="s" * 64,
+        admin_username="admin",
+        admin_password="strong-password!",
+        admin_display_name=None,
+        caddy_domain="blog.example.com",
+        caddy_email="ops@example.com",
+        caddy_public=False,
+        caddy_external=True,
+        shared_caddy_dir="/opt/caddy",
+        shared_caddy_email=None,
+        trusted_hosts="blog.example.com",
+        trusted_proxy_ips=None,
+        host_port=8000,
+        bind_public=False,
+        expose_docs=False,
+        deployment_mode=DEPLOY_MODE_LOCAL,
+        image_ref=None,
+        bundle_dir=DEFAULT_BUNDLE_DIR,
+        tarball_filename=DEFAULT_IMAGE_TARBALL,
+        platform=None,
+    )
+    config = config_from_args(args)
+    assert config.caddy_mode == CADDY_MODE_EXTERNAL
+    assert config.caddy_config is not None
+    assert config.caddy_config.domain == "blog.example.com"
+    assert config.shared_caddy_config is not None
+    assert config.shared_caddy_config.caddy_dir == Path("/opt/caddy")
+    assert config.shared_caddy_config.acme_email == "ops@example.com"
+
+
+def test_config_from_args_external_caddy_with_explicit_shared_email() -> None:
+    args = argparse.Namespace(
+        secret_key="s" * 64,
+        admin_username="admin",
+        admin_password="strong-password!",
+        admin_display_name=None,
+        caddy_domain="blog.example.com",
+        caddy_email="site@example.com",
+        caddy_public=False,
+        caddy_external=True,
+        shared_caddy_dir="/srv/caddy",
+        shared_caddy_email="global@example.com",
+        trusted_hosts="blog.example.com",
+        trusted_proxy_ips=None,
+        host_port=8000,
+        bind_public=False,
+        expose_docs=False,
+        deployment_mode=DEPLOY_MODE_LOCAL,
+        image_ref=None,
+        bundle_dir=DEFAULT_BUNDLE_DIR,
+        tarball_filename=DEFAULT_IMAGE_TARBALL,
+        platform=None,
+    )
+    config = config_from_args(args)
+    assert config.shared_caddy_config is not None
+    assert config.shared_caddy_config.caddy_dir == Path("/srv/caddy")
+    assert config.shared_caddy_config.acme_email == "global@example.com"
+
+
+# ── Task 17: dry_run and print_config_summary for external Caddy ──────
+
+
+def test_dry_run_external_caddy(capsys: pytest.CaptureFixture[str]) -> None:
+    config = _make_config(
+        caddy_mode=CADDY_MODE_EXTERNAL,
+        caddy_config=CaddyConfig(domain="blog.example.com", email=None),
+        host_bind_ip=LOCALHOST_BIND_IP,
+        shared_caddy_config=SharedCaddyConfig(caddy_dir=Path("/opt/caddy"), acme_email=None),
+    )
+    dry_run(config)
+    captured = capsys.readouterr().out
+    assert f"=== {DEFAULT_EXTERNAL_CADDY_COMPOSE_FILE} ===" in captured
+    assert "blog.example.com" in captured
+    assert "=== Caddyfile.production ===" not in captured
+
+
+def test_print_config_summary_external_caddy(capsys: pytest.CaptureFixture[str]) -> None:
+    config = _make_config(
+        caddy_mode=CADDY_MODE_EXTERNAL,
+        caddy_config=CaddyConfig(domain="blog.example.com", email="ops@example.com"),
+        host_bind_ip=LOCALHOST_BIND_IP,
+        shared_caddy_config=SharedCaddyConfig(
+            caddy_dir=Path("/opt/caddy"), acme_email="ops@example.com"
+        ),
+    )
+    print_config_summary(config)
+    captured = capsys.readouterr().out
+    assert "external" in captured.lower()
+    assert "/opt/caddy" in captured
+    assert "blog.example.com" in captured
+
+
+# ── Task 18: _build_remote_readme_content for external Caddy ─────────
+
+
+def test_remote_readme_external_caddy_mentions_shared_setup() -> None:
+    config = _make_config(
+        caddy_mode=CADDY_MODE_EXTERNAL,
+        caddy_config=CaddyConfig(domain="blog.example.com", email=None),
+        host_bind_ip=LOCALHOST_BIND_IP,
+        shared_caddy_config=SharedCaddyConfig(caddy_dir=Path("/opt/caddy"), acme_email=None),
+        deployment_mode=DEPLOY_MODE_REGISTRY,
+        image_ref="ghcr.io/example/agblogger:1.0",
+    )
+    commands = build_lifecycle_commands(
+        deployment_mode=DEPLOY_MODE_REGISTRY,
+        use_caddy=False,
+        caddy_public=False,
+        caddy_mode=CADDY_MODE_EXTERNAL,
+    )
+    content = _build_remote_readme_content(config, commands)
+    assert "shared caddy" in content.lower() or "external caddy" in content.lower()
+    assert "/opt/caddy" in content
+
     def test_daemon_check_skipped_for_dry_run(
         self,
         monkeypatch: pytest.MonkeyPatch,
@@ -3096,9 +3257,9 @@ class TestCollectConfigBundleDirReuse:
         bundle_dir.mkdir(parents=True)
         (bundle_dir / DEFAULT_ENV_FILE).write_text(env_content, encoding="utf-8")
 
-        # Simulate: reuse=yes, mode=local, caddy=no, public=no,
+        # Simulate: reuse=yes, mode=local, caddy=none, public=no,
         # port=8000, trusted hosts, proxy ips, docs=no
-        inputs = iter(["y", "", "n", "n", "", "example.com", "", "n"])
+        inputs = iter(["y", "", "none", "n", "", "example.com", "", "n"])
         monkeypatch.setattr("builtins.input", lambda _prompt: next(inputs))
         monkeypatch.setattr("cli.deploy_production.getpass.getpass", lambda _prompt: "")
 
@@ -3136,9 +3297,9 @@ class TestCollectConfigBundleDirReuse:
             build_env_content(bundle_config), encoding="utf-8"
         )
 
-        # Simulate: reuse=yes, mode=local, caddy=no, public=no,
+        # Simulate: reuse=yes, mode=local, caddy=none, public=no,
         # port=8000, trusted hosts, proxy ips, docs=no
-        inputs = iter(["y", "", "n", "n", "", "example.com", "", "n"])
+        inputs = iter(["y", "", "none", "n", "", "example.com", "", "n"])
         monkeypatch.setattr("builtins.input", lambda _prompt: next(inputs))
         monkeypatch.setattr("cli.deploy_production.getpass.getpass", lambda _prompt: "")
 
@@ -3351,6 +3512,9 @@ def test_config_from_args_sets_bundled_mode_when_caddy_domain_given() -> None:
         caddy_domain="blog.example.com",
         caddy_email=None,
         caddy_public=False,
+        caddy_external=False,
+        shared_caddy_dir=DEFAULT_SHARED_CADDY_DIR,
+        shared_caddy_email=None,
         trusted_hosts="blog.example.com",
         trusted_proxy_ips=None,
         host_port=8000,
@@ -3376,6 +3540,9 @@ def test_config_from_args_sets_none_mode_when_no_caddy_domain() -> None:
         caddy_domain=None,
         caddy_email=None,
         caddy_public=False,
+        caddy_external=False,
+        shared_caddy_dir=DEFAULT_SHARED_CADDY_DIR,
+        shared_caddy_email=None,
         trusted_hosts="example.com",
         trusted_proxy_ips=None,
         host_port=8000,
@@ -3593,7 +3760,7 @@ def test_reload_shared_caddy_runs_docker_exec(monkeypatch: pytest.MonkeyPatch) -
 # ── Task 13: write_config_files external Caddy mode ──────────────────
 
 
-def test_write_config_files_external_caddy(tmp_path: "Path") -> None:
+def test_write_config_files_external_caddy(tmp_path: Path) -> None:
     config = _make_config(
         caddy_mode=CADDY_MODE_EXTERNAL,
         caddy_config=CaddyConfig(domain="blog.example.com", email=None),
@@ -3611,7 +3778,7 @@ def test_write_config_files_external_caddy(tmp_path: "Path") -> None:
 # ── Task 14: write_bundle_files external Caddy mode ──────────────────
 
 
-def test_write_bundle_files_external_caddy(tmp_path: "Path") -> None:
+def test_write_bundle_files_external_caddy(tmp_path: Path) -> None:
     bundle_dir = tmp_path / "bundle"
     config = _make_config(
         caddy_mode=CADDY_MODE_EXTERNAL,
@@ -3632,7 +3799,7 @@ def test_write_bundle_files_external_caddy(tmp_path: "Path") -> None:
 
 
 def test_deploy_external_caddy_local_bootstraps_and_writes_snippet(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: "Path"
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     (tmp_path / "docker-compose.yml").write_text("services: {}\n", encoding="utf-8")
     commands = _stub_subprocess(monkeypatch)

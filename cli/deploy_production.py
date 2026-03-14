@@ -738,16 +738,12 @@ def _validate_config(config: DeployConfig) -> None:
     if config.caddy_public and config.caddy_config is None:
         raise DeployError("Caddy public exposure requires Caddy to be enabled")
     if config.caddy_mode not in CADDY_MODES:
-        raise DeployError(
-            f"caddy_mode must be one of: {', '.join(sorted(CADDY_MODES))}"
-        )
+        raise DeployError(f"caddy_mode must be one of: {', '.join(sorted(CADDY_MODES))}")
     if config.caddy_mode == CADDY_MODE_EXTERNAL:
         if config.caddy_config is None:
             raise DeployError("External Caddy mode requires a domain (caddy_config)")
         if config.shared_caddy_config is None:
-            raise DeployError(
-                "External Caddy mode requires shared Caddy configuration"
-            )
+            raise DeployError("External Caddy mode requires shared Caddy configuration")
     if config.deployment_mode not in DEPLOY_MODES:
         raise DeployError(f"DEPLOYMENT_MODE must be one of: {', '.join(sorted(DEPLOY_MODES))}")
     if config.deployment_mode in {DEPLOY_MODE_REGISTRY, DEPLOY_MODE_TARBALL}:
@@ -829,11 +825,13 @@ def write_config_files(config: DeployConfig, project_dir: Path) -> None:
     if config.caddy_mode == CADDY_MODE_EXTERNAL:
         compose_path = project_dir / DEFAULT_EXTERNAL_CADDY_COMPOSE_FILE
         compose_path.write_text(build_external_caddy_compose_content(), encoding="utf-8")
-        stale_files.extend([
-            DEFAULT_NO_CADDY_COMPOSE_FILE,
-            DEFAULT_CADDY_PUBLIC_COMPOSE_FILE,
-            DEFAULT_CADDYFILE,
-        ])
+        stale_files.extend(
+            [
+                DEFAULT_NO_CADDY_COMPOSE_FILE,
+                DEFAULT_CADDY_PUBLIC_COMPOSE_FILE,
+                DEFAULT_CADDYFILE,
+            ]
+        )
     elif config.caddy_config is not None:
         caddyfile_path = project_dir / DEFAULT_CADDYFILE
         caddyfile_path.write_text(build_caddyfile_content(config.caddy_config), encoding="utf-8")
@@ -929,6 +927,23 @@ def _build_remote_readme_content(config: DeployConfig, commands: dict[str, str])
             f"- Logs: `{commands['logs']}`",
         ]
     )
+    if config.caddy_mode == CADDY_MODE_EXTERNAL and config.shared_caddy_config:
+        lines.extend(
+            [
+                "",
+                "## Shared Caddy Setup",
+                "",
+                "This deployment uses an external shared Caddy reverse proxy.",
+                f"Shared Caddy directory: `{config.shared_caddy_config.caddy_dir}`",
+                "",
+                "The deployment script will bootstrap the shared Caddy instance if it",
+                "is not already running. To manage the shared Caddy separately:",
+                f"  cd {config.shared_caddy_config.caddy_dir}",
+                "  docker compose up -d    # start",
+                "  docker compose down     # stop",
+                "  docker compose logs -f  # logs",
+            ]
+        )
     if config.caddy_public:
         lines.extend(
             [
@@ -1030,12 +1045,14 @@ def write_bundle_files(config: DeployConfig, bundle_dir: Path) -> None:
         (bundle_dir / DEFAULT_IMAGE_EXTERNAL_CADDY_COMPOSE_FILE).write_text(
             build_image_external_caddy_compose_content(), encoding="utf-8"
         )
-        stale_files.extend([
-            DEFAULT_CADDYFILE,
-            DEFAULT_CADDY_PUBLIC_COMPOSE_FILE,
-            DEFAULT_IMAGE_COMPOSE_FILE,
-            DEFAULT_IMAGE_NO_CADDY_COMPOSE_FILE,
-        ])
+        stale_files.extend(
+            [
+                DEFAULT_CADDYFILE,
+                DEFAULT_CADDY_PUBLIC_COMPOSE_FILE,
+                DEFAULT_IMAGE_COMPOSE_FILE,
+                DEFAULT_IMAGE_NO_CADDY_COMPOSE_FILE,
+            ]
+        )
     elif config.caddy_config is not None:
         (bundle_dir / DEFAULT_CADDYFILE).write_text(
             build_caddyfile_content(config.caddy_config), encoding="utf-8"
@@ -1309,6 +1326,8 @@ def _mask_secrets(config: DeployConfig) -> DeployConfig:
         bundle_dir=config.bundle_dir,
         tarball_filename=config.tarball_filename,
         platform=config.platform,
+        caddy_mode=config.caddy_mode,
+        shared_caddy_config=config.shared_caddy_config,
     )
 
 
@@ -1322,7 +1341,17 @@ def dry_run(config: DeployConfig) -> None:
     print(build_env_content(masked))
 
     caddy_config = config.caddy_config
-    if config.deployment_mode == DEPLOY_MODE_LOCAL and caddy_config is None:
+    if config.caddy_mode == CADDY_MODE_EXTERNAL:
+        if caddy_config:
+            print("=== Site snippet ===")
+            print(build_caddy_site_snippet(caddy_config))
+        if config.deployment_mode == DEPLOY_MODE_LOCAL:
+            print(f"=== {DEFAULT_EXTERNAL_CADDY_COMPOSE_FILE} ===")
+            print(build_external_caddy_compose_content())
+        else:
+            print(f"=== {DEFAULT_IMAGE_EXTERNAL_CADDY_COMPOSE_FILE} ===")
+            print(build_image_external_caddy_compose_content())
+    elif config.deployment_mode == DEPLOY_MODE_LOCAL and caddy_config is None:
         print(f"=== {DEFAULT_NO_CADDY_COMPOSE_FILE} ===")
         print(build_direct_compose_content())
     elif config.deployment_mode == DEPLOY_MODE_LOCAL and caddy_config is not None:
@@ -1350,6 +1379,7 @@ def dry_run(config: DeployConfig) -> None:
         use_caddy=use_caddy,
         caddy_public=config.caddy_public,
         tarball_filename=config.tarball_filename,
+        caddy_mode=config.caddy_mode,
     )
     print("=== Lifecycle commands ===")
     if "pull" in commands:
@@ -1373,7 +1403,14 @@ def print_config_summary(config: DeployConfig) -> None:
     print(f"  Admin user:      {config.admin_username}")
     print(f"  Admin display:   {config.admin_display_name}")
     print(f"  Trusted hosts:   {', '.join(config.trusted_hosts)}")
-    if config.caddy_config is not None:
+    if config.caddy_mode == CADDY_MODE_EXTERNAL:
+        print("  Caddy mode:      external (shared)")
+        caddy_domain_str = config.caddy_config.domain if config.caddy_config else "(none)"
+        print(f"  Caddy domain:    {caddy_domain_str}")
+        if config.shared_caddy_config:
+            print(f"  Shared Caddy:    {config.shared_caddy_config.caddy_dir}")
+            print(f"  ACME email:      {config.shared_caddy_config.acme_email or '(none)'}")
+    elif config.caddy_config is not None:
         print(f"  Caddy domain:    {config.caddy_config.domain}")
         print(f"  Caddy email:     {config.caddy_config.email or '(none)'}")
         print(f"  Caddy public:    {'yes' if config.caddy_public else 'no'}")
@@ -1449,6 +1486,21 @@ def _is_valid_caddy_domain(domain: str) -> bool:
     if _is_ipv4_like(domain):
         return False
     return _DOMAIN_RE.match(domain) is not None
+
+
+def _prompt_caddy_mode() -> str:
+    """Prompt for Caddy reverse proxy mode."""
+    print("\nCaddy reverse proxy configuration:")
+    print("  bundled  - Deploy a Caddy container alongside AgBlogger (default)")
+    print("  external - Use a shared Caddy instance for multiple services")
+    print("  none     - No Caddy; expose AgBlogger directly")
+    while True:
+        value = input("Caddy mode [bundled/external/none] [bundled]: ").strip().lower()
+        if not value:
+            return CADDY_MODE_BUNDLED
+        if value in CADDY_MODES:
+            return value
+        print("Please choose bundled, external, or none.")
 
 
 def _prompt_caddy_domain() -> str:
@@ -1582,19 +1634,13 @@ def collect_config(project_dir: Path | None = None) -> DeployConfig:
         platform = DEFAULT_REMOTE_PLATFORM
         print(f"Target platform: {platform} (override with --platform for other architectures).")
 
-    use_caddy = _prompt_yes_no(
-        (
-            "Set up HTTPS with Caddy? "
-            "Caddy is a web server that automatically handles TLS certificates "
-            "and forwards traffic to AgBlogger"
-        ),
-        default=True,
-    )
+    caddy_mode = _prompt_caddy_mode()
 
     caddy_config: CaddyConfig | None = None
+    shared_caddy_config: SharedCaddyConfig | None = None
     host_port = DEFAULT_HOST_PORT
     caddy_public = False
-    if use_caddy:
+    if caddy_mode == CADDY_MODE_BUNDLED:
         caddy_domain = _prompt_caddy_domain()
         caddy_email = input("Email for TLS certificate notices (optional, recommended): ").strip()
         caddy_config = CaddyConfig(domain=caddy_domain, email=caddy_email or None)
@@ -1613,6 +1659,21 @@ def collect_config(project_dir: Path | None = None) -> DeployConfig:
             " before starting. Caddy needs to reach Let's Encrypt to provision"
             " TLS certificates.\n"
         )
+    elif caddy_mode == CADDY_MODE_EXTERNAL:
+        caddy_domain = _prompt_caddy_domain()
+        caddy_email = input("Email for TLS certificate notices (optional, recommended): ").strip()
+        caddy_config = CaddyConfig(domain=caddy_domain, email=caddy_email or None)
+        host_bind_ip = LOCALHOST_BIND_IP
+        shared_caddy_dir = _prompt_non_empty(
+            "Shared Caddy directory", default=DEFAULT_SHARED_CADDY_DIR
+        )
+        default_acme = caddy_email or None
+        acme_prompt = f"ACME email for shared Caddy [{default_acme or 'none'}]: "
+        acme_input = input(acme_prompt).strip()
+        acme_email = acme_input or default_acme
+        shared_caddy_config = SharedCaddyConfig(
+            caddy_dir=Path(shared_caddy_dir), acme_email=acme_email
+        )
     else:
         host_bind_ip = (
             PUBLIC_BIND_IP
@@ -1626,7 +1687,7 @@ def collect_config(project_dir: Path | None = None) -> DeployConfig:
 
     trusted_hosts = _prompt_trusted_hosts(caddy_config.domain if caddy_config else None)
 
-    if use_caddy:
+    if caddy_mode != CADDY_MODE_NONE:
         proxy_ips = [COMPOSE_SUBNET]
         print(f"Caddy proxy subnet ({COMPOSE_SUBNET}) auto-configured as a trusted proxy.")
         extra_proxy_ips = parse_csv_list(
@@ -1643,7 +1704,6 @@ def collect_config(project_dir: Path | None = None) -> DeployConfig:
         default=False,
     )
 
-    caddy_mode = CADDY_MODE_BUNDLED if use_caddy else CADDY_MODE_NONE
     return DeployConfig(
         secret_key=secret_key,
         admin_username=admin_username,
@@ -1662,6 +1722,7 @@ def collect_config(project_dir: Path | None = None) -> DeployConfig:
         tarball_filename=tarball_filename,
         platform=platform,
         caddy_mode=caddy_mode,
+        shared_caddy_config=shared_caddy_config,
     )
 
 
@@ -1688,11 +1749,23 @@ def config_from_args(args: argparse.Namespace) -> DeployConfig:
 
     caddy_config: CaddyConfig | None = None
     caddy_public = False
+    shared_caddy_config: SharedCaddyConfig | None = None
     if args.caddy_domain:
         caddy_config = CaddyConfig(domain=args.caddy_domain, email=args.caddy_email)
-        caddy_public = args.caddy_public
-        host_bind_ip = LOCALHOST_BIND_IP
+        if args.caddy_external:
+            caddy_mode = CADDY_MODE_EXTERNAL
+            shared_email = args.shared_caddy_email or args.caddy_email
+            shared_caddy_config = SharedCaddyConfig(
+                caddy_dir=Path(args.shared_caddy_dir),
+                acme_email=shared_email,
+            )
+            host_bind_ip = LOCALHOST_BIND_IP
+        else:
+            caddy_mode = CADDY_MODE_BUNDLED
+            caddy_public = args.caddy_public
+            host_bind_ip = LOCALHOST_BIND_IP
     else:
+        caddy_mode = CADDY_MODE_NONE
         host_bind_ip = PUBLIC_BIND_IP if args.bind_public else LOCALHOST_BIND_IP
 
     trusted_hosts = parse_csv_list(args.trusted_hosts)
@@ -1703,7 +1776,6 @@ def config_from_args(args: argparse.Namespace) -> DeployConfig:
     if caddy_config is not None and COMPOSE_SUBNET not in trusted_proxy_ips:
         trusted_proxy_ips.insert(0, COMPOSE_SUBNET)
 
-    caddy_mode = CADDY_MODE_BUNDLED if args.caddy_domain else CADDY_MODE_NONE
     admin_display_name = args.admin_display_name or args.admin_username
     return DeployConfig(
         secret_key=secret_key,
@@ -1723,6 +1795,7 @@ def config_from_args(args: argparse.Namespace) -> DeployConfig:
         tarball_filename=args.tarball_filename,
         platform=platform,
         caddy_mode=caddy_mode,
+        shared_caddy_config=shared_caddy_config,
     )
 
 
@@ -1776,6 +1849,21 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         default=False,
         help="Expose Caddy ports 80/443 publicly (default: localhost only).",
+    )
+    config_group.add_argument(
+        "--caddy-external",
+        action="store_true",
+        default=False,
+        help="Use a shared external Caddy instance instead of a bundled one.",
+    )
+    config_group.add_argument(
+        "--shared-caddy-dir",
+        default=DEFAULT_SHARED_CADDY_DIR,
+        help=f"Directory for the shared Caddy instance (default: {DEFAULT_SHARED_CADDY_DIR}).",
+    )
+    config_group.add_argument(
+        "--shared-caddy-email",
+        help="ACME email for the shared Caddy instance (defaults to --caddy-email).",
     )
     config_group.add_argument(
         "--trusted-hosts",
