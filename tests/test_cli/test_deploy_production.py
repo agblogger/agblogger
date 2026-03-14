@@ -4052,3 +4052,51 @@ class TestBuildSetupScript:
         # Bundled Caddy starts via compose, no separate bootstrap
         assert "/opt/caddy" not in script
         assert "caddy reload" not in script
+
+    def test_external_caddy_bootstraps_shared_caddy(self) -> None:
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+            caddy_config=CaddyConfig(domain="blog.example.com", email="admin@example.com"),
+            caddy_mode=CADDY_MODE_EXTERNAL,
+            shared_caddy_config=SharedCaddyConfig(
+                caddy_dir=Path("/opt/caddy"),
+                acme_email="admin@example.com",
+            ),
+        )
+        script = build_setup_script_content(config)
+        # Directory creation
+        assert "mkdir -p" in script
+        assert "/opt/caddy/sites" in script
+        # Shared Caddyfile heredoc
+        assert "import /etc/caddy/sites/*.caddy" in script
+        # Shared compose heredoc
+        assert "image: caddy:2" in script
+        # Network creation
+        assert "docker network create" in script
+        assert EXTERNAL_CADDY_NETWORK_NAME in script
+        # Start shared Caddy
+        assert "docker compose up -d" in script
+        # Subnet detection
+        assert "docker network inspect" in script
+        assert CADDY_NETWORK_SUBNET_PLACEHOLDER in script
+        # Site snippet
+        assert "blog.example.com" in script
+        assert "reverse_proxy agblogger:8000" in script
+        # Caddy reload
+        assert "caddy reload" in script
+
+    def test_external_caddy_uses_custom_caddy_dir(self) -> None:
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_REGISTRY,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+            caddy_config=CaddyConfig(domain="blog.example.com", email=None),
+            caddy_mode=CADDY_MODE_EXTERNAL,
+            shared_caddy_config=SharedCaddyConfig(
+                caddy_dir=Path("/srv/caddy"),
+                acme_email=None,
+            ),
+        )
+        script = build_setup_script_content(config)
+        assert "/srv/caddy" in script
+        assert "/opt/caddy" not in script

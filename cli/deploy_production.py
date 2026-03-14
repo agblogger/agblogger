@@ -414,6 +414,89 @@ def build_setup_script_content(config: DeployConfig) -> str:
             "",
         ])
 
+    # Bootstrap shared Caddy (external mode only)
+    if (
+        config.caddy_mode == CADDY_MODE_EXTERNAL
+        and config.shared_caddy_config is not None
+        and config.caddy_config is not None
+    ):
+        caddy_dir = str(config.shared_caddy_config.caddy_dir)
+        caddyfile_content = build_shared_caddyfile_content(
+            config.shared_caddy_config.acme_email,
+        )
+        caddy_compose_content = build_shared_caddy_compose_content()
+        site_snippet = build_caddy_site_snippet(config.caddy_config)
+        domain = config.caddy_config.domain
+
+        lines.extend([
+            "# ── Bootstrap shared Caddy ───────────────────────────────────────────",
+            f'echo "Setting up shared Caddy reverse proxy..."',
+            f"mkdir -p {caddy_dir}/sites",
+            "",
+        ])
+
+        # Write shared Caddyfile if not exists
+        lines.extend([
+            f"if [ ! -f {caddy_dir}/{DEFAULT_SHARED_CADDYFILE} ]; then",
+            f"    cat > {caddy_dir}/{DEFAULT_SHARED_CADDYFILE} <<'CADDYFILE_EOF'",
+            caddyfile_content.rstrip("\n"),
+            "CADDYFILE_EOF",
+            "fi",
+            "",
+        ])
+
+        # Write shared docker-compose.yml if not exists
+        lines.extend([
+            f"if [ ! -f {caddy_dir}/{DEFAULT_SHARED_CADDY_COMPOSE_FILE} ]; then",
+            f"    cat > {caddy_dir}/{DEFAULT_SHARED_CADDY_COMPOSE_FILE} <<'COMPOSE_EOF'",
+            caddy_compose_content.rstrip("\n"),
+            "COMPOSE_EOF",
+            "fi",
+            "",
+        ])
+
+        # Create Docker network if not exists
+        lines.extend([
+            f"if ! docker network inspect {EXTERNAL_CADDY_NETWORK_NAME} &>/dev/null; then",
+            f'    echo "Creating Docker network {EXTERNAL_CADDY_NETWORK_NAME}..."',
+            f"    docker network create {EXTERNAL_CADDY_NETWORK_NAME}",
+            "fi",
+            "",
+        ])
+
+        # Start shared Caddy if not running
+        lines.extend([
+            f'if ! docker ps --format "{{{{.Names}}}}" | grep -q "^{SHARED_CADDY_CONTAINER_NAME}$"; then',
+            f'    echo "Starting shared Caddy..."',
+            f"    (cd {caddy_dir} && docker compose up -d)",
+            "fi",
+            "",
+        ])
+
+        # Detect subnet and replace placeholder in .env.production
+        lines.extend([
+            "# Detect Caddy network subnet for trusted proxy configuration",
+            f'CADDY_SUBNET=$(docker network inspect {EXTERNAL_CADDY_NETWORK_NAME} --format "{{{{range .IPAM.Config}}}}{{{{.Subnet}}}}{{{{end}}}}")',
+            f'sed -i "s|{CADDY_NETWORK_SUBNET_PLACEHOLDER}|$CADDY_SUBNET|" .env.production',
+            "",
+        ])
+
+        # Write site snippet
+        lines.extend([
+            f"# Write site snippet for {domain}",
+            f"cat > {caddy_dir}/sites/{domain}.caddy <<'SITE_EOF'",
+            site_snippet.rstrip("\n"),
+            "SITE_EOF",
+            "",
+        ])
+
+        # Reload Caddy
+        lines.extend([
+            f'echo "Reloading Caddy configuration..."',
+            f"docker exec {SHARED_CADDY_CONTAINER_NAME} caddy reload --config /etc/caddy/Caddyfile",
+            "",
+        ])
+
     # Start/restart AgBlogger
     lines.extend([
         "# ── Start services ───────────────────────────────────────────────────",
