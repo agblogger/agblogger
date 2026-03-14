@@ -1778,7 +1778,10 @@ def config_from_args(args: argparse.Namespace) -> DeployConfig:
         trusted_hosts.append(caddy_config.domain)
 
     trusted_proxy_ips = parse_csv_list(args.trusted_proxy_ips) if args.trusted_proxy_ips else []
-    if caddy_config is not None and COMPOSE_SUBNET not in trusted_proxy_ips:
+    if caddy_mode == CADDY_MODE_EXTERNAL:
+        if CADDY_NETWORK_SUBNET_PLACEHOLDER not in trusted_proxy_ips:
+            trusted_proxy_ips.insert(0, CADDY_NETWORK_SUBNET_PLACEHOLDER)
+    elif caddy_config is not None and COMPOSE_SUBNET not in trusted_proxy_ips:
         trusted_proxy_ips.insert(0, COMPOSE_SUBNET)
 
     admin_display_name = args.admin_display_name or args.admin_username

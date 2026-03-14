@@ -15,6 +15,7 @@ from cli.deploy_production import (
     CADDY_MODE_BUNDLED,
     CADDY_MODE_EXTERNAL,
     CADDY_MODE_NONE,
+    CADDY_NETWORK_SUBNET_PLACEHOLDER,
     CADDY_STATIC_IP,
     COMPOSE_SUBNET,
     DEFAULT_BUNDLE_DIR,
@@ -3971,3 +3972,34 @@ def test_write_config_files_creates_content_directory(tmp_path: Path) -> None:
     config = _make_config()
     write_config_files(config, tmp_path)
     assert (tmp_path / "content").is_dir()
+
+
+# ── config_from_args: external Caddy proxy subnet placeholder ────────
+
+
+def test_config_from_args_external_caddy_uses_placeholder_not_compose_subnet() -> None:
+    args = argparse.Namespace(
+        secret_key="x" * 64,
+        admin_username="admin",
+        admin_password="password1234",
+        admin_display_name="Admin",
+        caddy_domain="blog.example.com",
+        caddy_email="admin@example.com",
+        caddy_public=False,
+        caddy_external=True,
+        shared_caddy_dir=DEFAULT_SHARED_CADDY_DIR,
+        shared_caddy_email=None,
+        trusted_hosts="example.com",
+        trusted_proxy_ips=None,
+        host_port=8000,
+        bind_public=False,
+        expose_docs=False,
+        deployment_mode=DEPLOY_MODE_LOCAL,
+        image_ref=None,
+        bundle_dir=DEFAULT_BUNDLE_DIR,
+        tarball_filename=DEFAULT_IMAGE_TARBALL,
+        platform=None,
+    )
+    config = config_from_args(args)
+    assert CADDY_NETWORK_SUBNET_PLACEHOLDER in config.trusted_proxy_ips
+    assert COMPOSE_SUBNET not in config.trusted_proxy_ips
