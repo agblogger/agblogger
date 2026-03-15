@@ -52,7 +52,15 @@ blockquote: { before: '', after: '', placeholder: 'quote text', linePrefix: '> '
 
 ### Keyboard shortcut handling
 
-Add a case in `EditorPage.handleEditorKeyDown` for Shift+`.` (period) mapping to the `'blockquote'` action.
+Refactor `EditorPage.handleEditorKeyDown` to check `e.shiftKey` before dispatching. Currently the handler maps `e.key.toLowerCase()` through a `keyMap` without checking Shift, so Cmd+Shift+I would incorrectly trigger italic. The new logic:
+
+- `(e.key === '>' || e.key === '.') && e.shiftKey` → `'blockquote'` (WrapAction, dispatched via `wrapSelection`; match both because Shift+Period produces `>` as `e.key` in most browsers)
+- `e.key === 'I' && e.shiftKey` → call `triggerImageUpload()` directly (not a WrapAction)
+- `e.key === 'i' && !e.shiftKey` → `'italic'` (existing behavior, now explicit)
+
+The image shortcut bypasses the WrapAction system since it triggers a file dialog, not text insertion. Match the blockquote shortcut on `e.key === '>' || e.key === '.'` to handle cross-browser differences (Shift+Period reports `>` as `e.key` in most browsers).
+
+**Blockquote toggle (removing `> ` prefixes) is out of scope.** The button always adds prefixes; removing them can be done manually.
 
 ## Image Upload: Shared `useFileUpload` Hook
 
@@ -67,7 +75,7 @@ useFileUpload(options: {
   filePath: string | null
   accept?: string        // MIME filter, e.g. "image/*"
   multiple?: boolean     // default true
-  onSuccess?: (uploaded: AssetInfo[]) => void
+  onSuccess?: (uploaded: string[]) => void  // filenames returned by uploadAssets
   onError?: (message: string) => void
 })
 ```
@@ -92,7 +100,7 @@ Returns:
 
 ### Consumer: FileStrip
 
-Replaces its inline `handleUpload`, `fileInputRef`, and `<input>` with `useFileUpload({ filePath, multiple: true, onSuccess: reloadAssets, onError: setError })`. All other FileStrip functionality (delete, rename, insert, expand/collapse, thumbnails) is unchanged.
+Replaces its inline `handleUpload`, `fileInputRef`, and `<input>` with `useFileUpload({ filePath, multiple: true, onSuccess: loadAssets, onError: setError })`. All other FileStrip functionality (delete, rename, insert, expand/collapse, thumbnails) is unchanged.
 
 ### Consumer: EditorPage (image toolbar button)
 
@@ -103,10 +111,9 @@ useFileUpload({
   filePath: effectiveFilePath,
   accept: 'image/*',
   multiple: false,
-  onSuccess: (assets) => {
-    // Insert ![filename](filename) at cursor for each uploaded image
-    for (const asset of assets) {
-      handleInsertAtCursor(`![${asset.name}](${asset.name})`)
+  onSuccess: (filenames) => {
+    for (const name of filenames) {
+      handleInsertAtCursor(`![${name}](${name})`)
     }
   },
   onError: setError,
@@ -114,6 +121,8 @@ useFileUpload({
 ```
 
 Passes `triggerImageUpload` and `imageUploading` down to MarkdownToolbar.
+
+The hidden `<input type="file">` for image upload is rendered in EditorPage's JSX alongside the MarkdownToolbar (using the hook's `inputProps`).
 
 ### MarkdownToolbar changes
 
@@ -126,9 +135,11 @@ imageUploading?: boolean
 
 The image button calls `onImageClick` instead of going through the `WrapAction` system. While `imageUploading` is true, the button shows a loading state and is disabled.
 
-### Unsaved post guard
+### Post eligibility guard
 
-When `effectiveFilePath` is null (unsaved new post), the image button is disabled with tooltip "Save post first to add images".
+The image button is disabled when:
+- `effectiveFilePath` is null (unsaved new post) — tooltip: "Save post first to add images"
+- `showFileStrip` is false (flat-file post, not directory-backed) — tooltip: "Only directory-backed posts support images"
 
 ## Error Handling
 
