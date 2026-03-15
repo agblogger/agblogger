@@ -1,11 +1,12 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Paperclip, ChevronDown, ChevronUp, Plus } from 'lucide-react'
 import { HTTPError } from '@/api/client'
 import type { AssetInfo } from '@/api/client'
 import { parseErrorDetail } from '@/api/parseError'
-import { fetchPostAssets, deletePostAsset, renamePostAsset, uploadAssets } from '@/api/posts'
+import { fetchPostAssets, deletePostAsset, renamePostAsset } from '@/api/posts'
 import FileCard from './FileCard'
 import { rewriteMarkdownAssetReferences } from './markdownAssetReferences'
+import { useFileUpload } from './useFileUpload'
 
 interface FileStripProps {
   filePath: string | null
@@ -27,7 +28,6 @@ export default function FileStrip({
   const [operating, setOperating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const loadAssets = useCallback(async () => {
     if (filePath === null) return
@@ -49,6 +49,14 @@ export default function FileStrip({
     void loadAssets()
   }, [loadAssets])
 
+  const { triggerUpload, uploading: uploadOperating, inputProps: uploadInputProps } = useFileUpload({
+    filePath,
+    multiple: true,
+    onStart: () => setError(null),
+    onSuccess: () => void loadAssets(),
+    onError: setError,
+  })
+
   if (filePath === null) {
     return (
       <div className="rounded-lg border border-border px-4 py-3 text-sm text-muted">
@@ -57,7 +65,7 @@ export default function FileStrip({
     )
   }
 
-  const controlsDisabled = disabled || operating
+  const controlsDisabled = disabled || operating || uploadOperating
 
   function handleToggle() {
     setExpanded((prev) => !prev)
@@ -114,31 +122,6 @@ export default function FileStrip({
       }
     } finally {
       setOperating(false)
-    }
-  }
-
-  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    if (filePath === null) return
-    const files = e.target.files
-    if (files === null || files.length === 0) return
-    setOperating(true)
-    setError(null)
-    try {
-      await uploadAssets(filePath, Array.from(files))
-      await loadAssets()
-    } catch (err) {
-      if (err instanceof HTTPError) {
-        const detail = await parseErrorDetail(err.response, 'Failed to upload files')
-        setError(detail)
-      } else {
-        setError('Failed to upload files')
-      }
-    } finally {
-      setOperating(false)
-      // Reset input so the same file can be re-uploaded
-      if (fileInputRef.current) {
-        fileInputRef.current.value = ''
-      }
     }
   }
 
@@ -204,7 +187,7 @@ export default function FileStrip({
 
             <button
               type="button"
-              onClick={() => fileInputRef.current?.click()}
+              onClick={triggerUpload}
               disabled={controlsDisabled}
               className="w-20 h-20 rounded-lg border-2 border-dashed border-border flex items-center justify-center text-muted hover:border-accent hover:text-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               aria-label="Upload file"
@@ -212,13 +195,7 @@ export default function FileStrip({
               <Plus size={24} />
             </button>
 
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              onChange={(e) => void handleUpload(e)}
-              className="hidden"
-            />
+            <input {...uploadInputProps} />
           </div>
 
           <p className="mt-2 text-xs text-muted">Max 10 MB per file</p>
