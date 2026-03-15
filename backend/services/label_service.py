@@ -128,6 +128,54 @@ async def get_label_descendant_ids(session: AsyncSession, label_id: str) -> list
     return [r[0] for r in result.all()]
 
 
+async def get_label_descendants_batch(
+    session: AsyncSession,
+    label_ids: list[str],
+) -> dict[str, set[str]]:
+    """Get all descendant label IDs for multiple seed labels in a single query.
+
+    Returns a mapping of each input label ID to the set of all its descendants
+    (including the label itself).  An empty input returns an empty dict.
+    Labels not present in the database are still included in the result with a
+    singleton set containing only themselves.
+
+    Uses ``json_each()`` to unpack the seed IDs from a single JSON array
+    parameter so the SQL template is static (no dynamic string interpolation).
+    """
+    if not label_ids:
+        return {}
+
+    # Pass all seed IDs as a single JSON array.  json_each() unpacks them into
+    # rows inside the query so the SQL itself contains no dynamic fragments.
+    #
+    # Query structure:
+    #   seeds(root, id)       — one row per seed: (seed, seed)
+    #   descendants(root, id) — recursive expansion via label_parents_cache
+    #   Final SELECT returns (root, descendant) pairs.
+    sql = text("""
+        WITH RECURSIVE
+        seeds(root, id) AS (
+            SELECT je.value, je.value
+            FROM json_each(:label_ids_json) AS je
+        ),
+        descendants(root, id) AS (
+            SELECT root, id FROM seeds
+            UNION ALL
+            SELECT d.root, lp.label_id
+            FROM label_parents_cache lp
+            JOIN descendants d ON lp.parent_id = d.id
+        )
+        SELECT root, id FROM descendants
+    """)
+    result = await session.execute(sql, {"label_ids_json": json.dumps(label_ids)})
+    rows = result.all()
+
+    mapping: dict[str, set[str]] = {lid: set() for lid in label_ids}
+    for root, descendant in rows:
+        mapping[root].add(descendant)
+    return mapping
+
+
 async def create_label(
     session: AsyncSession,
     label_id: str,

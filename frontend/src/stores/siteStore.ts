@@ -9,6 +9,13 @@ interface SiteState {
   fetchConfig: () => Promise<void>
 }
 
+/** Fire-and-forget config refresh — safe to call from event handlers. */
+export function refreshSiteConfig(): void {
+  useSiteStore.getState().fetchConfig().catch((err: unknown) => {
+    console.warn('Failed to refresh site config', err)
+  })
+}
+
 export const useSiteStore = create<SiteState>((set) => ({
   config: null,
   isLoading: false,

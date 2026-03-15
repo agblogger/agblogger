@@ -31,3 +31,8 @@ export class MockHTTPError extends Error {
 
 /** Alias so tests that import `HTTPError` by name work unchanged. */
 export { MockHTTPError as HTTPError }
+
+/** Convenience factory — avoids the ugly `new (MockHTTPError as unknown as new (s: number) => Error)(...)` cast. */
+export function mockHttpError(status: number, body?: string): Error {
+  return new MockHTTPError(status, body)
+}

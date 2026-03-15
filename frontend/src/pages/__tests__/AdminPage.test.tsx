@@ -5,7 +5,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 import type { UserResponse, AdminSiteSettings, AdminPageConfig } from '@/api/client'
-import { MockHTTPError } from '@/test/MockHTTPError'
+import { mockHttpError } from '@/test/MockHTTPError'
 
 vi.mock('@/api/client', async () => {
   const { MockHTTPError } = await import('@/test/MockHTTPError')
@@ -162,7 +162,7 @@ describe('AdminPage', () => {
 
   it('shows 401 error as session expired', async () => {
     mockFetchAdminSiteSettings.mockRejectedValue(
-      new (MockHTTPError as unknown as new (s: number) => Error)(401),
+      mockHttpError(401),
     )
     mockFetchAdminPages.mockResolvedValue({ pages: [] })
     renderAdmin()
@@ -597,7 +597,7 @@ describe('AdminPage', () => {
   it('shows 409 error for duplicate page ID', async () => {
     setupLoadSuccess()
     mockCreateAdminPage.mockRejectedValue(
-      new (MockHTTPError as unknown as new (s: number) => Error)(409),
+      mockHttpError(409),
     )
     const user = userEvent.setup()
     renderAdmin()
@@ -839,10 +839,7 @@ describe('AdminPage', () => {
   it('shows 400 error with detail from response', async () => {
     setupLoadSuccess()
     mockChangeAdminPassword.mockRejectedValue(
-      new (MockHTTPError as unknown as new (s: number, body?: string) => Error)(
-        400,
-        JSON.stringify({ detail: 'Current password is incorrect.' }),
-      ),
+      mockHttpError(400, JSON.stringify({ detail: 'Current password is incorrect.' })),
     )
     const user = userEvent.setup()
     renderAdmin()
@@ -869,7 +866,7 @@ describe('AdminPage', () => {
   it('shows session expired for 401 password error', async () => {
     setupLoadSuccess()
     mockChangeAdminPassword.mockRejectedValue(
-      new (MockHTTPError as unknown as new (s: number) => Error)(401),
+      mockHttpError(401),
     )
     const user = userEvent.setup()
     renderAdmin()
@@ -957,7 +954,7 @@ describe('AdminPage', () => {
   it('shows username already taken error (409)', async () => {
     setupLoadSuccess()
     mockUpdateProfile.mockRejectedValue(
-      new (MockHTTPError as unknown as new (s: number) => Error)(409),
+      mockHttpError(409),
     )
     const user = userEvent.setup()
     renderAdmin()
@@ -983,10 +980,7 @@ describe('AdminPage', () => {
   it('shows validation error (422)', async () => {
     setupLoadSuccess()
     mockUpdateProfile.mockRejectedValue(
-      new (MockHTTPError as unknown as new (s: number, body?: string) => Error)(
-        422,
-        JSON.stringify({ detail: 'Invalid format' }),
-      ),
+      mockHttpError(422, JSON.stringify({ detail: 'Invalid format' })),
     )
     const user = userEvent.setup()
     renderAdmin()
@@ -1012,7 +1006,7 @@ describe('AdminPage', () => {
   it('shows session expired error (401)', async () => {
     setupLoadSuccess()
     mockUpdateProfile.mockRejectedValue(
-      new (MockHTTPError as unknown as new (s: number) => Error)(401),
+      mockHttpError(401),
     )
     const user = userEvent.setup()
     renderAdmin()

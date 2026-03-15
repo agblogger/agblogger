@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Lock, Save, User } from 'lucide-react'
 
+import AlertBanner from '@/components/AlertBanner'
 import { HTTPError } from '@/api/client'
 import { parseErrorDetail } from '@/api/parseError'
 import { changeAdminPassword } from '@/api/admin'
@@ -154,14 +155,10 @@ export default function AccountSection({ busy, onSaving, onDirtyChange }: Accoun
         </div>
 
         {profileError !== null && (
-          <div className="mb-4 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/40 rounded-lg px-4 py-3">
-            {profileError}
-          </div>
+          <AlertBanner variant="error" className="mb-4">{profileError}</AlertBanner>
         )}
         {profileSuccess !== null && (
-          <div className="mb-4 text-sm text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800/40 rounded-lg px-4 py-3">
-            {profileSuccess}
-          </div>
+          <AlertBanner variant="success" className="mb-4">{profileSuccess}</AlertBanner>
         )}
 
         <form
@@ -233,14 +230,10 @@ export default function AccountSection({ busy, onSaving, onDirtyChange }: Accoun
         </div>
 
         {passwordError !== null && (
-          <div className="mb-4 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/40 rounded-lg px-4 py-3">
-            {passwordError}
-          </div>
+          <AlertBanner variant="error" className="mb-4">{passwordError}</AlertBanner>
         )}
         {passwordSuccess !== null && (
-          <div className="mb-4 text-sm text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800/40 rounded-lg px-4 py-3">
-            {passwordSuccess}
-          </div>
+          <AlertBanner variant="success" className="mb-4">{passwordSuccess}</AlertBanner>
         )}
 
         <form

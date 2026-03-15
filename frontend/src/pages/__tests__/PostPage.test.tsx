@@ -7,7 +7,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import { fetchPost, deletePost, updatePost, fetchPostForEdit } from '@/api/posts'
 import type { UserResponse, PostDetail } from '@/api/client'
-import { MockHTTPError } from '@/test/MockHTTPError'
+import { mockHttpError } from '@/test/MockHTTPError'
 
 vi.mock('@/api/posts', () => ({
   fetchPost: vi.fn(),
@@ -139,7 +139,7 @@ describe('PostPage', () => {
   })
 
   it('shows 404 for missing post', async () => {
-    mockFetchPost.mockRejectedValue(new (MockHTTPError as unknown as new (s: number) => Error)(404))
+    mockFetchPost.mockRejectedValue(mockHttpError(404))
     renderPostPage()
 
     await waitFor(() => {
@@ -150,7 +150,7 @@ describe('PostPage', () => {
 
   it('shows session expired error when loading post returns 401', async () => {
     mockFetchPost.mockRejectedValue(
-      new (MockHTTPError as unknown as new (s: number) => Error)(401),
+      mockHttpError(401),
     )
     renderPostPage()
 
@@ -286,7 +286,7 @@ describe('PostPage', () => {
     mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null, is_admin: true }
     mockFetchPost.mockResolvedValue(postDetail)
     mockDeletePost.mockRejectedValue(
-      new (MockHTTPError as unknown as new (s: number) => Error)(401),
+      mockHttpError(401),
     )
     renderPostPage()
 
@@ -498,10 +498,7 @@ describe('PostPage', () => {
       author: 'Admin',
     })
     mockUpdatePost.mockRejectedValue(
-      new (MockHTTPError as unknown as new (s: number, b?: string) => Error)(
-        409,
-        JSON.stringify({ detail: 'Post was modified by another user' }),
-      ),
+      mockHttpError(409, JSON.stringify({ detail: 'Post was modified by another user' })),
     )
     renderPostPage('/post/posts/2026-03-08-draft/index.md')
 
@@ -531,10 +528,7 @@ describe('PostPage', () => {
       author: 'Admin',
     })
     mockUpdatePost.mockRejectedValue(
-      new (MockHTTPError as unknown as new (s: number, b?: string) => Error)(
-        500,
-        JSON.stringify({ detail: 'Internal server error' }),
-      ),
+      mockHttpError(500, JSON.stringify({ detail: 'Internal server error' })),
     )
     renderPostPage('/post/posts/2026-03-08-draft/index.md')
 

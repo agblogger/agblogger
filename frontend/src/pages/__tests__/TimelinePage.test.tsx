@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import { fetchPosts, uploadPost } from '@/api/posts'
 import type { PostListResponse, UserResponse } from '@/api/client'
-import { MockHTTPError } from '@/test/MockHTTPError'
+import { mockHttpError } from '@/test/MockHTTPError'
 
 vi.mock('@/api/posts', () => ({
   fetchPosts: vi.fn(),
@@ -339,7 +339,7 @@ describe('TimelinePage', () => {
     setMockUser({ id: 1, username: 'admin', email: 'a@t.com', display_name: null, is_admin: true })
     mockFetchPosts.mockResolvedValue(postsResponse)
     mockUploadPost.mockRejectedValue(
-      new (MockHTTPError as unknown as new (s: number) => Error)(413),
+      mockHttpError(413),
     )
     renderTimeline()
 
@@ -359,9 +359,7 @@ describe('TimelinePage', () => {
     setMockUser({ id: 1, username: 'admin', email: 'a@t.com', display_name: null, is_admin: true })
     mockFetchPosts.mockResolvedValue(postsResponse)
     mockUploadPost.mockRejectedValue(
-      new (MockHTTPError as unknown as new (s: number, body?: string) => Error)(
-        422, JSON.stringify({ detail: 'no_title' }),
-      ),
+      mockHttpError(422, JSON.stringify({ detail: 'no_title' })),
     )
     renderTimeline()
 
@@ -382,9 +380,7 @@ describe('TimelinePage', () => {
     mockFetchPosts.mockResolvedValue(postsResponse)
     mockUploadPost
       .mockRejectedValueOnce(
-        new (MockHTTPError as unknown as new (s: number, body?: string) => Error)(
-          422, JSON.stringify({ detail: 'no_title' }),
-        ),
+        mockHttpError(422, JSON.stringify({ detail: 'no_title' })),
       )
       .mockResolvedValueOnce({
         id: 3, file_path: 'posts/titled.md', title: 'My Title',
@@ -417,9 +413,7 @@ describe('TimelinePage', () => {
     setMockUser({ id: 1, username: 'admin', email: 'a@t.com', display_name: null, is_admin: true })
     mockFetchPosts.mockResolvedValue(postsResponse)
     mockUploadPost.mockRejectedValue(
-      new (MockHTTPError as unknown as new (s: number, body?: string) => Error)(
-        422, JSON.stringify({ detail: 'no_title' }),
-      ),
+      mockHttpError(422, JSON.stringify({ detail: 'no_title' })),
     )
     const user = userEvent.setup()
     renderTimeline()
@@ -462,7 +456,7 @@ describe('TimelinePage', () => {
     setMockUser({ id: 1, username: 'admin', email: 'a@t.com', display_name: null, is_admin: true })
     mockFetchPosts.mockResolvedValue(postsResponse)
     mockUploadPost.mockRejectedValue(
-      new (MockHTTPError as unknown as new (s: number) => Error)(401),
+      mockHttpError(401),
     )
     renderTimeline()
 

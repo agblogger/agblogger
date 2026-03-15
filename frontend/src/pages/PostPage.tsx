@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Calendar, User, PenLine, Trash2 } from 'lucide-react'
+import { Calendar, User, PenLine, Trash2 } from 'lucide-react'
 import { fetchPost, deletePost, fetchPostForEdit, updatePost } from '@/api/posts'
+import BackLink from '@/components/BackLink'
 import { useAuthStore } from '@/stores/authStore'
 import { HTTPError } from '@/api/client'
 import { parseErrorDetail } from '@/api/parseError'
@@ -149,13 +150,7 @@ export default function PostPage() {
     <article className="animate-fade-in xl:flex xl:gap-8">
       <div className="flex-1 min-w-0">
       <div className="flex items-center justify-between mb-8">
-        <Link
-          to="/"
-          className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-ink transition-colors"
-        >
-          <ArrowLeft size={14} />
-          Back to posts
-        </Link>
+        <BackLink to="/" label="Back to posts" />
         <div className="xl:hidden">
           <TableOfContents contentRef={contentRef} />
         </div>
@@ -269,13 +264,7 @@ export default function PostPage() {
       )}
 
       <footer className="mt-16 pt-8 border-t border-border">
-        <Link
-          to="/"
-          className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-ink transition-colors"
-        >
-          <ArrowLeft size={14} />
-          Back to posts
-        </Link>
+        <BackLink to="/" label="Back to posts" />
       </footer>
       </div>
 

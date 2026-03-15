@@ -251,4 +251,50 @@ describe('useFileUpload', () => {
     expect(mockUploadAssets).not.toHaveBeenCalled()
     expect(onSuccess).not.toHaveBeenCalled()
   })
+
+  it('inputProps and its onChange are stable when only callbacks change between renders', () => {
+    const makeOnSuccess = () => vi.fn()
+
+    const { result, rerender } = renderHook(
+      ({ onSuccess }: { onSuccess: (uploaded: string[]) => void }) =>
+        useFileUpload({ filePath: 'posts/test/index.md', onSuccess }),
+      { initialProps: { onSuccess: makeOnSuccess() } },
+    )
+
+    const firstInputProps = result.current.inputProps
+    const firstOnChange = firstInputProps.onChange
+
+    rerender({ onSuccess: makeOnSuccess() })
+
+    expect(result.current.inputProps).toBe(firstInputProps)
+    expect(result.current.inputProps.onChange).toBe(firstOnChange)
+  })
+
+  it('uses the latest onSuccess callback even when handleChange identity is stable', async () => {
+    mockUploadAssets.mockResolvedValue({ uploaded: ['photo.png'] })
+
+    const firstOnSuccess = vi.fn()
+    const secondOnSuccess = vi.fn()
+
+    const { result, rerender } = renderHook(
+      ({ onSuccess }: { onSuccess: (uploaded: string[]) => void }) =>
+        useFileUpload({ filePath: 'posts/test/index.md', onSuccess }),
+      { initialProps: { onSuccess: firstOnSuccess } },
+    )
+
+    // Switch to a new callback before triggering the upload
+    rerender({ onSuccess: secondOnSuccess })
+
+    const file = new File(['content'], 'photo.png', { type: 'image/png' })
+    act(() => {
+      result.current.inputProps.onChange({
+        target: { files: [file], value: '' },
+      } as unknown as React.ChangeEvent<HTMLInputElement>)
+    })
+
+    await waitFor(() => {
+      expect(secondOnSuccess).toHaveBeenCalledWith(['photo.png'])
+    })
+    expect(firstOnSuccess).not.toHaveBeenCalled()
+  })
 })

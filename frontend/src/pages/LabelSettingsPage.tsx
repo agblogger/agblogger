@@ -1,7 +1,10 @@
 import { useEffect, useState, useMemo } from 'react'
+import AlertBanner from '@/components/AlertBanner'
 import LoadingSpinner from '@/components/LoadingSpinner'
-import { useParams, useNavigate, Link } from 'react-router-dom'
-import { ArrowLeft, X, Settings, Trash2 } from 'lucide-react'
+import BackLink from '@/components/BackLink'
+import ErrorBlock from '@/components/ErrorBlock'
+import { useParams, useNavigate } from 'react-router-dom'
+import { X, Settings, Trash2 } from 'lucide-react'
 
 import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
 import { useAuthStore } from '@/stores/authStore'
@@ -89,7 +92,7 @@ export default function LabelSettingsPage() {
 
   const { markSaved } = useUnsavedChanges(isDirty)
 
-  const availableParents = allLabels.filter((l) => !excludedIds.has(l.id))
+  const availableParents = useMemo(() => allLabels.filter((l) => !excludedIds.has(l.id)), [allLabels, excludedIds])
 
   function handleRemoveName(index: number) {
     setNames(names.filter((_, i) => i !== index))
@@ -174,25 +177,14 @@ export default function LabelSettingsPage() {
   }
 
   if (error !== null && label === null) {
-    return (
-      <div className="text-center py-24">
-        <p className="text-red-600 dark:text-red-400">{error}</p>
-        <Link to="/labels" className="text-accent text-sm hover:underline mt-4 inline-block">
-          Back to labels
-        </Link>
-      </div>
-    )
+    return <ErrorBlock message={error} backTo="/labels" backLabel="Back to labels" />
   }
 
   return (
     <div className="animate-fade-in">
-      <Link
-        to={`/labels/${labelId}`}
-        className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-ink transition-colors mb-6"
-      >
-        <ArrowLeft size={14} />
-        Back to #{labelId}
-      </Link>
+      <div className="mb-6">
+        <BackLink to={`/labels/${labelId}`} label={`Back to #${labelId}`} />
+      </div>
 
       <div className="flex items-center gap-3 mb-8">
         <Settings size={20} className="text-accent" />
@@ -210,9 +202,7 @@ export default function LabelSettingsPage() {
       </div>
 
       {error !== null && (
-        <div className="mb-6 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/40 rounded-lg px-4 py-3">
-          {error}
-        </div>
+        <AlertBanner variant="error" className="mb-6">{error}</AlertBanner>
       )}
 
       {/* Names section */}

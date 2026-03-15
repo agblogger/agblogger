@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -282,7 +283,7 @@ class TestInvalidSortColumn:
         mock_session.execute = AsyncMock(return_value=mock_result)
 
         with pytest.raises(ValueError, match="sort"):
-            await list_posts(mock_session, sort="nonexistent_column")
+            await list_posts(mock_session, sort=cast("Any", "nonexistent_column"))
 
 
 class TestSyncTimestampNarrowing:
@@ -358,7 +359,6 @@ class TestTomlWriteHardening:
     def test_concurrent_writes_use_unique_temp_paths(self, tmp_path: Path) -> None:
         """Two writes should not collide on temp path names."""
         import tempfile
-        from typing import Any
 
         temp_paths: list[str] = []
         original_mkstemp = tempfile.mkstemp

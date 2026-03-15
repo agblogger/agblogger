@@ -27,7 +27,7 @@ Object.defineProperty(window, 'localStorage', {
   writable: true,
 })
 
-import { MockHTTPError } from '@/test/MockHTTPError'
+import { mockHttpError } from '@/test/MockHTTPError'
 
 vi.mock('@/api/posts', () => ({
   fetchPostForEdit: vi.fn(),
@@ -206,7 +206,7 @@ describe('EditorPage', () => {
 
   it('shows 404 error page without editor form', async () => {
     // MockHTTPError has our test-friendly 1-arg constructor but TS sees the real type
-    mockFetchPostForEdit.mockRejectedValue(new (MockHTTPError as unknown as new (s: number) => Error)(404))
+    mockFetchPostForEdit.mockRejectedValue(mockHttpError(404))
     renderEditor('/editor/posts/missing.md')
 
     await waitFor(() => {
@@ -221,7 +221,7 @@ describe('EditorPage', () => {
 
   it('shows session expired when post load returns 401', async () => {
     mockFetchPostForEdit.mockRejectedValue(
-      new (MockHTTPError as unknown as new (s: number) => Error)(401),
+      mockHttpError(401),
     )
     renderEditor('/editor/posts/protected.md')
 
@@ -428,7 +428,7 @@ describe('EditorPage', () => {
   it('shows 401 save error', async () => {
     const mockCreatePost = vi.mocked(createPost)
     mockCreatePost.mockRejectedValue(
-      new (MockHTTPError as unknown as new (s: number) => Error)(401),
+      mockHttpError(401),
     )
     const user = userEvent.setup()
     renderEditor('/editor/new')
@@ -448,7 +448,7 @@ describe('EditorPage', () => {
   it('shows 409 conflict error', async () => {
     const mockCreatePost = vi.mocked(createPost)
     mockCreatePost.mockRejectedValue(
-      new (MockHTTPError as unknown as new (s: number) => Error)(409),
+      mockHttpError(409),
     )
     const user = userEvent.setup()
     renderEditor('/editor/new')
@@ -468,10 +468,7 @@ describe('EditorPage', () => {
   it('shows 422 validation error with string detail', async () => {
     const mockCreatePost = vi.mocked(createPost)
     mockCreatePost.mockRejectedValue(
-      new (MockHTTPError as unknown as new (s: number, b?: string) => Error)(
-        422,
-        JSON.stringify({ detail: 'Title cannot be empty' }),
-      ),
+      mockHttpError(422, JSON.stringify({ detail: 'Title cannot be empty' })),
     )
     const user = userEvent.setup()
     renderEditor('/editor/new')
@@ -491,10 +488,7 @@ describe('EditorPage', () => {
   it('shows 422 validation error with array detail', async () => {
     const mockCreatePost = vi.mocked(createPost)
     mockCreatePost.mockRejectedValue(
-      new (MockHTTPError as unknown as new (s: number, b?: string) => Error)(
-        422,
-        JSON.stringify({ detail: [{ msg: 'Field required' }, { msg: 'Invalid format' }] }),
-      ),
+      mockHttpError(422, JSON.stringify({ detail: [{ msg: 'Field required' }, { msg: 'Invalid format' }] })),
     )
     const user = userEvent.setup()
     renderEditor('/editor/new')
@@ -547,7 +541,7 @@ describe('EditorPage', () => {
   it('shows 404 save error', async () => {
     const mockCreatePost = vi.mocked(createPost)
     mockCreatePost.mockRejectedValue(
-      new (MockHTTPError as unknown as new (s: number) => Error)(404),
+      mockHttpError(404),
     )
     const user = userEvent.setup()
     renderEditor('/editor/new')
@@ -567,7 +561,7 @@ describe('EditorPage', () => {
   it('shows generic HTTP save error for unknown status', async () => {
     const mockCreatePost = vi.mocked(createPost)
     mockCreatePost.mockRejectedValue(
-      new (MockHTTPError as unknown as new (s: number) => Error)(500),
+      mockHttpError(500),
     )
     const user = userEvent.setup()
     renderEditor('/editor/new')
@@ -727,10 +721,7 @@ describe('EditorPage', () => {
   it('shows 422 with empty detail string as generic validation error', async () => {
     const mockCreatePost = vi.mocked(createPost)
     mockCreatePost.mockRejectedValue(
-      new (MockHTTPError as unknown as new (s: number, b?: string) => Error)(
-        422,
-        JSON.stringify({ detail: '' }),
-      ),
+      mockHttpError(422, JSON.stringify({ detail: '' })),
     )
     const user = userEvent.setup()
     renderEditor('/editor/new')
@@ -750,10 +741,7 @@ describe('EditorPage', () => {
   it('shows 422 with non-string/array detail as generic validation error', async () => {
     const mockCreatePost = vi.mocked(createPost)
     mockCreatePost.mockRejectedValue(
-      new (MockHTTPError as unknown as new (s: number, b?: string) => Error)(
-        422,
-        JSON.stringify({ detail: 42 }),
-      ),
+      mockHttpError(422, JSON.stringify({ detail: 42 })),
     )
     const user = userEvent.setup()
     renderEditor('/editor/new')
@@ -918,14 +906,11 @@ describe('EditorPage', () => {
   it('shows 422 with field/message detail as field-prefixed error', async () => {
     const mockCreatePost = vi.mocked(createPost)
     mockCreatePost.mockRejectedValue(
-      new (MockHTTPError as unknown as new (s: number, b?: string) => Error)(
-        422,
-        JSON.stringify({
-          detail: [
-            { field: 'title', message: 'String should have at least 1 character' },
-          ],
-        }),
-      ),
+      mockHttpError(422, JSON.stringify({
+        detail: [
+          { field: 'title', message: 'String should have at least 1 character' },
+        ],
+      })),
     )
     const user = userEvent.setup()
     renderEditor('/editor/new')
@@ -948,10 +933,7 @@ describe('EditorPage', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const mockCreatePost = vi.mocked(createPost)
     mockCreatePost.mockRejectedValue(
-      new (MockHTTPError as unknown as new (s: number, b?: string) => Error)(
-        422,
-        'not json',
-      ),
+      mockHttpError(422, 'not json'),
     )
     const user = userEvent.setup()
     renderEditor('/editor/new')
@@ -1006,7 +988,7 @@ describe('EditorPage', () => {
 
   it('shows session expired when fetchSocialAccounts returns 401', async () => {
     mockFetchSocialAccounts.mockRejectedValue(
-      new (MockHTTPError as unknown as new (s: number) => Error)(401),
+      mockHttpError(401),
     )
 
     renderEditor('/editor/new')

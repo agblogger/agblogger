@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { HTTPError } from '@/api/client'
 import { parseErrorDetail } from '@/api/parseError'
 import { uploadAssets } from '@/api/posts'
@@ -23,6 +23,15 @@ export function useFileUpload({
   const [uploading, setUploading] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
+  // Store the latest callbacks in refs so handleChange can stay stable
+  // without capturing stale closures.
+  const onStartRef = useRef(onStart)
+  const onSuccessRef = useRef(onSuccess)
+  const onErrorRef = useRef(onError)
+  onStartRef.current = onStart
+  onSuccessRef.current = onSuccess
+  onErrorRef.current = onError
+
   const triggerUpload = useCallback(() => {
     if (filePath === null) return
     inputRef.current?.click()
@@ -35,21 +44,21 @@ export function useFileUpload({
       if (files === null || files.length === 0) return
 
       setUploading(true)
-      onStart?.()
+      onStartRef.current?.()
       try {
         const result = await uploadAssets(filePath, Array.from(files))
-        onSuccess?.(result.uploaded)
+        onSuccessRef.current?.(result.uploaded)
       } catch (err) {
         if (err instanceof HTTPError) {
           const detail = await parseErrorDetail(err.response, 'Failed to upload files')
-          if (onError) {
-            onError(detail)
+          if (onErrorRef.current) {
+            onErrorRef.current(detail)
           } else {
             console.error(err)
           }
         } else {
           console.error(err)
-          onError?.('Failed to upload files')
+          onErrorRef.current?.('Failed to upload files')
         }
       } finally {
         setUploading(false)
@@ -58,17 +67,20 @@ export function useFileUpload({
         }
       }
     },
-    [filePath, onStart, onSuccess, onError],
+    [filePath],
   )
 
-  const inputProps = {
-    ref: inputRef,
-    type: 'file' as const,
-    accept,
-    multiple,
-    onChange: (e: React.ChangeEvent<HTMLInputElement>) => void handleChange(e),
-    className: 'hidden',
-  }
+  const inputProps = useMemo(
+    () => ({
+      ref: inputRef,
+      type: 'file' as const,
+      accept,
+      multiple,
+      onChange: (e: React.ChangeEvent<HTMLInputElement>) => void handleChange(e),
+      className: 'hidden',
+    }),
+    [accept, multiple, handleChange],
+  )
 
   return { triggerUpload, uploading, inputProps }
 }

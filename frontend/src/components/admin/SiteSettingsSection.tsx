@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Settings, Save } from 'lucide-react'
 
+import AlertBanner from '@/components/AlertBanner'
 import { HTTPError } from '@/api/client'
 import type { AdminSiteSettings } from '@/api/client'
 import { updateAdminSiteSettings } from '@/api/admin'
 import TimezoneCombobox from './TimezoneCombobox'
-import { useSiteStore } from '@/stores/siteStore'
+import { refreshSiteConfig } from '@/stores/siteStore'
 
 interface SiteSettingsSectionProps {
   initialSettings: AdminSiteSettings
@@ -68,7 +69,7 @@ export default function SiteSettingsSection({
       setSiteSettings(updated)
       onSavedSettings(updated)
       setSiteSuccess('Settings saved.')
-      useSiteStore.getState().fetchConfig().catch((err: unknown) => { console.warn('Failed to refresh site config', err) })
+      refreshSiteConfig()
     } catch (err) {
       if (err instanceof HTTPError) {
         if (err.response.status === 401) {
@@ -92,14 +93,10 @@ export default function SiteSettingsSection({
       </div>
 
       {siteError !== null && (
-        <div className="mb-4 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/40 rounded-lg px-4 py-3">
-          {siteError}
-        </div>
+        <AlertBanner variant="error" className="mb-4">{siteError}</AlertBanner>
       )}
       {siteSuccess !== null && (
-        <div className="mb-4 text-sm text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800/40 rounded-lg px-4 py-3">
-          {siteSuccess}
-        </div>
+        <AlertBanner variant="success" className="mb-4">{siteSuccess}</AlertBanner>
       )}
 
       <div className="space-y-4">

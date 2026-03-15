@@ -322,13 +322,13 @@ class SyncClient:
             if local_path is None:
                 print(f"  Skip backup (path traversal): {fp}")
                 continue
-            if not local_path.exists():
-                print(f"  Skip backup (file not found locally): {fp}")
-                continue
             dest = backup_dir / fp
             try:
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(local_path, dest)
+            except FileNotFoundError:
+                print(f"  Skip backup (file not found locally): {fp}")
+                continue
             except OSError as exc:
                 print(f"  Warning: Could not back up {fp}: {exc}")
                 continue

@@ -2,10 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Save, ArrowLeft, Eye } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
+import { formatDate } from '@/utils/date'
 
 import { fetchPostForEdit, createPost, updatePost } from '@/api/posts'
 import { fetchSocialAccounts } from '@/api/crosspost'
 import type { SocialAccount } from '@/api/crosspost'
+import AlertBanner from '@/components/AlertBanner'
 import { HTTPError } from '@/api/client'
 import { extractErrorDetail, parseErrorDetail } from '@/api/parseError'
 import api from '@/api/client'
@@ -245,15 +247,6 @@ export default function EditorPage() {
     onError: setError,
   })
 
-  function formatDate(iso: string): string {
-    try {
-      const parsed = parseISO(iso.replace(' ', 'T').replace(/\+(\d{2})$/, '+$1:00'))
-      return format(parsed, 'MMM d, yyyy, HH:mm')
-    } catch {
-      return iso.split('.')[0] ?? iso
-    }
-  }
-
   function handleEditorKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     const isMod = e.metaKey || e.ctrlKey
     if (!isMod) return
@@ -374,15 +367,11 @@ export default function EditorPage() {
       </div>
 
       {error !== null && (
-        <div className="mb-4 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/40 rounded-lg px-4 py-3">
-          {error}
-        </div>
+        <AlertBanner variant="error" className="mb-4">{error}</AlertBanner>
       )}
 
       {socialAccountsError !== null && (
-        <div className="mb-4 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/40 rounded-lg px-4 py-3">
-          {socialAccountsError}
-        </div>
+        <AlertBanner variant="error" className="mb-4">{socialAccountsError}</AlertBanner>
       )}
 
       {draftAvailable && draftSavedAt !== null && (
@@ -458,8 +447,8 @@ export default function EditorPage() {
 
           {!isNew && (createdAt !== null || modifiedAt !== null) && (
             <div className="flex items-center gap-4 text-xs text-muted">
-              {createdAt !== null && <span>Created {formatDate(createdAt)}</span>}
-              {modifiedAt !== null && <span>Modified {formatDate(modifiedAt)}</span>}
+              {createdAt !== null && <span>Created {formatDate(createdAt, 'MMM d, yyyy, HH:mm')}</span>}
+              {modifiedAt !== null && <span>Modified {formatDate(modifiedAt, 'MMM d, yyyy, HH:mm')}</span>}
             </div>
           )}
         </div>

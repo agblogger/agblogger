@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import { Link } from 'react-router-dom'
 import { Tag, Settings, Search } from 'lucide-react'
@@ -9,6 +9,7 @@ import { HTTPError } from '@/api/client'
 import type { LabelResponse } from '@/api/client'
 import { filterLabelsBySearch } from '@/components/labels/searchUtils'
 import LabelChip from '@/components/labels/LabelChip'
+import ParentLabelLinks from '@/components/labels/ParentLabelLinks'
 
 const LabelGraphPage = lazy(() => import('@/pages/LabelGraphPage'))
 
@@ -98,6 +99,8 @@ function LabelListView({ search }: { search: string }) {
       .finally(() => setLoading(false))
   }, [])
 
+  const filteredLabels = useMemo(() => filterLabelsBySearch(labels, search), [labels, search])
+
   if (loading) {
     return <LoadingSpinner />
   }
@@ -113,8 +116,6 @@ function LabelListView({ search }: { search: string }) {
   if (labels.length === 0) {
     return <p className="text-muted text-center py-16">No labels defined yet.</p>
   }
-
-  const filteredLabels = filterLabelsBySearch(labels, search)
 
   if (filteredLabels.length === 0) {
     return <p className="text-muted text-center py-16">No labels match your search.</p>
@@ -160,18 +161,7 @@ function LabelListView({ search }: { search: string }) {
             {label.parents.length > 0 && (
               <div className="mt-2 text-xs text-muted pointer-events-auto relative z-10">
                 <span>in </span>
-                {label.parents.map((p, idx) => (
-                  <span key={p}>
-                    {idx > 0 && ', '}
-                    <Link
-                      to={`/labels/${p}`}
-                      className="text-muted hover:text-ink underline decoration-border hover:decoration-ink transition-colors"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      #{p}
-                    </Link>
-                  </span>
-                ))}
+                <ParentLabelLinks parents={label.parents} stopPropagation />
               </div>
             )}
           </div>

@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useSearchParams, useNavigate, Link } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, FileText, Upload } from 'lucide-react'
+import AlertBanner from '@/components/AlertBanner'
 import PostCard from '@/components/posts/PostCard'
 import FilterPanel, { EMPTY_FILTER, type FilterState } from '@/components/filters/FilterPanel'
 import { fetchPosts, uploadPost, type PostListParams } from '@/api/posts'
@@ -201,9 +202,7 @@ export default function TimelinePage() {
       )}
 
       {uploadError !== null && (
-        <div className="mb-4 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/40 rounded-lg px-4 py-3">
-          {uploadError}
-        </div>
+        <AlertBanner variant="error" className="mb-4">{uploadError}</AlertBanner>
       )}
 
       {loading ? (

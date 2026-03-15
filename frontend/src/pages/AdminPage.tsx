@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, Link, useLocation } from 'react-router-dom'
-import { Settings, ArrowLeft } from 'lucide-react'
+import { Settings } from 'lucide-react'
 
 import { useAuthStore } from '@/stores/authStore'
 import LoadingSpinner from '@/components/LoadingSpinner'
+import BackLink from '@/components/BackLink'
 import { HTTPError } from '@/api/client'
 import type { AdminSiteSettings, AdminPageConfig } from '@/api/client'
 import { fetchAdminSiteSettings, fetchAdminPages } from '@/api/admin'
@@ -136,13 +137,9 @@ export default function AdminPage() {
 
   return (
     <div className="animate-fade-in">
-      <Link
-        to="/"
-        className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-ink transition-colors mb-6"
-      >
-        <ArrowLeft size={14} />
-        Back
-      </Link>
+      <div className="mb-6">
+        <BackLink to="/" />
+      </div>
 
       <div className="flex items-center gap-3 mb-8">
         <Settings size={20} className="text-accent" />

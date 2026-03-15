@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import math
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from sqlalchemy import func, or_, select, text
 
@@ -79,14 +79,14 @@ async def list_posts(
     per_page: int = 20,
     label: str | None = None,
     labels: list[str] | None = None,
-    label_mode: str = "or",
+    label_mode: Literal["or", "and"] = "or",
     include_descendants: bool = True,
     author: str | None = None,
     from_date: str | None = None,
     to_date: str | None = None,
     draft_owner_username: str | None = None,
-    sort: str = "created_at",
-    order: str = "desc",
+    sort: Literal["created_at", "modified_at", "title", "author"] = "created_at",
+    order: Literal["asc", "desc"] = "desc",
 ) -> PostListResponse:
     """List posts with pagination and filtering."""
     validate_pagination(page, per_page)
@@ -139,25 +139,25 @@ async def list_posts(
 
     if label_ids:
         if include_descendants:
-            from backend.services.label_service import get_label_descendant_ids
+            from backend.services.label_service import get_label_descendants_batch
+
+            descendants_by_label = await get_label_descendants_batch(session, label_ids)
 
             if label_mode == "and":
                 # AND mode: post must have ALL specified labels (or descendants)
                 for lid in label_ids:
-                    descendants = await get_label_descendant_ids(session, lid)
                     stmt = stmt.where(
                         PostCache.id.in_(
                             select(PostLabelCache.post_id).where(
-                                PostLabelCache.label_id.in_(descendants)
+                                PostLabelCache.label_id.in_(descendants_by_label[lid])
                             )
                         )
                     )
             else:
                 # OR mode (default): post must have ANY specified label (or descendants)
                 all_label_ids: set[str] = set()
-                for lid in label_ids:
-                    descendants = await get_label_descendant_ids(session, lid)
-                    all_label_ids.update(descendants)
+                for desc_set in descendants_by_label.values():
+                    all_label_ids.update(desc_set)
 
                 stmt = stmt.where(
                     PostCache.id.in_(

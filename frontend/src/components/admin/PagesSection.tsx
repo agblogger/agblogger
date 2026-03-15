@@ -10,6 +10,7 @@ import {
   Save,
 } from 'lucide-react'
 
+import AlertBanner from '@/components/AlertBanner'
 import { HTTPError } from '@/api/client'
 import api from '@/api/client'
 import type { AdminPageConfig } from '@/api/client'
@@ -20,7 +21,7 @@ import {
   deleteAdminPage,
 } from '@/api/admin'
 import { useRenderedHtml } from '@/hooks/useKatex'
-import { useSiteStore } from '@/stores/siteStore'
+import { refreshSiteConfig } from '@/stores/siteStore'
 
 const BUILTIN_PAGE_IDS = new Set(['timeline', 'labels'])
 
@@ -114,14 +115,14 @@ export default function PagesSection({
     pages.length !== initialPageIds.length ||
     pages.some((p, i) => p.id !== initialPageIds[i])
 
-  const pageEditDirty = (() => {
+  const pageEditDirty = useMemo(() => {
     if (expandedPageId === null) return false
     const page = pages.find((p) => p.id === expandedPageId)
     if (!page) return false
     if (editTitle !== page.title) return true
     if (!BUILTIN_PAGE_IDS.has(page.id) && editContent !== (page.content ?? '')) return true
     return false
-  })()
+  }, [expandedPageId, pages, editTitle, editContent])
 
   const addPageDirty = showAddForm && (newPageId !== '' || newPageTitle !== '')
 
@@ -164,7 +165,7 @@ export default function PagesSection({
       setPages(resp.pages)
       onPagesChange(resp.pages)
       setPagesSuccess('Page order saved.')
-      useSiteStore.getState().fetchConfig().catch((err: unknown) => { console.warn('Failed to refresh site config', err) })
+      refreshSiteConfig()
     } catch (err) {
       if (err instanceof HTTPError && err.response.status === 401) {
         setPagesError('Session expired. Please log in again.')
@@ -195,7 +196,7 @@ export default function PagesSection({
       setNewPageTitle('')
       setShowAddForm(false)
       setPagesSuccess(`Page "${trimmedTitle}" created.`)
-      useSiteStore.getState().fetchConfig().catch((err: unknown) => { console.warn('Failed to refresh site config', err) })
+      refreshSiteConfig()
     } catch (err) {
       if (err instanceof HTTPError) {
         if (err.response.status === 409) {
@@ -259,7 +260,7 @@ export default function PagesSection({
         setPages(nextPages)
         onPagesChange(nextPages)
         setPageEditSuccess('Page saved.')
-        useSiteStore.getState().fetchConfig().catch((err: unknown) => { console.warn('Failed to refresh site config', err) })
+        refreshSiteConfig()
       } else {
         setPageEditSuccess('No changes to save.')
       }
@@ -293,7 +294,7 @@ export default function PagesSection({
       setExpandedPageId(null)
       setDeleteConfirmId(null)
       setPagesSuccess(`Page deleted.`)
-      useSiteStore.getState().fetchConfig().catch((err: unknown) => { console.warn('Failed to refresh site config', err) })
+      refreshSiteConfig()
     } catch (err) {
       if (err instanceof HTTPError) {
         if (err.response.status === 400) {
@@ -319,14 +320,10 @@ export default function PagesSection({
       </div>
 
       {pagesError !== null && (
-        <div className="mb-4 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/40 rounded-lg px-4 py-3">
-          {pagesError}
-        </div>
+        <AlertBanner variant="error" className="mb-4">{pagesError}</AlertBanner>
       )}
       {pagesSuccess !== null && (
-        <div className="mb-4 text-sm text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800/40 rounded-lg px-4 py-3">
-          {pagesSuccess}
-        </div>
+        <AlertBanner variant="success" className="mb-4">{pagesSuccess}</AlertBanner>
       )}
 
       {/* Page list */}
@@ -379,14 +376,10 @@ export default function PagesSection({
             {expandedPageId === page.id && (
               <div className="border-t border-border px-4 py-4 space-y-4">
                 {pageEditError !== null && (
-                  <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/40 rounded-lg px-4 py-3">
-                    {pageEditError}
-                  </div>
+                  <AlertBanner variant="error">{pageEditError}</AlertBanner>
                 )}
                 {pageEditSuccess !== null && (
-                  <div className="text-sm text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800/40 rounded-lg px-4 py-3">
-                    {pageEditSuccess}
-                  </div>
+                  <AlertBanner variant="success">{pageEditSuccess}</AlertBanner>
                 )}
 
                 <div>

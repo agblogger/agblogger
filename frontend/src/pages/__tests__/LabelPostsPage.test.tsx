@@ -4,7 +4,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import type { UserResponse, LabelResponse, PostListResponse } from '@/api/client'
-import { MockHTTPError } from '@/test/MockHTTPError'
+import { mockHttpError } from '@/test/MockHTTPError'
 
 vi.mock('@/api/client', async () => {
   const { MockHTTPError } = await import('@/test/MockHTTPError')
@@ -91,7 +91,7 @@ describe('LabelPostsPage', () => {
 
   it('shows 404 error', async () => {
     mockFetchLabel.mockRejectedValue(
-      new (MockHTTPError as unknown as new (s: number) => Error)(404),
+      mockHttpError(404),
     )
     mockFetchLabelPosts.mockResolvedValue({ posts: [], total: 0, page: 1, per_page: 20, total_pages: 0 })
     renderPage()
@@ -103,7 +103,7 @@ describe('LabelPostsPage', () => {
 
   it('shows 401 error', async () => {
     mockFetchLabel.mockRejectedValue(
-      new (MockHTTPError as unknown as new (s: number) => Error)(401),
+      mockHttpError(401),
     )
     mockFetchLabelPosts.mockResolvedValue({ posts: [], total: 0, page: 1, per_page: 20, total_pages: 0 })
     renderPage()

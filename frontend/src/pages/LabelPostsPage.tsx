@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, Tag, Settings } from 'lucide-react'
+import { Tag, Settings } from 'lucide-react'
 
+import BackLink from '@/components/BackLink'
+import ErrorBlock from '@/components/ErrorBlock'
 import LabelChip from '@/components/labels/LabelChip'
+import ParentLabelLinks from '@/components/labels/ParentLabelLinks'
 import PostCard from '@/components/posts/PostCard'
 import { useAuthStore } from '@/stores/authStore'
 import { fetchLabelPosts, fetchLabel } from '@/api/labels'
@@ -46,14 +49,7 @@ export default function LabelPostsPage() {
   }
 
   if (error !== null) {
-    return (
-      <div className="text-center py-24">
-        <p className="text-red-600 dark:text-red-400">{error}</p>
-        <Link to="/labels" className="text-accent text-sm hover:underline mt-4 inline-block">
-          Back to labels
-        </Link>
-      </div>
-    )
+    return <ErrorBlock message={error} backTo="/labels" backLabel="Back to labels" />
   }
 
   const hasHierarchy =
@@ -61,13 +57,9 @@ export default function LabelPostsPage() {
 
   return (
     <div className="animate-fade-in">
-      <Link
-        to="/labels"
-        className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-ink transition-colors mb-6"
-      >
-        <ArrowLeft size={14} />
-        All labels
-      </Link>
+      <div className="mb-6">
+        <BackLink to="/labels" label="All labels" />
+      </div>
 
       <div className="flex items-center gap-3 mb-2">
         <Tag size={20} className="text-accent" />
@@ -103,17 +95,7 @@ export default function LabelPostsPage() {
         <div className={`${label.children.length > 0 ? 'mt-3' : 'mt-4'} mb-8`}>
           <h2 className="text-sm font-medium text-muted mb-2">Parents</h2>
           <div className="text-sm">
-            {label.parents.map((p, idx) => (
-              <span key={p}>
-                {idx > 0 && ', '}
-                <Link
-                  to={`/labels/${p}`}
-                  className="text-muted hover:text-ink underline decoration-border hover:decoration-ink transition-colors"
-                >
-                  #{p}
-                </Link>
-              </span>
-            ))}
+            <ParentLabelLinks parents={label.parents} />
           </div>
         </div>
       )}
