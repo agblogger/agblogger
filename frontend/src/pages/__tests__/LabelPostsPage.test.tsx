@@ -25,6 +25,12 @@ vi.mock('@/components/posts/PostCard', () => ({
   ),
 }))
 
+vi.mock('@/components/labels/LabelChip', () => ({
+  default: ({ labelId }: { labelId: string }) => (
+    <a data-testid="label-chip" href={`/labels/${labelId}`}>#{labelId}</a>
+  ),
+}))
+
 let mockUser: UserResponse | null = null
 
 vi.mock('@/stores/authStore', () => ({
@@ -38,7 +44,7 @@ const testLabel: LabelResponse = {
   id: 'swe',
   names: ['software engineering'],
   is_implicit: false,
-  parents: ['cs'],
+  parents: [],
   children: [],
   post_count: 2,
 }
@@ -160,5 +166,84 @@ describe('LabelPostsPage', () => {
       expect(screen.getByText('#swe')).toBeInTheDocument()
     })
     expect(screen.queryByLabelText('Label settings')).not.toBeInTheDocument()
+  })
+
+  it('renders children as clickable chips', async () => {
+    const labelWithChildren: LabelResponse = {
+      ...testLabel,
+      children: ['frontend', 'backend'],
+      parents: [],
+    }
+    mockFetchLabel.mockResolvedValue(labelWithChildren)
+    mockFetchLabelPosts.mockResolvedValue(postsData)
+    renderPage()
+
+    await waitFor(() => {
+      expect(screen.getByText('#swe')).toBeInTheDocument()
+    })
+    expect(screen.getByText('Children')).toBeInTheDocument()
+    const chips = screen.getAllByTestId('label-chip')
+    expect(chips).toHaveLength(2)
+    expect(chips[0]).toHaveAttribute('href', '/labels/frontend')
+    expect(chips[1]).toHaveAttribute('href', '/labels/backend')
+  })
+
+  it('renders parents as clickable links', async () => {
+    const labelWithParents: LabelResponse = {
+      ...testLabel,
+      children: [],
+      parents: ['cs', 'engineering'],
+    }
+    mockFetchLabel.mockResolvedValue(labelWithParents)
+    mockFetchLabelPosts.mockResolvedValue(postsData)
+    renderPage()
+
+    await waitFor(() => {
+      expect(screen.getByText('#swe')).toBeInTheDocument()
+    })
+    expect(screen.getByText('Parents')).toBeInTheDocument()
+    const csLink = screen.getByRole('link', { name: '#cs' })
+    expect(csLink).toHaveAttribute('href', '/labels/cs')
+    const engLink = screen.getByRole('link', { name: '#engineering' })
+    expect(engLink).toHaveAttribute('href', '/labels/engineering')
+  })
+
+  it('renders both children and parents with children first', async () => {
+    const labelWithBoth: LabelResponse = {
+      ...testLabel,
+      children: ['frontend'],
+      parents: ['cs'],
+    }
+    mockFetchLabel.mockResolvedValue(labelWithBoth)
+    mockFetchLabelPosts.mockResolvedValue(postsData)
+    renderPage()
+
+    await waitFor(() => {
+      expect(screen.getByText('#swe')).toBeInTheDocument()
+    })
+    const childrenHeading = screen.getByText('Children')
+    const parentsHeading = screen.getByText('Parents')
+    // Children section appears before Parents in the DOM
+    expect(
+      childrenHeading.compareDocumentPosition(parentsHeading) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+  })
+
+  it('renders no hierarchy sections when label has no parents or children', async () => {
+    const labelNoHierarchy: LabelResponse = {
+      ...testLabel,
+      children: [],
+      parents: [],
+    }
+    mockFetchLabel.mockResolvedValue(labelNoHierarchy)
+    mockFetchLabelPosts.mockResolvedValue(postsData)
+    renderPage()
+
+    await waitFor(() => {
+      expect(screen.getByText('#swe')).toBeInTheDocument()
+    })
+    expect(screen.queryByText('Children')).not.toBeInTheDocument()
+    expect(screen.queryByText('Parents')).not.toBeInTheDocument()
   })
 })
