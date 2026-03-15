@@ -56,7 +56,7 @@ Admin sub-sections are child components rendered conditionally by tab. Only the 
 
 - **SiteSettingsSection**: dirty when `siteSettings` differs from `initialSettings` (comparing title, description, timezone).
 - **AccountSection**: dirty when `profileChanged` is true OR any password field is non-empty. On successful password change with session revocation, the section must call `onDirtyChange(false)` before the `logout()` call triggers navigation, preventing a spurious blocker dialog.
-- **PagesSection**: dirty when page order differs from initial page order (computed by comparing page ID arrays, not a one-way flag) OR when the expanded page's `editTitle`/`editContent` differs from the page's saved values. Page edit dirty is tracked only while a page row is expanded (the current `handleExpandPage` resets edit state from server values on re-expand, so edits don't survive collapse/re-expand). The "Save Order" button is shown only when the order actually differs from initial — if the user reorders pages back to the original order, the button disappears.
+- **PagesSection**: dirty when page order differs from initial page order (computed by comparing page ID arrays, not a one-way flag) OR when the expanded page's `editTitle`/`editContent` differs from the page's saved values OR when the Add Page form is visible and has any input (`addPageDirty = showAddForm && (newPageId !== '' || newPageTitle !== '')`). Page edit dirty is tracked only while a page row is expanded (the current `handleExpandPage` resets edit state from server values on re-expand, so edits don't survive collapse/re-expand). The "Save Order" button is shown only when the order actually differs from initial — if the user reorders pages back to the original order, the button disappears.
 - **SocialAccountsPanel**: no dirty tracking.
 
 **AdminPage aggregation:** Tracks `siteDirty`, `pagesDirty`, `accountDirty` via the callbacks. Computes `anyDirty = siteDirty || pagesDirty || accountDirty` and passes it to `useUnsavedChanges(anyDirty)`.
@@ -111,4 +111,4 @@ All unsaved changes prompts use `window.confirm('You have unsaved changes. Are y
 - No auto-save
 - No custom styled modal — uses native browser confirm dialog
 - No backend changes
-- Add Page form in PagesSection (transient creation form, not editing existing state) is excluded from dirty tracking
+- Add Page form in PagesSection is included in dirty tracking — a user who has started filling out the form should be warned before losing that data

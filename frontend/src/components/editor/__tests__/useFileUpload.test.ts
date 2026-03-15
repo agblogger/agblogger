@@ -112,6 +112,7 @@ describe('useFileUpload', () => {
   })
 
   it('calls onError with generic message on non-HTTP error', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
     mockUploadAssets.mockRejectedValue(new Error('Network failure'))
     const onError = vi.fn()
 
@@ -133,6 +134,103 @@ describe('useFileUpload', () => {
       expect(onError).toHaveBeenCalledWith('Failed to upload files')
     })
     expect(result.current.uploading).toBe(false)
+    consoleError.mockRestore()
+  })
+
+  it('console.error is called on HTTPError when onError is not provided', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const errorResponse = new Response(JSON.stringify({ detail: 'File too large' }), {
+      status: 413,
+      statusText: 'Payload Too Large',
+    })
+    mockUploadAssets.mockRejectedValue(
+      new HTTPError(errorResponse, new Request('http://test'), httpErrorOptions),
+    )
+
+    const { result } = renderHook(() =>
+      useFileUpload({ filePath: 'posts/test/index.md' }),
+    )
+
+    const file = new File(['content'], 'big.png', { type: 'image/png' })
+    act(() => {
+      result.current.inputProps.onChange({
+        target: { files: [file], value: '' },
+      } as unknown as React.ChangeEvent<HTMLInputElement>)
+    })
+
+    await waitFor(() => {
+      expect(consoleError).toHaveBeenCalled()
+    })
+    consoleError.mockRestore()
+  })
+
+  it('console.error is called on non-HTTP error when onError is not provided', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    mockUploadAssets.mockRejectedValue(new TypeError('Network failure'))
+
+    const { result } = renderHook(() =>
+      useFileUpload({ filePath: 'posts/test/index.md' }),
+    )
+
+    const file = new File(['content'], 'photo.png', { type: 'image/png' })
+    act(() => {
+      result.current.inputProps.onChange({
+        target: { files: [file], value: '' },
+      } as unknown as React.ChangeEvent<HTMLInputElement>)
+    })
+
+    await waitFor(() => {
+      expect(consoleError).toHaveBeenCalled()
+    })
+    consoleError.mockRestore()
+  })
+
+  it('console.error is called on non-HTTP error even when onError IS provided', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const syntaxErr = new SyntaxError('Bad JSON')
+    mockUploadAssets.mockRejectedValue(syntaxErr)
+    const onError = vi.fn()
+
+    const { result } = renderHook(() =>
+      useFileUpload({ filePath: 'posts/test/index.md', onError }),
+    )
+
+    const file = new File(['content'], 'photo.png', { type: 'image/png' })
+    act(() => {
+      result.current.inputProps.onChange({
+        target: { files: [file], value: '' },
+      } as unknown as React.ChangeEvent<HTMLInputElement>)
+    })
+
+    await waitFor(() => {
+      expect(onError).toHaveBeenCalledWith('Failed to upload files')
+      expect(consoleError).toHaveBeenCalledWith(syntaxErr)
+    })
+    consoleError.mockRestore()
+  })
+
+  it('calls onStart callback before onSuccess during upload', async () => {
+    const callOrder: string[] = []
+    mockUploadAssets.mockResolvedValue({ uploaded: ['photo.png'] })
+    const onStart = vi.fn(() => { callOrder.push('onStart') })
+    const onSuccess = vi.fn(() => { callOrder.push('onSuccess') })
+
+    const { result } = renderHook(() =>
+      useFileUpload({ filePath: 'posts/test/index.md', onStart, onSuccess }),
+    )
+
+    const file = new File(['content'], 'photo.png', { type: 'image/png' })
+    act(() => {
+      result.current.inputProps.onChange({
+        target: { files: [file], value: '' },
+      } as unknown as React.ChangeEvent<HTMLInputElement>)
+    })
+
+    await waitFor(() => {
+      expect(onStart).toHaveBeenCalledTimes(1)
+      expect(onSuccess).toHaveBeenCalledWith(['photo.png'])
+      expect(callOrder).toEqual(['onStart', 'onSuccess'])
+    })
   })
 
   it('does nothing when no files are selected', () => {

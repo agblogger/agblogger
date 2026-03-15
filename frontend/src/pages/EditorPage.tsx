@@ -58,6 +58,12 @@ export default function EditorPage() {
   )
   const showFileStrip = effectiveFilePath === null || effectiveFilePath.endsWith('/index.md')
   const imageUploadEnabled = showFileStrip && effectiveFilePath !== null
+  const imageDisabledReason =
+    effectiveFilePath === null
+      ? 'Save post first to add images'
+      : !showFileStrip
+        ? 'Only directory-backed posts support images'
+        : undefined
 
   useCodeBlockEnhance(previewRef, renderedPreview)
 
@@ -212,7 +218,10 @@ export default function EditorPage() {
 
   function handleInsertAtCursor(text: string) {
     const textarea = textareaRef.current
-    if (!textarea) return
+    if (!textarea) {
+      setBody((prev) => prev + '\n' + text)
+      return
+    }
     const pos = textarea.selectionStart
     const before = body.slice(0, pos)
     const after = body.slice(pos)
@@ -535,6 +544,7 @@ export default function EditorPage() {
             disabled={saving}
             onImageClick={imageUploadEnabled ? triggerImageUpload : undefined}
             imageUploading={imageUploading}
+            {...(imageDisabledReason !== undefined ? { imageDisabledReason } : {})}
           />
           <input {...imageInputProps} />
           <textarea

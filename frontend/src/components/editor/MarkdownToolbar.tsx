@@ -10,6 +10,7 @@ interface MarkdownToolbarProps {
   disabled?: boolean
   onImageClick?: (() => void) | undefined
   imageUploading?: boolean
+  imageDisabledReason?: string
 }
 
 const isMac = typeof navigator !== 'undefined' && navigator.platform.toUpperCase().includes('MAC')
@@ -33,6 +34,7 @@ export default function MarkdownToolbar({
   disabled,
   onImageClick,
   imageUploading,
+  imageDisabledReason,
 }: MarkdownToolbarProps) {
   function handleAction(key: string) {
     if (key === 'image') return // handled via onImageClick
@@ -57,7 +59,7 @@ export default function MarkdownToolbar({
   }
 
   function imageTitle(shortcut: string): string {
-    if (onImageClick === undefined) return 'Save post first to add images'
+    if (imageDisabledReason !== undefined) return imageDisabledReason
     if (imageUploading === true) return 'Uploading...'
     return `Image (${shortcut})`
   }
@@ -67,7 +69,7 @@ export default function MarkdownToolbar({
       {buttons.map(({ key, label, Icon, shortcut }) => {
         const isImage = key === 'image'
         const isDisabled = isImage
-          ? (disabled ?? false) || onImageClick === undefined || imageUploading === true
+          ? (disabled ?? false) || imageDisabledReason !== undefined || onImageClick === undefined || imageUploading === true
           : disabled
         const title = isImage ? imageTitle(shortcut) : `${label} (${shortcut})`
 

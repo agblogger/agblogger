@@ -10,7 +10,7 @@ import os
 import shutil
 import sys
 from dataclasses import asdict, dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -313,7 +313,7 @@ class SyncClient:
             return None
 
         backed_up = 0
-        timestamp = datetime.now().strftime("%Y-%m-%d-%H%M%S")
+        timestamp = datetime.now(tz=UTC).strftime("%Y-%m-%d-%H%M%S")
         backup_dir = self.content_dir / ".backups" / timestamp
 
         for conflict in conflicts:
@@ -323,10 +323,15 @@ class SyncClient:
                 print(f"  Skip backup (path traversal): {fp}")
                 continue
             if not local_path.exists():
+                print(f"  Skip backup (file not found locally): {fp}")
                 continue
             dest = backup_dir / fp
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(local_path, dest)
+            try:
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(local_path, dest)
+            except OSError as exc:
+                print(f"  Warning: Could not back up {fp}: {exc}")
+                continue
             backed_up += 1
 
         if backed_up == 0:
@@ -386,7 +391,11 @@ class SyncClient:
 
         # Back up local versions of conflicted files before downloading server versions
         response_conflicts: list[dict[str, Any]] = commit_data.get("conflicts", [])
-        backup_dir = self._backup_conflicted_files(response_conflicts)
+        try:
+            backup_dir = self._backup_conflicted_files(response_conflicts)
+        except OSError as exc:
+            print(f"  Warning: Backup failed, continuing with sync: {exc}")
+            backup_dir = None
 
         # Download files: from plan's to_download + from commit response's to_download
         all_downloads: list[str] = list(to_download_plan)

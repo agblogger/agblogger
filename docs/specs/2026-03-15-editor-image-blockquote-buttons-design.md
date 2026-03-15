@@ -100,7 +100,7 @@ Returns:
 
 ### Consumer: FileStrip
 
-Replaces its inline `handleUpload`, `fileInputRef`, and `<input>` with `useFileUpload({ filePath, multiple: true, onSuccess: loadAssets, onError: setError })`. All other FileStrip functionality (delete, rename, insert, expand/collapse, thumbnails) is unchanged.
+Replaces its inline `handleUpload`, `fileInputRef`, and `<input>` with `useFileUpload({ filePath, multiple: true, onStart: () => setError(null), onSuccess: () => void loadAssets(), onError: setError })`. All other FileStrip functionality (delete, rename, insert, expand/collapse, thumbnails) is unchanged.
 
 ### Consumer: EditorPage (image toolbar button)
 

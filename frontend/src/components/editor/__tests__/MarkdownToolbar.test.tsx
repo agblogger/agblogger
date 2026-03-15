@@ -289,4 +289,51 @@ describe('MarkdownToolbar', () => {
 
     expect(screen.getByLabelText(/^Image/)).toBeDisabled()
   })
+
+  it('image button shows imageDisabledReason as tooltip when provided', () => {
+    const ref = createRef<HTMLTextAreaElement>()
+    render(
+      <MarkdownToolbar
+        textareaRef={ref}
+        value=""
+        onChange={() => {}}
+        imageDisabledReason="Save post first to add images"
+      />,
+    )
+
+    const imageBtn = screen.getByLabelText(/^Image/)
+    expect(imageBtn).toBeDisabled()
+    expect(imageBtn).toHaveAttribute('title', 'Save post first to add images')
+  })
+
+  it('image button shows flat-file disabled reason as tooltip when provided', () => {
+    const ref = createRef<HTMLTextAreaElement>()
+    render(
+      <MarkdownToolbar
+        textareaRef={ref}
+        value=""
+        onChange={() => {}}
+        imageDisabledReason="Only directory-backed posts support images"
+      />,
+    )
+
+    const imageBtn = screen.getByLabelText(/^Image/)
+    expect(imageBtn).toBeDisabled()
+    expect(imageBtn).toHaveAttribute('title', 'Only directory-backed posts support images')
+  })
+
+  it('image button is enabled when onImageClick is provided and no imageDisabledReason', () => {
+    const onImageClick = vi.fn()
+    const ref = createRef<HTMLTextAreaElement>()
+    render(
+      <MarkdownToolbar
+        textareaRef={ref}
+        value=""
+        onChange={() => {}}
+        onImageClick={onImageClick}
+      />,
+    )
+
+    expect(screen.getByLabelText(/^Image/)).not.toBeDisabled()
+  })
 })

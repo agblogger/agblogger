@@ -42,8 +42,13 @@ export function useFileUpload({
       } catch (err) {
         if (err instanceof HTTPError) {
           const detail = await parseErrorDetail(err.response, 'Failed to upload files')
-          onError?.(detail)
+          if (onError) {
+            onError(detail)
+          } else {
+            console.error(err)
+          }
         } else {
+          console.error(err)
           onError?.('Failed to upload files')
         }
       } finally {

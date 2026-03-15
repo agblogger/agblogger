@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 from typing import TYPE_CHECKING, Any
 
 import httpx
@@ -766,3 +767,128 @@ class TestRemovedMethods:
 
     def test_upload_file_method_removed(self) -> None:
         assert not hasattr(SyncClient, "_upload_file")
+
+
+class TestBackupOSErrorHandling:
+    """Issue 1: _backup_conflicted_files should degrade gracefully on OSError."""
+
+    def test_copy2_oserror_prints_warning_and_continues(
+        self, tmp_path: Path, monkeypatch: Any, capsys: Any
+    ) -> None:
+        """OSError during shutil.copy2 should print a warning but not raise."""
+        content_dir = tmp_path / "content"
+        posts_dir = content_dir / "posts"
+        posts_dir.mkdir(parents=True)
+        (posts_dir / "a.md").write_text("local a\n")
+        (posts_dir / "b.md").write_text("local b\n")
+
+        def _fail_copy(src: object, dst: object) -> None:
+            raise OSError("Permission denied")
+
+        monkeypatch.setattr(shutil, "copy2", _fail_copy)
+
+        client, _http = _build_sync_client(content_dir)
+        conflicts = [
+            {"file_path": "posts/a.md", "body_conflicted": True, "field_conflicts": []},
+            {"file_path": "posts/b.md", "body_conflicted": True, "field_conflicts": []},
+        ]
+
+        # Must not raise
+        backup_dir = client._backup_conflicted_files(conflicts)
+
+        captured = capsys.readouterr()
+        # Should print a warning for each failed copy
+        assert "warning" in captured.out.lower() or "warning" in captured.err.lower()
+        # No files backed up, so None is returned
+        assert backup_dir is None
+
+    def test_backup_oserror_does_not_abort_sync(self, tmp_path: Path, monkeypatch: Any) -> None:
+        """OSError raised by _backup_conflicted_files must not abort sync()."""
+        content_dir = tmp_path / "content"
+        content_dir.mkdir()
+
+        commit_resp = _DummyResponse(
+            json_data={
+                "status": "ok",
+                "commit_hash": "c123",
+                "conflicts": [
+                    {
+                        "file_path": "posts/conflict.md",
+                        "body_conflicted": True,
+                        "field_conflicts": [],
+                    }
+                ],
+                "to_download": [],
+                "warnings": [],
+            }
+        )
+        client, _http = _build_sync_client(content_dir, responses={"/api/sync/commit": commit_resp})
+        client.status = lambda: {
+            "to_upload": [],
+            "to_download": [],
+            "to_delete_remote": [],
+            "to_delete_local": [],
+            "conflicts": [{"file_path": "posts/conflict.md", "action": "merge"}],
+        }
+
+        def _raise_oserror(conflicts: list[dict[str, Any]]) -> None:
+            raise OSError("Disk full")
+
+        monkeypatch.setattr(client, "_backup_conflicted_files", _raise_oserror)
+        monkeypatch.setattr(sync_client, "scan_local_files", lambda _: {})
+        monkeypatch.setattr(sync_client, "save_manifest", lambda *_: None)
+
+        # Must not raise; sync should complete despite backup failure
+        client.sync()
+
+
+class TestBackupSkipNonExistentMessage:
+    """Issue 8: Non-existent files should print a skip message."""
+
+    def test_skip_nonexistent_file_prints_message(self, tmp_path: Path, capsys: Any) -> None:
+        """When a conflict file does not exist locally, a skip message is printed."""
+        content_dir = tmp_path / "content"
+        content_dir.mkdir()
+
+        client, _http = _build_sync_client(content_dir)
+        conflicts = [
+            {"file_path": "posts/gone.md", "body_conflicted": True, "field_conflicts": []},
+        ]
+
+        client._backup_conflicted_files(conflicts)
+
+        captured = capsys.readouterr()
+        assert "skip backup" in captured.out.lower()
+        assert "posts/gone.md" in captured.out
+
+
+class TestBackupTimestampUTC:
+    """Issue 12: Backup timestamp should use UTC."""
+
+    def test_backup_dir_timestamp_is_utc(self, tmp_path: Path, monkeypatch: Any) -> None:
+        """Backup directory name is derived from UTC, not local time."""
+        import datetime as dt
+
+        content_dir = tmp_path / "content"
+        posts_dir = content_dir / "posts"
+        posts_dir.mkdir(parents=True)
+        (posts_dir / "conflict.md").write_text("local\n")
+
+        class _FixedDatetime(dt.datetime):
+            @classmethod
+            def now(cls, tz: dt.tzinfo | None = None) -> _FixedDatetime:
+                if tz is dt.UTC:
+                    return cls(2025, 6, 15, 10, 30, 45, tzinfo=dt.UTC)
+                raise AssertionError("datetime.now() called without tz=timezone.utc")
+
+        monkeypatch.setattr(sync_client, "datetime", _FixedDatetime)
+
+        client, _http = _build_sync_client(content_dir)
+        conflicts = [
+            {"file_path": "posts/conflict.md", "body_conflicted": True, "field_conflicts": []},
+        ]
+
+        backup_dir = client._backup_conflicted_files(conflicts)
+
+        assert backup_dir is not None
+        assert backup_dir.name == "2025-06-15-103045"

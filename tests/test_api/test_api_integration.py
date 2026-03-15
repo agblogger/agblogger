@@ -2167,6 +2167,93 @@ class TestPostsIncludeSublabelsParam:
         titles = [p["title"] for p in resp.json()["posts"]]
         assert "Child Sub Post" in titles
 
+    @pytest.mark.asyncio
+    async def test_and_mode_exact_match_with_and_without_sublabels(
+        self, client: AsyncClient
+    ) -> None:
+        """AND mode with include_descendants=False only matches exact label IDs."""
+        login_resp = await client.post(
+            "/api/auth/token-login",
+            json={"username": "admin", "password": "admin123"},
+        )
+        token = login_resp.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # Create a parent label "and-par", a child label "and-chi", and an
+        # independent label "and-ind".
+        await client.post(
+            "/api/labels",
+            json={"id": "and-par", "names": ["And Parent"]},
+            headers=headers,
+        )
+        await client.post(
+            "/api/labels",
+            json={"id": "and-chi", "names": ["And Child"], "parents": ["and-par"]},
+            headers=headers,
+        )
+        await client.post(
+            "/api/labels",
+            json={"id": "and-ind", "names": ["And Independent"]},
+            headers=headers,
+        )
+
+        # Create a post tagged with the parent and the independent label.
+        create_resp = await client.post(
+            "/api/posts",
+            json={
+                "title": "And Mode Exact Post",
+                "body": "Tagged with and-par and and-ind.\n",
+                "labels": ["and-par", "and-ind"],
+                "is_draft": False,
+            },
+            headers=headers,
+        )
+        assert create_resp.status_code == 201
+
+        # AND + exact match (includeSublabels=false): post has "and-par" and "and-ind"
+        # → should be found.
+        resp = await client.get(
+            "/api/posts",
+            params={
+                "labels": "and-par,and-ind",
+                "labelMode": "and",
+                "includeSublabels": "false",
+            },
+        )
+        assert resp.status_code == 200
+        titles = [p["title"] for p in resp.json()["posts"]]
+        assert "And Mode Exact Post" in titles
+
+        # AND + with sublabels (includeSublabels=true): "and-par" also covers
+        # its descendant "and-chi", but the post itself carries "and-par" directly
+        # → should still be found.
+        resp = await client.get(
+            "/api/posts",
+            params={
+                "labels": "and-par,and-ind",
+                "labelMode": "and",
+                "includeSublabels": "true",
+            },
+        )
+        assert resp.status_code == 200
+        titles = [p["title"] for p in resp.json()["posts"]]
+        assert "And Mode Exact Post" in titles
+
+        # AND + exact match using the child label the post does NOT carry:
+        # querying "and-chi,and-ind" should NOT find the post because the post
+        # has "and-par" (the parent), not "and-chi".
+        resp = await client.get(
+            "/api/posts",
+            params={
+                "labels": "and-chi,and-ind",
+                "labelMode": "and",
+                "includeSublabels": "false",
+            },
+        )
+        assert resp.status_code == 200
+        titles = [p["title"] for p in resp.json()["posts"]]
+        assert "And Mode Exact Post" not in titles
+
 
 class TestPagination:
     @pytest.mark.asyncio

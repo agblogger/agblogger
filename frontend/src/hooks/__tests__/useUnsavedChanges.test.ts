@@ -200,6 +200,21 @@ describe('useUnsavedChanges', () => {
       expect(result.current.markSaved).toBeInstanceOf(Function)
     })
 
+    it('allows navigation without confirm when markSaved is called before navigating', async () => {
+      const confirmSpy = vi.spyOn(window, 'confirm')
+      const user = userEvent.setup()
+
+      renderWithDirtyControls()
+
+      await user.click(screen.getByRole('button', { name: 'Mark Saved' }))
+      await user.click(screen.getByText('Leave'))
+
+      expect(confirmSpy).not.toHaveBeenCalled()
+      await waitFor(() => {
+        expect(screen.getByText('Other page')).toBeInTheDocument()
+      })
+    })
+
     it('does not bypass prompts after the form becomes dirty again', async () => {
       const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
       const user = userEvent.setup()

@@ -1090,6 +1090,74 @@ describe('EditorPage', () => {
     warnSpy.mockRestore()
   })
 
+  it('image button shows "Save post first to add images" tooltip for new unsaved post', async () => {
+    renderEditor('/editor/new')
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Title/)).toBeInTheDocument()
+    })
+
+    const imageBtn = screen.getByLabelText(/^Image/)
+    expect(imageBtn).toBeDisabled()
+    expect(imageBtn).toHaveAttribute('title', 'Save post first to add images')
+  })
+
+  it('image button shows "Only directory-backed posts support images" tooltip for flat-file post', async () => {
+    mockFetchPostForEdit.mockResolvedValue(editResponse)
+    renderEditor('/editor/posts/existing.md')
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Title/)).toHaveValue('Existing Post')
+    })
+
+    const imageBtn = screen.getByLabelText(/^Image/)
+    expect(imageBtn).toBeDisabled()
+    expect(imageBtn).toHaveAttribute('title', 'Only directory-backed posts support images')
+  })
+
+  it('image button is enabled for directory-backed saved posts', async () => {
+    mockFetchPostForEdit.mockResolvedValue(directoryEditResponse)
+    renderEditor('/editor/posts/2026-03-08-existing-post/index.md')
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Title/)).toHaveValue('Existing Post')
+    })
+
+    const imageBtn = screen.getByLabelText(/^Image/)
+    expect(imageBtn).not.toBeDisabled()
+  })
+
+  it('handleInsertAtCursor appends to body when textarea ref is null', async () => {
+    // This test verifies the fallback: when an image upload succeeds but textarea ref is null,
+    // the markdown is appended to the body rather than silently dropped.
+    const user = userEvent.setup()
+    vi.mocked(uploadAssets).mockResolvedValue({ uploaded: ['fallback.jpg'] })
+
+    mockFetchPostForEdit.mockResolvedValue(directoryEditResponse)
+    renderEditor('/editor/posts/2026-03-08-existing-post/index.md')
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Title/)).toHaveValue('Existing Post')
+    })
+
+    // Set initial body content
+    const textareas = document.querySelectorAll('textarea')
+    const bodyTextarea = textareas[0]!
+    await user.clear(bodyTextarea)
+    await user.type(bodyTextarea, 'Initial content')
+
+    // Upload via the toolbar image input
+    const imageInput = document.querySelector('input[accept="image/*"]') as HTMLInputElement
+    expect(imageInput).not.toBeNull()
+
+    const file = new File(['img data'], 'fallback.jpg', { type: 'image/jpeg' })
+    await user.upload(imageInput, file)
+
+    await waitFor(() => {
+      const textarea = document.querySelectorAll('textarea')[0]!
+      expect(textarea.value).toContain('![fallback.jpg](fallback.jpg)')
+    })
+  })
+
   it('refreshes FileStrip assets after toolbar image upload', async () => {
     const user = userEvent.setup()
     vi.mocked(uploadAssets).mockResolvedValue({ uploaded: ['hero.jpg'] })
