@@ -171,6 +171,8 @@ export default function EditorPage() {
       markSaved()
       setSavedFilePath(result.file_path)
       setEffectiveFilePath(result.file_path)
+      setCreatedAt(result.created_at)
+      setModifiedAt(result.modified_at)
       if (isNew) {
         void navigate(`/editor/${result.file_path}`, { replace: true })
       }

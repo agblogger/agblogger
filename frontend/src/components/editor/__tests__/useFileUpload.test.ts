@@ -76,9 +76,9 @@ describe('useFileUpload', () => {
 
     await waitFor(() => {
       expect(mockUploadAssets).toHaveBeenCalledWith('posts/test/index.md', [file])
+      expect(onSuccess).toHaveBeenCalledWith(['photo.png'])
+      expect(result.current.uploading).toBe(false)
     })
-    expect(onSuccess).toHaveBeenCalledWith(['photo.png'])
-    expect(result.current.uploading).toBe(false)
   })
 
   it('calls onError with parsed message on HTTPError', async () => {

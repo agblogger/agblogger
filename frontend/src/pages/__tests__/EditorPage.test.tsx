@@ -594,6 +594,63 @@ describe('EditorPage', () => {
     })
   })
 
+  it('updates created date when publishing a draft post', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const mockUpdatePost = vi.mocked(updatePost)
+    const draftEditResponse: PostEditResponse = {
+      ...editResponse,
+      is_draft: true,
+      created_at: '2026-02-01 12:00:00+00:00',
+    }
+    mockFetchPostForEdit.mockResolvedValue(draftEditResponse)
+    const publishedPost: PostDetail = {
+      id: 1, file_path: 'posts/existing.md',
+      title: 'Existing Post', author: 'Admin', created_at: '2026-03-15 09:00:00+00:00',
+      modified_at: '2026-03-15 09:00:00+00:00', is_draft: false,
+      rendered_excerpt: '', rendered_html: '<p>Content</p>', content: 'Content', labels: ['swe'],
+    }
+    mockUpdatePost.mockResolvedValue(publishedPost)
+    const user = userEvent.setup()
+    renderEditor('/editor/posts/existing.md')
+
+    await waitFor(() => {
+      expect(screen.getByText(/Created.*Feb 1/)).toBeInTheDocument()
+    })
+
+    // Uncheck Draft to publish
+    await user.click(screen.getByRole('checkbox', { name: /draft/i }))
+    await user.click(screen.getByRole('button', { name: /save/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/Created.*Mar 15/)).toBeInTheDocument()
+    })
+  })
+
+  it('updates modified date displayed in editor after saving', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const mockUpdatePost = vi.mocked(updatePost)
+    mockFetchPostForEdit.mockResolvedValue(editResponse)
+    const updatedPost: PostDetail = {
+      id: 1, file_path: 'posts/existing.md',
+      title: 'Existing Post', author: 'Admin', created_at: '2026-02-01 12:00:00+00:00',
+      modified_at: '2026-02-22 09:00:00+00:00', is_draft: false,
+      rendered_excerpt: '', rendered_html: '<p>Content</p>', content: 'Content', labels: ['swe'],
+    }
+    mockUpdatePost.mockResolvedValue(updatedPost)
+    const user = userEvent.setup()
+    renderEditor('/editor/posts/existing.md')
+
+    await waitFor(() => {
+      expect(screen.getByText(/Modified.*Feb 1/)).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: /save/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/Modified.*Feb 22/)).toBeInTheDocument()
+    })
+  })
+
   it('shows preview placeholder initially', async () => {
     renderEditor('/editor/new')
 
