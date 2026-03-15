@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   FileText,
   ArrowUp,
@@ -72,6 +72,7 @@ interface PagesSectionProps {
   busy: boolean
   onSaving: (saving: boolean) => void
   onPagesChange: (pages: AdminPageConfig[]) => void
+  onDirtyChange: (dirty: boolean) => void
 }
 
 export default function PagesSection({
@@ -79,12 +80,12 @@ export default function PagesSection({
   busy,
   onSaving,
   onPagesChange,
+  onDirtyChange,
 }: PagesSectionProps) {
   const [pages, setPages] = useState<AdminPageConfig[]>(initialPages)
   const [pagesError, setPagesError] = useState<string | null>(null)
   const [pagesSuccess, setPagesSuccess] = useState<string | null>(null)
   const [savingOrder, setSavingOrder] = useState(false)
-  const [orderDirty, setOrderDirty] = useState(false)
 
   const [showAddForm, setShowAddForm] = useState(false)
   const [newPageId, setNewPageId] = useState('')
@@ -107,6 +108,26 @@ export default function PagesSection({
     setPages(initialPages)
   }, [initialPages])
 
+  const initialPageIds = useMemo(() => initialPages.map((p) => p.id), [initialPages])
+
+  const orderDirty =
+    pages.length !== initialPageIds.length ||
+    pages.some((p, i) => p.id !== initialPageIds[i])
+
+  const pageEditDirty = (() => {
+    if (expandedPageId === null) return false
+    const page = pages.find((p) => p.id === expandedPageId)
+    if (!page) return false
+    if (editTitle !== page.title) return true
+    if (!BUILTIN_PAGE_IDS.has(page.id) && editContent !== (page.content ?? '')) return true
+    return false
+  })()
+
+  const isDirty = orderDirty || pageEditDirty
+
+  useEffect(() => { onDirtyChange(isDirty) }, [isDirty, onDirtyChange])
+  useEffect(() => { return () => { onDirtyChange(false) } }, [onDirtyChange])
+
   function handleMoveUp(index: number) {
     if (index <= 0) return
     const newPages = [...pages]
@@ -116,7 +137,6 @@ export default function PagesSection({
     newPages[index - 1] = currentPage
     newPages[index] = prevPage
     setPages(newPages)
-    setOrderDirty(true)
     setPagesSuccess(null)
   }
 
@@ -129,7 +149,6 @@ export default function PagesSection({
     newPages[index + 1] = currentPage
     newPages[index] = nextPage
     setPages(newPages)
-    setOrderDirty(true)
     setPagesSuccess(null)
   }
 
@@ -142,7 +161,6 @@ export default function PagesSection({
       const resp = await updateAdminPageOrder(orderPayload)
       setPages(resp.pages)
       onPagesChange(resp.pages)
-      setOrderDirty(false)
       setPagesSuccess('Page order saved.')
       useSiteStore.getState().fetchConfig().catch((err: unknown) => { console.warn('Failed to refresh site config', err) })
     } catch (err) {
