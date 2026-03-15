@@ -34,7 +34,7 @@ Children come first and are more visually prominent because they are more import
 
 - `mt-4` between the aliases line (or header if no aliases) and the first hierarchy section
 - `mt-3` between children and parents sections when both are present
-- `mb-8` on the last element before the post list (shifts from aliases to the last hierarchy section when hierarchy exists)
+- `mb-8` on the last element before the post list. Currently the aliases `<p>` has `mb-8`. When hierarchy sections are present, remove `mb-8` from the aliases line and apply it to the last hierarchy section instead. When no hierarchy sections exist, keep `mb-8` on aliases as today.
 
 ### Data
 
@@ -46,4 +46,5 @@ Add test cases to `LabelPostsPage.test.tsx`:
 
 - Label with children renders clickable `LabelChip` components linking to `/labels/{childId}`
 - Label with parents renders clickable links to `/labels/{parentId}`
+- Label with both parents and children renders both sections in the correct order (children first, then parents)
 - Label with neither parents nor children renders no hierarchy sections
