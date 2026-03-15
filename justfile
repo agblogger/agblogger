@@ -61,10 +61,13 @@ check-gitleaks-full:
     printf '[extend]\nuseDefault = true\n' > "$cfg_file"
     gitleaks detect --source . --config "$cfg_file" --no-banner --verbose
 
-# Run extra checks not covered by `check`
-check-extra: check-audit-full checkov check-gitleaks check-codeql check-semgrep test-backend-slow
+# Run Snyk open source dependency scan on the frontend
+check-snyk-deps:
     @echo "\n── Snyk: open source dependency scan ──"
     snyk test frontend
+
+# Run extra checks not covered by `check`
+check-extra: check-audit-full checkov check-gitleaks check-codeql check-semgrep test-backend-slow check-snyk-deps
     @echo "\n✓ Extra checks passed"
 
 # Run Snyk code analysis
