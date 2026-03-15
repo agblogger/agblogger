@@ -3,6 +3,7 @@
 .worktrees/
 .codex/
 .agents/
+.superpowers/
 
 skills-lock.json
 
