@@ -10,6 +10,7 @@ import { HTTPError } from '@/api/client'
 import { extractErrorDetail, parseErrorDetail } from '@/api/parseError'
 import api from '@/api/client'
 import { useCodeBlockEnhance } from '@/hooks/useCodeBlockEnhance'
+import { useFileUpload } from '@/components/editor/useFileUpload'
 import { buildEditorDraftStorageKey, useEditorAutoSave } from '@/hooks/useEditorAutoSave'
 import type { DraftData } from '@/hooks/useEditorAutoSave'
 import { useRenderedHtml } from '@/hooks/useKatex'
@@ -55,6 +56,8 @@ export default function EditorPage() {
     isNew ? null : filePath,
   )
   const showFileStrip = effectiveFilePath === null || effectiveFilePath.endsWith('/index.md')
+  const imageUploadEnabled = showFileStrip && effectiveFilePath !== null
+
   useCodeBlockEnhance(previewRef, renderedPreview)
 
   const draftOwnerId = user?.id ?? 0
@@ -213,6 +216,22 @@ export default function EditorPage() {
     setBody(before + text + after)
   }
 
+  const {
+    triggerUpload: triggerImageUpload,
+    uploading: imageUploading,
+    inputProps: imageInputProps,
+  } = useFileUpload({
+    filePath: imageUploadEnabled ? effectiveFilePath : null,
+    accept: 'image/*',
+    multiple: false,
+    onSuccess: (filenames) => {
+      for (const name of filenames) {
+        handleInsertAtCursor(`![${name}](${name})`)
+      }
+    },
+    onError: setError,
+  })
+
   function formatDate(iso: string): string {
     try {
       const parsed = parseISO(iso.replace(' ', 'T').replace(/\+(\d{2})$/, '+$1:00'))
@@ -232,6 +251,12 @@ export default function EditorPage() {
       actionKey = e.shiftKey ? 'codeblock' : 'code'
     } else if ((e.key === '>' || e.key === '.') && e.shiftKey) {
       actionKey = 'blockquote'
+    } else if ((e.key === 'I' || e.key === 'i') && e.shiftKey) {
+      if (imageUploadEnabled) {
+        e.preventDefault()
+        triggerImageUpload()
+      }
+      return
     } else if (!e.shiftKey) {
       const keyMap: Record<string, string> = {
         b: 'bold',
@@ -503,7 +528,10 @@ export default function EditorPage() {
             value={body}
             onChange={setBody}
             disabled={saving}
+            onImageClick={imageUploadEnabled ? triggerImageUpload : undefined}
+            imageUploading={imageUploading}
           />
+          <input {...imageInputProps} />
           <textarea
             ref={textareaRef}
             value={body}

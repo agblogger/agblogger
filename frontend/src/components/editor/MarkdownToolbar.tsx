@@ -8,6 +8,8 @@ interface MarkdownToolbarProps {
   value: string
   onChange: (value: string) => void
   disabled?: boolean
+  onImageClick?: () => void
+  imageUploading?: boolean
 }
 
 const isMac = typeof navigator !== 'undefined' && navigator.platform.toUpperCase().includes('MAC')
@@ -24,8 +26,16 @@ const buttons = [
   { key: 'codeblock', label: 'Code Block', Icon: FileCode, shortcut: `${mod}+Shift+E` },
 ] as const
 
-export default function MarkdownToolbar({ textareaRef, value, onChange, disabled }: MarkdownToolbarProps) {
+export default function MarkdownToolbar({
+  textareaRef,
+  value,
+  onChange,
+  disabled,
+  onImageClick,
+  imageUploading,
+}: MarkdownToolbarProps) {
   function handleAction(key: string) {
+    if (key === 'image') return // handled via onImageClick
     const textarea = textareaRef.current
     if (!textarea) return
 
@@ -46,22 +56,38 @@ export default function MarkdownToolbar({ textareaRef, value, onChange, disabled
     })
   }
 
+  function imageTitle(shortcut: string): string {
+    if (!onImageClick) return 'Save post first to add images'
+    if (imageUploading) return 'Uploading...'
+    return `Image (${shortcut})`
+  }
+
   return (
     <div className="flex items-center gap-1 mb-2">
-      {buttons.map(({ key, label, Icon, shortcut }) => (
-        <button
-          key={key}
-          type="button"
-          onClick={() => handleAction(key)}
-          disabled={disabled}
-          className="p-1.5 text-muted hover:text-ink hover:bg-paper-warm rounded transition-colors
-                   disabled:opacity-50 disabled:cursor-not-allowed"
-          title={`${label} (${shortcut})`}
-          aria-label={`${label} (${shortcut})`}
-        >
-          <Icon size={16} />
-        </button>
-      ))}
+      {buttons.map(({ key, label, Icon, shortcut }) => {
+        const isImage = key === 'image'
+        const isDisabled = isImage
+          ? disabled || !onImageClick || imageUploading
+          : disabled
+        const title = isImage ? imageTitle(shortcut) : `${label} (${shortcut})`
+
+        return (
+          <button
+            key={key}
+            type="button"
+            onClick={() => (isImage ? onImageClick?.() : handleAction(key))}
+            disabled={isDisabled}
+            className={`p-1.5 text-muted hover:text-ink hover:bg-paper-warm rounded transition-colors
+                     disabled:opacity-50 disabled:cursor-not-allowed${
+                       isImage && imageUploading ? ' animate-pulse' : ''
+                     }`}
+            title={title}
+            aria-label={`${label} (${shortcut})`}
+          >
+            <Icon size={16} />
+          </button>
+        )
+      })}
     </div>
   )
 }

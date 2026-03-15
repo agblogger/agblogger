@@ -247,4 +247,46 @@ describe('MarkdownToolbar', () => {
     const codeBlockBtn = screen.getByRole('button', { name: /Code Block/ })
     expect(codeBlockBtn.title).toMatch(/Code Block \((Cmd|Ctrl)\+Shift\+E\)/)
   })
+
+  it('image button calls onImageClick when provided', async () => {
+    const onImageClick = vi.fn()
+    const ref = createRef<HTMLTextAreaElement>()
+    const user = userEvent.setup()
+
+    render(
+      <MarkdownToolbar
+        textareaRef={ref}
+        value=""
+        onChange={() => {}}
+        onImageClick={onImageClick}
+      />,
+    )
+
+    await user.click(screen.getByLabelText(/^Image/))
+    expect(onImageClick).toHaveBeenCalledOnce()
+  })
+
+  it('image button is disabled when onImageClick is not provided', () => {
+    const ref = createRef<HTMLTextAreaElement>()
+    render(
+      <MarkdownToolbar textareaRef={ref} value="" onChange={() => {}} />,
+    )
+
+    expect(screen.getByLabelText(/^Image/)).toBeDisabled()
+  })
+
+  it('image button is disabled when imageUploading is true', () => {
+    const ref = createRef<HTMLTextAreaElement>()
+    render(
+      <MarkdownToolbar
+        textareaRef={ref}
+        value=""
+        onChange={() => {}}
+        onImageClick={() => {}}
+        imageUploading
+      />,
+    )
+
+    expect(screen.getByLabelText(/^Image/)).toBeDisabled()
+  })
 })
