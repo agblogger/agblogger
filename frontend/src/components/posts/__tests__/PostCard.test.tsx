@@ -76,6 +76,14 @@ describe('PostCard', () => {
     expect(screen.getByText('#cs')).toBeInTheDocument()
   })
 
+  it('renders label chips as links to label pages', () => {
+    renderCard(makePost({ labels: ['swe', 'cs'] }))
+    const sweLink = screen.getByText('#swe').closest('a')
+    const csLink = screen.getByText('#cs').closest('a')
+    expect(sweLink).toHaveAttribute('href', '/labels/swe')
+    expect(csLink).toHaveAttribute('href', '/labels/cs')
+  })
+
   it('handles malformed date', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     renderCard(makePost({ created_at: 'not-a-date' }))
