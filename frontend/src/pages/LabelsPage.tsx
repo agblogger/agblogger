@@ -59,6 +59,7 @@ export default function LabelsPage() {
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Filter labels..."
+                  aria-label="Filter labels"
                   className="w-48 pl-9 pr-3 py-2 text-sm border border-border rounded-lg
                     bg-paper focus:outline-none focus:border-accent/50 transition-colors"
                 />
@@ -82,7 +83,6 @@ function LabelListView({ search }: { search: string }) {
   const [labels, setLabels] = useState<LabelResponse[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const filteredLabels = filterLabelsBySearch(labels, search)
 
   useEffect(() => {
     fetchLabels()
@@ -112,6 +112,8 @@ function LabelListView({ search }: { search: string }) {
   if (labels.length === 0) {
     return <p className="text-muted text-center py-16">No labels defined yet.</p>
   }
+
+  const filteredLabels = filterLabelsBySearch(labels, search)
 
   if (filteredLabels.length === 0) {
     return <p className="text-muted text-center py-16">No labels match your search.</p>
