@@ -136,8 +136,6 @@ async def get_label_descendants_batch(
 
     Returns a mapping of each input label ID to the set of all its descendants
     (including the label itself).  An empty input returns an empty dict.
-    Labels not present in the database are still included in the result with a
-    singleton set containing only themselves.
 
     Uses ``json_each()`` to unpack the seed IDs from a single JSON array
     parameter so the SQL template is static (no dynamic string interpolation).
@@ -160,7 +158,7 @@ async def get_label_descendants_batch(
         ),
         descendants(root, id) AS (
             SELECT root, id FROM seeds
-            UNION ALL
+            UNION
             SELECT d.root, lp.label_id
             FROM label_parents_cache lp
             JOIN descendants d ON lp.parent_id = d.id

@@ -131,6 +131,9 @@ export default function AdminPage() {
     if (anyDirty) {
       const leave = window.confirm('You have unsaved changes. Are you sure you want to leave?')
       if (!leave) return
+      setSiteDirty(false)
+      setPagesDirty(false)
+      setAccountDirty(false)
     }
     setActiveTab(key)
   }

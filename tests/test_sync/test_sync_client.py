@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import shutil
 from typing import TYPE_CHECKING, Any
 
@@ -637,7 +638,9 @@ class TestBackupConflictedFiles:
         # Should be under .backups/ in the content dir
         assert backup_dir.parent == content_dir / ".backups"
         # Timestamp directory name: YYYY-MM-DD-HHMMSS
-        assert len(backup_dir.name) == len("2026-03-15-143022")
+        assert re.fullmatch(r"\d{4}-\d{2}-\d{2}-\d{6}", backup_dir.name), (
+            f"Unexpected timestamp format: {backup_dir.name}"
+        )
 
 
 class TestSyncBackupIntegration:
@@ -892,3 +895,126 @@ class TestBackupTimestampUTC:
 
         assert backup_dir is not None
         assert backup_dir.name == "2025-06-15-103045"
+
+
+class TestDownloadTransportError:
+    """Issue 9: _download_file should catch httpx.TransportError."""
+
+    def test_transport_error_returns_false(self, tmp_path: Path, capsys: Any) -> None:
+        """ConnectError (a TransportError) must not crash; _download_file returns False."""
+        content_dir = tmp_path / "content"
+        content_dir.mkdir()
+
+        class _RaisingHttpClient:
+            def get(self, url: str, **kwargs: Any) -> None:
+                raise httpx.ConnectError("Connection refused")
+
+            def close(self) -> None:
+                return None
+
+        client, _ = _build_sync_client(content_dir)
+        client.client = _RaisingHttpClient()  # type: ignore[assignment]
+
+        result = client._download_file("posts/some.md")
+
+        assert result is False
+        captured = capsys.readouterr()
+        assert "error" in captured.out.lower()
+        assert "posts/some.md" in captured.out
+
+    def test_transport_error_does_not_crash_sync(self, tmp_path: Path, monkeypatch: Any) -> None:
+        """A transport error during download must not abort the entire sync."""
+        content_dir = tmp_path / "content"
+        content_dir.mkdir()
+
+        commit_resp = _DummyResponse(
+            json_data={
+                "status": "ok",
+                "commit_hash": "abc123",
+                "conflicts": [],
+                "to_download": [],
+                "warnings": [],
+            }
+        )
+
+        class _RaisingHttpClient(_RecordingHttpClient):
+            def get(self, url: str, **kwargs: Any) -> _DummyResponse:
+                self.get_calls.append((url, kwargs))
+                raise httpx.ConnectError("Connection refused")
+
+        http_client = _RaisingHttpClient(responses={"/api/sync/commit": commit_resp})
+        client = SyncClient("http://example.com", content_dir, "test-token")
+        client.client = http_client  # type: ignore[assignment]
+
+        client.status = lambda: {
+            "to_upload": [],
+            "to_download": ["posts/some.md"],
+            "to_delete_remote": [],
+            "to_delete_local": [],
+            "conflicts": [],
+        }
+
+        monkeypatch.setattr(sync_client, "scan_local_files", lambda _: {})
+        monkeypatch.setattr(sync_client, "save_manifest", lambda *_: None)
+
+        # Must not raise
+        client.sync()
+
+
+class TestBackupEmptyDirCleanup:
+    """Issue 13: Empty backup directories must be cleaned up when all copies fail."""
+
+    def test_empty_backup_dir_removed_when_all_copies_fail(
+        self, tmp_path: Path, monkeypatch: Any
+    ) -> None:
+        """When all file copies fail, the backup directory should not remain on disk."""
+        content_dir = tmp_path / "content"
+        posts_dir = content_dir / "posts"
+        posts_dir.mkdir(parents=True)
+        (posts_dir / "a.md").write_text("local a\n")
+        (posts_dir / "b.md").write_text("local b\n")
+
+        def _fail_copy(src: object, dst: object) -> None:
+            raise OSError("Permission denied")
+
+        monkeypatch.setattr(shutil, "copy2", _fail_copy)
+
+        client, _http = _build_sync_client(content_dir)
+        conflicts = [
+            {"file_path": "posts/a.md", "body_conflicted": True, "field_conflicts": []},
+            {"file_path": "posts/b.md", "body_conflicted": True, "field_conflicts": []},
+        ]
+
+        backup_dir_result = client._backup_conflicted_files(conflicts)
+
+        assert backup_dir_result is None
+        # The .backups directory (or any subdirectory) must not have been left behind
+        backups_root = content_dir / ".backups"
+        assert not backups_root.exists(), (
+            f"Expected .backups to be cleaned up, but found: {list(backups_root.iterdir())}"
+        )
+
+
+class TestTimestampFormatRegex:
+    """Issue 17: Backup dir timestamp format should be validated with a regex."""
+
+    def test_backup_dir_name_matches_timestamp_pattern(self, tmp_path: Path) -> None:
+        """Backup directory name must match YYYY-MM-DD-HHMMSS pattern."""
+        import re
+
+        content_dir = tmp_path / "content"
+        posts_dir = content_dir / "posts"
+        posts_dir.mkdir(parents=True)
+        (posts_dir / "conflict.md").write_text("local\n")
+
+        client, _http = _build_sync_client(content_dir)
+        conflicts = [
+            {"file_path": "posts/conflict.md", "body_conflicted": True, "field_conflicts": []},
+        ]
+
+        backup_dir = client._backup_conflicted_files(conflicts)
+
+        assert backup_dir is not None
+        assert re.fullmatch(r"\d{4}-\d{2}-\d{2}-\d{6}", backup_dir.name), (
+            f"Unexpected timestamp format: {backup_dir.name}"
+        )

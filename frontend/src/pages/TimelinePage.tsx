@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useSearchParams, useNavigate, Link } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, FileText, Upload } from 'lucide-react'
 import AlertBanner from '@/components/AlertBanner'
@@ -28,14 +28,14 @@ export default function TimelinePage() {
   const page = Number(searchParams.get('page') ?? '1')
   const urlLabelMode = searchParams.get('labelMode')
   const parsedLabelMode: 'or' | 'and' = urlLabelMode === 'and' ? 'and' : 'or'
-  const filterState: FilterState = {
+  const filterState: FilterState = useMemo(() => ({
     labels: searchParams.get('labels')?.split(',').filter(Boolean) ?? [],
     labelMode: parsedLabelMode,
     includeSublabels: searchParams.get('includeSublabels') === 'true',
     author: searchParams.get('author') ?? '',
     fromDate: searchParams.get('from') ?? '',
     toDate: searchParams.get('to') ?? '',
-  }
+  }), [searchParams, parsedLabelMode])
 
   // Sync filters to URL
   const setFilter = useCallback(

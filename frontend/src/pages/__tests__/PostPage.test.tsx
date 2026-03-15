@@ -543,4 +543,43 @@ describe('PostPage', () => {
       ).toBeInTheDocument()
     })
   })
+
+  it('publish error is rendered via AlertBanner with mt-3 spacing class', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null, is_admin: true }
+    mockFetchPost.mockResolvedValue(draftPost)
+    mockFetchPostForEdit.mockRejectedValue(new Error('Network error'))
+    renderPostPage('/post/posts/2026-03-08-draft/index.md')
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /publish/i })).toBeInTheDocument()
+    })
+    await userEvent.click(screen.getByRole('button', { name: /publish/i }))
+
+    await waitFor(() => {
+      const errorEl = screen.getByText('Failed to publish post. Please try again.')
+      // AlertBanner with className="mt-3" should add mt-3 to the wrapper div
+      expect(errorEl.closest('div')).toHaveClass('mt-3')
+    })
+  })
+
+  it('delete error is rendered via AlertBanner with mb-6 spacing class', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null, is_admin: true }
+    mockFetchPost.mockResolvedValue(postDetail)
+    mockDeletePost.mockRejectedValue(new Error('Network error'))
+    renderPostPage()
+
+    await waitFor(() => {
+      expect(screen.getByText('Delete')).toBeInTheDocument()
+    })
+    await userEvent.click(screen.getByText('Delete'))
+    await userEvent.click(screen.getByTestId('confirm-delete'))
+
+    await waitFor(() => {
+      const errorEl = screen.getByText('Failed to delete post. Please try again.')
+      // AlertBanner with className="mb-6" should add mb-6 to the wrapper div
+      expect(errorEl.closest('div')).toHaveClass('mb-6')
+    })
+  })
 })

@@ -13,7 +13,7 @@ interface MarkdownToolbarProps {
   imageDisabledReason?: string
 }
 
-const isMac = typeof navigator !== 'undefined' && navigator.platform.toUpperCase().includes('MAC')
+const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.userAgent)
 const mod = isMac ? 'Cmd' : 'Ctrl'
 
 const buttons = [

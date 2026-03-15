@@ -3,6 +3,7 @@ export interface WrapAction {
   after: string
   placeholder: string
   block?: boolean
+  /** When set, each line is prefixed instead of wrapping with before/after. */
   linePrefix?: string
 }
 

@@ -19,7 +19,7 @@ Review of 48 commits (origin/main..HEAD) spanning 57 files, ~5400 lines added, ~
 
 **Fix:** Wrap `shutil.copy2` in `try/except OSError`, print a warning, continue. Also guard the `_backup_conflicted_files()` call in `sync()`.
 
-### 2. `useFileUpload` silently swallows errors when `onError` omitted
+### 2. **[RESOLVED]** `useFileUpload` silently swallows errors when `onError` omitted
 
 **File:** `frontend/src/components/editor/useFileUpload.ts:42-48`
 **Category:** error-handling
@@ -27,6 +27,8 @@ Review of 48 commits (origin/main..HEAD) spanning 57 files, ~5400 lines added, ~
 `onError` is optional. When not provided, upload failures are completely silent — no console log, no user feedback. Both current callers pass `onError`, but the hook's contract allows silent failures. Additionally, non-`HTTPError` exceptions (TypeError, SyntaxError) are masked as generic "Failed to upload files" with no console logging.
 
 **Fix:** Add `console.error` fallback when `onError` is not provided, and always `console.error` non-HTTP errors.
+
+**Resolution:** Fixed — `console.error(err)` fallback is now present in the hook's error handling path.
 
 ### 3. Missing test: `include_descendants=False` with `label_mode="and"`
 
@@ -69,12 +71,14 @@ Spec says two distinct disabled tooltips ("Save post first" vs "Only directory-b
 
 Spec shows `onSuccess: loadAssets` but actual implementation is `onSuccess: () => void loadAssets()` plus `onStart: () => setError(null)` which the spec omits.
 
-### 8. No notification when backup skips non-existent files
+### 8. **[RESOLVED]** No notification when backup skips non-existent files
 
 **File:** `cli/sync_client.py:325-326`
 **Category:** error-handling
 
 Non-existent files are silently skipped with `continue`, no message printed. User thinks all conflicts were backed up but some were skipped. Inconsistent with the path-traversal skip which does print.
+
+**Resolution:** Fixed — the skip is now accompanied by `print(f"Skip backup (file not found locally): {fp}")`, making it consistent with the path-traversal skip.
 
 ---
 
@@ -92,11 +96,13 @@ The `markSaved` ref-bypass pattern is non-obvious. The spec at `docs/specs/2026-
 
 Image uploads succeed server-side but markdown insertion silently fails if ref is null. Consider appending to body as fallback.
 
-### 11. Spec contradicts implementation on add-page dirty tracking
+### 11. **[INCORRECT]** Spec contradicts implementation on add-page dirty tracking
 
 **File:** `docs/specs/2026-03-15-unsaved-changes-detection-design.md:114`
 
 Non-goals say add-page form is excluded from dirty tracking, but `PagesSection.tsx:126` includes `addPageDirty` in the dirty computation.
+
+**Note:** This finding is incorrect — the spec at `docs/specs/2026-03-15-unsaved-changes-detection-design.md:114` explicitly states that add-page IS included in dirty tracking. The spec and implementation are aligned.
 
 ### 12. `datetime.now()` without explicit timezone
 

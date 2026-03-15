@@ -503,4 +503,31 @@ describe('TimelinePage', () => {
       )
     })
   })
+
+  it('passes includeSublabels=true from URL to fetchPosts', async () => {
+    mockFetchPosts.mockResolvedValue(postsResponse)
+    renderTimeline('/?labels=swe&includeSublabels=true')
+
+    await waitFor(() => {
+      expect(mockFetchPosts).toHaveBeenCalledWith(
+        expect.objectContaining({
+          includeSublabels: true,
+        }),
+      )
+    })
+  })
+
+  it('does not pass includeSublabels when absent from URL', async () => {
+    mockFetchPosts.mockResolvedValue(postsResponse)
+    renderTimeline('/?labels=swe')
+
+    await waitFor(() => {
+      expect(mockFetchPosts).toHaveBeenCalled()
+    })
+    expect(mockFetchPosts).toHaveBeenCalledWith(
+      expect.not.objectContaining({
+        includeSublabels: expect.anything() as unknown,
+      }),
+    )
+  })
 })

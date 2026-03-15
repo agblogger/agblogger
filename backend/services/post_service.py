@@ -80,7 +80,7 @@ async def list_posts(
     label: str | None = None,
     labels: list[str] | None = None,
     label_mode: Literal["or", "and"] = "or",
-    include_descendants: bool = True,
+    include_descendants: bool = False,
     author: str | None = None,
     from_date: str | None = None,
     to_date: str | None = None,

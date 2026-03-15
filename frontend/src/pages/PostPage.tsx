@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { Calendar, User, PenLine, Trash2 } from 'lucide-react'
 import { fetchPost, deletePost, fetchPostForEdit, updatePost } from '@/api/posts'
+import AlertBanner from '@/components/AlertBanner'
 import BackLink from '@/components/BackLink'
 import { useAuthStore } from '@/stores/authStore'
 import { HTTPError } from '@/api/client'
@@ -177,9 +178,7 @@ export default function PostPage() {
         )}
 
         {publishError !== null && (
-          <div className="mt-3 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/40 rounded-lg px-4 py-3">
-            {publishError}
-          </div>
+          <AlertBanner variant="error" className="mt-3">{publishError}</AlertBanner>
         )}
 
         <div className="mt-5 text-sm text-muted">
@@ -237,9 +236,7 @@ export default function PostPage() {
       </header>
 
       {deleteError !== null && (
-        <div className="mb-6 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/40 rounded-lg px-4 py-3">
-          {deleteError}
-        </div>
+        <AlertBanner variant="error" className="mb-6">{deleteError}</AlertBanner>
       )}
 
       <div

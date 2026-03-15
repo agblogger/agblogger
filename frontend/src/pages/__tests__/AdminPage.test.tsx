@@ -1460,5 +1460,38 @@ describe('AdminPage', () => {
       expect(screen.getByLabelText(/Page ID/)).toBeInTheDocument()
       confirmSpy.mockRestore()
     })
+
+    it('dirty flags are reset after confirming tab switch so subsequent switches do not re-prompt', async () => {
+      setupLoadSuccess()
+      const user = userEvent.setup()
+      renderAdmin()
+
+      await waitFor(() => {
+        expect(screen.getByLabelText('Title *')).toHaveValue('My Blog')
+      })
+
+      // Make the Settings tab dirty
+      await user.clear(screen.getByLabelText('Title *'))
+      await user.type(screen.getByLabelText('Title *'), 'Dirty Title')
+
+      // Confirm the tab switch to Social (which has no dirty-reporting section,
+      // so the unmount cleanup from SiteSettingsSection would normally reset siteDirty,
+      // but the explicit reset in handleTabSwitch ensures the flags are cleared immediately)
+      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+      await user.click(screen.getByRole('button', { name: 'Social' }))
+
+      expect(confirmSpy).toHaveBeenCalledOnce()
+      await waitFor(() => {
+        expect(screen.getByTestId('social-accounts-panel')).toBeInTheDocument()
+      })
+
+      // Now switch from Social → Account: since dirty flags were reset when confirming
+      // the previous switch, this should NOT prompt again
+      confirmSpy.mockClear()
+      await user.click(screen.getByRole('button', { name: 'Account' }))
+      expect(confirmSpy).not.toHaveBeenCalled()
+
+      confirmSpy.mockRestore()
+    })
   })
 })

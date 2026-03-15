@@ -75,6 +75,7 @@ useFileUpload(options: {
   filePath: string | null
   accept?: string        // MIME filter, e.g. "image/*"
   multiple?: boolean     // default true
+  onStart?: () => void   // called before upload begins (e.g. clear prior errors)
   onSuccess?: (uploaded: string[]) => void  // filenames returned by uploadAssets
   onError?: (message: string) => void
 })
@@ -102,6 +103,8 @@ Returns:
 
 Replaces its inline `handleUpload`, `fileInputRef`, and `<input>` with `useFileUpload({ filePath, multiple: true, onStart: () => setError(null), onSuccess: () => void loadAssets(), onError: setError })`. All other FileStrip functionality (delete, rename, insert, expand/collapse, thumbnails) is unchanged.
 
+**Implementation note:** The final implementation also passes a `refreshToken` prop to `useFileUpload` to allow the file input to be reset between uploads so the same file can be re-selected after a successful upload.
+
 ### Consumer: EditorPage (image toolbar button)
 
 EditorPage creates a hook instance:
@@ -119,6 +122,8 @@ useFileUpload({
   onError: setError,
 })
 ```
+
+**Implementation note:** The final implementation includes an `imageUploadEnabled` guard so that `filePath` is conditionally passed: `filePath: imageUploadEnabled ? effectiveFilePath : null`. This ensures the hook is always called (preserving hook call order) while keeping the button inert when the post is not eligible for image uploads.
 
 Passes `triggerImageUpload` and `imageUploading` down to MarkdownToolbar.
 

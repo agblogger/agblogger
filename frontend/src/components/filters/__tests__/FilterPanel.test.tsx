@@ -297,6 +297,18 @@ describe('FilterPanel', () => {
     expect(onChange).toHaveBeenCalledWith(EMPTY_FILTER)
   })
 
+  it('shows error message when label fetch fails', async () => {
+    mockPanelState = 'open'
+    mockFetchLabels.mockRejectedValue(new Error('Network error'))
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    await renderPanel()
+
+    await waitFor(() => {
+      expect(screen.getByText('Failed to load labels')).toBeInTheDocument()
+    })
+    expect(screen.queryByText('No matching labels')).not.toBeInTheDocument()
+  })
+
   it('toggles includeSublabels checkbox', async () => {
     mockPanelState = 'open'
     const onChange = vi.fn()

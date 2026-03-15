@@ -1166,4 +1166,68 @@ describe('EditorPage', () => {
       expect(mockFetchPostAssets.mock.calls.length).toBeGreaterThan(initialCount)
     })
   })
+
+  // === Navigation guarding integration ===
+
+  it('blocks in-app navigation and shows confirm when editor has unsaved changes', async () => {
+    const user = userEvent.setup()
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+
+    renderEditor('/editor/new')
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Title/)).toBeInTheDocument()
+    })
+
+    // Make the editor dirty by typing a title
+    await user.type(screen.getByLabelText(/Title/), 'Unsaved Title')
+
+    // Click Back button — triggers navigate(-1) which is blocked by useBlocker when isDirty=true
+    await user.click(screen.getByText('Back'))
+
+    // The confirm dialog should have been shown
+    expect(confirmSpy).toHaveBeenCalledWith(
+      'You have unsaved changes. Are you sure you want to leave?',
+    )
+  })
+
+  it('navigation after successful save proceeds without unsaved changes prompt', async () => {
+    const mockCreatePost = vi.mocked(createPost)
+    const savedPost: PostDetail = {
+      id: 1, file_path: 'posts/2026-03-08-my-title/index.md',
+      title: 'My Title', author: 'jane', created_at: '2026-03-08 12:00:00+00:00',
+      modified_at: '2026-03-08 12:00:00+00:00', is_draft: false,
+      rendered_excerpt: '', rendered_html: '<p>Hello</p>', content: 'Hello', labels: [],
+    }
+    mockCreatePost.mockResolvedValue(savedPost)
+    mockFetchPostForEdit.mockResolvedValue({
+      file_path: 'posts/2026-03-08-my-title/index.md',
+      title: 'My Title', body: '', labels: [], is_draft: false,
+      created_at: '2026-03-08 12:00:00+00:00',
+      modified_at: '2026-03-08 12:00:00+00:00',
+      author: 'jane',
+    })
+
+    const user = userEvent.setup()
+    renderEditor('/editor/new')
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Title/)).toBeInTheDocument()
+    })
+
+    await user.type(screen.getByLabelText(/Title/), 'My Title')
+    await user.click(screen.getByRole('button', { name: /save/i }))
+
+    // After a successful save, the editor navigates to /editor/<file_path>.
+    // Navigation must proceed without a blocking confirm dialog — verified by
+    // checking the component successfully loads and shows the saved post.
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Title/)).toHaveValue('My Title')
+    })
+    // "View post" button appears only after the navigate succeeds and the
+    // post is reloaded; its presence confirms navigation was NOT blocked.
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /view post/i })).toBeInTheDocument()
+    })
+  })
 })

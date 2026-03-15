@@ -36,11 +36,20 @@ export default function FilterPanel({ value, onChange }: FilterPanelProps) {
 
   const [allLabels, setAllLabels] = useState<LabelResponse[]>([])
   const [labelSearch, setLabelSearch] = useState('')
+  const [labelLoadError, setLabelLoadError] = useState<string | null>(null)
 
   const expanded = panelState === 'open'
 
   useEffect(() => {
-    fetchLabels().then(setAllLabels).catch(console.error)
+    fetchLabels()
+      .then((labels) => {
+        setAllLabels(labels)
+        setLabelLoadError(null)
+      })
+      .catch((err: unknown) => {
+        console.error('Failed to load labels:', err)
+        setLabelLoadError('Failed to load labels')
+      })
   }, [])
 
   useEffect(() => {
@@ -179,9 +188,11 @@ export default function FilterPanel({ value, onChange }: FilterPanelProps) {
                     </button>
                   )
                 })}
-                {filteredLabels.length === 0 && (
+                {labelLoadError !== null ? (
+                  <span className="text-xs text-red-600 dark:text-red-400 py-2">{labelLoadError}</span>
+                ) : filteredLabels.length === 0 ? (
                   <span className="text-xs text-muted py-2">No matching labels</span>
-                )}
+                ) : null}
               </div>
             </div>
 

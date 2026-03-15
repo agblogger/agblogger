@@ -300,6 +300,9 @@ class SyncClient:
         except httpx.HTTPStatusError as exc:
             print(f"  ERROR: Failed to download {file_path} (HTTP {exc.response.status_code})")
             return False
+        except httpx.TransportError as exc:
+            print(f"  ERROR: Failed to download {file_path}: {exc}")
+            return False
         local_path.parent.mkdir(parents=True, exist_ok=True)
         local_path.write_bytes(resp.content)
         return True
@@ -335,6 +338,16 @@ class SyncClient:
             backed_up += 1
 
         if backed_up == 0:
+            # Clean up empty backup directory if no files were backed up
+            try:
+                if backup_dir.exists():
+                    shutil.rmtree(backup_dir)
+                # Also remove the parent .backups dir if it is now empty
+                backups_root = backup_dir.parent
+                if backups_root.exists() and not any(backups_root.iterdir()):
+                    backups_root.rmdir()
+            except OSError:
+                pass
             return None
         return backup_dir
 

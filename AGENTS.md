@@ -25,7 +25,7 @@ just test-frontend    # Frontend tests only
 ```
 All `just` commands must be run unsandboxed.
 
-Always start a dev server with `just start` (unsanboxed). Remember to stop a running dev server with `just stop` when finished.
+Always start a dev server with `just start` (unsandboxed). Remember to stop a running dev server with `just stop` when finished.
 
 ## Coding Style & Naming Conventions
 
