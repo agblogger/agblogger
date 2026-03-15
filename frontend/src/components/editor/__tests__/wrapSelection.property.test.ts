@@ -10,8 +10,8 @@ const actionArb: fc.Arbitrary<WrapAction> = fc.record({
   after: fc.string({ maxLength: 8 }),
   placeholder: fc.string({ minLength: 1, maxLength: 32 }),
   block: fc.boolean(),
-  linePrefix: fc.option(fc.string({ minLength: 1, maxLength: 4 }), { nil: undefined }),
-})
+  linePrefix: fc.string({ minLength: 1, maxLength: 4 }),
+}, { requiredKeys: ['before', 'after', 'placeholder', 'block'] })
 
 function normalizedSelection(len: number, startRaw: number, endRaw: number): [number, number] {
   const limit = len + 1
@@ -71,8 +71,16 @@ describe('wrapSelection property tests', () => {
           expect(result.newValue).toBe(expectedNewValue)
           expect(result.cursorStart).toBe(expectedCursorStart)
           expect(result.cursorEnd).toBe(expectedCursorEnd)
+          const expectedSelectedText =
+            action.linePrefix !== undefined
+              ? insertedText
+                  .split('\n')
+                  .map((line) => action.linePrefix + line)
+                  .join('\n')
+              : insertedText
+
           expect(result.newValue.slice(result.cursorStart, result.cursorEnd)).toBe(
-            result.newValue.slice(expectedCursorStart, expectedCursorEnd),
+            expectedSelectedText,
           )
         },
       ),

@@ -21,9 +21,10 @@ export function wrapSelection(
   }
 
   if (action.linePrefix !== undefined) {
+    const linePrefix = action.linePrefix
     const prefixed = text
       .split('\n')
-      .map((line) => action.linePrefix + line)
+      .map((line) => linePrefix + line)
       .join('\n')
     const inserted = blockPrefix + prefixed
     const newValue = value.slice(0, selectionStart) + inserted + value.slice(selectionEnd)
