@@ -215,6 +215,16 @@ describe('useUnsavedChanges', () => {
       })
     })
 
+    it('markSaved is referentially stable across renders', () => {
+      const { result, rerender } = renderHook(
+        ({ dirty }) => useUnsavedChanges(dirty),
+        { wrapper: createWrapper(), initialProps: { dirty: false } },
+      )
+      const first = result.current.markSaved
+      rerender({ dirty: true })
+      expect(result.current.markSaved).toBe(first)
+    })
+
     it('does not bypass prompts after the form becomes dirty again', async () => {
       const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
       const user = userEvent.setup()

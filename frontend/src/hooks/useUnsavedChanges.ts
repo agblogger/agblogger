@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useBlocker } from 'react-router-dom'
 
 /**
@@ -80,9 +80,9 @@ export function useUnsavedChanges(isDirty: boolean): { markSaved: () => void } {
     }
   }, [blocker])
 
-  return {
-    markSaved: () => {
-      navigationAllowedRef.current = true
-    },
-  }
+  const markSaved = useCallback(() => {
+    navigationAllowedRef.current = true
+  }, [])
+
+  return useMemo(() => ({ markSaved }), [markSaved])
 }

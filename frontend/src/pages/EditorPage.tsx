@@ -25,6 +25,13 @@ import { actions as toolbarActions } from '@/components/editor/toolbarActions'
 import { wrapSelection } from '@/components/editor/wrapSelection'
 import FileStrip from '@/components/editor/FileStrip'
 
+const KEY_MAP: Record<string, string> = {
+  b: 'bold',
+  i: 'italic',
+  h: 'heading',
+  k: 'link',
+}
+
 export default function EditorPage() {
   const { '*': filePath } = useParams()
   const navigate = useNavigate()
@@ -264,13 +271,7 @@ export default function EditorPage() {
       }
       return
     } else if (!e.shiftKey) {
-      const keyMap: Record<string, string> = {
-        b: 'bold',
-        i: 'italic',
-        h: 'heading',
-        k: 'link',
-      }
-      actionKey = keyMap[e.key.toLowerCase()]
+      actionKey = KEY_MAP[e.key.toLowerCase()]
     }
 
     if (actionKey === undefined) return
@@ -533,7 +534,7 @@ export default function EditorPage() {
             disabled={saving}
             onImageClick={imageUploadEnabled ? triggerImageUpload : undefined}
             imageUploading={imageUploading}
-            {...(imageDisabledReason !== undefined ? { imageDisabledReason } : {})}
+            {...(imageDisabledReason !== undefined && { imageDisabledReason })}
           />
           <input {...imageInputProps} />
           <textarea
