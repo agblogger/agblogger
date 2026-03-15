@@ -64,6 +64,16 @@ const allLabels: LabelResponse[] = [
   { id: 'math', names: ['mathematics'], is_implicit: false, parents: [], children: [], post_count: 3 },
 ]
 
+const multiParentLabel: LabelResponse = {
+  ...testLabel,
+  parents: ['cs', 'math'],
+}
+
+const allLabelsWithTwoParents: LabelResponse[] = [
+  multiParentLabel,
+  ...allLabels.slice(1),
+]
+
 function renderSettings(labelId = 'swe') {
   const router = createMemoryRouter(
     [{ path: '/labels/:labelId/settings', element: createElement(LabelSettingsPage) }],
@@ -323,13 +333,9 @@ describe('LabelSettingsPage', () => {
 
     const markSavedCallOrder = mockMarkSaved.mock.invocationCallOrder[0]
     const navigateCallOrder = mockNavigate.mock.invocationCallOrder[0]
-
-    expect(markSavedCallOrder).toBeDefined()
-    expect(navigateCallOrder).toBeDefined()
     if (markSavedCallOrder === undefined || navigateCallOrder === undefined) {
       throw new Error('Expected markSaved and navigate to be called')
     }
-
     expect(markSavedCallOrder).toBeLessThan(navigateCallOrder)
   })
 
@@ -470,6 +476,25 @@ describe('LabelSettingsPage', () => {
     expect(screen.getByRole('button', { name: /save changes/i })).toBeEnabled()
 
     // Re-check cs → back to original
+    await user.click(csCheckbox)
+    expect(screen.getByRole('button', { name: /save changes/i })).toBeDisabled()
+  })
+
+  it('reverting a multi-parent selection back to the original set disables save even if order changes', async () => {
+    mockFetchLabel.mockResolvedValue(multiParentLabel)
+    mockFetchLabels.mockResolvedValue(allLabelsWithTwoParents)
+    const user = userEvent.setup()
+    renderSettings()
+
+    await waitFor(() => {
+      expect(screen.getByText('#cs')).toBeInTheDocument()
+    })
+
+    const csCheckbox = screen.getByRole('checkbox', { name: /#cs/i })
+
+    await user.click(csCheckbox)
+    expect(screen.getByRole('button', { name: /save changes/i })).toBeEnabled()
+
     await user.click(csCheckbox)
     expect(screen.getByRole('button', { name: /save changes/i })).toBeDisabled()
   })
