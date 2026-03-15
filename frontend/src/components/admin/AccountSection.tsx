@@ -15,9 +15,10 @@ const INPUT_CLASSES =
 interface AccountSectionProps {
   busy: boolean
   onSaving: (saving: boolean) => void
+  onDirtyChange: (dirty: boolean) => void
 }
 
-export default function AccountSection({ busy, onSaving }: AccountSectionProps) {
+export default function AccountSection({ busy, onSaving, onDirtyChange }: AccountSectionProps) {
   const user = useAuthStore((s) => s.user)
   const setUser = useAuthStore((s) => s.setUser)
 
@@ -42,6 +43,13 @@ export default function AccountSection({ busy, onSaving }: AccountSectionProps) 
   const profileChanged =
     username !== (user?.username ?? '') ||
     displayName !== (user?.display_name ?? '')
+
+  const passwordDirty =
+    currentPassword.length > 0 || newPassword.length > 0 || confirmPassword.length > 0
+  const isDirty = profileChanged || passwordDirty
+
+  useEffect(() => { onDirtyChange(isDirty) }, [isDirty, onDirtyChange])
+  useEffect(() => { return () => { onDirtyChange(false) } }, [onDirtyChange])
 
   async function handleSaveProfile() {
     setProfileError(null)
@@ -113,6 +121,7 @@ export default function AccountSection({ busy, onSaving }: AccountSectionProps) 
       setNewPassword('')
       setConfirmPassword('')
       if (result.sessions_revoked === true) {
+        onDirtyChange(false)
         void useAuthStore.getState().logout()
       }
     } catch (err) {
