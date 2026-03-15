@@ -2037,8 +2037,8 @@ class TestLabelPosts:
         assert resp.json()["detail"] == "Label not found"
 
     @pytest.mark.asyncio
-    async def test_label_posts_includes_descendant_labels(self, client: AsyncClient) -> None:
-        """Posts tagged with a child label appear in the parent label's posts."""
+    async def test_label_posts_excludes_descendant_labels(self, client: AsyncClient) -> None:
+        """Posts tagged with a child label do NOT appear in the parent label's posts."""
         login_resp = await client.post(
             "/api/auth/token-login",
             json={"username": "admin", "password": "admin123"},
@@ -2067,12 +2067,105 @@ class TestLabelPosts:
         )
         assert create_resp.status_code == 201
 
-        # Query posts for the parent label (swe) -- should include the child's post
+        # Query posts for the parent label (swe) -- should NOT include the child's post
         resp = await client.get("/api/labels/swe/posts")
         assert resp.status_code == 200
         data = resp.json()
         titles = [p["title"] for p in data["posts"]]
-        assert "Backend Dev Post" in titles
+        assert "Backend Dev Post" not in titles
+
+        # But querying the child label directly should include it
+        child_resp = await client.get("/api/labels/backend-dev/posts")
+        assert child_resp.status_code == 200
+        child_data = child_resp.json()
+        child_titles = [p["title"] for p in child_data["posts"]]
+        assert "Backend Dev Post" in child_titles
+
+
+class TestPostsIncludeSublabelsParam:
+    @pytest.mark.asyncio
+    async def test_posts_filter_excludes_sublabels_by_default(self, client: AsyncClient) -> None:
+        """GET /api/posts?labels=parent does NOT include child-label posts by default."""
+        login_resp = await client.post(
+            "/api/auth/token-login",
+            json={"username": "admin", "password": "admin123"},
+        )
+        token = login_resp.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # Create parent and child labels
+        await client.post(
+            "/api/labels",
+            json={"id": "parent-lbl", "names": ["Parent"]},
+            headers=headers,
+        )
+        await client.post(
+            "/api/labels",
+            json={"id": "child-lbl", "names": ["Child"], "parents": ["parent-lbl"]},
+            headers=headers,
+        )
+
+        # Create a post tagged with the child only
+        create_resp = await client.post(
+            "/api/posts",
+            json={
+                "title": "Child Only Post",
+                "body": "Tagged with child.\n",
+                "labels": ["child-lbl"],
+                "is_draft": False,
+            },
+            headers=headers,
+        )
+        assert create_resp.status_code == 201
+
+        # Default: should NOT include child-label posts
+        resp = await client.get("/api/posts", params={"labels": "parent-lbl"})
+        assert resp.status_code == 200
+        titles = [p["title"] for p in resp.json()["posts"]]
+        assert "Child Only Post" not in titles
+
+    @pytest.mark.asyncio
+    async def test_posts_filter_includes_sublabels_when_requested(
+        self, client: AsyncClient
+    ) -> None:
+        """GET /api/posts?labels=parent&includeSublabels=true includes child-label posts."""
+        login_resp = await client.post(
+            "/api/auth/token-login",
+            json={"username": "admin", "password": "admin123"},
+        )
+        token = login_resp.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        await client.post(
+            "/api/labels",
+            json={"id": "par-sub", "names": ["Parent Sub"]},
+            headers=headers,
+        )
+        await client.post(
+            "/api/labels",
+            json={"id": "chi-sub", "names": ["Child Sub"], "parents": ["par-sub"]},
+            headers=headers,
+        )
+        create_resp = await client.post(
+            "/api/posts",
+            json={
+                "title": "Child Sub Post",
+                "body": "Tagged with child.\n",
+                "labels": ["chi-sub"],
+                "is_draft": False,
+            },
+            headers=headers,
+        )
+        assert create_resp.status_code == 201
+
+        # With includeSublabels=true: should include child-label posts
+        resp = await client.get(
+            "/api/posts",
+            params={"labels": "par-sub", "includeSublabels": "true"},
+        )
+        assert resp.status_code == 200
+        titles = [p["title"] for p in resp.json()["posts"]]
+        assert "Child Sub Post" in titles
 
 
 class TestPagination:

@@ -14,6 +14,7 @@ export interface PostListParams {
   label?: string
   labels?: string
   labelMode?: 'or' | 'and'
+  includeSublabels?: boolean
   author?: string
   from?: string
   to?: string

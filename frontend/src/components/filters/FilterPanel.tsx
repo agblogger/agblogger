@@ -8,6 +8,7 @@ import type { LabelResponse } from '@/api/client'
 export interface FilterState {
   labels: string[]
   labelMode: 'or' | 'and'
+  includeSublabels: boolean
   author: string
   fromDate: string
   toDate: string
@@ -16,6 +17,7 @@ export interface FilterState {
 const EMPTY_FILTER: FilterState = {
   labels: [],
   labelMode: 'or',
+  includeSublabels: false,
   author: '',
   fromDate: '',
   toDate: '',
@@ -120,7 +122,15 @@ export default function FilterPanel({ value, onChange }: FilterPanelProps) {
               <div className="flex items-center gap-1.5 text-xs font-mono text-muted uppercase tracking-wider mb-2">
                 <Tag size={12} />
                 Labels
-                <span className="normal-case tracking-normal font-body opacity-70">(incl. sub-labels)</span>
+                <label className="normal-case tracking-normal font-body opacity-70 flex items-center gap-1 ml-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={value.includeSublabels}
+                    onChange={(e) => onChange({ ...value, includeSublabels: e.target.checked })}
+                    className="accent-accent"
+                  />
+                  incl. sub-labels
+                </label>
               </div>
 
               <div className="flex items-center gap-2 mb-2">

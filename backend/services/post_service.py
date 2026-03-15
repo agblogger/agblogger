@@ -80,6 +80,7 @@ async def list_posts(
     label: str | None = None,
     labels: list[str] | None = None,
     label_mode: str = "or",
+    include_descendants: bool = True,
     author: str | None = None,
     from_date: str | None = None,
     to_date: str | None = None,
@@ -137,32 +138,49 @@ async def list_posts(
         label_ids.extend(labels)
 
     if label_ids:
-        # Get all descendant labels for each requested label
-        from backend.services.label_service import get_label_descendant_ids
+        if include_descendants:
+            from backend.services.label_service import get_label_descendant_ids
 
-        if label_mode == "and":
-            # AND mode: post must have ALL specified labels (or descendants)
-            for lid in label_ids:
-                descendants = await get_label_descendant_ids(session, lid)
+            if label_mode == "and":
+                # AND mode: post must have ALL specified labels (or descendants)
+                for lid in label_ids:
+                    descendants = await get_label_descendant_ids(session, lid)
+                    stmt = stmt.where(
+                        PostCache.id.in_(
+                            select(PostLabelCache.post_id).where(
+                                PostLabelCache.label_id.in_(descendants)
+                            )
+                        )
+                    )
+            else:
+                # OR mode (default): post must have ANY specified label (or descendants)
+                all_label_ids: set[str] = set()
+                for lid in label_ids:
+                    descendants = await get_label_descendant_ids(session, lid)
+                    all_label_ids.update(descendants)
+
                 stmt = stmt.where(
                     PostCache.id.in_(
                         select(PostLabelCache.post_id).where(
-                            PostLabelCache.label_id.in_(descendants)
+                            PostLabelCache.label_id.in_(all_label_ids)
                         )
                     )
                 )
         else:
-            # OR mode (default): post must have ANY specified label
-            all_label_ids: set[str] = set()
-            for lid in label_ids:
-                descendants = await get_label_descendant_ids(session, lid)
-                all_label_ids.update(descendants)
-
-            stmt = stmt.where(
-                PostCache.id.in_(
-                    select(PostLabelCache.post_id).where(PostLabelCache.label_id.in_(all_label_ids))
+            # Exact match only — no descendant expansion
+            if label_mode == "and":
+                for lid in label_ids:
+                    stmt = stmt.where(
+                        PostCache.id.in_(
+                            select(PostLabelCache.post_id).where(PostLabelCache.label_id == lid)
+                        )
+                    )
+            else:
+                stmt = stmt.where(
+                    PostCache.id.in_(
+                        select(PostLabelCache.post_id).where(PostLabelCache.label_id.in_(label_ids))
+                    )
                 )
-            )
 
     # Count total
     count_stmt = select(func.count()).select_from(stmt.subquery())
@@ -307,5 +325,7 @@ async def search_posts(session: AsyncSession, query: str, *, limit: int = 20) ->
 async def get_posts_by_label(
     session: AsyncSession, label_id: str, *, page: int = 1, per_page: int = 20
 ) -> PostListResponse:
-    """Get posts for a specific label (including descendants)."""
-    return await list_posts(session, page=page, per_page=per_page, label=label_id)
+    """Get posts for a specific label (exact match only, no descendants)."""
+    return await list_posts(
+        session, page=page, per_page=per_page, label=label_id, include_descendants=False
+    )

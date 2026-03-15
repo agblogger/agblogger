@@ -251,7 +251,7 @@ async def label_posts(
     page: int = Query(1, ge=1, le=MAX_SAFE_PAGE),
     per_page: int = Query(20, ge=1, le=100),
 ) -> PostListResponse:
-    """Get posts for a specific label (including descendants)."""
+    """Get posts for a specific label (exact match only)."""
     label = await get_label(session, label_id)
     if label is None:
         raise HTTPException(status_code=404, detail="Label not found")

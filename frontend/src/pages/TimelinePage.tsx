@@ -30,6 +30,7 @@ export default function TimelinePage() {
   const filterState: FilterState = {
     labels: searchParams.get('labels')?.split(',').filter(Boolean) ?? [],
     labelMode: parsedLabelMode,
+    includeSublabels: searchParams.get('includeSublabels') === 'true',
     author: searchParams.get('author') ?? '',
     fromDate: searchParams.get('from') ?? '',
     toDate: searchParams.get('to') ?? '',
@@ -41,6 +42,7 @@ export default function TimelinePage() {
       const params = new URLSearchParams()
       if (f.labels.length > 0) params.set('labels', f.labels.join(','))
       if (f.labelMode !== 'or') params.set('labelMode', f.labelMode)
+      if (f.includeSublabels) params.set('includeSublabels', 'true')
       if (f.author) params.set('author', f.author)
       if (f.fromDate) params.set('from', f.fromDate)
       if (f.toDate) params.set('to', f.toDate)
@@ -55,6 +57,7 @@ export default function TimelinePage() {
     const labels = searchParams.get('labels')?.split(',').filter(Boolean) ?? []
     const labelModeParam = searchParams.get('labelMode')
     const labelMode: 'or' | 'and' = labelModeParam === 'and' ? 'and' : 'or'
+    const includeSublabels = searchParams.get('includeSublabels') === 'true'
     const author = searchParams.get('author') ?? ''
     const fromDate = searchParams.get('from') ?? ''
     const toDate = searchParams.get('to') ?? ''
@@ -69,6 +72,7 @@ export default function TimelinePage() {
         }
         if (labels.length > 0) params.labels = labels.join(',')
         if (labelMode !== 'or') params.labelMode = labelMode
+        if (includeSublabels) params.includeSublabels = true
         if (author) params.author = author
         if (fromDate) params.from = fromDate
         if (toDate) params.to = toDate

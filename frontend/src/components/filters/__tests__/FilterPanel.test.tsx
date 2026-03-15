@@ -178,7 +178,7 @@ describe('FilterPanel', () => {
   it('clears all filters via chip area', async () => {
     const onChange = vi.fn()
     const user = userEvent.setup()
-    const filter: FilterState = { labels: ['swe'], labelMode: 'and', author: 'Admin', fromDate: '2026-01-01', toDate: '' }
+    const filter: FilterState = { labels: ['swe'], labelMode: 'and', includeSublabels: false, author: 'Admin', fromDate: '2026-01-01', toDate: '' }
     await renderPanel(filter, onChange)
 
     // Chips area has "Clear all" (panel is closed, so only 1 visible)
@@ -281,7 +281,7 @@ describe('FilterPanel', () => {
     mockPanelState = 'open'
     const onChange = vi.fn()
     const user = userEvent.setup()
-    const filter: FilterState = { labels: ['swe'], labelMode: 'or', author: 'Admin', fromDate: '', toDate: '' }
+    const filter: FilterState = { labels: ['swe'], labelMode: 'or', includeSublabels: false, author: 'Admin', fromDate: '', toDate: '' }
     await renderPanel(filter, onChange)
 
     await waitFor(() => {
@@ -295,6 +295,21 @@ describe('FilterPanel', () => {
     await user.click(clearButtons[clearButtons.length - 1]!)
 
     expect(onChange).toHaveBeenCalledWith(EMPTY_FILTER)
+  })
+
+  it('toggles includeSublabels checkbox', async () => {
+    mockPanelState = 'open'
+    const onChange = vi.fn()
+    const user = userEvent.setup()
+    await renderPanel(EMPTY_FILTER, onChange)
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('incl. sub-labels')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByLabelText('incl. sub-labels'))
+
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ includeSublabels: true }))
   })
 
   it('calls setActiveFilterCount with correct count', async () => {
