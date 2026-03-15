@@ -22,6 +22,7 @@ just test-backend     # Backend tests only (excludes slow tests)
 just check-frontend   # Frontend static checks + frontend tests
 just test-frontend    # Frontend tests only
 ```
+All `just` commands must be run unsandboxed.
 
 Always start a dev server with `just start` (unsanboxed). Remember to stop a running dev server with `just stop` when finished.
 
@@ -34,12 +35,11 @@ Always start a dev server with `just start` (unsanboxed). Remember to stop a run
 - Do NOT use `type: ignore` comments. If ignoring a type rule is necessary, ALWAYS ask the user for permission and explain why.
 - Do NOT use `noqa` comment. If ignoring a lint rule is necessary, ALWAYS ask the user for permission and explain why.
 - Do not use `fmt: skip` or `fmt: off` comments. If ignoring the formatter is necessary, ask the user for permission and explain why.
-- Naming & style: `snake_case` files/functions/variables, `PascalCase` classes
 
 ### TypeScript (frontend/src/)
 
 - Formatting: ESLint with typescript-eslint (type-checked rules); avoid `eslint-disable-line`
-- Naming & style: `PascalCase.tsx` components, `camelCase.ts` utilities/stores; `PascalCase` types/interfaces, `fetch` prefix for API functions, `handle` prefix for event handlers; Tailwind with semantic color tokens; follow existing patterns in the codebase
+- Naming & style: `camelCase.ts` utilities/stores; `fetch` prefix for API functions, `handle` prefix for event handlers; Tailwind with semantic color tokens
 
 ## Testing Guidelines
 
@@ -71,13 +71,13 @@ Always start a dev server with `just start` (unsanboxed). Remember to stop a run
 - Never expose *internal* server error details to clients: return a generic error message to clients while keeping detailed logging server-side.
 - Business logic errors (input validation, invalid action, etc.) are NOT internal server errors: clients should be informed what went wrong when the error is a direct result of invalid user action or input.
 - Any security-sensitive bug fix or feature change must include failing-first regression tests that cover abuse paths, not only happy paths.
-- Read docs/guidelines/security.md for the full security guidelines. Read docs/arch/security.md for security architecture.
-- **IMPORTANT**: Read docs/guidelines/security.md before making any changes related to authentication, authorization, input validation, sanitization, error handling, or infrastructure security.
+- **IMPORTANT**: Read docs/guidelines/security.md for security guidelines before making any changes related to authentication, authorization, input validation, sanitization, or error handling.
 
 ## Instructions
 
 - **IMPORTANT**: Keep ALL files under docs/arch/ in sync with the codebase. Update them after any frontend or backend architecture changes, addition of major new features, workflow changes.
 - Avoid code duplication. Abstract common logic into parameterized functions.
 - Do NOT try to circumvent static analysis tools. Adapt the code to pass `just check` properly - do not ignore checks or suppress rules. If you absolutely need to bypass a static analysis tool, ALWAYS ask the user for approval and explain why this is necessary.
-- When saving a plan, put it in docs/plans/. When saving a spec or a design doc, put it in docs/specs/.
+- When saving a plan, put it in docs/plans/. 
+- When saving a spec or design doc, put it in docs/specs/.
 - When finished, verify with `just check`.

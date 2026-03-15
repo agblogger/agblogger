@@ -31,10 +31,6 @@ Frontend testing focuses on user-visible behavior in the SPA: navigation, editor
 
 Where the codebase has deterministic, high-invariant logic, tests favor property-based coverage and other approaches that validate whole classes of behavior instead of a small set of fixed examples.
 
-## Quality Gates
-
-Repository-level check commands combine static analysis, automated tests, and additional security validation. The default gate covers normal development checks, while heavier or noisier scans live outside that default path. Correctness and security are verified continuously rather than left to manual review.
-
 ## Code Entry Points
 
 - `tests/test_api/` covers HTTP-level backend behavior.
