@@ -42,7 +42,7 @@ interface LabelNodeData {
 function LabelNode({ data }: NodeProps) {
   const d = data as unknown as LabelNodeData
   const depthColors = [
-    'border-accent bg-accent/8 text-accent',
+    'border-accent bg-accent/8 dark:bg-accent/20 text-accent',
     'border-amber-600 dark:border-amber-500 bg-amber-50 dark:bg-amber-900/30 text-amber-800 dark:text-amber-400',
     'border-emerald-600 dark:border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-400',
     'border-sky-600 dark:border-sky-500 bg-sky-50 dark:bg-sky-950/30 text-sky-800 dark:text-sky-300',
@@ -109,7 +109,7 @@ function layoutGraph(
     }
   })
 
-  const edgeColor = '#c8c1b8'
+  const edgeColor = 'var(--color-border-dark)'
   const edges: Edge[] = graphData.edges.map((e) => ({
     id: `${e.target}-${e.source}`,
     source: e.target,
@@ -346,13 +346,13 @@ export default function LabelGraphPage({ viewToggle }: { viewToggle: React.React
           minZoom={0.3}
           maxZoom={2}
         >
-          <Background color="#e0dbd4" gap={20} size={1} />
+          <Background color="var(--color-border)" gap={20} size={1} />
           <Controls
             className="!bg-paper !border-border !shadow-sm [&>button]:!bg-paper [&>button]:!border-border [&>button]:!text-muted [&>button:hover]:!bg-paper-warm"
           />
           <MiniMap
-            nodeColor="#c8c1b8"
-            maskColor="rgba(245, 243, 239, 0.7)"
+            nodeColor="var(--color-border-dark)"
+            maskColor="var(--color-paper-warm)"
             className="!bg-paper !border-border !shadow-sm !rounded-lg"
           />
         </ReactFlow>
