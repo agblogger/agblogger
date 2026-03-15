@@ -229,12 +229,16 @@ describe('LabelSettingsPage', () => {
       expect(screen.getByText('software engineering')).toBeInTheDocument()
     })
 
+    // Toggle math parent to make form dirty
+    const mathCheckbox = screen.getByRole('checkbox', { name: /#math/i })
+    await user.click(mathCheckbox)
+
     await user.click(screen.getByRole('button', { name: /save changes/i }))
 
     await waitFor(() => {
       expect(mockUpdateLabel).toHaveBeenCalledWith('swe', {
         names: ['software engineering', 'programming'],
-        parents: ['cs'],
+        parents: ['cs', 'math'],
       })
     })
   })
@@ -251,6 +255,10 @@ describe('LabelSettingsPage', () => {
     await waitFor(() => {
       expect(screen.getByText('software engineering')).toBeInTheDocument()
     })
+
+    // Toggle math parent to make form dirty
+    const mathCheckbox = screen.getByRole('checkbox', { name: /#math/i })
+    await user.click(mathCheckbox)
 
     await user.click(screen.getByRole('button', { name: /save changes/i }))
 
@@ -286,7 +294,7 @@ describe('LabelSettingsPage', () => {
   it('allows saving with no display names', async () => {
     mockFetchLabel.mockResolvedValue({ ...testLabel, names: [] })
     mockFetchLabels.mockResolvedValue(allLabels)
-    mockUpdateLabel.mockResolvedValue({ ...testLabel, names: [], parents: ['cs'] })
+    mockUpdateLabel.mockResolvedValue({ ...testLabel, names: [], parents: ['cs', 'math'] })
     const user = userEvent.setup()
     renderSettings()
 
@@ -294,9 +302,13 @@ describe('LabelSettingsPage', () => {
       expect(screen.getByRole('button', { name: /save changes/i })).toBeInTheDocument()
     })
 
+    // Toggle math parent to make form dirty
+    const mathCheckbox = screen.getByRole('checkbox', { name: /#math/i })
+    await user.click(mathCheckbox)
+
     await user.click(screen.getByRole('button', { name: /save changes/i }))
     await waitFor(() => {
-      expect(mockUpdateLabel).toHaveBeenCalledWith('swe', { names: [], parents: ['cs'] })
+      expect(mockUpdateLabel).toHaveBeenCalledWith('swe', { names: [], parents: ['cs', 'math'] })
     })
     expect(screen.queryByText('At least one display name is required.')).not.toBeInTheDocument()
   })
@@ -333,5 +345,107 @@ describe('LabelSettingsPage', () => {
     await user.click(screen.getByRole('button', { name: /cancel/i }))
 
     expect(screen.queryByRole('button', { name: /confirm delete/i })).not.toBeInTheDocument()
+  })
+
+  it('save button is disabled when no changes have been made', async () => {
+    mockFetchLabel.mockResolvedValue(testLabel)
+    mockFetchLabels.mockResolvedValue(allLabels)
+    renderSettings()
+
+    await waitFor(() => {
+      expect(screen.getByText('software engineering')).toBeInTheDocument()
+    })
+
+    expect(screen.getByRole('button', { name: /save changes/i })).toBeDisabled()
+  })
+
+  it('save button is enabled after toggling a parent', async () => {
+    mockFetchLabel.mockResolvedValue(testLabel)
+    mockFetchLabels.mockResolvedValue(allLabels)
+    const user = userEvent.setup()
+    renderSettings()
+
+    await waitFor(() => {
+      expect(screen.getByText('#cs')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('checkbox', { name: /#cs/i }))
+    expect(screen.getByRole('button', { name: /save changes/i })).toBeEnabled()
+  })
+
+  it('save button is enabled after adding a name', async () => {
+    mockFetchLabel.mockResolvedValue(testLabel)
+    mockFetchLabels.mockResolvedValue(allLabels)
+    const user = userEvent.setup()
+    renderSettings()
+
+    await waitFor(() => {
+      expect(screen.getByText('software engineering')).toBeInTheDocument()
+    })
+
+    await user.type(screen.getByPlaceholderText('Add a display name...'), 'coding')
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+    expect(screen.getByRole('button', { name: /save changes/i })).toBeEnabled()
+  })
+
+  it('save button becomes disabled after successful save', async () => {
+    mockFetchLabel.mockResolvedValue(testLabel)
+    mockFetchLabels.mockResolvedValue(allLabels)
+    mockUpdateLabel.mockResolvedValue({ ...testLabel, parents: [] })
+    const user = userEvent.setup()
+    renderSettings()
+
+    await waitFor(() => {
+      expect(screen.getByText('#cs')).toBeInTheDocument()
+    })
+
+    // Make dirty
+    await user.click(screen.getByRole('checkbox', { name: /#cs/i }))
+    expect(screen.getByRole('button', { name: /save changes/i })).toBeEnabled()
+
+    // Save
+    await user.click(screen.getByRole('button', { name: /save changes/i }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /save changes/i })).toBeDisabled()
+    })
+  })
+
+  it('reverting changes back to original makes save button disabled', async () => {
+    mockFetchLabel.mockResolvedValue(testLabel)
+    mockFetchLabels.mockResolvedValue(allLabels)
+    const user = userEvent.setup()
+    renderSettings()
+
+    await waitFor(() => {
+      expect(screen.getByText('#cs')).toBeInTheDocument()
+    })
+
+    const csCheckbox = screen.getByRole('checkbox', { name: /#cs/i })
+
+    // Uncheck cs → dirty
+    await user.click(csCheckbox)
+    expect(screen.getByRole('button', { name: /save changes/i })).toBeEnabled()
+
+    // Re-check cs → back to original
+    await user.click(csCheckbox)
+    expect(screen.getByRole('button', { name: /save changes/i })).toBeDisabled()
+  })
+
+  it('save button appears near the page heading', async () => {
+    mockFetchLabel.mockResolvedValue(testLabel)
+    mockFetchLabels.mockResolvedValue(allLabels)
+    renderSettings()
+
+    await waitFor(() => {
+      expect(screen.getByText('software engineering')).toBeInTheDocument()
+    })
+
+    // The Save button should be in the same header area as the page title
+    const heading = screen.getByRole('heading', { level: 1 })
+    const saveButton = screen.getByRole('button', { name: /save changes/i })
+
+    // Both should share a common parent container (the header row)
+    expect(heading.closest('.flex')?.contains(saveButton)).toBe(true)
   })
 })

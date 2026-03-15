@@ -3,6 +3,7 @@ import LoadingSpinner from '@/components/LoadingSpinner'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { ArrowLeft, X, Settings, Trash2 } from 'lucide-react'
 
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
 import { useAuthStore } from '@/stores/authStore'
 import { fetchLabel, fetchLabels, updateLabel, deleteLabel } from '@/api/labels'
 import { HTTPError } from '@/api/client'
@@ -23,6 +24,8 @@ export default function LabelSettingsPage() {
   // Editable state
   const [names, setNames] = useState<string[]>([])
   const [parents, setParents] = useState<string[]>([])
+  const [savedNames, setSavedNames] = useState<string[]>([])
+  const [savedParents, setSavedParents] = useState<string[]>([])
   const [newName, setNewName] = useState('')
 
   // Async operation state
@@ -47,6 +50,8 @@ export default function LabelSettingsPage() {
         setAllLabels(all)
         setNames([...l.names])
         setParents([...l.parents])
+        setSavedNames([...l.names])
+        setSavedParents([...l.parents])
       })
       .catch((err: unknown) => {
         if (err instanceof HTTPError && err.response.status === 404) {
@@ -69,6 +74,20 @@ export default function LabelSettingsPage() {
     descendants.add(labelId)
     return descendants
   }, [labelId, allLabels])
+
+  const isDirty = useMemo(() => {
+    if (names.length !== savedNames.length) return true
+    if (parents.length !== savedParents.length) return true
+    for (let i = 0; i < names.length; i++) {
+      if (names[i] !== savedNames[i]) return true
+    }
+    for (let i = 0; i < parents.length; i++) {
+      if (parents[i] !== savedParents[i]) return true
+    }
+    return false
+  }, [names, savedNames, parents, savedParents])
+
+  const { markSaved } = useUnsavedChanges(isDirty)
 
   const availableParents = allLabels.filter((l) => !excludedIds.has(l.id))
 
@@ -104,6 +123,9 @@ export default function LabelSettingsPage() {
       setLabel(updated)
       setNames([...updated.names])
       setParents([...updated.parents])
+      setSavedNames([...updated.names])
+      setSavedParents([...updated.parents])
+      markSaved()
     } catch (err) {
       if (err instanceof HTTPError) {
         const status = err.response.status
@@ -175,6 +197,16 @@ export default function LabelSettingsPage() {
       <div className="flex items-center gap-3 mb-8">
         <Settings size={20} className="text-accent" />
         <h1 className="font-display text-3xl text-ink">Label Settings: #{labelId}</h1>
+        <div className="ml-auto">
+          <button
+            onClick={() => void handleSave()}
+            disabled={busy || !isDirty}
+            className="px-6 py-2.5 text-sm font-medium bg-accent text-white rounded-lg
+                     hover:bg-accent-light disabled:opacity-50 transition-colors"
+          >
+            {saving ? 'Saving...' : 'Save Changes'}
+          </button>
+        </div>
       </div>
 
       {error !== null && (
@@ -268,18 +300,6 @@ export default function LabelSettingsPage() {
           Labels that are descendants of #{labelId} are excluded to prevent cycles.
         </p>
       </section>
-
-      {/* Save button */}
-      <div className="mb-10">
-        <button
-          onClick={() => void handleSave()}
-          disabled={busy}
-          className="px-6 py-2.5 text-sm font-medium bg-accent text-white rounded-lg
-                   hover:bg-accent-light disabled:opacity-50 transition-colors"
-        >
-          {saving ? 'Saving...' : 'Save Changes'}
-        </button>
-      </div>
 
       {/* Delete section */}
       <section className="p-5 border border-red-200 dark:border-red-800/40 rounded-lg">
