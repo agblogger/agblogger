@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Settings, Save } from 'lucide-react'
 
 import { HTTPError } from '@/api/client'
@@ -12,6 +12,7 @@ interface SiteSettingsSectionProps {
   busy: boolean
   onSaving: (saving: boolean) => void
   onSavedSettings: (settings: AdminSiteSettings) => void
+  onDirtyChange: (dirty: boolean) => void
 }
 
 function normalizeSiteSettings(
@@ -29,6 +30,7 @@ export default function SiteSettingsSection({
   busy,
   onSaving,
   onSavedSettings,
+  onDirtyChange,
 }: SiteSettingsSectionProps) {
   const [siteSettings, setSiteSettings] = useState<AdminSiteSettings>(
     normalizeSiteSettings(initialSettings),
@@ -38,6 +40,17 @@ export default function SiteSettingsSection({
   const [savingSite, setSavingSite] = useState(false)
 
   useEffect(() => { onSaving(savingSite) }, [savingSite, onSaving])
+
+  const normalizedInitial = useMemo(() => normalizeSiteSettings(initialSettings), [initialSettings])
+
+  const isDirty =
+    siteSettings.title !== normalizedInitial.title ||
+    siteSettings.description !== normalizedInitial.description ||
+    siteSettings.timezone !== normalizedInitial.timezone
+
+  useEffect(() => { onDirtyChange(isDirty) }, [isDirty, onDirtyChange])
+  useEffect(() => { return () => { onDirtyChange(false) } }, [onDirtyChange])
+
   useEffect(() => {
     setSiteSettings(normalizeSiteSettings(initialSettings))
   }, [initialSettings])
