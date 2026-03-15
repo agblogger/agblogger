@@ -306,32 +306,32 @@ class TestSyncCommit:
         assert dl_resp.status_code == 200
         assert dl_resp.content == binary_content
 
-    async def test_non_post_md_conflict_last_writer_wins(
+    async def test_non_post_non_labels_conflict_last_writer_wins(
         self, merge_client: AsyncClient, merge_settings: Settings
     ) -> None:
         token = await _login(merge_client)
         headers = {"Authorization": f"Bearer {token}"}
 
-        # Write a non-post file on server
+        # Write a non-post, non-labels file on server
         content_dir = merge_settings.content_dir
-        (content_dir / "labels.toml").write_text("[labels.server]\nnames = ['server']\n")
+        (content_dir / "index.toml").write_text('[site]\ntitle = "Server Title"\n')
 
         # Upload a different version via sync
-        client_content = b"[labels.client]\nnames = ['client']\n"
+        client_content = b'[site]\ntitle = "Client Title"\n'
         metadata = json.dumps({"deleted_files": []})
         resp = await merge_client.post(
             "/api/sync/commit",
             data={"metadata": metadata},
-            files=[("files", ("labels.toml", io.BytesIO(client_content), "text/plain"))],
+            files=[("files", ("index.toml", io.BytesIO(client_content), "text/plain"))],
             headers=headers,
         )
         assert resp.status_code == 200
         data = resp.json()
-        # Non-post files use last-writer-wins (client wins), no conflict reported
+        # Non-post, non-labels files use last-writer-wins (client wins)
         assert len(data["conflicts"]) == 0
 
-        dl_resp = await merge_client.get("/api/sync/download/labels.toml", headers=headers)
-        assert b"client" in dl_resp.content
+        dl_resp = await merge_client.get("/api/sync/download/index.toml", headers=headers)
+        assert b"Client Title" in dl_resp.content
 
     async def test_files_synced_reflects_actual_changes(self, merge_client: AsyncClient) -> None:
         token = await _login(merge_client)

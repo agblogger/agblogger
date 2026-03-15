@@ -31,6 +31,7 @@ from backend.services.sync_service import (
     compute_sync_plan,
     get_server_manifest,
     is_sync_managed_path,
+    merge_labels_toml,
     merge_post_file,
     normalize_post_frontmatter,
     scan_content_files,
@@ -308,11 +309,33 @@ async def _sync_commit_inner(
             uploaded_paths.append(target_path)
             continue
 
-        # Merge conflict detection: attempt smart merge only for markdown posts
-        # under posts/ where the server has a different version.
+        # Merge conflict detection: attempt smart merge for markdown posts and labels.toml.
         is_post_md = target_path.startswith("posts/") and target_path.endswith(".md")
+        is_labels_toml = target_path == "labels.toml"
 
-        if server_content is not None and server_content != client_text and is_post_md:
+        if server_content is not None and server_content != client_text and is_labels_toml:
+            # Semantic merge for labels.toml: set-based merge for names and parents
+            base_content = await _get_base_content(git_service, last_sync_commit, target_path)
+            labels_result = merge_labels_toml(base_content, server_content, client_text)
+
+            if labels_result.field_conflicts:
+                conflicts.append(
+                    SyncConflictInfo(
+                        file_path=target_path,
+                        body_conflicted=False,
+                        field_conflicts=labels_result.field_conflicts,
+                    )
+                )
+
+            try:
+                full_path.write_text(labels_result.merged_content, encoding="utf-8")
+            except OSError as exc:
+                logger.error("Sync: I/O error writing merged %s: %s", target_path, exc)
+                raise HTTPException(status_code=500, detail="File I/O error during sync") from exc
+            to_download.append(target_path)
+            uploaded_paths.append(target_path)
+
+        elif server_content is not None and server_content != client_text and is_post_md:
             # Get base version from git for three-way merge
             base_content = await _get_base_content(git_service, last_sync_commit, target_path)
             try:

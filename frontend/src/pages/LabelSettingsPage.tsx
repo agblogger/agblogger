@@ -13,10 +13,10 @@ import { HTTPError } from '@/api/client'
 import type { LabelResponse } from '@/api/client'
 import { computeDescendants } from '@/components/labels/graphUtils'
 
-function haveSameIds(left: readonly string[], right: readonly string[]): boolean {
+function haveSameElements(left: readonly string[], right: readonly string[]): boolean {
   if (left.length !== right.length) return false
-  const rightIds = new Set(right)
-  return left.every((id) => rightIds.has(id))
+  const rightSet = new Set(right)
+  return left.every((item) => rightSet.has(item))
 }
 
 export default function LabelSettingsPage() {
@@ -85,11 +85,8 @@ export default function LabelSettingsPage() {
   }, [labelId, allLabels])
 
   const isDirty = useMemo(() => {
-    if (names.length !== savedNames.length) return true
-    for (let i = 0; i < names.length; i++) {
-      if (names[i] !== savedNames[i]) return true
-    }
-    return !haveSameIds(parents, savedParents)
+    if (!haveSameElements(names, savedNames)) return true
+    return !haveSameElements(parents, savedParents)
   }, [names, savedNames, parents, savedParents])
 
   const { markSaved } = useUnsavedChanges(isDirty)

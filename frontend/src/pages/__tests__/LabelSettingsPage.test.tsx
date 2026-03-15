@@ -481,6 +481,28 @@ describe('LabelSettingsPage', () => {
     expect(screen.getByRole('button', { name: /save changes/i })).toBeDisabled()
   })
 
+  it('removing and re-adding a name disables save even if order changes', async () => {
+    mockFetchLabel.mockResolvedValue(testLabel)
+    mockFetchLabels.mockResolvedValue(allLabels)
+    const user = userEvent.setup()
+    renderSettings()
+
+    await waitFor(() => {
+      expect(screen.getByText('software engineering')).toBeInTheDocument()
+    })
+
+    // Remove first name → dirty
+    await user.click(screen.getByLabelText('Remove name "software engineering"'))
+    expect(screen.getByRole('button', { name: /save changes/i })).toBeEnabled()
+
+    // Re-add it (appended to end, so order is now ['programming', 'software engineering'])
+    await user.type(screen.getByPlaceholderText('Add a display name...'), 'software engineering')
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+
+    // Same set of names → not dirty
+    expect(screen.getByRole('button', { name: /save changes/i })).toBeDisabled()
+  })
+
   it('reverting a multi-parent selection back to the original set disables save even if order changes', async () => {
     mockFetchLabel.mockResolvedValue(multiParentLabel)
     mockFetchLabels.mockResolvedValue(allLabelsWithTwoParents)

@@ -6,6 +6,7 @@ import hashlib
 import logging
 import os
 import subprocess
+import tomllib
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from enum import StrEnum
@@ -13,6 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import frontmatter as fm
+import tomli_w
 import yaml
 from sqlalchemy import delete, select
 
@@ -363,6 +365,105 @@ def merge_frontmatter(
                     field_conflicts.append(key)
 
     return FrontmatterMergeResult(merged=merged, field_conflicts=field_conflicts)
+
+
+@dataclass
+class LabelsMergeResult:
+    """Result of merging labels.toml files."""
+
+    merged_content: str
+    field_conflicts: list[str]
+
+
+def _set_merge(base: list[str], server: list[str], client: list[str]) -> list[str]:
+    """Three-way set merge: apply additions and removals from both sides."""
+    base_set = set(base)
+    server_set = set(server)
+    client_set = set(client)
+
+    server_added = server_set - base_set
+    server_removed = base_set - server_set
+    client_added = client_set - base_set
+    client_removed = base_set - client_set
+
+    result = (base_set | server_added | client_added) - server_removed - client_removed
+    return sorted(result)
+
+
+def merge_labels_toml(
+    base: str | None,
+    server: str,
+    client: str,
+) -> LabelsMergeResult:
+    """Merge labels.toml using three-way set-based merge for names and parents.
+
+    Each label's names and parents are merged as sets (additions/removals from
+    both sides are applied). The set of label IDs is also merged as a set.
+    Falls back to server content on parse errors or missing base.
+    """
+    try:
+        server_data = tomllib.loads(server).get("labels", {})
+    except (tomllib.TOMLDecodeError, ValueError):
+        logger.warning("Failed to parse server labels.toml during merge")
+        return LabelsMergeResult(merged_content=server, field_conflicts=[])
+
+    if base is None:
+        return LabelsMergeResult(merged_content=server, field_conflicts=[])
+
+    try:
+        base_data = tomllib.loads(base).get("labels", {})
+    except (tomllib.TOMLDecodeError, ValueError):
+        logger.warning("Failed to parse base labels.toml during merge")
+        return LabelsMergeResult(merged_content=server, field_conflicts=[])
+
+    try:
+        client_data = tomllib.loads(client).get("labels", {})
+    except (tomllib.TOMLDecodeError, ValueError):
+        logger.warning("Failed to parse client labels.toml during merge")
+        return LabelsMergeResult(merged_content=server, field_conflicts=[])
+
+    # Three-way set merge for which label IDs exist
+    base_ids = set(base_data)
+    server_ids = set(server_data)
+    client_ids = set(client_data)
+
+    server_added_ids = server_ids - base_ids
+    server_removed_ids = base_ids - server_ids
+    client_added_ids = client_ids - base_ids
+    client_removed_ids = base_ids - client_ids
+
+    merged_ids = (
+        (base_ids | server_added_ids | client_added_ids)
+        - server_removed_ids
+        - client_removed_ids
+    )
+
+    # Merge each label's fields
+    merged_labels: dict[str, Any] = {}
+    for label_id in sorted(merged_ids):
+        base_label = base_data.get(label_id, {})
+        server_label = server_data.get(label_id, {})
+        client_label = client_data.get(label_id, {})
+
+        def _get_list(label: object, key: str) -> list[str]:
+            return label.get(key, []) if isinstance(label, dict) else []
+
+        base_names = _get_list(base_label, "names")
+        server_names = _get_list(server_label, "names")
+        client_names = _get_list(client_label, "names")
+
+        base_parents = _get_list(base_label, "parents")
+        server_parents = _get_list(server_label, "parents")
+        client_parents = _get_list(client_label, "parents")
+
+        entry: dict[str, list[str]] = {
+            "names": _set_merge(base_names, server_names, client_names),
+            "parents": _set_merge(base_parents, server_parents, client_parents),
+        }
+        merged_labels[label_id] = entry
+
+    merged_content = tomli_w.dumps({"labels": merged_labels})
+    return LabelsMergeResult(merged_content=merged_content, field_conflicts=[])
 
 
 @dataclass
