@@ -15,6 +15,7 @@ just start            # Start backend (:8000) + frontend (:5173) in the backgrou
 just stop             # Stop the running dev server
 just health           # Check if dev server is healthy (backend + frontend)
 just check            # Full gate: static checks first, then tests (excludes slow tests)
+just check-static     # Static checks only
 just check-extra      # Extra dependency/security checks + slow backend tests
 just test             # Test-only gate: backend + frontend tests (excludes slow tests)
 just check-backend    # Backend static checks + backend tests

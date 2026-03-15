@@ -372,14 +372,6 @@ stop-caddy-local:
 health-caddy-local:
     python3 -m cli.local_caddy health --caddy-port "{{ local_caddy_port }}"
 
-# Start backend and frontend in the foreground (Ctrl-C to stop). Do not use unless you're human.
-syncrun:
-    #!/usr/bin/env bash
-    trap 'kill 0' EXIT
-    uv run uvicorn backend.main:app --reload --host 127.0.0.1 --port {{ backend_port }} &
-    cd frontend && AGBLOGGER_BACKEND_PORT="{{ backend_port }}" npm run dev -- --host 127.0.0.1 --port {{ frontend_port }} &
-    wait
-
 # ── Developer commands (do not use unless you're human) ──────────────────────────────────────────
 
 cloc:
