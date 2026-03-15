@@ -34,7 +34,7 @@ Always start a dev server with `just start` (unsanboxed). Remember to stop a run
 - Do NOT use `type: ignore` comments. If ignoring a type rule is necessary, ALWAYS ask the user for permission and explain why.
 - Do NOT use `noqa` comment. If ignoring a lint rule is necessary, ALWAYS ask the user for permission and explain why.
 - Do not use `fmt: skip` or `fmt: off` comments. If ignoring the formatter is necessary, ask the user for permission and explain why.
-- Naming & style: `snake_case` files/functions/variables, `PascalCase` classes; `from __future__ import annotations` everywhere; `async def` for all I/O; follow existing Pydantic/SQLAlchemy/FastAPI patterns in the codebase
+- Naming & style: `snake_case` files/functions/variables, `PascalCase` classes
 
 ### TypeScript (frontend/src/)
 
