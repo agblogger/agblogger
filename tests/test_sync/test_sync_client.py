@@ -642,6 +642,44 @@ class TestBackupConflictedFiles:
             f"Unexpected timestamp format: {backup_dir.name}"
         )
 
+    def test_backup_dirs_do_not_collide_with_same_second_timestamp(
+        self, tmp_path: Path, monkeypatch: Any
+    ) -> None:
+        import datetime as dt
+
+        content_dir = tmp_path / "content"
+        posts_dir = content_dir / "posts"
+        posts_dir.mkdir(parents=True)
+        conflict_file = posts_dir / "conflict.md"
+        conflict_file.write_text("first version\n")
+
+        class _FixedDatetime(dt.datetime):
+            @classmethod
+            def now(cls, tz: dt.tzinfo | None = None) -> _FixedDatetime:
+                if tz is dt.UTC:
+                    return cls(2025, 6, 15, 10, 30, 45, tzinfo=dt.UTC)
+                raise AssertionError("datetime.now() called without tz=timezone.utc")
+
+        monkeypatch.setattr(sync_client, "datetime", _FixedDatetime)
+
+        client, _http = _build_sync_client(content_dir)
+        conflicts = [
+            {"file_path": "posts/conflict.md", "body_conflicted": True, "field_conflicts": []},
+        ]
+
+        first_backup_dir = client._backup_conflicted_files(conflicts)
+        assert first_backup_dir is not None
+        assert (first_backup_dir / "posts" / "conflict.md").read_text() == "first version\n"
+
+        conflict_file.write_text("second version\n")
+
+        second_backup_dir = client._backup_conflicted_files(conflicts)
+        assert second_backup_dir is not None
+
+        assert second_backup_dir != first_backup_dir
+        assert (first_backup_dir / "posts" / "conflict.md").read_text() == "first version\n"
+        assert (second_backup_dir / "posts" / "conflict.md").read_text() == "second version\n"
+
 
 class TestSyncBackupIntegration:
     def test_sync_backs_up_before_downloading_conflicts(

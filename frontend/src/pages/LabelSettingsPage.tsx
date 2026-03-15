@@ -155,6 +155,7 @@ export default function LabelSettingsPage() {
     setError(null)
     try {
       await deleteLabel(labelId)
+      markSaved()
       void navigate('/labels', { replace: true })
     } catch (err) {
       if (err instanceof HTTPError && err.response.status === 401) {

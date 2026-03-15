@@ -317,7 +317,12 @@ class SyncClient:
 
         backed_up = 0
         timestamp = datetime.now(tz=UTC).strftime("%Y-%m-%d-%H%M%S")
-        backup_dir = self.content_dir / ".backups" / timestamp
+        backups_root = self.content_dir / ".backups"
+        backup_dir = backups_root / timestamp
+        suffix = 1
+        while backup_dir.exists():
+            backup_dir = backups_root / f"{timestamp}-{suffix}"
+            suffix += 1
 
         for conflict in conflicts:
             fp = conflict["file_path"]
@@ -343,7 +348,6 @@ class SyncClient:
                 if backup_dir.exists():
                     shutil.rmtree(backup_dir)
                 # Also remove the parent .backups dir if it is now empty
-                backups_root = backup_dir.parent
                 if backups_root.exists() and not any(backups_root.iterdir()):
                     backups_root.rmdir()
             except OSError:

@@ -16,6 +16,7 @@ const mockFetchLabel = vi.fn()
 const mockFetchLabels = vi.fn()
 const mockUpdateLabel = vi.fn()
 const mockDeleteLabel = vi.fn()
+const mockMarkSaved = vi.fn()
 
 vi.mock('@/api/labels', () => ({
   fetchLabel: (...args: unknown[]) => mockFetchLabel(...args) as unknown,
@@ -26,6 +27,10 @@ vi.mock('@/api/labels', () => ({
 
 vi.mock('@/components/labels/graphUtils', () => ({
   computeDescendants: (_id: string, _map: unknown) => new Set<string>(),
+}))
+
+vi.mock('@/hooks/useUnsavedChanges', () => ({
+  useUnsavedChanges: () => ({ markSaved: mockMarkSaved }),
 }))
 
 let mockUser: UserResponse | null = null
@@ -289,6 +294,43 @@ describe('LabelSettingsPage', () => {
     await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith('/labels', { replace: true })
     })
+  })
+
+  it('marks the form saved before redirecting after successful delete', async () => {
+    mockFetchLabel.mockResolvedValue(testLabel)
+    mockFetchLabels.mockResolvedValue(allLabels)
+    mockDeleteLabel.mockResolvedValue({ id: 'swe', deleted: true })
+    const user = userEvent.setup()
+    renderSettings()
+
+    await waitFor(() => {
+      expect(screen.getByText('software engineering')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('checkbox', { name: /#math/i }))
+    await user.click(screen.getByRole('button', { name: /delete label/i }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /confirm delete/i })).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: /confirm delete/i }))
+
+    await waitFor(() => {
+      expect(mockMarkSaved).toHaveBeenCalledTimes(1)
+      expect(mockNavigate).toHaveBeenCalledWith('/labels', { replace: true })
+    })
+
+    const markSavedCallOrder = mockMarkSaved.mock.invocationCallOrder[0]
+    const navigateCallOrder = mockNavigate.mock.invocationCallOrder[0]
+
+    expect(markSavedCallOrder).toBeDefined()
+    expect(navigateCallOrder).toBeDefined()
+    if (markSavedCallOrder === undefined || navigateCallOrder === undefined) {
+      throw new Error('Expected markSaved and navigate to be called')
+    }
+
+    expect(markSavedCallOrder).toBeLessThan(navigateCallOrder)
   })
 
   it('allows saving with no display names', async () => {
