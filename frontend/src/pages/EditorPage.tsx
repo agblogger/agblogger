@@ -226,17 +226,19 @@ export default function EditorPage() {
     const isMod = e.metaKey || e.ctrlKey
     if (!isMod) return
 
-    const keyMap: Record<string, string> = {
-      b: 'bold',
-      i: 'italic',
-      h: 'heading',
-      k: 'link',
-    }
-
     let actionKey: string | undefined
+
     if (e.key === 'e' || e.key === 'E') {
       actionKey = e.shiftKey ? 'codeblock' : 'code'
-    } else {
+    } else if ((e.key === '>' || e.key === '.') && e.shiftKey) {
+      actionKey = 'blockquote'
+    } else if (!e.shiftKey) {
+      const keyMap: Record<string, string> = {
+        b: 'bold',
+        i: 'italic',
+        h: 'heading',
+        k: 'link',
+      }
       actionKey = keyMap[e.key.toLowerCase()]
     }
 
