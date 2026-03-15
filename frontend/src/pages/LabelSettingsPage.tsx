@@ -13,6 +13,7 @@ import { HTTPError } from '@/api/client'
 import type { LabelResponse } from '@/api/client'
 import { computeDescendants } from '@/components/labels/graphUtils'
 
+/** Unordered equality check for arrays with unique elements (duplicates are prevented by UI). */
 function haveSameElements(left: readonly string[], right: readonly string[]): boolean {
   if (left.length !== right.length) return false
   const rightSet = new Set(right)

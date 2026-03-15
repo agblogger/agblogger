@@ -451,22 +451,22 @@ def merge_labels_toml(
         server_data = tomllib.loads(server).get("labels", {})
     except _TOML_PARSE_ERRORS:
         logger.warning("Failed to parse server labels.toml during merge")
-        return LabelsMergeResult(merged_content=client, field_conflicts=[])
+        return LabelsMergeResult(merged_content=client, field_conflicts=["_parse_error"])
 
     if base is None:
-        return LabelsMergeResult(merged_content=client, field_conflicts=[])
+        return LabelsMergeResult(merged_content=client, field_conflicts=["_no_base"])
 
     try:
         base_data = tomllib.loads(base).get("labels", {})
     except _TOML_PARSE_ERRORS:
         logger.warning("Failed to parse base labels.toml during merge")
-        return LabelsMergeResult(merged_content=client, field_conflicts=[])
+        return LabelsMergeResult(merged_content=client, field_conflicts=["_parse_error"])
 
     try:
         client_data = tomllib.loads(client).get("labels", {})
     except _TOML_PARSE_ERRORS:
         logger.warning("Failed to parse client labels.toml during merge")
-        return LabelsMergeResult(merged_content=client, field_conflicts=[])
+        return LabelsMergeResult(merged_content=client, field_conflicts=["_parse_error"])
 
     # Three-way set merge for which label IDs exist
     base_ids = set(base_data)

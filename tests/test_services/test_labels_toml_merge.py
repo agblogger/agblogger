@@ -192,6 +192,7 @@ class TestMergeLabelsToml:
         client = _make_labels_toml({"swe": {"names": ["coding"]}})
         result = merge_labels_toml(None, server, client)
         assert result.merged_content == client
+        assert result.field_conflicts == ["_no_base"]
 
     def test_no_conflicts_reported(self) -> None:
         base = _make_labels_toml({"swe": {"names": ["a"]}})
@@ -250,6 +251,7 @@ class TestMergeLabelsToml:
         client = _make_labels_toml({"swe": {"names": ["coding"]}})
         result = merge_labels_toml("not valid toml {{{{", server, client)
         assert result.merged_content == client
+        assert result.field_conflicts == ["_parse_error"]
 
     def test_malformed_server_returns_client(self) -> None:
         base = _make_labels_toml({"swe": {"names": ["a"]}})
@@ -257,9 +259,96 @@ class TestMergeLabelsToml:
         client = _make_labels_toml({"swe": {"names": ["b"]}})
         result = merge_labels_toml(base, server, client)
         assert result.merged_content == client
+        assert result.field_conflicts == ["_parse_error"]
 
     def test_malformed_client_returns_client_raw(self) -> None:
         base = _make_labels_toml({"swe": {"names": ["a"]}})
         server = _make_labels_toml({"swe": {"names": ["a", "b"]}})
         result = merge_labels_toml(base, server, "not valid toml {{{{")
         assert result.merged_content == "not valid toml {{{{"
+        assert result.field_conflicts == ["_parse_error"]
+
+    # --- Error-signaling tests (TDD: written to fail before fix) ---
+
+    def test_malformed_server_signals_parse_error(self) -> None:
+        base = _make_labels_toml({"swe": {"names": ["a"]}})
+        client = _make_labels_toml({"swe": {"names": ["b"]}})
+        result = merge_labels_toml(base, "not valid toml {{{{", client)
+        assert result.field_conflicts == ["_parse_error"]
+
+    def test_malformed_base_signals_parse_error(self) -> None:
+        server = _make_labels_toml({"swe": {"names": ["a"]}})
+        client = _make_labels_toml({"swe": {"names": ["b"]}})
+        result = merge_labels_toml("not valid toml {{{{", server, client)
+        assert result.field_conflicts == ["_parse_error"]
+
+    def test_malformed_client_signals_parse_error(self) -> None:
+        base = _make_labels_toml({"swe": {"names": ["a"]}})
+        server = _make_labels_toml({"swe": {"names": ["a", "b"]}})
+        result = merge_labels_toml(base, server, "not valid toml {{{{")
+        assert result.field_conflicts == ["_parse_error"]
+
+    def test_no_base_signals_no_base(self) -> None:
+        server = _make_labels_toml({"swe": {"names": ["software engineering"]}})
+        client = _make_labels_toml({"swe": {"names": ["coding"]}})
+        result = merge_labels_toml(None, server, client)
+        assert result.field_conflicts == ["_no_base"]
+
+    # --- Behavior-pinning tests for concurrent add+remove of same item ---
+
+    def test_server_adds_client_removes_same_name_removal_wins(self) -> None:
+        """Server adds name X, client removes name X from base that has X → X NOT in result."""
+        base = _make_labels_toml({"swe": {"names": ["a", "X"]}})
+        server = _make_labels_toml({"swe": {"names": ["a", "X", "new"]}})
+        client = _make_labels_toml({"swe": {"names": ["a"]}})
+        result = merge_labels_toml(base, server, client)
+        merged = _parse_merged(result.merged_content)
+        assert "X" not in merged["swe"]["names"]
+
+    def test_server_removes_client_adds_back_same_name_removal_wins(self) -> None:
+        """Server removes name X, client adds name X back to base that has X → X NOT in result."""
+        base = _make_labels_toml({"swe": {"names": ["a", "X"]}})
+        server = _make_labels_toml({"swe": {"names": ["a"]}})
+        client = _make_labels_toml({"swe": {"names": ["a", "X", "new"]}})
+        result = merge_labels_toml(base, server, client)
+        merged = _parse_merged(result.merged_content)
+        assert "X" not in merged["swe"]["names"]
+
+    # --- Edge case behavior-pinning tests ---
+
+    def test_empty_labels_all_sides_produces_empty_result(self) -> None:
+        """Empty labels table on all sides → merged result has empty labels."""
+        base = _make_labels_toml({})
+        server = _make_labels_toml({})
+        client = _make_labels_toml({})
+        result = merge_labels_toml(base, server, client)
+        merged = _parse_merged(result.merged_content)
+        assert merged == {}
+
+    def test_both_sides_remove_same_label_simultaneously(self) -> None:
+        """Both sides remove the same label → label is removed from merged result."""
+        base = _make_labels_toml(
+            {
+                "swe": {"names": ["software engineering"]},
+                "old": {"names": ["old label"]},
+            }
+        )
+        server = _make_labels_toml({"swe": {"names": ["software engineering"]}})
+        client = _make_labels_toml({"swe": {"names": ["software engineering"]}})
+        result = merge_labels_toml(base, server, client)
+        merged = _parse_merged(result.merged_content)
+        assert "old" not in merged
+
+    def test_base_has_labels_server_and_client_empty_removes_all(self) -> None:
+        """Base has labels, server and client have empty [labels] tables → all labels removed."""
+        base = _make_labels_toml(
+            {
+                "swe": {"names": ["software engineering"]},
+                "cs": {"names": ["computer science"]},
+            }
+        )
+        server = _make_labels_toml({})
+        client = _make_labels_toml({})
+        result = merge_labels_toml(base, server, client)
+        merged = _parse_merged(result.merged_content)
+        assert merged == {}

@@ -6,10 +6,12 @@ import hashlib
 import io
 import json
 import subprocess
+import tomllib
 from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import pytest
+import tomli_w
 
 from backend.config import Settings
 from tests.conftest import create_test_client
@@ -332,6 +334,75 @@ class TestSyncCommit:
 
         dl_resp = await merge_client.get("/api/sync/download/index.toml", headers=headers)
         assert b"Client Title" in dl_resp.content
+
+    async def test_labels_toml_three_way_merge(
+        self, merge_client: AsyncClient, merge_settings: Settings
+    ) -> None:
+        token = await _login(merge_client)
+        headers = {"Authorization": f"Bearer {token}"}
+        content_dir = merge_settings.content_dir
+
+        # Step 1: Create an initial labels.toml on the server
+        initial_labels = tomli_w.dumps({"labels": {"swe": {"names": ["software engineering"]}}})
+        (content_dir / "labels.toml").write_text(initial_labels, encoding="utf-8")
+
+        # Step 2: Perform an initial sync commit so the client has a baseline
+        # (this causes the server to create a git commit containing labels.toml)
+        metadata = json.dumps({"deleted_files": []})
+        resp = await merge_client.post(
+            "/api/sync/commit",
+            data={"metadata": metadata},
+            files=[
+                (
+                    "files",
+                    ("labels.toml", io.BytesIO(initial_labels.encode()), "text/plain"),
+                ),
+            ],
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        last_sync_commit = resp.json()["commit_hash"]
+        assert last_sync_commit is not None
+
+        # Step 3: Modify labels.toml on the server (add "SWE" to the names)
+        server_labels = tomli_w.dumps(
+            {"labels": {"swe": {"names": ["software engineering", "SWE"]}}}
+        )
+        (content_dir / "labels.toml").write_text(server_labels, encoding="utf-8")
+
+        # Step 4: Upload a different client version (add "coding" instead)
+        client_labels = tomli_w.dumps(
+            {"labels": {"swe": {"names": ["software engineering", "coding"]}}}
+        )
+        metadata = json.dumps({"deleted_files": [], "last_sync_commit": last_sync_commit})
+        resp = await merge_client.post(
+            "/api/sync/commit",
+            data={"metadata": metadata},
+            files=[
+                (
+                    "files",
+                    ("labels.toml", io.BytesIO(client_labels.encode()), "text/plain"),
+                ),
+            ],
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+
+        # Step 5: Assert 0 conflicts — set merge auto-resolves
+        assert len(data["conflicts"]) == 0
+
+        # Step 6: Assert labels.toml appears in to_download (server wrote merged version)
+        assert "labels.toml" in data["to_download"]
+
+        # Step 7: Download and assert merged content contains names from BOTH sides
+        dl_resp = await merge_client.get("/api/sync/download/labels.toml", headers=headers)
+        assert dl_resp.status_code == 200
+        merged = tomllib.loads(dl_resp.content.decode())
+        merged_names = set(merged["labels"]["swe"]["names"])
+        assert "software engineering" in merged_names
+        assert "SWE" in merged_names
+        assert "coding" in merged_names
 
     async def test_files_synced_reflects_actual_changes(self, merge_client: AsyncClient) -> None:
         token = await _login(merge_client)

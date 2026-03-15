@@ -369,7 +369,7 @@ async def _sync_commit_inner(
 
             uploaded_paths.append(target_path)
         else:
-            # Non-conflict or non-post file: write client's version
+            # No conflict, or file type without semantic merge: write client's version
             try:
                 full_path.parent.mkdir(parents=True, exist_ok=True)
                 full_path.write_text(client_text, encoding="utf-8")
