@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.models.base import CacheBase
@@ -50,7 +50,10 @@ class LabelParentCache(CacheBase):
         foreign_keys=[parent_id], back_populates="child_edges"
     )
 
-    __table_args__ = (CheckConstraint("label_id != parent_id"),)
+    __table_args__ = (
+        CheckConstraint("label_id != parent_id"),
+        Index("ix_label_parents_cache_parent_id", "parent_id"),
+    )
 
 
 class PostLabelCache(CacheBase):
