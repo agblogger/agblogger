@@ -457,6 +457,7 @@ describe('LabelSettingsPage', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /save changes/i })).toBeDisabled()
     })
+    expect(mockMarkSaved).toHaveBeenCalled()
   })
 
   it('reverting changes back to original makes save button disabled', async () => {
