@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 
 _SYNC_ALLOWED_PREFIXES = ("posts/", "assets/")
 _SYNC_ALLOWED_TOP_LEVEL_FILES = frozenset({"index.toml", "labels.toml"})
+_TOML_PARSE_ERRORS = (tomllib.TOMLDecodeError, ValueError)
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -390,6 +391,51 @@ def _set_merge(base: list[str], server: list[str], client: list[str]) -> list[st
     return sorted(result)
 
 
+def _ordered_set_merge(base: list[str], server: list[str], client: list[str]) -> list[str]:
+    """Three-way merge that preserves meaningful list order while merging membership."""
+    merged_items = set(_set_merge(base, server, client))
+    if not merged_items:
+        return []
+
+    if server == base and client != base:
+        preferred_orders = (client, server, base)
+    elif client == base and server != base:
+        preferred_orders = (server, client, base)
+    elif client == server:
+        preferred_orders = (client, server, base)
+    else:
+        preferred_orders = (base, server, client)
+
+    merged: list[str] = []
+    seen: set[str] = set()
+    for values in preferred_orders:
+        for value in values:
+            if value in merged_items and value not in seen:
+                merged.append(value)
+                seen.add(value)
+    return merged
+
+
+def _get_label_list(label: object, key: str) -> list[str]:
+    """Extract a list field from a parsed label entry."""
+    if not isinstance(label, dict):
+        return []
+    raw = label.get(key, [])
+    return raw if isinstance(raw, list) else []
+
+
+def _get_label_parents(label: object) -> list[str]:
+    """Extract parent references from either singular or plural TOML fields."""
+    if not isinstance(label, dict):
+        return []
+
+    parents = _get_label_list(label, "parents")
+    raw_parent = label.get("parent")
+    if isinstance(raw_parent, str):
+        return [raw_parent, *parents]
+    return parents
+
+
 def merge_labels_toml(
     base: str | None,
     server: str,
@@ -399,28 +445,28 @@ def merge_labels_toml(
 
     Each label's names and parents are merged as sets (additions/removals from
     both sides are applied). The set of label IDs is also merged as a set.
-    Falls back to server content on parse errors or missing base.
+    Falls back to client content when semantic merge is not possible.
     """
     try:
         server_data = tomllib.loads(server).get("labels", {})
-    except (tomllib.TOMLDecodeError, ValueError):
+    except _TOML_PARSE_ERRORS:
         logger.warning("Failed to parse server labels.toml during merge")
-        return LabelsMergeResult(merged_content=server, field_conflicts=[])
+        return LabelsMergeResult(merged_content=client, field_conflicts=[])
 
     if base is None:
-        return LabelsMergeResult(merged_content=server, field_conflicts=[])
+        return LabelsMergeResult(merged_content=client, field_conflicts=[])
 
     try:
         base_data = tomllib.loads(base).get("labels", {})
-    except (tomllib.TOMLDecodeError, ValueError):
+    except _TOML_PARSE_ERRORS:
         logger.warning("Failed to parse base labels.toml during merge")
-        return LabelsMergeResult(merged_content=server, field_conflicts=[])
+        return LabelsMergeResult(merged_content=client, field_conflicts=[])
 
     try:
         client_data = tomllib.loads(client).get("labels", {})
-    except (tomllib.TOMLDecodeError, ValueError):
+    except _TOML_PARSE_ERRORS:
         logger.warning("Failed to parse client labels.toml during merge")
-        return LabelsMergeResult(merged_content=server, field_conflicts=[])
+        return LabelsMergeResult(merged_content=client, field_conflicts=[])
 
     # Three-way set merge for which label IDs exist
     base_ids = set(base_data)
@@ -433,9 +479,7 @@ def merge_labels_toml(
     client_removed_ids = base_ids - client_ids
 
     merged_ids = (
-        (base_ids | server_added_ids | client_added_ids)
-        - server_removed_ids
-        - client_removed_ids
+        (base_ids | server_added_ids | client_added_ids) - server_removed_ids - client_removed_ids
     )
 
     # Merge each label's fields
@@ -445,21 +489,22 @@ def merge_labels_toml(
         server_label = server_data.get(label_id, {})
         client_label = client_data.get(label_id, {})
 
-        def _get_list(label: object, key: str) -> list[str]:
-            return label.get(key, []) if isinstance(label, dict) else []
+        base_names = _get_label_list(base_label, "names")
+        server_names = _get_label_list(server_label, "names")
+        client_names = _get_label_list(client_label, "names")
 
-        base_names = _get_list(base_label, "names")
-        server_names = _get_list(server_label, "names")
-        client_names = _get_list(client_label, "names")
+        base_parents = _get_label_parents(base_label)
+        server_parents = _get_label_parents(server_label)
+        client_parents = _get_label_parents(client_label)
 
-        base_parents = _get_list(base_label, "parents")
-        server_parents = _get_list(server_label, "parents")
-        client_parents = _get_list(client_label, "parents")
+        merged_names = _ordered_set_merge(base_names, server_names, client_names)
+        merged_parents = _ordered_set_merge(base_parents, server_parents, client_parents)
 
-        entry: dict[str, list[str]] = {
-            "names": _set_merge(base_names, server_names, client_names),
-            "parents": _set_merge(base_parents, server_parents, client_parents),
-        }
+        entry: dict[str, Any] = {"names": merged_names}
+        if len(merged_parents) == 1:
+            entry["parent"] = merged_parents[0]
+        elif len(merged_parents) > 1:
+            entry["parents"] = merged_parents
         merged_labels[label_id] = entry
 
     merged_content = tomli_w.dumps({"labels": merged_labels})

@@ -19,6 +19,11 @@ function haveSameElements(left: readonly string[], right: readonly string[]): bo
   return left.every((item) => rightSet.has(item))
 }
 
+function haveSameOrder(left: readonly string[], right: readonly string[]): boolean {
+  if (left.length !== right.length) return false
+  return left.every((item, index) => item === right[index])
+}
+
 export default function LabelSettingsPage() {
   const { labelId } = useParams()
   const navigate = useNavigate()
@@ -85,7 +90,7 @@ export default function LabelSettingsPage() {
   }, [labelId, allLabels])
 
   const isDirty = useMemo(() => {
-    if (!haveSameElements(names, savedNames)) return true
+    if (!haveSameOrder(names, savedNames)) return true
     return !haveSameElements(parents, savedParents)
   }, [names, savedNames, parents, savedParents])
 

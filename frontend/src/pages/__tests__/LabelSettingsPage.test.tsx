@@ -481,7 +481,7 @@ describe('LabelSettingsPage', () => {
     expect(screen.getByRole('button', { name: /save changes/i })).toBeDisabled()
   })
 
-  it('removing and re-adding a name disables save even if order changes', async () => {
+  it('removing and re-adding a name keeps save enabled when alias order changes', async () => {
     mockFetchLabel.mockResolvedValue(testLabel)
     mockFetchLabels.mockResolvedValue(allLabels)
     const user = userEvent.setup()
@@ -499,8 +499,8 @@ describe('LabelSettingsPage', () => {
     await user.type(screen.getByPlaceholderText('Add a display name...'), 'software engineering')
     await user.click(screen.getByRole('button', { name: 'Add' }))
 
-    // Same set of names → not dirty
-    expect(screen.getByRole('button', { name: /save changes/i })).toBeDisabled()
+    // Same aliases but different order still changes the primary display name.
+    expect(screen.getByRole('button', { name: /save changes/i })).toBeEnabled()
   })
 
   it('reverting a multi-parent selection back to the original set disables save even if order changes', async () => {
