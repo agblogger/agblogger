@@ -116,6 +116,10 @@ html {
   font-style: italic;
 }
 
+.prose blockquote p:last-child {
+  margin-bottom: 0;
+}
+
 .prose dl {
   margin: 1.5rem 0;
 }
