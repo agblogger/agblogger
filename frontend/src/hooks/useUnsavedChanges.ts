@@ -5,10 +5,17 @@ export function useUnsavedChanges(isDirty: boolean): { markSaved: () => void } {
   const navigationAllowedRef = useRef(false)
 
   useEffect(() => {
+    if (isDirty) {
+      navigationAllowedRef.current = false
+    }
+  }, [isDirty])
+
+  useEffect(() => {
     if (!isDirty) return
 
     const handler = (e: BeforeUnloadEvent) => {
       e.preventDefault()
+      e.returnValue = ''
     }
     window.addEventListener('beforeunload', handler)
     return () => window.removeEventListener('beforeunload', handler)

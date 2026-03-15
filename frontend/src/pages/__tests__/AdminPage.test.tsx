@@ -1437,5 +1437,34 @@ describe('AdminPage', () => {
       expect(confirmSpy).not.toHaveBeenCalled()
       confirmSpy.mockRestore()
     })
+
+    it('add page draft fields trigger dirty state', async () => {
+      setupLoadSuccess()
+      const user = userEvent.setup()
+      renderAdmin()
+
+      await waitFor(() => {
+        expect(screen.getByLabelText('Title *')).toHaveValue('My Blog')
+      })
+
+      await user.click(screen.getByRole('button', { name: 'Pages' }))
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /add page/i })).toBeInTheDocument()
+      })
+
+      await user.click(screen.getByRole('button', { name: /add page/i }))
+      await user.type(screen.getByLabelText(/Page ID/), 'contact')
+      await user.type(screen.getByPlaceholderText('e.g. About'), 'Contact')
+
+      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+      await user.click(screen.getByRole('button', { name: 'Settings' }))
+
+      expect(confirmSpy).toHaveBeenCalledWith(
+        'You have unsaved changes. Are you sure you want to leave?',
+      )
+      expect(screen.getByLabelText(/Page ID/)).toBeInTheDocument()
+      confirmSpy.mockRestore()
+    })
   })
 })

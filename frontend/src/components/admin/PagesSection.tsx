@@ -123,7 +123,9 @@ export default function PagesSection({
     return false
   })()
 
-  const isDirty = orderDirty || pageEditDirty
+  const addPageDirty = showAddForm && (newPageId !== '' || newPageTitle !== '')
+
+  const isDirty = orderDirty || pageEditDirty || addPageDirty
 
   useEffect(() => { onDirtyChange(isDirty) }, [isDirty, onDirtyChange])
   useEffect(() => { return () => { onDirtyChange(false) } }, [onDirtyChange])

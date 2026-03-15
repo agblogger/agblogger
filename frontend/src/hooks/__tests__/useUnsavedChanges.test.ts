@@ -2,7 +2,7 @@ import { renderHook, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { ReactNode } from 'react'
-import { createElement } from 'react'
+import { createElement, useState } from 'react'
 import { createMemoryRouter, RouterProvider, Link, useLocation } from 'react-router-dom'
 
 import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
@@ -34,6 +34,44 @@ function renderWithHost(isDirty: boolean) {
   const router = createMemoryRouter(
     [
       { path: '/', element: createElement(TestHost, { isDirty }) },
+      { path: '/other', element: createElement('div', null, 'Other page') },
+    ],
+    { initialEntries: ['/'] },
+  )
+  return render(createElement(RouterProvider, { router }))
+}
+
+function TestHostWithDirtyControls() {
+  const [isDirty, setIsDirty] = useState(true)
+  const { markSaved } = useUnsavedChanges(isDirty)
+  const location = useLocation()
+  return createElement(
+    'div',
+    null,
+    createElement('span', { 'data-testid': 'location' }, location.pathname),
+    createElement(
+      'button',
+      { type: 'button', onClick: () => markSaved() },
+      'Mark Saved',
+    ),
+    createElement(
+      'button',
+      { type: 'button', onClick: () => setIsDirty(false) },
+      'Clean',
+    ),
+    createElement(
+      'button',
+      { type: 'button', onClick: () => setIsDirty(true) },
+      'Dirty Again',
+    ),
+    createElement(Link, { to: '/other' }, 'Leave'),
+  )
+}
+
+function renderWithDirtyControls() {
+  const router = createMemoryRouter(
+    [
+      { path: '/', element: createElement(TestHostWithDirtyControls) },
       { path: '/other', element: createElement('div', null, 'Other page') },
     ],
     { initialEntries: ['/'] },
@@ -75,6 +113,28 @@ describe('useUnsavedChanges', () => {
       rerender({ dirty: false })
 
       expect(removeSpy).toHaveBeenCalledWith('beforeunload', expect.any(Function))
+    })
+
+    it('sets returnValue when beforeunload fires', () => {
+      const addSpy = vi.spyOn(window, 'addEventListener')
+
+      renderHook(() => useUnsavedChanges(true), { wrapper: createWrapper() })
+
+      const handler = addSpy.mock.calls.find(([event]) => event === 'beforeunload')?.[1]
+      expect(handler).toBeTypeOf('function')
+      if (typeof handler !== 'function') {
+        throw new Error('beforeunload handler missing')
+      }
+
+      const beforeUnloadEvent = {
+        preventDefault: vi.fn(),
+        returnValue: undefined as string | undefined,
+      }
+
+      handler(beforeUnloadEvent as unknown as BeforeUnloadEvent)
+
+      expect(beforeUnloadEvent.preventDefault).toHaveBeenCalledOnce()
+      expect(beforeUnloadEvent.returnValue).toBe('')
     })
   })
 
@@ -138,6 +198,23 @@ describe('useUnsavedChanges', () => {
       })
 
       expect(result.current.markSaved).toBeInstanceOf(Function)
+    })
+
+    it('does not bypass prompts after the form becomes dirty again', async () => {
+      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+      const user = userEvent.setup()
+
+      renderWithDirtyControls()
+
+      await user.click(screen.getByRole('button', { name: 'Mark Saved' }))
+      await user.click(screen.getByRole('button', { name: 'Clean' }))
+      await user.click(screen.getByRole('button', { name: 'Dirty Again' }))
+      await user.click(screen.getByText('Leave'))
+
+      expect(confirmSpy).toHaveBeenCalledWith(
+        'You have unsaved changes. Are you sure you want to leave?',
+      )
+      expect(screen.getByTestId('location')).toHaveTextContent('/')
     })
   })
 })
