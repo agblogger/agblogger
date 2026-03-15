@@ -16,8 +16,8 @@ export function useActiveHeading(contentRef: RefObject<HTMLElement | null>): str
           }
         }
       },
-      // 112px = 7rem at 16px base; matches header height in scroll-margin-top and ToC sticky offset
-      { rootMargin: '-112px 0px -60% 0px', threshold: 0 },
+      // 128px = 8rem at 16px base; matches header height in scroll-margin-top and ToC sticky offset
+      { rootMargin: '-128px 0px -60% 0px', threshold: 0 },
     )
 
     const observeHeadings = () => {
