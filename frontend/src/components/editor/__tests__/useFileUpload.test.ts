@@ -1,4 +1,4 @@
-import { renderHook, act } from '@testing-library/react'
+import { renderHook, act, waitFor } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import { HTTPError } from '@/api/client'
@@ -68,13 +68,15 @@ describe('useFileUpload', () => {
     )
 
     const file = new File(['content'], 'photo.png', { type: 'image/png' })
-    await act(async () => {
+    act(() => {
       result.current.inputProps.onChange({
         target: { files: [file], value: '' },
       } as unknown as React.ChangeEvent<HTMLInputElement>)
     })
 
-    expect(mockUploadAssets).toHaveBeenCalledWith('posts/test/index.md', [file])
+    await waitFor(() => {
+      expect(mockUploadAssets).toHaveBeenCalledWith('posts/test/index.md', [file])
+    })
     expect(onSuccess).toHaveBeenCalledWith(['photo.png'])
     expect(result.current.uploading).toBe(false)
   })
@@ -97,13 +99,15 @@ describe('useFileUpload', () => {
     )
 
     const file = new File(['content'], 'big.png', { type: 'image/png' })
-    await act(async () => {
+    act(() => {
       result.current.inputProps.onChange({
         target: { files: [file], value: '' },
       } as unknown as React.ChangeEvent<HTMLInputElement>)
     })
 
-    expect(onError).toHaveBeenCalledWith('File too large')
+    await waitFor(() => {
+      expect(onError).toHaveBeenCalledWith('File too large')
+    })
     expect(result.current.uploading).toBe(false)
   })
 
@@ -119,17 +123,19 @@ describe('useFileUpload', () => {
     )
 
     const file = new File(['content'], 'photo.png', { type: 'image/png' })
-    await act(async () => {
+    act(() => {
       result.current.inputProps.onChange({
         target: { files: [file], value: '' },
       } as unknown as React.ChangeEvent<HTMLInputElement>)
     })
 
-    expect(onError).toHaveBeenCalledWith('Failed to upload files')
+    await waitFor(() => {
+      expect(onError).toHaveBeenCalledWith('Failed to upload files')
+    })
     expect(result.current.uploading).toBe(false)
   })
 
-  it('does nothing when no files are selected', async () => {
+  it('does nothing when no files are selected', () => {
     const onSuccess = vi.fn()
     const { result } = renderHook(() =>
       useFileUpload({
@@ -138,7 +144,7 @@ describe('useFileUpload', () => {
       }),
     )
 
-    await act(async () => {
+    act(() => {
       result.current.inputProps.onChange({
         target: { files: [], value: '' },
       } as unknown as React.ChangeEvent<HTMLInputElement>)

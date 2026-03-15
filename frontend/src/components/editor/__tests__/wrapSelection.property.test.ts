@@ -46,9 +46,10 @@ describe('wrapSelection property tests', () => {
           let expectedCursorEnd: number
 
           if (action.linePrefix !== undefined) {
+            const lp = action.linePrefix
             const prefixed = insertedText
               .split('\n')
-              .map((line) => action.linePrefix + line)
+              .map((line) => lp + line)
               .join('\n')
             expectedNewValue =
               value.slice(0, selectionStart) + blockPrefix + prefixed + value.slice(selectionEnd)
@@ -71,11 +72,12 @@ describe('wrapSelection property tests', () => {
           expect(result.newValue).toBe(expectedNewValue)
           expect(result.cursorStart).toBe(expectedCursorStart)
           expect(result.cursorEnd).toBe(expectedCursorEnd)
+          const lp2 = action.linePrefix
           const expectedSelectedText =
-            action.linePrefix !== undefined
+            lp2 !== undefined
               ? insertedText
                   .split('\n')
-                  .map((line) => action.linePrefix + line)
+                  .map((line) => lp2 + line)
                   .join('\n')
               : insertedText
 

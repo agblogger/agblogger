@@ -33,7 +33,7 @@ export function wrapSelection(
     return { newValue, cursorStart, cursorEnd }
   }
 
-  let before = blockPrefix + action.before
+  const before = blockPrefix + action.before
   const inserted = before + text + action.after
   const newValue = value.slice(0, selectionStart) + inserted + value.slice(selectionEnd)
   const cursorStart = selectionStart + before.length

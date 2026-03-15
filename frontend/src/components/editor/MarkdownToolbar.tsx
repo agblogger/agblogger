@@ -8,7 +8,7 @@ interface MarkdownToolbarProps {
   value: string
   onChange: (value: string) => void
   disabled?: boolean
-  onImageClick?: () => void
+  onImageClick?: (() => void) | undefined
   imageUploading?: boolean
 }
 
@@ -57,8 +57,8 @@ export default function MarkdownToolbar({
   }
 
   function imageTitle(shortcut: string): string {
-    if (!onImageClick) return 'Save post first to add images'
-    if (imageUploading) return 'Uploading...'
+    if (onImageClick === undefined) return 'Save post first to add images'
+    if (imageUploading === true) return 'Uploading...'
     return `Image (${shortcut})`
   }
 
@@ -67,7 +67,7 @@ export default function MarkdownToolbar({
       {buttons.map(({ key, label, Icon, shortcut }) => {
         const isImage = key === 'image'
         const isDisabled = isImage
-          ? disabled || !onImageClick || imageUploading
+          ? (disabled ?? false) || onImageClick === undefined || imageUploading === true
           : disabled
         const title = isImage ? imageTitle(shortcut) : `${label} (${shortcut})`
 
@@ -79,7 +79,7 @@ export default function MarkdownToolbar({
             disabled={isDisabled}
             className={`p-1.5 text-muted hover:text-ink hover:bg-paper-warm rounded transition-colors
                      disabled:opacity-50 disabled:cursor-not-allowed${
-                       isImage && imageUploading ? ' animate-pulse' : ''
+                       isImage && imageUploading === true ? ' animate-pulse' : ''
                      }`}
             title={title}
             aria-label={`${label} (${shortcut})`}
