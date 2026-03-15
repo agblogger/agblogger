@@ -52,6 +52,7 @@ export default function EditorPage() {
   const [showCrossPostDialog, setShowCrossPostDialog] = useState(false)
   const [mobileTab, setMobileTab] = useState<'edit' | 'preview'>('edit')
   const [savedFilePath, setSavedFilePath] = useState<string | null>(null)
+  const [fileStripRefreshToken, setFileStripRefreshToken] = useState(0)
   const [effectiveFilePath, setEffectiveFilePath] = useState<string | null>(
     isNew ? null : filePath,
   )
@@ -230,6 +231,7 @@ export default function EditorPage() {
       for (const name of filenames) {
         handleInsertAtCursor(`![${name}](${name})`)
       }
+      setFileStripRefreshToken((prev) => prev + 1)
     },
     onError: setError,
   })
@@ -494,6 +496,7 @@ export default function EditorPage() {
             onBodyChange={setBody}
             onInsertAtCursor={handleInsertAtCursor}
             disabled={saving}
+            refreshToken={fileStripRefreshToken}
           />
         </div>
       )}

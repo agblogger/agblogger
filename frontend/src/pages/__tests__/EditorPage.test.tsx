@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-import { fetchPostForEdit, createPost, updatePost } from '@/api/posts'
+import { fetchPostForEdit, createPost, updatePost, uploadAssets, fetchPostAssets } from '@/api/posts'
 import { fetchSocialAccounts } from '@/api/crosspost'
 import type { UserResponse, PostEditResponse, PostDetail } from '@/api/client'
 import { DRAFT_SCHEMA_VERSION } from '@/hooks/useEditorAutoSave'
@@ -1088,5 +1088,32 @@ describe('EditorPage', () => {
     expect(warnSpy).not.toHaveBeenCalled()
 
     warnSpy.mockRestore()
+  })
+
+  it('refreshes FileStrip assets after toolbar image upload', async () => {
+    const user = userEvent.setup()
+    vi.mocked(uploadAssets).mockResolvedValue({ uploaded: ['hero.jpg'] })
+    const mockFetchPostAssets = vi.mocked(fetchPostAssets)
+    mockFetchPostAssets.mockResolvedValue({ assets: [] })
+
+    mockFetchPostForEdit.mockResolvedValue(directoryEditResponse)
+    renderEditor('/editor/posts/2026-03-08-existing-post/index.md')
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Title/)).toHaveValue('Existing Post')
+    })
+
+    const initialCount = mockFetchPostAssets.mock.calls.length
+
+    // The toolbar image input has accept="image/*"
+    const imageInput = document.querySelector('input[accept="image/*"]') as HTMLInputElement
+    expect(imageInput).not.toBeNull()
+
+    const file = new File(['img data'], 'hero.jpg', { type: 'image/jpeg' })
+    await user.upload(imageInput, file)
+
+    await waitFor(() => {
+      expect(mockFetchPostAssets.mock.calls.length).toBeGreaterThan(initialCount)
+    })
   })
 })

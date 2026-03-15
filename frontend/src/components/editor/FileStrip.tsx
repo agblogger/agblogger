@@ -14,6 +14,7 @@ interface FileStripProps {
   onBodyChange: (body: string) => void
   onInsertAtCursor: (text: string) => void
   disabled: boolean
+  refreshToken?: number
 }
 
 export default function FileStrip({
@@ -22,6 +23,7 @@ export default function FileStrip({
   onBodyChange,
   onInsertAtCursor,
   disabled,
+  refreshToken,
 }: FileStripProps) {
   const [expanded, setExpanded] = useState(false)
   const [assets, setAssets] = useState<AssetInfo[]>([])
@@ -47,7 +49,7 @@ export default function FileStrip({
 
   useEffect(() => {
     void loadAssets()
-  }, [loadAssets])
+  }, [loadAssets, refreshToken])
 
   const { triggerUpload, uploading: uploadOperating, inputProps: uploadInputProps } = useFileUpload({
     filePath,

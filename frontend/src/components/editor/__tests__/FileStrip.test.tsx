@@ -36,6 +36,7 @@ interface StripProps {
   onBodyChange: (body: string) => void
   onInsertAtCursor: (text: string) => void
   disabled: boolean
+  refreshToken?: number
 }
 
 function renderStrip(overrides: Partial<StripProps> = {}) {
@@ -338,6 +339,28 @@ describe('FileStrip', () => {
       expect(screen.getByText('Post not found')).toBeInTheDocument()
     })
     expect(screen.queryByText(/404/)).not.toBeInTheDocument()
+  })
+
+  it('reloads assets when refreshToken changes', async () => {
+    mockFetchPostAssets.mockResolvedValue({ assets: [] })
+
+    const { rerender } = renderStrip({ refreshToken: 0 })
+    const initialCount = mockFetchPostAssets.mock.calls.length
+
+    rerender(
+      createElement(FileStrip, {
+        filePath: 'posts/2026-03-08-test/index.md',
+        body: 'Some markdown content',
+        onBodyChange: vi.fn(),
+        onInsertAtCursor: vi.fn(),
+        disabled: false,
+        refreshToken: 1,
+      }),
+    )
+
+    await waitFor(() => {
+      expect(mockFetchPostAssets.mock.calls.length).toBeGreaterThan(initialCount)
+    })
   })
 
   it('shows backend error detail instead of raw status code on upload failure', async () => {
