@@ -16,7 +16,7 @@ import time
 from contextlib import suppress
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Final, Literal
+from typing import Final, Literal, get_args
 
 from backend.validation import is_valid_trusted_host
 
@@ -51,11 +51,11 @@ LOCALHOST_BIND_IP = "127.0.0.1"
 HEALTH_POLL_INTERVAL_SECONDS = 5
 HEALTH_POLL_TIMEOUT_SECONDS = 60
 
-CADDY_MODE_BUNDLED: Final = "bundled"
-CADDY_MODE_EXTERNAL: Final = "external"
-CADDY_MODE_NONE: Final = "none"
-CADDY_MODES = {CADDY_MODE_BUNDLED, CADDY_MODE_EXTERNAL, CADDY_MODE_NONE}
 CaddyMode = Literal["bundled", "external", "none"]
+CADDY_MODE_BUNDLED: Final[CaddyMode] = "bundled"
+CADDY_MODE_EXTERNAL: Final[CaddyMode] = "external"
+CADDY_MODE_NONE: Final[CaddyMode] = "none"
+CADDY_MODES: Final[set[CaddyMode]] = set(get_args(CaddyMode))
 DEFAULT_SHARED_CADDY_DIR = "/opt/caddy"
 EXTERNAL_CADDY_NETWORK_NAME = "caddy"
 SHARED_CADDY_CONTAINER_NAME = "caddy"
@@ -423,10 +423,8 @@ def build_setup_script_content(config: DeployConfig) -> str:
     lines.extend(
         [
             "# ── Backup and version info ──────────────────────────────────────────",
-            "if [ -f .env.production ]; then",
-            "    cp .env.production .env.production.bak",
-            '    echo "Backed up .env.production to .env.production.bak"',
-            "fi",
+            "cp .env.production .env.production.bak",
+            'echo "Backed up .env.production to .env.production.bak"',
             'NEW_VERSION=$(cat VERSION 2>/dev/null || echo "unknown")',
             f"if {compose_cmd} ps -q agblogger 2>/dev/null | grep -q .; then",
             '    echo "Upgrading AgBlogger to v${NEW_VERSION}..."',
@@ -475,7 +473,7 @@ def build_setup_script_content(config: DeployConfig) -> str:
             [
                 "# ── Bootstrap shared Caddy ───────────────────────────────────────────",
                 'echo "Setting up shared Caddy reverse proxy..."',
-                f"mkdir -p {caddy_dir}/sites",
+                f'mkdir -p "{caddy_dir}/sites"',
                 "",
             ]
         )
@@ -483,8 +481,8 @@ def build_setup_script_content(config: DeployConfig) -> str:
         # Write shared Caddyfile if not exists
         lines.extend(
             [
-                f"if [ ! -f {caddy_dir}/{DEFAULT_SHARED_CADDYFILE} ]; then",
-                f"    cat > {caddy_dir}/{DEFAULT_SHARED_CADDYFILE} <<'CADDYFILE_EOF'",
+                f'if [ ! -f "{caddy_dir}/{DEFAULT_SHARED_CADDYFILE}" ]; then',
+                f"    cat > \"{caddy_dir}/{DEFAULT_SHARED_CADDYFILE}\" <<'CADDYFILE_EOF'",
                 caddyfile_content.rstrip("\n"),
                 "CADDYFILE_EOF",
                 "fi",
@@ -495,8 +493,8 @@ def build_setup_script_content(config: DeployConfig) -> str:
         # Write shared docker-compose.yml if not exists
         lines.extend(
             [
-                f"if [ ! -f {caddy_dir}/{DEFAULT_SHARED_CADDY_COMPOSE_FILE} ]; then",
-                f"    cat > {caddy_dir}/{DEFAULT_SHARED_CADDY_COMPOSE_FILE} <<'COMPOSE_EOF'",
+                f'if [ ! -f "{caddy_dir}/{DEFAULT_SHARED_CADDY_COMPOSE_FILE}" ]; then',
+                f"    cat > \"{caddy_dir}/{DEFAULT_SHARED_CADDY_COMPOSE_FILE}\" <<'COMPOSE_EOF'",
                 caddy_compose_content.rstrip("\n"),
                 "COMPOSE_EOF",
                 "fi",
@@ -522,7 +520,7 @@ def build_setup_script_content(config: DeployConfig) -> str:
             [
                 ps_check,
                 '    echo "Starting shared Caddy..."',
-                f"    (cd {caddy_dir} && docker compose up -d)",
+                f'    (cd "{caddy_dir}" && docker compose up -d)',
                 "fi",
                 "",
             ]
@@ -556,7 +554,7 @@ def build_setup_script_content(config: DeployConfig) -> str:
         lines.extend(
             [
                 f"# Write site snippet for {domain}",
-                f"cat > {caddy_dir}/sites/{domain}.caddy <<'SITE_EOF'",
+                f"cat > \"{caddy_dir}/sites/{domain}.caddy\" <<'SITE_EOF'",
                 site_snippet.rstrip("\n"),
                 "SITE_EOF",
                 "",
@@ -857,12 +855,15 @@ def build_image_external_caddy_compose_content() -> str:
 
 def _is_container_running(container_name: str) -> bool:
     """Check if a Docker container exists and is running."""
-    result = subprocess.run(
-        ["docker", "inspect", "--format", "{{.State.Running}}", container_name],
-        capture_output=True,
-        text=True,
-        timeout=10,
-    )
+    try:
+        result = subprocess.run(
+            ["docker", "inspect", "--format", "{{.State.Running}}", container_name],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except subprocess.TimeoutExpired:
+        return False
     return result.returncode == 0 and "true" in result.stdout.strip().lower()
 
 
@@ -993,7 +994,12 @@ def _compose_filenames(
     caddy_public: bool,
     caddy_mode: CaddyMode = CADDY_MODE_NONE,
 ) -> list[str]:
-    """Return compose filenames for the requested deployment mode."""
+    """Return compose filenames for the requested deployment mode.
+
+    When ``caddy_mode`` is ``external``, the function short-circuits and
+    ``use_caddy`` / ``caddy_public`` are ignored because external mode has
+    its own dedicated compose files.
+    """
     if caddy_mode == CADDY_MODE_EXTERNAL:
         if deployment_mode == DEPLOY_MODE_LOCAL:
             return [DEFAULT_EXTERNAL_CADDY_COMPOSE_FILE]
@@ -1592,7 +1598,7 @@ def deploy(config: DeployConfig, project_dir: Path) -> DeployResult:
             env_path=project_dir / DEFAULT_ENV_FILE,
             commands=build_lifecycle_commands(
                 deployment_mode=config.deployment_mode,
-                use_caddy=config.caddy_config is not None,
+                use_caddy=config.use_bundled_caddy,
                 caddy_public=config.caddy_public,
                 caddy_mode=config.caddy_mode,
             ),

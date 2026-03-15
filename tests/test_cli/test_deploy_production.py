@@ -16,6 +16,7 @@ from cli.deploy_production import (
     CADDY_MODE_BUNDLED,
     CADDY_MODE_EXTERNAL,
     CADDY_MODE_NONE,
+    CADDY_MODES,
     CADDY_NETWORK_SUBNET_PLACEHOLDER,
     CADDY_STATIC_IP,
     COMPOSE_SUBNET,
@@ -3498,6 +3499,16 @@ def test_caddy_mode_constants_are_strings() -> None:
     assert CADDY_MODE_BUNDLED == "bundled"
     assert CADDY_MODE_EXTERNAL == "external"
     assert CADDY_MODE_NONE == "none"
+
+
+def test_caddy_modes_set_matches_literal() -> None:
+    """CADDY_MODES set is derived from CaddyMode Literal and stays in sync."""
+    from typing import get_args
+
+    assert set(get_args(CaddyMode)) == CADDY_MODES
+    assert CADDY_MODE_BUNDLED in CADDY_MODES
+    assert CADDY_MODE_EXTERNAL in CADDY_MODES
+    assert CADDY_MODE_NONE in CADDY_MODES
 
 
 def test_default_shared_caddy_dir_constant() -> None:
