@@ -19,7 +19,7 @@ function PostCardInner({ post, index = 0 }: PostCardProps) {
 
   return (
     <article
-      className={`group relative opacity-0 animate-slide-up ${staggerClass} py-6 -mx-4 px-4 rounded-xl border-l-2 border-l-transparent transition-all duration-200 hover:bg-paper-warm/60 hover:-translate-y-1 hover:shadow-lg hover:scale-[1.005] hover:border-l-accent`}
+      className={`group relative opacity-0 animate-slide-up ${staggerClass} py-6 -mx-4 px-4 rounded-xl border-l-2 border-l-transparent transition-all duration-200 hover:bg-paper-warm/60 hover:shadow-lg hover:border-l-accent hover:z-10`}
     >
       <Link to={postUrl} className="absolute inset-0" aria-label={post.title} />
       <div className="flex items-start justify-between gap-4">
