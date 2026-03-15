@@ -3,6 +3,7 @@ import LoadingSpinner from '@/components/LoadingSpinner'
 import { useParams, Link } from 'react-router-dom'
 import { ArrowLeft, Tag, Settings } from 'lucide-react'
 
+import LabelChip from '@/components/labels/LabelChip'
 import PostCard from '@/components/posts/PostCard'
 import { useAuthStore } from '@/stores/authStore'
 import { fetchLabelPosts, fetchLabel } from '@/api/labels'
@@ -55,6 +56,9 @@ export default function LabelPostsPage() {
     )
   }
 
+  const hasHierarchy =
+    label !== null && (label.children.length > 0 || label.parents.length > 0)
+
   return (
     <div className="animate-fade-in">
       <Link
@@ -81,7 +85,37 @@ export default function LabelPostsPage() {
       </div>
 
       {label !== null && label.names.length > 0 && (
-        <p className="text-muted mb-8">{label.names.join(', ')}</p>
+        <p className={`text-muted${hasHierarchy ? '' : ' mb-8'}`}>{label.names.join(', ')}</p>
+      )}
+
+      {label !== null && label.children.length > 0 && (
+        <div className={`mt-4${label.parents.length > 0 ? '' : ' mb-8'}`}>
+          <h2 className="text-sm font-medium text-muted mb-2">Children</h2>
+          <div className="flex flex-wrap gap-2">
+            {label.children.map((c) => (
+              <LabelChip key={c} labelId={c} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {label !== null && label.parents.length > 0 && (
+        <div className={`${label.children.length > 0 ? 'mt-3' : 'mt-4'} mb-8`}>
+          <h2 className="text-sm font-medium text-muted mb-2">Parents</h2>
+          <div className="text-sm">
+            {label.parents.map((p, idx) => (
+              <span key={p}>
+                {idx > 0 && ', '}
+                <Link
+                  to={`/labels/${p}`}
+                  className="text-muted hover:text-ink underline decoration-border hover:decoration-ink transition-colors"
+                >
+                  #{p}
+                </Link>
+              </span>
+            ))}
+          </div>
+        </div>
       )}
 
       {!data || data.posts.length === 0 ? (
