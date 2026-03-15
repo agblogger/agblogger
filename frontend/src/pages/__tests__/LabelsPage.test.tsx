@@ -230,7 +230,8 @@ describe('LabelsPage', () => {
     const nonCardLinks = allLinks.filter(
       (a) => a.getAttribute('href') !== '/labels/math' && !a.getAttribute('href')?.includes('/settings'),
     )
-    // Only parent link (/labels/cs) expected, no child chip links
-    expect(nonCardLinks.every((a) => a.getAttribute('href') === '/labels/cs')).toBe(true)
+    // Only the parent link (/labels/cs) expected, no child chip links
+    expect(nonCardLinks).toHaveLength(1)
+    expect(nonCardLinks[0].getAttribute('href')).toBe('/labels/cs')
   })
 })
