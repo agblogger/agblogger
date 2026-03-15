@@ -512,7 +512,7 @@ For each file path across `(client_files UNION server_files UNION manifest_files
    - Timestamps: take the latest `modified_at`; keep earliest `created_at`
 3. **Body**: three-way line-based merge using `merge3` library (ancestor, local, remote)
    - If clean merge: accept automatically
-   - If overlapping edits: keep server version as primary, save local version as `.conflict-backup`, log for user review
+   - If overlapping edits: keep server version as primary, report conflict to the client for user review
 4. Reassemble merged front matter + merged body
 
 **For TOML config files:**
@@ -522,7 +522,7 @@ For each file path across `(client_files UNION server_files UNION manifest_files
 
 **For binary files (images, PDFs, etc.):**
 - Last-writer-wins by `mtime`
-- Loser saved as `filename.conflict-backup.ext`, auto-cleaned after 30 days or user acknowledgment
+- Loser reported as a conflict to the client for user review
 
 ### 6.5 Performance Optimizations
 
@@ -975,7 +975,7 @@ agblogger/
     main.py                         # CLI entry point (click or typer)
     sync_client.py                  # HTTP client for sync API
     manifest.py                     # Local manifest management
-    config.py                       # CLI config (.agblogger.toml)
+    config.py                       # CLI config (.agblogger.json)
 
   tests/
     conftest.py

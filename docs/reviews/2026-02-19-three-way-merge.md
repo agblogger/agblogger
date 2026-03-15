@@ -120,7 +120,7 @@ if mr["status"] == "merged":
 
 ### 4. Server `scan_content_files` doesn't filter dot-files
 
-The function correctly filters out directories starting with `.` but does **not** filter out dot-files. Files like `.env`, `.agblogger-sync.json`, or other hidden files in the content directory will be included in the server manifest and exposed via `sync_download`. The CLI client already filters hidden files.
+The function correctly filters out directories starting with `.` but does **not** filter out dot-files. Files like `.env`, `.agblogger.json`, or other hidden files in the content directory will be included in the server manifest and exposed via `sync_download`. The CLI client already filters hidden files.
 
 **Recommendation:** Add to `scan_content_files`:
 

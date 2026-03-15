@@ -86,7 +86,7 @@ The server version wins on all conflicts. The client is informed so the user kno
 **After:** `init`, `status`, `sync`
 
 - `push` and `pull` removed. `sync` is always bidirectional.
-- Authentication: PAT via `--pat` or interactive username/password prompt (no `--password` argument).
+- Authentication: PAT via `--pat` or `AGBLOGGER_PAT` env var, or interactive username/password prompt (no `--password` argument). No credentials are stored locally.
 - `sync` flow: call `status` to get the plan, send all uploads + deletions in a single `commit` request, download server-changed files, update local manifest.
 
 ### What Gets Removed
