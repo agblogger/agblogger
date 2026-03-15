@@ -75,6 +75,68 @@ describe('wrapSelection', () => {
     expect(result.cursorStart).toBe(7)
     expect(result.cursorEnd).toBe(11)
   })
+
+  it('linePrefix mode prefixes a single line with the given string', () => {
+    const result = wrapSelection('hello world', 6, 11, {
+      before: '',
+      after: '',
+      placeholder: 'quote text',
+      linePrefix: '> ',
+    })
+    expect(result.newValue).toBe('hello > world')
+    expect(result.cursorStart).toBe(6)
+    expect(result.cursorEnd).toBe(13)
+  })
+
+  it('linePrefix mode prefixes each line of a multi-line selection', () => {
+    const result = wrapSelection('line one\nline two\nline three', 0, 28, {
+      before: '',
+      after: '',
+      placeholder: 'quote text',
+      linePrefix: '> ',
+    })
+    expect(result.newValue).toBe('> line one\n> line two\n> line three')
+    expect(result.cursorStart).toBe(0)
+    expect(result.cursorEnd).toBe(34)
+  })
+
+  it('linePrefix mode uses placeholder when nothing is selected', () => {
+    const result = wrapSelection('hello ', 6, 6, {
+      before: '',
+      after: '',
+      placeholder: 'quote text',
+      linePrefix: '> ',
+    })
+    expect(result.newValue).toBe('hello > quote text')
+    expect(result.cursorStart).toBe(6)
+    expect(result.cursorEnd).toBe(18)
+  })
+
+  it('linePrefix mode with block adds leading newline when not at line start', () => {
+    const result = wrapSelection('some text', 9, 9, {
+      before: '',
+      after: '',
+      placeholder: 'quote text',
+      linePrefix: '> ',
+      block: true,
+    })
+    expect(result.newValue).toBe('some text\n> quote text')
+    expect(result.cursorStart).toBe(10)
+    expect(result.cursorEnd).toBe(22)
+  })
+
+  it('linePrefix mode with block does not add newline at line start', () => {
+    const result = wrapSelection('', 0, 0, {
+      before: '',
+      after: '',
+      placeholder: 'quote text',
+      linePrefix: '> ',
+      block: true,
+    })
+    expect(result.newValue).toBe('> quote text')
+    expect(result.cursorStart).toBe(0)
+    expect(result.cursorEnd).toBe(12)
+  })
 })
 
 describe('MarkdownToolbar', () => {

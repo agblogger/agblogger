@@ -10,6 +10,7 @@ const actionArb: fc.Arbitrary<WrapAction> = fc.record({
   after: fc.string({ maxLength: 8 }),
   placeholder: fc.string({ minLength: 1, maxLength: 32 }),
   block: fc.boolean(),
+  linePrefix: fc.option(fc.string({ minLength: 1, maxLength: 4 }), { nil: undefined }),
 })
 
 function normalizedSelection(len: number, startRaw: number, endRaw: number): [number, number] {
@@ -32,26 +33,47 @@ describe('wrapSelection property tests', () => {
 
           const selected = value.slice(selectionStart, selectionEnd)
           const insertedText = selected.length > 0 ? selected : action.placeholder
-          const expectedBefore =
+
+          const blockPrefix =
             action.block === true &&
             selectionStart > 0 &&
             value[selectionStart - 1] !== '\n'
-              ? `\n${action.before}`
-              : action.before
+              ? '\n'
+              : ''
 
-          const expectedNewValue =
-            value.slice(0, selectionStart) +
-            expectedBefore +
-            insertedText +
-            action.after +
-            value.slice(selectionEnd)
+          let expectedNewValue: string
+          let expectedCursorStart: number
+          let expectedCursorEnd: number
+
+          if (action.linePrefix !== undefined) {
+            const prefixed = insertedText
+              .split('\n')
+              .map((line) => action.linePrefix + line)
+              .join('\n')
+            expectedNewValue =
+              value.slice(0, selectionStart) + blockPrefix + prefixed + value.slice(selectionEnd)
+            expectedCursorStart = selectionStart + blockPrefix.length
+            expectedCursorEnd = expectedCursorStart + prefixed.length
+          } else {
+            const expectedBefore = blockPrefix + action.before
+            expectedNewValue =
+              value.slice(0, selectionStart) +
+              expectedBefore +
+              insertedText +
+              action.after +
+              value.slice(selectionEnd)
+            expectedCursorStart = selectionStart + expectedBefore.length
+            expectedCursorEnd = expectedCursorStart + insertedText.length
+          }
 
           const result = wrapSelection(value, selectionStart, selectionEnd, action)
 
           expect(result.newValue).toBe(expectedNewValue)
-          expect(result.cursorStart).toBe(selectionStart + expectedBefore.length)
-          expect(result.cursorEnd).toBe(result.cursorStart + insertedText.length)
-          expect(result.newValue.slice(result.cursorStart, result.cursorEnd)).toBe(insertedText)
+          expect(result.cursorStart).toBe(expectedCursorStart)
+          expect(result.cursorEnd).toBe(expectedCursorEnd)
+          expect(result.newValue.slice(result.cursorStart, result.cursorEnd)).toBe(
+            result.newValue.slice(expectedCursorStart, expectedCursorEnd),
+          )
         },
       ),
       { numRuns: 500 },
@@ -108,6 +130,44 @@ describe('wrapSelection property tests', () => {
         expect(blockResult.newValue).toBe(`${value}${expectedBlockPrefix}x`)
         expect(inlineResult.newValue).toBe(`${value}${before}x`)
       }),
+      { numRuns: 300 },
+    )
+  })
+
+  it('injects an extra leading newline for linePrefix block actions not at line start', () => {
+    fc.assert(
+      fc.property(
+        textArb,
+        fc.string({ minLength: 1, maxLength: 4 }),
+        (value, linePrefix) => {
+          const selectionStart = value.length
+          const selectionEnd = value.length
+
+          const blockResult = wrapSelection(value, selectionStart, selectionEnd, {
+            before: '',
+            after: '',
+            placeholder: 'x',
+            block: true,
+            linePrefix,
+          })
+
+          const inlineResult = wrapSelection(value, selectionStart, selectionEnd, {
+            before: '',
+            after: '',
+            placeholder: 'x',
+            block: false,
+            linePrefix,
+          })
+
+          const shouldPrefixWithNewline = value.length > 0 && value[value.length - 1] !== '\n'
+          const expectedBlockValue = shouldPrefixWithNewline
+            ? `${value}\n${linePrefix}x`
+            : `${value}${linePrefix}x`
+
+          expect(blockResult.newValue).toBe(expectedBlockValue)
+          expect(inlineResult.newValue).toBe(`${value}${linePrefix}x`)
+        },
+      ),
       { numRuns: 300 },
     )
   })
