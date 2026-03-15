@@ -7,8 +7,10 @@ import getpass
 import hashlib
 import json
 import os
+import shutil
 import sys
 from dataclasses import asdict, dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -302,6 +304,35 @@ class SyncClient:
         local_path.write_bytes(resp.content)
         return True
 
+    def _backup_conflicted_files(self, conflicts: list[dict[str, Any]]) -> Path | None:
+        """Back up local versions of conflicted files before they are overwritten.
+
+        Returns the backup directory path, or None if no files were backed up.
+        """
+        if not conflicts:
+            return None
+
+        backed_up = 0
+        timestamp = datetime.now().strftime("%Y-%m-%d-%H%M%S")
+        backup_dir = self.content_dir / ".backups" / timestamp
+
+        for conflict in conflicts:
+            fp = conflict["file_path"]
+            local_path = _is_safe_local_path(self.content_dir, fp)
+            if local_path is None:
+                print(f"  Skip backup (path traversal): {fp}")
+                continue
+            if not local_path.exists():
+                continue
+            dest = backup_dir / fp
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(local_path, dest)
+            backed_up += 1
+
+        if backed_up == 0:
+            return None
+        return backup_dir
+
     def sync(self, plan: dict[str, Any] | None = None) -> None:
         """Bidirectional sync with the server."""
         if plan is None:
@@ -353,6 +384,10 @@ class SyncClient:
             return
         commit_data: dict[str, Any] = resp.json()
 
+        # Back up local versions of conflicted files before downloading server versions
+        response_conflicts: list[dict[str, Any]] = commit_data.get("conflicts", [])
+        backup_dir = self._backup_conflicted_files(response_conflicts)
+
         # Download files: from plan's to_download + from commit response's to_download
         all_downloads: list[str] = list(to_download_plan)
         for fp in commit_data.get("to_download", []):
@@ -378,7 +413,6 @@ class SyncClient:
                 deletes_done += 1
 
         # Report conflicts
-        response_conflicts: list[dict[str, Any]] = commit_data.get("conflicts", [])
         for c in response_conflicts:
             fp = c["file_path"]
             details: list[str] = []
@@ -388,6 +422,8 @@ class SyncClient:
             if field_conflicts:
                 details.append(f"fields: {', '.join(field_conflicts)}")
             print(f"  CONFLICT: {fp} ({', '.join(details) or 'unknown'})")
+        if backup_dir is not None:
+            print(f"  Backups of your local versions saved to .backups/{backup_dir.name}/")
 
         # Report warnings
         for warning in commit_data.get("warnings", []):
