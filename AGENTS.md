@@ -51,11 +51,9 @@ Always start a dev server with `just start` (unsanboxed). Remember to stop a run
 - Backend tests which take more than 1s to run should be marked @pytest.mark.slow. If a fixture setup takes more than 1s, the entire group of tests using that fixture should be marked @pytest.mark.slow.
 - Coverage target 80%, branches 70%.
 
-## Commit & Pull Request Guidelines
+## Commit Guidelines
 
 - Commit format: `type: subject` in imperative lowercase (e.g., `feat: add transfer flow`).
-- PR title format same as commit format (`type: subject`).
-- PR descriptions should summarize changes, rationale and impact. Do not summarize validation or testing. Unless the PR updates documentation only, do not describe documentation changes.
 - Keep commits focused; avoid mixing unrelated changes.
 - Use `git add`, `git commit`, `git merge`, etc. Do NOT use the `-C` option with `git`.
 
