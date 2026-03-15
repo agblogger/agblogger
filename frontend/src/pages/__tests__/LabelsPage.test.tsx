@@ -232,6 +232,38 @@ describe('LabelsPage', () => {
     )
     // Only the parent link (/labels/cs) expected, no child chip links
     expect(nonCardLinks).toHaveLength(1)
-    expect(nonCardLinks[0].getAttribute('href')).toBe('/labels/cs')
+    expect(nonCardLinks[0]!.getAttribute('href')).toBe('/labels/cs')
+  })
+
+  it('displays parents as subtle clickable links', async () => {
+    mockFetchLabels.mockResolvedValue(sampleLabels)
+    renderLabelsPage()
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Open label #swe')).toBeInTheDocument()
+    })
+
+    // The #swe card should show "in" text with a link to parent #cs
+    const sweCard = getCardByLabel('swe')
+    expect(sweCard.textContent).toContain('in')
+    const parentLink = sweCard.querySelector('a[href="/labels/cs"]')
+    expect(parentLink).not.toBeNull()
+    expect(parentLink!.textContent).toBe('#cs')
+  })
+
+  it('does not show parents section when label has no parents', async () => {
+    mockFetchLabels.mockResolvedValue(sampleLabels)
+    renderLabelsPage()
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Open label #cs')).toBeInTheDocument()
+    })
+
+    // The #cs card has no parents — should not show "in" text
+    const csCard = getCardByLabel('cs')
+    const inSpan = Array.from(csCard.querySelectorAll('span')).find(
+      (el) => el.textContent.trim() === 'in',
+    )
+    expect(inSpan).toBeUndefined()
   })
 })

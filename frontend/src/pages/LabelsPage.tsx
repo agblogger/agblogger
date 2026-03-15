@@ -158,11 +158,18 @@ function LabelListView({ search }: { search: string }) {
             )}
 
             {label.parents.length > 0 && (
-              <div className="mt-3 flex items-center gap-1 text-xs text-muted">
-                <span>{label.parents.length === 1 ? 'Parent:' : 'Parents:'}</span>
-                {label.parents.map((p) => (
-                  <span key={p} className="text-tag-text bg-tag-bg px-1.5 py-0.5 rounded">
-                    #{p}
+              <div className="mt-2 text-xs text-muted pointer-events-auto relative z-10">
+                <span>in </span>
+                {label.parents.map((p, idx) => (
+                  <span key={p}>
+                    {idx > 0 && ', '}
+                    <Link
+                      to={`/labels/${p}`}
+                      className="text-muted hover:text-ink underline decoration-border hover:decoration-ink transition-colors"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      #{p}
+                    </Link>
                   </span>
                 ))}
               </div>
