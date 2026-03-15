@@ -1,17 +1,19 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import { Link } from 'react-router-dom'
-import { Tag, Settings } from 'lucide-react'
+import { Tag, Settings, Search } from 'lucide-react'
 
 import { useAuthStore } from '@/stores/authStore'
 import { fetchLabels } from '@/api/labels'
 import { HTTPError } from '@/api/client'
 import type { LabelResponse } from '@/api/client'
+import { filterLabelsBySearch } from '@/components/labels/searchUtils'
 
 const LabelGraphPage = lazy(() => import('@/pages/LabelGraphPage'))
 
 export default function LabelsPage() {
   const [view, setView] = useState<'list' | 'graph'>('list')
+  const [search, setSearch] = useState('')
 
   const viewToggle = (
     <div className="flex items-center bg-paper-warm rounded-lg p-0.5 border border-border">
@@ -49,9 +51,22 @@ export default function LabelsPage() {
               <Tag size={20} className="text-accent" />
               <h1 className="font-display text-3xl text-ink">Labels</h1>
             </div>
-            {viewToggle}
+            <div className="flex items-center gap-3 ml-auto">
+              <div className="relative">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Filter labels..."
+                  className="w-48 pl-9 pr-3 py-2 text-sm border border-border rounded-lg
+                    bg-paper focus:outline-none focus:border-accent/50 transition-colors"
+                />
+              </div>
+              {viewToggle}
+            </div>
           </div>
-          <LabelListView />
+          <LabelListView search={search} />
         </>
       ) : (
         <Suspense fallback={<LoadingSpinner />}>
@@ -62,11 +77,12 @@ export default function LabelsPage() {
   )
 }
 
-function LabelListView() {
+function LabelListView({ search }: { search: string }) {
   const user = useAuthStore((s) => s.user)
   const [labels, setLabels] = useState<LabelResponse[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const filteredLabels = filterLabelsBySearch(labels, search)
 
   useEffect(() => {
     fetchLabels()
@@ -97,9 +113,13 @@ function LabelListView() {
     return <p className="text-muted text-center py-16">No labels defined yet.</p>
   }
 
+  if (filteredLabels.length === 0) {
+    return <p className="text-muted text-center py-16">No labels match your search.</p>
+  }
+
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-      {labels.map((label, i) => (
+      {filteredLabels.map((label, i) => (
         <div
           key={label.id}
           className={`group relative p-5 rounded-xl border border-border bg-paper

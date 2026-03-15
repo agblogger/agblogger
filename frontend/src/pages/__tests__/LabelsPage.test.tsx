@@ -130,4 +130,64 @@ describe('LabelsPage', () => {
       expect(screen.getByText('No labels defined yet.')).toBeInTheDocument()
     })
   })
+
+  it('filters labels by search input', async () => {
+    mockFetchLabels.mockResolvedValue(sampleLabels)
+    renderLabelsPage()
+
+    await waitFor(() => {
+      expect(screen.getByText('#swe')).toBeInTheDocument()
+    })
+
+    await userEvent.type(screen.getByPlaceholderText('Filter labels...'), 'math')
+
+    expect(screen.queryByText('#swe')).not.toBeInTheDocument()
+    expect(screen.getByText('#math')).toBeInTheDocument()
+  })
+
+  it('shows empty message when search matches nothing', async () => {
+    mockFetchLabels.mockResolvedValue(sampleLabels)
+    renderLabelsPage()
+
+    await waitFor(() => {
+      expect(screen.getByText('#swe')).toBeInTheDocument()
+    })
+
+    await userEvent.type(screen.getByPlaceholderText('Filter labels...'), 'zzzzz')
+
+    expect(screen.queryByText('#swe')).not.toBeInTheDocument()
+    expect(screen.queryByText('#math')).not.toBeInTheDocument()
+    expect(screen.getByText('No labels match your search.')).toBeInTheDocument()
+  })
+
+  it('shows all labels when search is cleared', async () => {
+    mockFetchLabels.mockResolvedValue(sampleLabels)
+    renderLabelsPage()
+
+    await waitFor(() => {
+      expect(screen.getByText('#swe')).toBeInTheDocument()
+    })
+
+    const searchInput = screen.getByPlaceholderText('Filter labels...')
+    await userEvent.type(searchInput, 'math')
+    expect(screen.queryByText('#swe')).not.toBeInTheDocument()
+
+    await userEvent.clear(searchInput)
+    expect(screen.getByText('#swe')).toBeInTheDocument()
+    expect(screen.getByText('#math')).toBeInTheDocument()
+  })
+
+  it('filters labels by display name', async () => {
+    mockFetchLabels.mockResolvedValue(sampleLabels)
+    renderLabelsPage()
+
+    await waitFor(() => {
+      expect(screen.getByText('#swe')).toBeInTheDocument()
+    })
+
+    await userEvent.type(screen.getByPlaceholderText('Filter labels...'), 'software')
+
+    expect(screen.getByText('#swe')).toBeInTheDocument()
+    expect(screen.queryByText('#math')).not.toBeInTheDocument()
+  })
 })
