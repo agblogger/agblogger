@@ -1,4 +1,4 @@
-import { Bold, Italic, Heading2, Link, Code, FileCode } from 'lucide-react'
+import { Bold, Italic, Heading2, Link, ImagePlus, TextQuote, Code, FileCode } from 'lucide-react'
 import type { RefObject } from 'react'
 import { actions } from './toolbarActions'
 import { wrapSelection } from './wrapSelection'
@@ -18,6 +18,8 @@ const buttons = [
   { key: 'italic', label: 'Italic', Icon: Italic, shortcut: `${mod}+I` },
   { key: 'heading', label: 'Heading', Icon: Heading2, shortcut: `${mod}+H` },
   { key: 'link', label: 'Link', Icon: Link, shortcut: `${mod}+K` },
+  { key: 'image', label: 'Image', Icon: ImagePlus, shortcut: `${mod}+Shift+I` },
+  { key: 'blockquote', label: 'Blockquote', Icon: TextQuote, shortcut: `${mod}+Shift+.` },
   { key: 'code', label: 'Code', Icon: Code, shortcut: `${mod}+E` },
   { key: 'codeblock', label: 'Code Block', Icon: FileCode, shortcut: `${mod}+Shift+E` },
 ] as const

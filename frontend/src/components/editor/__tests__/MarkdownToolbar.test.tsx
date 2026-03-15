@@ -140,7 +140,7 @@ describe('wrapSelection', () => {
 })
 
 describe('MarkdownToolbar', () => {
-  it('renders all 6 toolbar buttons', () => {
+  it('renders all 8 toolbar buttons including image and blockquote', () => {
     const ref = createRef<HTMLTextAreaElement>()
     render(
       <MarkdownToolbar textareaRef={ref} value="" onChange={() => {}} />,
@@ -149,8 +149,28 @@ describe('MarkdownToolbar', () => {
     expect(screen.getByLabelText(/^Italic/)).toBeInTheDocument()
     expect(screen.getByLabelText(/^Heading/)).toBeInTheDocument()
     expect(screen.getByLabelText(/^Link/)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^Image/)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^Blockquote/)).toBeInTheDocument()
     expect(screen.getByLabelText(/^Code \(/)).toBeInTheDocument()
     expect(screen.getByLabelText(/^Code Block/)).toBeInTheDocument()
+  })
+
+  it('blockquote button inserts with linePrefix mode', async () => {
+    const onChange = vi.fn()
+    const textarea = document.createElement('textarea')
+    textarea.value = 'line one\nline two'
+    textarea.selectionStart = 0
+    textarea.selectionEnd = 17
+    const ref = { current: textarea }
+
+    const user = userEvent.setup()
+    render(
+      <MarkdownToolbar textareaRef={ref} value={'line one\nline two'} onChange={onChange} />,
+    )
+
+    await user.click(screen.getByLabelText(/^Blockquote/))
+
+    expect(onChange).toHaveBeenCalledWith('> line one\n> line two')
   })
 
   it('disables all buttons when disabled prop is true', () => {
