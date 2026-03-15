@@ -141,7 +141,7 @@ export default function FileStrip({
       </button>
 
       {expanded && (
-        <div className="px-4 pb-4">
+        <div className="px-4 pt-2 pb-4">
           {error !== null && (
             <p className="text-sm text-red-600 mb-2">{error}</p>
           )}
