@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -29,6 +29,14 @@ const mockFetchLabels = vi.mocked(fetchLabels)
 
 const sampleLabels: LabelResponse[] = [
   {
+    id: 'cs',
+    names: ['computer science'],
+    is_implicit: false,
+    parents: [],
+    children: ['swe', 'math'],
+    post_count: 10,
+  },
+  {
     id: 'swe',
     names: ['software engineering'],
     is_implicit: false,
@@ -40,7 +48,7 @@ const sampleLabels: LabelResponse[] = [
     id: 'math',
     names: ['mathematics'],
     is_implicit: false,
-    parents: [],
+    parents: ['cs'],
     children: [],
     post_count: 3,
   },
@@ -54,6 +62,10 @@ function renderLabelsPage() {
   )
 }
 
+function getCardByLabel(labelId: string): HTMLElement {
+  return screen.getByLabelText(`Open label #${labelId}`).closest('div[class*="group"]') as HTMLElement
+}
+
 describe('LabelsPage', () => {
   beforeEach(() => {
     mockUser = null
@@ -65,11 +77,11 @@ describe('LabelsPage', () => {
     renderLabelsPage()
 
     await waitFor(() => {
-      expect(screen.getByText('#swe')).toBeInTheDocument()
+      expect(within(getCardByLabel('swe')).getByText('#swe')).toBeInTheDocument()
     })
-    expect(screen.getByText('#math')).toBeInTheDocument()
-    expect(screen.getByText('5 posts')).toBeInTheDocument()
-    expect(screen.getByText('3 posts')).toBeInTheDocument()
+    expect(within(getCardByLabel('math')).getByText('#math')).toBeInTheDocument()
+    expect(within(getCardByLabel('swe')).getByText('5 posts')).toBeInTheDocument()
+    expect(within(getCardByLabel('math')).getByText('3 posts')).toBeInTheDocument()
   })
 
   it('switches to graph view when Graph button is clicked', async () => {
@@ -77,7 +89,7 @@ describe('LabelsPage', () => {
     renderLabelsPage()
 
     await waitFor(() => {
-      expect(screen.getByText('#swe')).toBeInTheDocument()
+      expect(screen.getByLabelText('Open label #swe')).toBeInTheDocument()
     })
 
     await userEvent.click(screen.getByRole('button', { name: 'Graph' }))
@@ -90,7 +102,7 @@ describe('LabelsPage', () => {
     renderLabelsPage()
 
     await waitFor(() => {
-      expect(screen.getByText('#swe')).toBeInTheDocument()
+      expect(screen.getByLabelText('Open label #swe')).toBeInTheDocument()
     })
 
     await userEvent.click(screen.getByRole('button', { name: 'Graph' }))
@@ -98,7 +110,7 @@ describe('LabelsPage', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'List' }))
     await waitFor(() => {
-      expect(screen.getByText('#swe')).toBeInTheDocument()
+      expect(screen.getByLabelText('Open label #swe')).toBeInTheDocument()
     })
     expect(screen.queryByTestId('graph-view')).not.toBeInTheDocument()
   })
@@ -136,13 +148,13 @@ describe('LabelsPage', () => {
     renderLabelsPage()
 
     await waitFor(() => {
-      expect(screen.getByText('#swe')).toBeInTheDocument()
+      expect(screen.getByLabelText('Open label #swe')).toBeInTheDocument()
     })
 
     await userEvent.type(screen.getByPlaceholderText('Filter labels...'), 'math')
 
-    expect(screen.queryByText('#swe')).not.toBeInTheDocument()
-    expect(screen.getByText('#math')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Open label #swe')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Open label #math')).toBeInTheDocument()
   })
 
   it('shows empty message when search matches nothing', async () => {
@@ -150,7 +162,7 @@ describe('LabelsPage', () => {
     renderLabelsPage()
 
     await waitFor(() => {
-      expect(screen.getByText('#swe')).toBeInTheDocument()
+      expect(screen.getByLabelText('Open label #swe')).toBeInTheDocument()
     })
 
     await userEvent.type(screen.getByPlaceholderText('Filter labels...'), 'zzzzz')
@@ -165,16 +177,16 @@ describe('LabelsPage', () => {
     renderLabelsPage()
 
     await waitFor(() => {
-      expect(screen.getByText('#swe')).toBeInTheDocument()
+      expect(screen.getByLabelText('Open label #swe')).toBeInTheDocument()
     })
 
     const searchInput = screen.getByPlaceholderText('Filter labels...')
     await userEvent.type(searchInput, 'math')
-    expect(screen.queryByText('#swe')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Open label #swe')).not.toBeInTheDocument()
 
     await userEvent.clear(searchInput)
-    expect(screen.getByText('#swe')).toBeInTheDocument()
-    expect(screen.getByText('#math')).toBeInTheDocument()
+    expect(screen.getByLabelText('Open label #swe')).toBeInTheDocument()
+    expect(screen.getByLabelText('Open label #math')).toBeInTheDocument()
   })
 
   it('filters labels by display name', async () => {
@@ -182,12 +194,43 @@ describe('LabelsPage', () => {
     renderLabelsPage()
 
     await waitFor(() => {
-      expect(screen.getByText('#swe')).toBeInTheDocument()
+      expect(screen.getByLabelText('Open label #swe')).toBeInTheDocument()
     })
 
     await userEvent.type(screen.getByPlaceholderText('Filter labels...'), 'software')
 
-    expect(screen.getByText('#swe')).toBeInTheDocument()
-    expect(screen.queryByText('#math')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Open label #swe')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Open label #math')).not.toBeInTheDocument()
+  })
+
+  it('displays children as clickable chips', async () => {
+    mockFetchLabels.mockResolvedValue(sampleLabels)
+    renderLabelsPage()
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Open label #cs')).toBeInTheDocument()
+    })
+
+    const csCard = getCardByLabel('cs')
+    const childLinks = csCard.querySelectorAll('a[href="/labels/swe"], a[href="/labels/math"]')
+    expect(childLinks).toHaveLength(2)
+  })
+
+  it('does not show children chips when label has no children', async () => {
+    mockFetchLabels.mockResolvedValue(sampleLabels)
+    renderLabelsPage()
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Open label #math')).toBeInTheDocument()
+    })
+
+    // #math has no children — the only links should be the card overlay and possibly a parent link
+    const mathCard = getCardByLabel('math')
+    const allLinks = Array.from(mathCard.querySelectorAll('a'))
+    const nonCardLinks = allLinks.filter(
+      (a) => a.getAttribute('href') !== '/labels/math' && !a.getAttribute('href')?.includes('/settings'),
+    )
+    // Only parent link (/labels/cs) expected, no child chip links
+    expect(nonCardLinks.every((a) => a.getAttribute('href') === '/labels/cs')).toBe(true)
   })
 })

@@ -8,6 +8,7 @@ import { fetchLabels } from '@/api/labels'
 import { HTTPError } from '@/api/client'
 import type { LabelResponse } from '@/api/client'
 import { filterLabelsBySearch } from '@/components/labels/searchUtils'
+import LabelChip from '@/components/labels/LabelChip'
 
 const LabelGraphPage = lazy(() => import('@/pages/LabelGraphPage'))
 
@@ -147,6 +148,14 @@ function LabelListView({ search }: { search: string }) {
                 {label.post_count} {label.post_count === 1 ? 'post' : 'posts'}
               </span>
             </div>
+
+            {label.children.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-1.5 pointer-events-auto relative z-10">
+                {label.children.map((c) => (
+                  <LabelChip key={c} labelId={c} />
+                ))}
+              </div>
+            )}
 
             {label.parents.length > 0 && (
               <div className="mt-3 flex items-center gap-1 text-xs text-muted">
