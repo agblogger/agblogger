@@ -11,6 +11,7 @@ import SiteSettingsSection from '@/components/admin/SiteSettingsSection'
 import PagesSection from '@/components/admin/PagesSection'
 import AccountSection from '@/components/admin/AccountSection'
 import SocialAccountsPanel from '@/components/crosspost/SocialAccountsPanel'
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
 
 const ADMIN_TABS = [
   { key: 'settings', label: 'Settings' },
@@ -54,6 +55,14 @@ export default function AdminPage() {
   const [accountSaving, setAccountSaving] = useState(false)
   const [socialBusy, setSocialBusy] = useState(false)
   const busy = siteSaving || pagesSaving || accountSaving || socialBusy
+
+  // === Dirty tracking from sections ===
+  const [siteDirty, setSiteDirty] = useState(false)
+  const [pagesDirty, setPagesDirty] = useState(false)
+  const [accountDirty, setAccountDirty] = useState(false)
+  const anyDirty = siteDirty || pagesDirty || accountDirty
+
+  useUnsavedChanges(anyDirty)
 
   // === Auth redirect ===
   useEffect(() => {
@@ -117,6 +126,14 @@ export default function AdminPage() {
     )
   }
 
+  function handleTabSwitch(key: AdminTabKey) {
+    if (anyDirty) {
+      const leave = window.confirm('You have unsaved changes. Are you sure you want to leave?')
+      if (!leave) return
+    }
+    setActiveTab(key)
+  }
+
   return (
     <div className="animate-fade-in">
       <Link
@@ -136,7 +153,7 @@ export default function AdminPage() {
         {ADMIN_TABS.map((tab) => (
           <button
             key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
+            onClick={() => handleTabSwitch(tab.key)}
             disabled={busy}
             className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
               activeTab === tab.key
@@ -155,6 +172,7 @@ export default function AdminPage() {
           busy={busy}
           onSaving={setSiteSaving}
           onSavedSettings={setSiteSettings}
+          onDirtyChange={setSiteDirty}
         />
       )}
       {activeTab === 'pages' && (
@@ -163,10 +181,11 @@ export default function AdminPage() {
           busy={busy}
           onSaving={setPagesSaving}
           onPagesChange={setPages}
+          onDirtyChange={setPagesDirty}
         />
       )}
       {activeTab === 'account' && (
-        <AccountSection busy={busy} onSaving={setAccountSaving} />
+        <AccountSection busy={busy} onSaving={setAccountSaving} onDirtyChange={setAccountDirty} />
       )}
       {activeTab === 'social' && (
         <SocialAccountsPanel busy={busy} onBusyChange={setSocialBusy} />
