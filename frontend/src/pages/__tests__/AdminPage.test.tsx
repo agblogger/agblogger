@@ -1,6 +1,7 @@
+import { createElement } from 'react'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
+import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 import type { UserResponse, AdminSiteSettings, AdminPageConfig } from '@/api/client'
@@ -89,11 +90,11 @@ const defaultPages: AdminPageConfig[] = [
 ]
 
 function renderAdmin(path = '/admin') {
-  return render(
-    <MemoryRouter initialEntries={[path]}>
-      <AdminPage />
-    </MemoryRouter>,
+  const router = createMemoryRouter(
+    [{ path: '/admin', element: createElement(AdminPage) }],
+    { initialEntries: [path] },
   )
+  return render(createElement(RouterProvider, { router }))
 }
 
 function setupLoadSuccess() {
@@ -1284,6 +1285,157 @@ describe('AdminPage', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/at least 8 characters/i)).toBeInTheDocument()
+    })
+  })
+
+  // === Unsaved Changes ===
+
+  describe('unsaved changes', () => {
+    it('site settings tab reports dirty when title changes', async () => {
+      setupLoadSuccess()
+      const user = userEvent.setup()
+      renderAdmin()
+
+      await waitFor(() => {
+        expect(screen.getByLabelText('Title *')).toHaveValue('My Blog')
+      })
+
+      await user.clear(screen.getByLabelText('Title *'))
+      await user.type(screen.getByLabelText('Title *'), 'New Title')
+
+      // Switching tabs should show confirm dialog
+      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+      await user.click(screen.getByRole('button', { name: 'Pages' }))
+
+      expect(confirmSpy).toHaveBeenCalledWith(
+        'You have unsaved changes. Are you sure you want to leave?',
+      )
+      // Tab should NOT have switched since confirm returned false
+      expect(screen.getByLabelText('Title *')).toBeInTheDocument()
+      confirmSpy.mockRestore()
+    })
+
+    it('tab switch proceeds when user confirms', async () => {
+      setupLoadSuccess()
+      const user = userEvent.setup()
+      renderAdmin()
+
+      await waitFor(() => {
+        expect(screen.getByLabelText('Title *')).toHaveValue('My Blog')
+      })
+
+      await user.clear(screen.getByLabelText('Title *'))
+      await user.type(screen.getByLabelText('Title *'), 'New Title')
+
+      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+      await user.click(screen.getByRole('button', { name: 'Pages' }))
+
+      expect(confirmSpy).toHaveBeenCalled()
+      // Tab should have switched — Pages section should be visible
+      await waitFor(() => {
+        expect(screen.queryByLabelText('Title *')).not.toBeInTheDocument()
+      })
+      confirmSpy.mockRestore()
+    })
+
+    it('tab switch without dirty state does not show confirm dialog', async () => {
+      setupLoadSuccess()
+      const user = userEvent.setup()
+      renderAdmin()
+
+      await waitFor(() => {
+        expect(screen.getByLabelText('Title *')).toHaveValue('My Blog')
+      })
+
+      const confirmSpy = vi.spyOn(window, 'confirm')
+      await user.click(screen.getByRole('button', { name: 'Pages' }))
+
+      expect(confirmSpy).not.toHaveBeenCalled()
+      confirmSpy.mockRestore()
+    })
+
+    it('account profile changes trigger dirty state', async () => {
+      setupLoadSuccess()
+      const user = userEvent.setup()
+      renderAdmin()
+
+      await waitFor(() => {
+        expect(screen.getByLabelText('Title *')).toHaveValue('My Blog')
+      })
+
+      // Switch to Account tab (clean → no confirm)
+      await user.click(screen.getByRole('button', { name: 'Account' }))
+
+      await waitFor(() => {
+        expect(screen.getByLabelText('Username')).toBeInTheDocument()
+      })
+
+      await user.clear(screen.getByLabelText('Username'))
+      await user.type(screen.getByLabelText('Username'), 'newname')
+
+      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+      await user.click(screen.getByRole('button', { name: 'Settings' }))
+
+      expect(confirmSpy).toHaveBeenCalled()
+      confirmSpy.mockRestore()
+    })
+
+    it('account password field triggers dirty state', async () => {
+      setupLoadSuccess()
+      const user = userEvent.setup()
+      renderAdmin()
+
+      await waitFor(() => {
+        expect(screen.getByLabelText('Title *')).toHaveValue('My Blog')
+      })
+
+      await user.click(screen.getByRole('button', { name: 'Account' }))
+
+      await waitFor(() => {
+        expect(screen.getByLabelText(/current password/i)).toBeInTheDocument()
+      })
+
+      await user.type(screen.getByLabelText(/current password/i), 'secret')
+
+      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+      await user.click(screen.getByRole('button', { name: 'Settings' }))
+
+      expect(confirmSpy).toHaveBeenCalled()
+      confirmSpy.mockRestore()
+    })
+
+    it('page reorder triggers dirty, reordering back clears it', async () => {
+      setupLoadSuccess()
+      const user = userEvent.setup()
+      renderAdmin()
+
+      await waitFor(() => {
+        expect(screen.getByLabelText('Title *')).toHaveValue('My Blog')
+      })
+
+      await user.click(screen.getByRole('button', { name: 'Pages' }))
+
+      await waitFor(() => {
+        expect(screen.getByText('Timeline')).toBeInTheDocument()
+      })
+
+      // Move "Labels" up
+      await user.click(screen.getByLabelText('Move Labels up'))
+
+      // Save Order button should appear
+      expect(screen.getByRole('button', { name: /save order/i })).toBeInTheDocument()
+
+      // Move "Labels" back down → original order restored
+      await user.click(screen.getByLabelText('Move Labels down'))
+
+      // Save Order button should disappear
+      expect(screen.queryByRole('button', { name: /save order/i })).not.toBeInTheDocument()
+
+      // Tab switch should NOT show confirm (not dirty)
+      const confirmSpy = vi.spyOn(window, 'confirm')
+      await user.click(screen.getByRole('button', { name: 'Settings' }))
+      expect(confirmSpy).not.toHaveBeenCalled()
+      confirmSpy.mockRestore()
     })
   })
 })
