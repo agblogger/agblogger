@@ -1,9 +1,15 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-import type { UserResponse, SiteConfigResponse } from '@/api/client'
+import type { UserResponse, SiteConfigResponse, SearchResult } from '@/api/client'
+
+const mockSearchPosts = vi.fn<(q: string, limit?: number, signal?: AbortSignal) => Promise<SearchResult[]>>()
+
+vi.mock('@/api/posts', () => ({
+  searchPosts: (...args: [string, number?, AbortSignal?]) => mockSearchPosts(...args),
+}))
 
 const siteConfig: SiteConfigResponse = {
   title: 'My Blog',
@@ -76,6 +82,7 @@ describe('Header', () => {
     mockPanelState = 'closed'
     mockActiveFilterCount = 0
     vi.clearAllMocks()
+    mockSearchPosts.mockReset()
   })
 
   it('renders site title', () => {
@@ -287,5 +294,170 @@ describe('Header', () => {
     renderHeader('/')
     const btn = screen.getByLabelText('Toggle filters')
     expect(btn.className).toContain('text-accent')
+  })
+
+  describe('live search dropdown', () => {
+    const results: SearchResult[] = [
+      { id: 1, file_path: 'posts/hello.md', title: 'Hello World', rendered_excerpt: null, created_at: '2026-02-01 12:00:00+00:00', rank: 1.0 },
+      { id: 2, file_path: 'posts/react.md', title: 'React Guide', rendered_excerpt: null, created_at: '2026-02-02 12:00:00+00:00', rank: 0.9 },
+    ]
+
+    it('shows dropdown after typing 2+ chars with debounce', async () => {
+      mockSearchPosts.mockResolvedValue(results)
+      renderHeader()
+      await userEvent.click(screen.getByLabelText('Search'))
+      await userEvent.type(screen.getByPlaceholderText('Search posts...'), 'he')
+
+      await waitFor(() => {
+        expect(screen.getByRole('listbox')).toBeInTheDocument()
+      })
+      expect(mockSearchPosts).toHaveBeenCalledWith('he', 5, expect.any(AbortSignal))
+    })
+
+    it('does not search with fewer than 2 chars', async () => {
+      renderHeader()
+      await userEvent.click(screen.getByLabelText('Search'))
+      await userEvent.type(screen.getByPlaceholderText('Search posts...'), 'h')
+
+      await new Promise((r) => setTimeout(r, 400))
+      expect(mockSearchPosts).not.toHaveBeenCalled()
+      expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+    })
+
+    it('navigates to post on result click', async () => {
+      mockSearchPosts.mockResolvedValue(results)
+      renderHeader()
+      await userEvent.click(screen.getByLabelText('Search'))
+      await userEvent.type(screen.getByPlaceholderText('Search posts...'), 'hello')
+
+      await waitFor(() => {
+        expect(screen.getByRole('listbox')).toBeInTheDocument()
+      })
+
+      const options = screen.getAllByRole('option')
+      fireEvent.mouseDown(options[0]!)
+
+      await waitFor(() => {
+        expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+      })
+    })
+
+    it('Enter with no highlight goes to search page', async () => {
+      mockSearchPosts.mockResolvedValue(results)
+      renderHeader()
+      await userEvent.click(screen.getByLabelText('Search'))
+      await userEvent.type(screen.getByPlaceholderText('Search posts...'), 'hello')
+
+      await waitFor(() => {
+        expect(screen.getByRole('listbox')).toBeInTheDocument()
+      })
+
+      await userEvent.keyboard('{Enter}')
+      expect(screen.queryByPlaceholderText('Search posts...')).not.toBeInTheDocument()
+    })
+
+    it('arrow down highlights first result, enter navigates to it', async () => {
+      mockSearchPosts.mockResolvedValue(results)
+      renderHeader()
+      await userEvent.click(screen.getByLabelText('Search'))
+      await userEvent.type(screen.getByPlaceholderText('Search posts...'), 'hello')
+
+      await waitFor(() => {
+        expect(screen.getByRole('listbox')).toBeInTheDocument()
+      })
+
+      await userEvent.keyboard('{ArrowDown}')
+      const options = screen.getAllByRole('option')
+      expect(options[0]).toHaveAttribute('aria-selected', 'true')
+    })
+
+    it('arrow down past last result wraps to no selection', async () => {
+      mockSearchPosts.mockResolvedValue(results)
+      renderHeader()
+      await userEvent.click(screen.getByLabelText('Search'))
+      await userEvent.type(screen.getByPlaceholderText('Search posts...'), 'hello')
+
+      await waitFor(() => {
+        expect(screen.getByRole('listbox')).toBeInTheDocument()
+      })
+
+      await userEvent.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}')
+      const options = screen.getAllByRole('option')
+      options.forEach((opt) => expect(opt).toHaveAttribute('aria-selected', 'false'))
+    })
+
+    it('ESC closes dropdown', async () => {
+      mockSearchPosts.mockResolvedValue(results)
+      renderHeader()
+      await userEvent.click(screen.getByLabelText('Search'))
+      await userEvent.type(screen.getByPlaceholderText('Search posts...'), 'hello')
+
+      await waitFor(() => {
+        expect(screen.getByRole('listbox')).toBeInTheDocument()
+      })
+
+      await userEvent.keyboard('{Escape}')
+      expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+    })
+
+    it('clears dropdown when input is cleared', async () => {
+      mockSearchPosts.mockResolvedValue(results)
+      renderHeader()
+      await userEvent.click(screen.getByLabelText('Search'))
+      const input = screen.getByPlaceholderText('Search posts...')
+      await userEvent.type(input, 'hello')
+
+      await waitFor(() => {
+        expect(screen.getByRole('listbox')).toBeInTheDocument()
+      })
+
+      await userEvent.clear(input)
+      expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+    })
+
+    it('arrow up from first result wraps to no selection', async () => {
+      mockSearchPosts.mockResolvedValue(results)
+      renderHeader()
+      await userEvent.click(screen.getByLabelText('Search'))
+      await userEvent.type(screen.getByPlaceholderText('Search posts...'), 'hello')
+
+      await waitFor(() => {
+        expect(screen.getByRole('listbox')).toBeInTheDocument()
+      })
+
+      await userEvent.keyboard('{ArrowDown}{ArrowUp}')
+      const options = screen.getAllByRole('option')
+      options.forEach((opt) => expect(opt).toHaveAttribute('aria-selected', 'false'))
+    })
+
+    it('footer click navigates to search page', async () => {
+      mockSearchPosts.mockResolvedValue(results)
+      renderHeader()
+      await userEvent.click(screen.getByLabelText('Search'))
+      await userEvent.type(screen.getByPlaceholderText('Search posts...'), 'hello')
+
+      await waitFor(() => {
+        expect(screen.getByRole('listbox')).toBeInTheDocument()
+      })
+
+      const footer = screen.getByText('View all results')
+      fireEvent.mouseDown(footer)
+
+      await waitFor(() => {
+        expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+      })
+    })
+
+    it('closes dropdown silently on API error', async () => {
+      mockSearchPosts.mockRejectedValue(new Error('fail'))
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      renderHeader()
+      await userEvent.click(screen.getByLabelText('Search'))
+      await userEvent.type(screen.getByPlaceholderText('Search posts...'), 'hello')
+
+      await new Promise((r) => setTimeout(r, 400))
+      expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+      consoleSpy.mockRestore()
+    })
   })
 })

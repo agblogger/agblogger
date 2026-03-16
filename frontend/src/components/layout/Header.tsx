@@ -1,10 +1,13 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Search, LogIn, LogOut, PenLine, Settings, Menu, X, Sun, Moon, Filter } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSiteStore } from '@/stores/siteStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useThemeStore } from '@/stores/themeStore'
 import { useFilterPanelStore } from '@/stores/filterPanelStore'
+import { searchPosts } from '@/api/posts'
+import type { SearchResult } from '@/api/client'
+import SearchDropdown from '@/components/search/SearchDropdown'
 
 export default function Header() {
   const location = useLocation()
@@ -22,6 +25,11 @@ export default function Header() {
   const [searchQuery, setSearchQuery] = useState('')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const closeSearchRef = useRef<HTMLButtonElement>(null)
+  const [dropdownResults, setDropdownResults] = useState<SearchResult[]>([])
+  const [dropdownOpen, setDropdownOpen] = useState(false)
+  const [highlightIndex, setHighlightIndex] = useState(-1)
+  const abortRef = useRef<AbortController | null>(null)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -37,8 +45,55 @@ export default function Header() {
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [])
 
+  const doSearch = useCallback((query: string) => {
+    if (debounceRef.current !== null) clearTimeout(debounceRef.current)
+    if (abortRef.current !== null) abortRef.current.abort()
+
+    if (query.trim().length < 2) {
+      setDropdownResults([])
+      setDropdownOpen(false)
+      setHighlightIndex(-1)
+      return
+    }
+
+    debounceRef.current = setTimeout(() => {
+      const controller = new AbortController()
+      abortRef.current = controller
+      searchPosts(query.trim(), 5, controller.signal)
+        .then((results) => {
+          if (!controller.signal.aborted) {
+            setDropdownResults(results)
+            setDropdownOpen(true)
+            setHighlightIndex(-1)
+          }
+        })
+        .catch((err: unknown) => {
+          if (err instanceof DOMException && err.name === 'AbortError') return
+          console.error('Search dropdown error:', err)
+          setDropdownOpen(false)
+        })
+    }, 300)
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current !== null) clearTimeout(debounceRef.current)
+      if (abortRef.current !== null) abortRef.current.abort()
+    }
+  }, [])
+
   function closeMobileMenu() {
     setMobileMenuOpen(false)
+  }
+
+  function closeSearch() {
+    setSearchOpen(false)
+    setSearchQuery('')
+    setDropdownResults([])
+    setDropdownOpen(false)
+    setHighlightIndex(-1)
+    if (debounceRef.current !== null) clearTimeout(debounceRef.current)
+    if (abortRef.current !== null) abortRef.current.abort()
   }
 
   const pages = config?.pages ?? []
@@ -50,8 +105,7 @@ export default function Header() {
     e.preventDefault()
     if (searchQuery.trim()) {
       void navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`)
-      setSearchOpen(false)
-      setSearchQuery('')
+      closeSearch()
     }
   }
 
@@ -73,34 +127,91 @@ export default function Header() {
 
           <div className="flex items-center gap-3">
             {searchOpen ? (
-              <form onSubmit={handleSearch} className="flex items-center gap-1">
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search posts..."
-                  autoFocus
-                  className="w-48 px-3 py-1.5 text-sm bg-paper-warm border border-border rounded-lg
-                           focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/20
-                           font-body placeholder:text-muted"
-                  onBlur={(e) => {
-                    if (!searchQuery && e.relatedTarget !== closeSearchRef.current)
-                      setSearchOpen(false)
-                  }}
-                />
-                <button
-                  ref={closeSearchRef}
-                  type="button"
-                  onClick={() => {
-                    setSearchOpen(false)
-                    setSearchQuery('')
-                  }}
-                  className="p-1.5 text-muted hover:text-ink transition-colors rounded-lg hover:bg-paper-warm"
-                  aria-label="Close search"
-                >
-                  <X size={16} />
-                </button>
-              </form>
+              <div className="relative">
+                <form onSubmit={handleSearch} className="flex items-center gap-1">
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value)
+                      doSearch(e.target.value)
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') {
+                        setDropdownOpen(false)
+                        return
+                      }
+                      if (!dropdownOpen || dropdownResults.length === 0) return
+
+                      if (e.key === 'ArrowDown') {
+                        e.preventDefault()
+                        setHighlightIndex((prev) =>
+                          prev >= dropdownResults.length - 1 ? -1 : prev + 1
+                        )
+                      } else if (e.key === 'ArrowUp') {
+                        e.preventDefault()
+                        setHighlightIndex((prev) =>
+                          prev <= -1 ? -1 : prev - 1
+                        )
+                      } else if (e.key === 'Enter' && highlightIndex >= 0) {
+                        e.preventDefault()
+                        const result = dropdownResults[highlightIndex]
+                        if (result) {
+                          void navigate(`/post/${result.file_path}`)
+                          closeSearch()
+                        }
+                      }
+                    }}
+                    placeholder="Search posts..."
+                    autoFocus
+                    role="combobox"
+                    aria-expanded={dropdownOpen}
+                    aria-controls="search-results-listbox"
+                    aria-activedescendant={highlightIndex >= 0 ? `search-result-${highlightIndex}` : undefined}
+                    aria-autocomplete="list"
+                    className="w-48 px-3 py-1.5 text-sm bg-paper-warm border border-border rounded-lg
+                             focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/20
+                             font-body placeholder:text-muted"
+                    onBlur={(e) => {
+                      if (e.relatedTarget === closeSearchRef.current) return
+                      if (!searchQuery) {
+                        closeSearch()
+                      } else {
+                        setDropdownOpen(false)
+                        setHighlightIndex(-1)
+                      }
+                    }}
+                  />
+                  <button
+                    ref={closeSearchRef}
+                    type="button"
+                    onClick={() => {
+                      closeSearch()
+                    }}
+                    className="p-1.5 text-muted hover:text-ink transition-colors rounded-lg hover:bg-paper-warm"
+                    aria-label="Close search"
+                  >
+                    <X size={16} />
+                  </button>
+                </form>
+                {dropdownOpen && (
+                  <SearchDropdown
+                    results={dropdownResults}
+                    query={searchQuery}
+                    highlightIndex={highlightIndex}
+                    onSelect={(filePath) => {
+                      void navigate(`/post/${filePath}`)
+                      closeSearch()
+                    }}
+                    onFooterClick={() => {
+                      if (searchQuery.trim()) {
+                        void navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`)
+                      }
+                      closeSearch()
+                    }}
+                  />
+                )}
+              </div>
             ) : (
               <button
                 onClick={() => setSearchOpen(true)}
