@@ -1,7 +1,7 @@
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { MemoryRouter, useLocation } from 'react-router-dom'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 import type { UserResponse, SiteConfigResponse, SearchResult } from '@/api/client'
 
@@ -66,10 +66,26 @@ vi.mock('@/stores/filterPanelStore', () => ({
 
 import Header from '../Header'
 
+function LocationDisplay() {
+  const location = useLocation()
+  return <div data-testid="location-display">{location.pathname}{location.search}</div>
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
+}
+
 function renderHeader(path = '/') {
   return render(
     <MemoryRouter initialEntries={[path]}>
       <Header />
+      <LocationDisplay />
     </MemoryRouter>,
   )
 }
@@ -83,6 +99,10 @@ describe('Header', () => {
     mockActiveFilterCount = 0
     vi.clearAllMocks()
     mockSearchPosts.mockReset()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('renders site title', () => {
@@ -478,6 +498,60 @@ describe('Header', () => {
       await new Promise((r) => setTimeout(r, 400))
       expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
       consoleSpy.mockRestore()
+    })
+
+    it('does not reopen dropdown after Escape dismisses it during a newer search', async () => {
+      vi.useFakeTimers()
+      const nextSearch = createDeferred<SearchResult[]>()
+      mockSearchPosts.mockResolvedValueOnce(results).mockReturnValueOnce(nextSearch.promise)
+
+      renderHeader()
+      fireEvent.click(screen.getByLabelText('Search'))
+      const input = screen.getByPlaceholderText('Search posts...')
+
+      fireEvent.change(input, { target: { value: 'he' } })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300)
+        await Promise.resolve()
+      })
+      expect(screen.getByRole('listbox')).toBeInTheDocument()
+
+      fireEvent.change(input, { target: { value: 'hel' } })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300)
+      })
+      expect(mockSearchPosts).toHaveBeenLastCalledWith('hel', 5, expect.any(AbortSignal))
+
+      fireEvent.keyDown(input, { key: 'Escape' })
+      expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+
+      await act(async () => {
+        nextSearch.resolve(results)
+        await Promise.resolve()
+      })
+
+      expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+    })
+
+    it('submits the edited query instead of navigating to a stale highlighted result', async () => {
+      mockSearchPosts.mockResolvedValue(results)
+
+      renderHeader()
+      await userEvent.click(screen.getByLabelText('Search'))
+      const input = screen.getByPlaceholderText('Search posts...')
+
+      await userEvent.type(input, 'hello')
+      await waitFor(() => {
+        expect(screen.getByRole('listbox')).toBeInTheDocument()
+      })
+
+      await userEvent.keyboard('{ArrowDown}')
+      expect(screen.getAllByRole('option')[0]).toHaveAttribute('aria-selected', 'true')
+
+      await userEvent.type(input, 'z')
+      await userEvent.keyboard('{Enter}')
+
+      expect(screen.getByTestId('location-display')).toHaveTextContent('/search?q=helloz')
     })
   })
 })

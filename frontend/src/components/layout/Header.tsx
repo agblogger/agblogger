@@ -86,14 +86,22 @@ export default function Header() {
     setMobileMenuOpen(false)
   }
 
+  function cancelPendingSearch() {
+    if (debounceRef.current !== null) clearTimeout(debounceRef.current)
+    if (abortRef.current !== null) abortRef.current.abort()
+  }
+
+  function dismissDropdown() {
+    cancelPendingSearch()
+    setDropdownOpen(false)
+    setHighlightIndex(-1)
+  }
+
   function closeSearch() {
     setSearchOpen(false)
     setSearchQuery('')
     setDropdownResults([])
-    setDropdownOpen(false)
-    setHighlightIndex(-1)
-    if (debounceRef.current !== null) clearTimeout(debounceRef.current)
-    if (abortRef.current !== null) abortRef.current.abort()
+    dismissDropdown()
   }
 
   const pages = config?.pages ?? []
@@ -134,12 +142,13 @@ export default function Header() {
                     value={searchQuery}
                     onChange={(e) => {
                       setSearchQuery(e.target.value)
+                      setHighlightIndex(-1)
                       doSearch(e.target.value)
                     }}
                     onKeyDown={(e) => {
                       if (e.key === 'Escape') {
                         if (dropdownOpen) {
-                          setDropdownOpen(false)
+                          dismissDropdown()
                         } else {
                           closeSearch()
                         }
@@ -182,8 +191,7 @@ export default function Header() {
                       if (!searchQuery) {
                         closeSearch()
                       } else {
-                        setDropdownOpen(false)
-                        setHighlightIndex(-1)
+                        dismissDropdown()
                       }
                     }}
                   />
