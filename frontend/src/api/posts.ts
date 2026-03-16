@@ -46,7 +46,7 @@ export async function searchPosts(
   signal?: AbortSignal,
 ): Promise<SearchResult[]> {
   return api
-    .get('posts/search', { searchParams: { q: query, limit: String(limit) }, signal })
+    .get('posts/search', { searchParams: { q: query, limit: String(limit) }, signal: signal ?? null })
     .json<SearchResult[]>()
 }
 
