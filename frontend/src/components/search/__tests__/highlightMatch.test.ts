@@ -33,6 +33,10 @@ describe('highlightMatch', () => {
     )
   })
 
+  it('escapes ampersands in title text', () => {
+    expect(highlightMatch('AT&T Guide', 'guide')).toBe('AT&amp;T <mark>Guide</mark>')
+  })
+
   it('handles overlapping match regions by taking first match', () => {
     expect(highlightMatch('testing', 'test testing')).toBe('<mark>testing</mark>')
   })

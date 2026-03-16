@@ -46,6 +46,7 @@ export async function searchPosts(
   signal?: AbortSignal,
 ): Promise<SearchResult[]> {
   return api
+    // ky's Options.signal expects AbortSignal | null, not undefined
     .get('posts/search', { searchParams: { q: query, limit: String(limit) }, signal: signal ?? null })
     .json<SearchResult[]>()
 }

@@ -55,6 +55,8 @@ export default function SearchDropdown({
                 {hasHighlight && (
                   <span
                     aria-hidden="true"
+                    // nosemgrep: typescript.react.security.audit.react-dangerouslysetinnerhtml
+                    // Title text is HTML-escaped by highlightMatch before mark tags are inserted.
                     dangerouslySetInnerHTML={{ __html: highlighted }}
                   />
                 )}
