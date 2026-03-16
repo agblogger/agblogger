@@ -138,7 +138,11 @@ export default function Header() {
                     }}
                     onKeyDown={(e) => {
                       if (e.key === 'Escape') {
-                        setDropdownOpen(false)
+                        if (dropdownOpen) {
+                          setDropdownOpen(false)
+                        } else {
+                          closeSearch()
+                        }
                         return
                       }
                       if (!dropdownOpen || dropdownResults.length === 0) return
@@ -163,6 +167,7 @@ export default function Header() {
                       }
                     }}
                     placeholder="Search posts..."
+                    aria-label="Search posts"
                     autoFocus
                     role="combobox"
                     aria-expanded={dropdownOpen}

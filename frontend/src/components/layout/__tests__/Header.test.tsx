@@ -400,6 +400,26 @@ describe('Header', () => {
       expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
     })
 
+    it('second ESC closes search entirely', async () => {
+      mockSearchPosts.mockResolvedValue(results)
+      renderHeader()
+      await userEvent.click(screen.getByLabelText('Search'))
+      await userEvent.type(screen.getByPlaceholderText('Search posts...'), 'hello')
+
+      await waitFor(() => {
+        expect(screen.getByRole('listbox')).toBeInTheDocument()
+      })
+
+      // First ESC closes dropdown
+      await userEvent.keyboard('{Escape}')
+      expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+      expect(screen.getByPlaceholderText('Search posts...')).toBeInTheDocument()
+
+      // Second ESC closes search entirely
+      await userEvent.keyboard('{Escape}')
+      expect(screen.queryByPlaceholderText('Search posts...')).not.toBeInTheDocument()
+    })
+
     it('clears dropdown when input is cleared', async () => {
       mockSearchPosts.mockResolvedValue(results)
       renderHeader()
