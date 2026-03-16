@@ -40,4 +40,26 @@ describe('highlightMatch', () => {
   it('handles overlapping match regions by taking first match', () => {
     expect(highlightMatch('testing', 'test testing')).toBe('<mark>testing</mark>')
   })
+
+  it('handles regex metacharacters in query without crashing', () => {
+    expect(highlightMatch('Learning C++ Basics', 'c++')).toBe(
+      'Learning <mark>C++</mark> Basics',
+    )
+    expect(highlightMatch('Is this a question?', 'question?')).toBe(
+      'Is this a <mark>question?</mark>',
+    )
+    expect(highlightMatch('[Draft] My Post', '[draft]')).toBe(
+      '<mark>[Draft]</mark> My Post',
+    )
+    expect(highlightMatch('config.yaml setup', 'config.yaml')).toBe(
+      '<mark>config.yaml</mark> setup',
+    )
+    expect(highlightMatch('Price is $5', '$5')).toBe(
+      'Price is <mark>$5</mark>',
+    )
+  })
+
+  it('handles empty title', () => {
+    expect(highlightMatch('', 'hello')).toBe('')
+  })
 })

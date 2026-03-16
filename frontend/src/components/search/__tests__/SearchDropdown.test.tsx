@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, it, expect, vi } from 'vitest'
 import SearchDropdown from '../SearchDropdown'
@@ -53,8 +53,8 @@ describe('SearchDropdown', () => {
     const onSelect = vi.fn()
     renderDropdown({ onSelect })
     const option = screen.getAllByRole('option')[0]!
-    // Use fireEvent for mousedown (userEvent doesn't have mousedown)
-    option.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+    // fireEvent.mouseDown is used because userEvent doesn't support mousedown directly
+    fireEvent.mouseDown(option)
     expect(onSelect).toHaveBeenCalledWith('posts/hello.md')
   })
 
@@ -62,7 +62,7 @@ describe('SearchDropdown', () => {
     const onFooterClick = vi.fn()
     renderDropdown({ onFooterClick })
     const footer = screen.getByText('View all results')
-    footer.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+    fireEvent.mouseDown(footer)
     expect(onFooterClick).toHaveBeenCalled()
   })
 

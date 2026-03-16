@@ -335,11 +335,14 @@ describe('Header', () => {
     })
 
     it('does not search with fewer than 2 chars', async () => {
+      vi.useFakeTimers()
       renderHeader()
-      await userEvent.click(screen.getByLabelText('Search'))
-      await userEvent.type(screen.getByPlaceholderText('Search posts...'), 'h')
+      fireEvent.click(screen.getByLabelText('Search'))
+      fireEvent.change(screen.getByPlaceholderText('Search posts...'), { target: { value: 'h' } })
 
-      await new Promise((r) => setTimeout(r, 400))
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(400)
+      })
       expect(mockSearchPosts).not.toHaveBeenCalled()
       expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
     })
@@ -360,6 +363,7 @@ describe('Header', () => {
       await waitFor(() => {
         expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
       })
+      expect(screen.getByTestId('location-display')).toHaveTextContent('/post/posts/hello.md')
     })
 
     it('Enter with no highlight goes to search page', async () => {
@@ -389,6 +393,9 @@ describe('Header', () => {
       await userEvent.keyboard('{ArrowDown}')
       const options = screen.getAllByRole('option')
       expect(options[0]).toHaveAttribute('aria-selected', 'true')
+
+      await userEvent.keyboard('{Enter}')
+      expect(screen.getByTestId('location-display')).toHaveTextContent('/post/posts/hello.md')
     })
 
     it('arrow down past last result wraps to no selection', async () => {
@@ -486,18 +493,90 @@ describe('Header', () => {
       await waitFor(() => {
         expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
       })
+      expect(screen.getByTestId('location-display')).toHaveTextContent('/search?q=hello')
     })
 
-    it('closes dropdown silently on API error', async () => {
+    it('shows error message in dropdown on API error', async () => {
+      vi.useFakeTimers()
       mockSearchPosts.mockRejectedValue(new Error('fail'))
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      renderHeader()
+      fireEvent.click(screen.getByLabelText('Search'))
+      fireEvent.change(screen.getByPlaceholderText('Search posts...'), { target: { value: 'hello' } })
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300)
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+      expect(screen.getByText('Search failed')).toBeInTheDocument()
+      consoleSpy.mockRestore()
+    })
+
+    it('silently ignores AbortError without logging', async () => {
+      vi.useFakeTimers()
+      const abortError = new DOMException('The operation was aborted', 'AbortError')
+      mockSearchPosts.mockRejectedValue(abortError)
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      renderHeader()
+      fireEvent.click(screen.getByLabelText('Search'))
+      fireEvent.change(screen.getByPlaceholderText('Search posts...'), { target: { value: 'hello' } })
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300)
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+      expect(consoleSpy).not.toHaveBeenCalled()
+      consoleSpy.mockRestore()
+    })
+
+    it('shows loading indicator while search is in progress', async () => {
+      vi.useFakeTimers()
+      const deferred = createDeferred<SearchResult[]>()
+      mockSearchPosts.mockReturnValue(deferred.promise)
+      renderHeader()
+      fireEvent.click(screen.getByLabelText('Search'))
+      fireEvent.change(screen.getByPlaceholderText('Search posts...'), { target: { value: 'hello' } })
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300)
+      })
+      expect(screen.getByText('Searching...')).toBeInTheDocument()
+
+      await act(async () => {
+        deferred.resolve([
+          { id: 1, file_path: 'posts/hello.md', title: 'Hello World', rendered_excerpt: null, created_at: '2026-02-01 12:00:00+00:00', rank: 1.0 },
+        ])
+        await Promise.resolve()
+      })
+      expect(screen.queryByText('Searching...')).not.toBeInTheDocument()
+      expect(screen.getByRole('listbox')).toBeInTheDocument()
+    })
+
+    it('dismisses dropdown but keeps search on blur when query has text', async () => {
+      mockSearchPosts.mockResolvedValue(results)
       renderHeader()
       await userEvent.click(screen.getByLabelText('Search'))
       await userEvent.type(screen.getByPlaceholderText('Search posts...'), 'hello')
 
-      await new Promise((r) => setTimeout(r, 400))
+      await waitFor(() => {
+        expect(screen.getByRole('listbox')).toBeInTheDocument()
+      })
+
+      fireEvent.blur(screen.getByPlaceholderText('Search posts...'))
       expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
-      consoleSpy.mockRestore()
+      expect(screen.getByPlaceholderText('Search posts...')).toBeInTheDocument()
+    })
+
+    it('closes search entirely on blur when query is empty', async () => {
+      renderHeader()
+      await userEvent.click(screen.getByLabelText('Search'))
+      const input = screen.getByPlaceholderText('Search posts...')
+      expect(input).toBeInTheDocument()
+
+      fireEvent.blur(input)
+      expect(screen.queryByPlaceholderText('Search posts...')).not.toBeInTheDocument()
     })
 
     it('does not reopen dropdown after Escape dismisses it during a newer search', async () => {

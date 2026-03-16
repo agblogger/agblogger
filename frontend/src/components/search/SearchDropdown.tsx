@@ -8,6 +8,8 @@ interface SearchDropdownProps {
   highlightIndex: number
   onSelect: (filePath: string) => void
   onFooterClick: () => void
+  error?: string | null
+  loading?: boolean
 }
 
 export default function SearchDropdown({
@@ -16,7 +18,31 @@ export default function SearchDropdown({
   highlightIndex,
   onSelect,
   onFooterClick,
+  error,
+  loading,
 }: SearchDropdownProps) {
+  if (error != null) {
+    return (
+      <div
+        className="absolute top-full left-0 right-0 mt-1 bg-paper border border-border
+                   rounded-lg shadow-lg z-[60] overflow-hidden"
+      >
+        <div className="px-3 py-2 text-sm text-red-600 dark:text-red-400">{error}</div>
+      </div>
+    )
+  }
+
+  if (loading === true && results.length === 0) {
+    return (
+      <div
+        className="absolute top-full left-0 right-0 mt-1 bg-paper border border-border
+                   rounded-lg shadow-lg z-[60] overflow-hidden"
+      >
+        <div className="px-3 py-2 text-sm text-muted">Searching...</div>
+      </div>
+    )
+  }
+
   if (results.length === 0) {
     return (
       <div
@@ -56,7 +82,8 @@ export default function SearchDropdown({
                   <span
                     aria-hidden="true"
                     // nosemgrep: typescript.react.security.audit.react-dangerouslysetinnerhtml
-                    // Title text is HTML-escaped by highlightMatch before mark tags are inserted.
+                    // Safe: title text is HTML-escaped by highlightMatch before mark tags are
+                    // inserted. Output is only used as element innerHTML, never in attributes.
                     dangerouslySetInnerHTML={{ __html: highlighted }}
                   />
                 )}

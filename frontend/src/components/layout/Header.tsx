@@ -28,6 +28,8 @@ export default function Header() {
   const [dropdownResults, setDropdownResults] = useState<SearchResult[]>([])
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const [highlightIndex, setHighlightIndex] = useState(-1)
+  const [dropdownError, setDropdownError] = useState<string | null>(null)
+  const [searchLoading, setSearchLoading] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -52,10 +54,14 @@ export default function Header() {
     if (query.trim().length < 2) {
       setDropdownResults([])
       setDropdownOpen(false)
+      setDropdownError(null)
+      setSearchLoading(false)
       setHighlightIndex(-1)
       return
     }
 
+    setSearchLoading(true)
+    setDropdownOpen(true)
     debounceRef.current = setTimeout(() => {
       const controller = new AbortController()
       abortRef.current = controller
@@ -63,14 +69,20 @@ export default function Header() {
         .then((results) => {
           if (!controller.signal.aborted) {
             setDropdownResults(results)
+            setDropdownError(null)
+            setSearchLoading(false)
             setDropdownOpen(true)
             setHighlightIndex(-1)
           }
         })
         .catch((err: unknown) => {
+          if (err instanceof Error && err.name === 'AbortError') return
           if (err instanceof DOMException && err.name === 'AbortError') return
           console.error('Search dropdown error:', err)
-          setDropdownOpen(false)
+          setDropdownError('Search failed')
+          setDropdownResults([])
+          setSearchLoading(false)
+          setDropdownOpen(true)
         })
     }, 300)
   }, [])
@@ -94,6 +106,8 @@ export default function Header() {
   function dismissDropdown() {
     cancelPendingSearch()
     setDropdownOpen(false)
+    setDropdownError(null)
+    setSearchLoading(false)
     setHighlightIndex(-1)
   }
 
@@ -101,6 +115,8 @@ export default function Header() {
     setSearchOpen(false)
     setSearchQuery('')
     setDropdownResults([])
+    setDropdownError(null)
+    setSearchLoading(false)
     dismissDropdown()
   }
 
@@ -212,6 +228,8 @@ export default function Header() {
                     results={dropdownResults}
                     query={searchQuery}
                     highlightIndex={highlightIndex}
+                    error={dropdownError}
+                    loading={searchLoading}
                     onSelect={(filePath) => {
                       void navigate(`/post/${filePath}`)
                       closeSearch()
