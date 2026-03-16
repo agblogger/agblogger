@@ -37,3 +37,4 @@ The frontend does not own markdown rendering. It receives rendered HTML from the
 - `frontend/src/stores/` contains the small set of shared Zustand stores for auth, site config, theme, and UI coordination.
 - `frontend/src/api/` contains the HTTP client and API-facing modules that connect the SPA to the backend.
 - `frontend/src/hooks/` contains client-side enhancements layered on top of backend-rendered content and editor workflows.
+- `frontend/src/components/search/` contains the live search dropdown components (`SearchDropdown`, `highlightMatch`) used by the header for as-you-type search previews.
