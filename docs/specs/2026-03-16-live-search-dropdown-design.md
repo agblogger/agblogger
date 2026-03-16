@@ -16,7 +16,7 @@ Add a live search dropdown to the header search input that shows results as the 
 - **No result is highlighted by default.** Arrow keys begin highlighting from the first result. This means Enter consistently navigates to the full search page unless the user explicitly arrow-keys to a specific result.
 - **Enter** with no highlight → navigates to `/search?q=...` (full results page).
 - **Enter** with a highlighted result → navigates to that post.
-- **Arrow keys** (↑↓) navigate the dropdown results. Down on the last result wraps to "no selection" state. Up on the first result also wraps to "no selection."
+- **Arrow keys** (↑↓) navigate the dropdown results. Down on the last result wraps to "no selection" state. Up on the first result also wraps to "no selection." The footer is not part of the arrow-key navigation cycle.
 - **ESC** closes the dropdown.
 - Clicking a result navigates to that post. The dropdown uses `mousedown` + `preventDefault` on result items to prevent the input's `onBlur` from firing before the click registers.
 - Clicking outside the dropdown closes it.
@@ -41,6 +41,7 @@ No backend changes. The existing `GET /api/posts/search?q=...&limit=...` endpoin
 - The dropdown is positioned absolutely below the search input with a z-index above the sticky header (≥50).
 - No new stores or global state — entirely local to the header search interaction.
 - `SearchPage.tsx` is unchanged.
+- The dropdown renders identically on mobile. The header search input is the same component on both layouts, so the dropdown appears below it regardless of viewport width.
 
 ## Edge Cases
 
@@ -51,6 +52,7 @@ No backend changes. The existing `GET /api/posts/search?q=...&limit=...` endpoin
 
 ## Accessibility
 
-- Dropdown uses `role="listbox"`, results use `role="option"` with `aria-selected` for the highlighted item.
-- `aria-activedescendant` on the input tracks the current keyboard highlight.
+- Follow the WAI-ARIA combobox pattern: input uses `role="combobox"`, `aria-expanded`, and `aria-controls` pointing to the listbox.
+- Dropdown uses `role="listbox"`, results use `role="option"` with `aria-selected` for the highlighted item. Option IDs follow the pattern `search-result-{index}`.
+- `aria-activedescendant` on the input references the ID of the currently highlighted option.
 - Click-outside closes the dropdown (existing behavior extended).
