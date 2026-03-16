@@ -40,9 +40,13 @@ export async function fetchPostForEdit(filePath: string): Promise<PostEditRespon
   return api.get(`posts/${filePath}/edit`).json<PostEditResponse>()
 }
 
-export async function searchPosts(query: string, limit = 20): Promise<SearchResult[]> {
+export async function searchPosts(
+  query: string,
+  limit = 20,
+  signal?: AbortSignal,
+): Promise<SearchResult[]> {
   return api
-    .get('posts/search', { searchParams: { q: query, limit: String(limit) } })
+    .get('posts/search', { searchParams: { q: query, limit: String(limit) }, signal })
     .json<SearchResult[]>()
 }
 
