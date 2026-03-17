@@ -12,6 +12,39 @@ setup:
     mkdir -p data/db
     @echo "\n✓ Fresh worktree setup complete"
 
+# Remove generated artifacts, local runtime state, reports, and content
+clean:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    rm -rf \
+        .coverage \
+        .hypothesis \
+        .mypy_cache \
+        .playwright-mcp \
+        .pytest_cache \
+        .ruff_cache \
+        .venv \
+        build \
+        codeql-db \
+        content \
+        data \
+        dist \
+        frontend/.stryker-tmp \
+        frontend/.tsbuildinfo \
+        frontend/coverage \
+        frontend/dist \
+        frontend/node_modules \
+        frontend/reports \
+        htmlcov \
+        node_modules \
+        playwright-report \
+        playwright-results \
+        reports
+    find . -type d -name '__pycache__' -prune -exec rm -rf {} +
+    find . -maxdepth 2 -type d -name '*.egg-info' -prune -exec rm -rf {} +
+    find . -type f \( -name '*.pyc' -o -name '*.pyo' -o -name '*$py.class' \) -delete
+    @echo "\n✓ Generated artifacts removed"
+
 # ── Quality checks ──────────────────────────────────────────────────
 
 mutation_max_children := env("MUTATION_MAX_CHILDREN", "")
