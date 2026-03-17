@@ -612,6 +612,61 @@ describe('Header', () => {
       expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
     })
 
+    it('clears stale results when reopening dropdown after ESC', async () => {
+      vi.useFakeTimers()
+      mockSearchPosts.mockResolvedValueOnce(results)
+      renderHeader()
+      fireEvent.click(screen.getByLabelText('Search'))
+      const input = screen.getByPlaceholderText('Search posts...')
+
+      // First search returns results
+      fireEvent.change(input, { target: { value: 'hello' } })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300)
+        await Promise.resolve()
+      })
+      expect(screen.getByRole('listbox')).toBeInTheDocument()
+
+      // ESC dismisses dropdown
+      fireEvent.keyDown(input, { key: 'Escape' })
+      expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+
+      // Type again — dropdown reopens, should show "Searching..." not stale results
+      const deferred = createDeferred<SearchResult[]>()
+      mockSearchPosts.mockReturnValueOnce(deferred.promise)
+      fireEvent.change(input, { target: { value: 'world' } })
+
+      expect(screen.getByText('Searching...')).toBeInTheDocument()
+      expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+    })
+
+    it('clears stale error banner when typing after a search failure', async () => {
+      vi.useFakeTimers()
+      mockSearchPosts.mockRejectedValueOnce(new Error('fail'))
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      renderHeader()
+      fireEvent.click(screen.getByLabelText('Search'))
+      const input = screen.getByPlaceholderText('Search posts...')
+
+      // First search fails
+      fireEvent.change(input, { target: { value: 'hello' } })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300)
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+      expect(screen.getByText('Search failed')).toBeInTheDocument()
+
+      // Type again — error should be cleared immediately
+      const deferred = createDeferred<SearchResult[]>()
+      mockSearchPosts.mockReturnValueOnce(deferred.promise)
+      fireEvent.change(input, { target: { value: 'world' } })
+      expect(screen.queryByText('Search failed')).not.toBeInTheDocument()
+      expect(screen.getByText('Searching...')).toBeInTheDocument()
+
+      consoleSpy.mockRestore()
+    })
+
     it('submits the edited query instead of navigating to a stale highlighted result', async () => {
       mockSearchPosts.mockResolvedValue(results)
 

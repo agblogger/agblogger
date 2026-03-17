@@ -1,6 +1,6 @@
 import type { SearchResult } from '@/api/client'
 import { formatRelativeDate } from '@/utils/date'
-import { highlightMatch } from './highlightMatch'
+import { highlightParts } from './highlightMatch'
 
 interface SearchDropdownProps {
   results: SearchResult[]
@@ -61,8 +61,7 @@ export default function SearchDropdown({
     >
       <ul id="search-results-listbox" role="listbox">
         {results.map((result, i) => {
-          const highlighted = highlightMatch(result.title, query)
-          const hasHighlight = highlighted.includes('<mark>')
+          const segments = highlightParts(result.title, query)
           return (
             <li
               key={result.id}
@@ -78,16 +77,9 @@ export default function SearchDropdown({
               }}
             >
               <div className="text-sm font-medium text-ink truncate">
-                {hasHighlight && (
-                  <span
-                    aria-hidden="true"
-                    // nosemgrep: typescript.react.security.audit.react-dangerouslysetinnerhtml
-                    // Safe: title text is HTML-escaped by highlightMatch before mark tags are
-                    // inserted. Output is only used as element innerHTML, never in attributes.
-                    dangerouslySetInnerHTML={{ __html: highlighted }}
-                  />
+                {segments.map((seg, j) =>
+                  seg.match ? <mark key={j}>{seg.text}</mark> : seg.text,
                 )}
-                <span className={hasHighlight ? 'sr-only' : ''}>{result.title}</span>
               </div>
               <div className="text-xs text-muted mt-0.5">
                 {formatRelativeDate(result.created_at)}

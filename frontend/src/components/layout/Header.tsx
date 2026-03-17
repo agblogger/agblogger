@@ -62,6 +62,8 @@ export default function Header() {
 
     setSearchLoading(true)
     setDropdownOpen(true)
+    setDropdownError(null)
+    setDropdownResults([])
     debounceRef.current = setTimeout(() => {
       const controller = new AbortController()
       abortRef.current = controller

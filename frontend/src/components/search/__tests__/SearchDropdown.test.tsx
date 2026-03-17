@@ -27,8 +27,9 @@ function renderDropdown(props: Partial<React.ComponentProps<typeof SearchDropdow
 describe('SearchDropdown', () => {
   it('renders result titles', () => {
     renderDropdown()
-    expect(screen.getByText('Hello World')).toBeInTheDocument()
-    expect(screen.getByText('React Guide')).toBeInTheDocument()
+    const options = screen.getAllByRole('option')
+    expect(options[0]).toHaveTextContent('Hello World')
+    expect(options[1]).toHaveTextContent('React Guide')
   })
 
   it('renders "View all results" footer when results exist', () => {

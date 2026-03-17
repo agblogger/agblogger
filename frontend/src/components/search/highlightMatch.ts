@@ -1,12 +1,16 @@
+export interface HighlightSegment {
+  text: string
+  match: boolean
+}
+
 /**
- * Highlight query term matches in a title string.
- * Returns an HTML string with matches wrapped in <mark> tags.
- * The title is split on query matches first, then each segment
- * is HTML-escaped individually before matches are wrapped.
+ * Split a title into segments based on query term matches.
+ * Returns an array of segments, each marked as a match or not.
+ * The joined text of all segments always equals the original title.
  */
-export function highlightMatch(title: string, query: string): string {
+export function highlightParts(title: string, query: string): HighlightSegment[] {
   const terms = query.trim().split(/\s+/).filter(Boolean)
-  if (terms.length === 0) return escapeHtml(title)
+  if (terms.length === 0) return [{ text: title, match: false }]
 
   // Build a single regex matching any term (longest first so e.g. "testing" is matched before "test")
   const sorted = [...terms].sort((a, b) => b.length - a.length)
@@ -19,12 +23,8 @@ export function highlightMatch(title: string, query: string): string {
   // Odd-indexed parts are always the captured matches.
   const parts = title.split(pattern)
   return parts
-    .map((part, i) => (i % 2 === 1 ? `<mark>${escapeHtml(part)}</mark>` : escapeHtml(part)))
-    .join('')
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .map((text, i) => ({ text, match: i % 2 === 1 }))
+    .filter((seg) => seg.text !== '')
 }
 
 function escapeRegex(s: string): string {
