@@ -28,6 +28,9 @@ interface CapturedFlowProps {
   onConnect?: ((connection: { source: string; target: string; sourceHandle: null; targetHandle: null }) => void) | undefined
   onEdgeClick?: ((event: React.MouseEvent, edge: { id: string; source: string; target: string }) => void) | undefined
   isValidConnection?: ((connection: { source: string | null; target: string | null }) => boolean) | undefined
+  backgroundColor?: string | undefined
+  minimapNodeColor?: string | undefined
+  minimapMaskColor?: string | undefined
 }
 
 let capturedFlowProps: CapturedFlowProps = {}
@@ -49,6 +52,7 @@ vi.mock('@xyflow/react', () => {
       onConnect?: CapturedFlowProps['onConnect']
       onEdgeClick?: CapturedFlowProps['onEdgeClick']
       isValidConnection?: CapturedFlowProps['isValidConnection']
+      children?: React.ReactNode
     }) => {
       capturedFlowProps = {
         onNodeClick: props.onNodeClick,
@@ -67,12 +71,20 @@ vi.mock('@xyflow/react', () => {
               {n.data?.label}
             </div>
           ))}
+          {props.children}
         </div>
       )
     },
-    Background: () => null,
+    Background: (props: { color?: string }) => {
+      capturedFlowProps.backgroundColor = props.color
+      return null
+    },
     Controls: () => null,
-    MiniMap: () => null,
+    MiniMap: (props: { nodeColor?: string; maskColor?: string }) => {
+      capturedFlowProps.minimapNodeColor = props.nodeColor
+      capturedFlowProps.minimapMaskColor = props.maskColor
+      return null
+    },
     Handle: () => null,
     Position: { Top: 'top', Bottom: 'bottom' },
     MarkerType: { ArrowClosed: 'arrowclosed' },
@@ -242,6 +254,19 @@ describe('LabelGraphPage', () => {
     await waitFor(() => {
       expect(screen.getByText('Label Graph')).toBeInTheDocument()
     })
+  })
+
+  it('keeps the graph background separate from the minimap overlay colors', async () => {
+    mockFetchLabelGraph.mockResolvedValue(graphData)
+    renderGraph()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('react-flow')).toBeInTheDocument()
+    })
+
+    expect(capturedFlowProps.backgroundColor).toBe('var(--color-border)')
+    expect(capturedFlowProps.minimapNodeColor).toBe('var(--color-border-dark)')
+    expect(capturedFlowProps.minimapMaskColor).toBe('var(--color-minimap-mask)')
   })
 
   it('search dims non-matching nodes', async () => {

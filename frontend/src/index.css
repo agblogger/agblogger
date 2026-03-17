@@ -16,6 +16,7 @@
   --color-muted: #8a857e;
   --color-border: #e0dbd4;
   --color-border-dark: #c8c1b8;
+  --color-minimap-mask: rgba(245, 243, 239, 0.7);
   --color-tag-bg: #ede8e1;
   --color-tag-text: #5a554e;
   --font-display: 'Lora Variable', Georgia, serif;
@@ -42,6 +43,7 @@ html {
   --color-muted: #8a857e;
   --color-border: #3a3a42;
   --color-border-dark: #4a4a54;
+  --color-minimap-mask: rgba(36, 36, 42, 0.7);
   --color-tag-bg: #2a2a32;
   --color-tag-text: #b0aaa2;
 }

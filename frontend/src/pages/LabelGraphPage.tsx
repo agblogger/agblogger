@@ -352,7 +352,7 @@ export default function LabelGraphPage({ viewToggle }: { viewToggle: React.React
           />
           <MiniMap
             nodeColor="var(--color-border-dark)"
-            maskColor="var(--color-paper-warm)"
+            maskColor="var(--color-minimap-mask)"
             className="!bg-paper !border-border !shadow-sm !rounded-lg"
           />
         </ReactFlow>
