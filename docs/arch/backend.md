@@ -87,6 +87,9 @@ The goal is to preserve content, preserve service availability where possible, a
 - `backend/main.py` is the main runtime entry point.
 - `backend/api/` contains the HTTP-facing modules grouped by feature area.
 - `backend/services/` contains the orchestration and business-logic layer.
+- `backend/models/` contains SQLAlchemy ORM models for both durable tables (users, tokens, social accounts, cross-posts) and cache tables (posts, labels, sync manifest).
+- `backend/schemas/` contains Pydantic request/response schemas that define the API contracts.
 - `backend/filesystem/` contains the canonical content model.
 - `backend/pandoc/server.py` manages the long-lived Pandoc server process used by the application.
 - `backend/pandoc/renderer.py` exposes the shared markdown-rendering boundary used across backend features.
+- `backend/migrations/` contains Alembic migration scripts for durable table schema changes.

@@ -105,7 +105,7 @@ Format notes:
 
 ## Labels
 
-`content/labels.toml` stores the label graph as a TOML-defined directed acyclic graph. Each label entry can declare names plus either a single parent or multiple parents.
+`content/labels.toml` stores the label graph as a TOML-defined directed acyclic graph. Each label entry can declare names and parent references.
 
 Example:
 

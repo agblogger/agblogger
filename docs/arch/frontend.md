@@ -32,9 +32,9 @@ The frontend does not own markdown rendering. It receives rendered HTML from the
 ## Code Entry Points
 
 - `frontend/src/App.tsx` defines the router, shared layout, and application bootstrapping.
-- `frontend/src/pages/TimelinePage.tsx`, `frontend/src/pages/PostPage.tsx`, `frontend/src/pages/PageViewPage.tsx`, `frontend/src/pages/SearchPage.tsx`, and `frontend/src/pages/LabelsPage.tsx` are the main public browsing entry points.
-- `frontend/src/pages/EditorPage.tsx`, `frontend/src/pages/AdminPage.tsx`, and `frontend/src/pages/LabelSettingsPage.tsx` are the main editing and administration entry points.
+- `frontend/src/pages/` contains the main public browsing, authentication, editing and administration entry points.
 - `frontend/src/stores/` contains the small set of shared Zustand stores for auth, site config, theme, and UI coordination.
 - `frontend/src/api/` contains the HTTP client and API-facing modules that connect the SPA to the backend.
 - `frontend/src/hooks/` contains client-side enhancements layered on top of backend-rendered content and editor workflows.
 - `frontend/src/components/search/` contains the live search dropdown components (`SearchDropdown`, `highlightMatch`) used by the header for as-you-type search previews.
+- `frontend/src/components/share/` contains the social sharing bar and platform-specific sharing components used by the post view.

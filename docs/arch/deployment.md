@@ -47,4 +47,5 @@ The project also supports a packaged local deployment profile for deployment-sty
 - `Dockerfile` defines the production image.
 - `docker-compose.yml` defines the standard container topology.
 - `cli/deploy_production.py` contains the deployment helper, configuration generation, and `setup.sh` script generation workflow.
+- `cli/release.py` contains release workflow tooling.
 - `tests/test_cli/test_deploy_production.py` covers the deployment helper behavior.
