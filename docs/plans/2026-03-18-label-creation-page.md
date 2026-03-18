@@ -989,21 +989,3 @@ Expected: PASS — all static checks and tests pass
 git add frontend/src/App.tsx frontend/src/pages/LabelsPage.tsx frontend/src/pages/__tests__/LabelsPage.test.tsx
 git commit -m "feat: add /labels/new route and New Label button to LabelsPage"
 ```
-
----
-
-### Task 6: Update architecture docs
-
-**Files:**
-- Modify: `docs/arch/frontend.md` — add LabelCreatePage to the pages listing and shared components
-
-- [ ] **Step 1: Update frontend architecture docs**
-
-Add `LabelCreatePage` to the pages section and document the new shared label components (`LabelNamesEditor`, `LabelParentsSelector`) in `docs/arch/frontend.md`.
-
-- [ ] **Step 2: Commit**
-
-```bash
-git add docs/arch/frontend.md
-git commit -m "docs: add label creation page to frontend architecture docs"
-```
