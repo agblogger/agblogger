@@ -23,6 +23,8 @@ clean:
         .playwright-mcp \
         .pytest_cache \
         .ruff_cache \
+        .import_linter_cache \
+        .superpowers \
         .venv \
         build \
         codeql-db \
@@ -43,7 +45,7 @@ clean:
     find . -type d -name '__pycache__' -prune -exec rm -rf {} +
     find . -maxdepth 2 -type d -name '*.egg-info' -prune -exec rm -rf {} +
     find . -type f \( -name '*.pyc' -o -name '*.pyo' -o -name '*$py.class' \) -delete
-    @echo "\n✓ Generated artifacts removed"
+    echo "✓ Generated artifacts removed"
 
 # ── Quality checks ──────────────────────────────────────────────────
 
