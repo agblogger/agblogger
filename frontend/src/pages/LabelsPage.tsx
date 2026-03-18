@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import { Link } from 'react-router-dom'
-import { Tag, Settings, Search } from 'lucide-react'
+import { Tag, Settings, Search, Plus } from 'lucide-react'
 
 import { useAuthStore } from '@/stores/authStore'
 import { fetchLabels } from '@/api/labels'
@@ -14,6 +14,7 @@ import ParentLabelLinks from '@/components/labels/ParentLabelLinks'
 const LabelGraphPage = lazy(() => import('@/pages/LabelGraphPage'))
 
 export default function LabelsPage() {
+  const user = useAuthStore((s) => s.user)
   const [view, setView] = useState<'list' | 'graph'>('list')
   const [search, setSearch] = useState('')
 
@@ -67,6 +68,16 @@ export default function LabelsPage() {
                 />
               </div>
               {viewToggle}
+              {user && (
+                <Link
+                  to="/labels/new"
+                  className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium
+                           bg-accent text-white rounded-lg hover:bg-accent-light transition-colors"
+                >
+                  <Plus size={16} />
+                  New Label
+                </Link>
+              )}
             </div>
           </div>
           <LabelListView search={search} />

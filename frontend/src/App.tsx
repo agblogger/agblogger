@@ -14,6 +14,7 @@ import LoginPage from "@/pages/LoginPage";
 import LabelPostsPage from "@/pages/LabelPostsPage";
 import LabelsPage from "@/pages/LabelsPage";
 import LabelSettingsPage from "@/pages/LabelSettingsPage";
+import LabelCreatePage from "@/pages/LabelCreatePage";
 import { useSiteStore } from "@/stores/siteStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useThemeStore } from "@/stores/themeStore";
@@ -86,6 +87,7 @@ const router = createBrowserRouter([
       { path: "/search", element: <SearchPage /> },
       { path: "/login", element: <LoginPage /> },
       { path: "/labels", element: <LabelsPage /> },
+      { path: "/labels/new", element: <LabelCreatePage /> },
       { path: "/labels/:labelId/settings", element: <LabelSettingsPage /> },
       { path: "/labels/:labelId", element: <LabelPostsPage /> },
       { path: "/editor/*", element: <EditorPage /> },

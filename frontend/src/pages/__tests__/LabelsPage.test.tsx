@@ -266,4 +266,19 @@ describe('LabelsPage', () => {
     )
     expect(inSpan).toBeUndefined()
   })
+
+  it('shows New Label button when user is authenticated', async () => {
+    mockUser = { id: 1, username: 'admin', email: 'a@t.com', display_name: null, is_admin: true }
+    mockFetchLabels.mockResolvedValue(sampleLabels)
+    renderLabelsPage()
+    expect(await screen.findByRole('link', { name: /new label/i })).toBeInTheDocument()
+  })
+
+  it('hides New Label button when user is not authenticated', async () => {
+    mockUser = null
+    mockFetchLabels.mockResolvedValue(sampleLabels)
+    renderLabelsPage()
+    await screen.findByLabelText('Open label #cs')
+    expect(screen.queryByRole('link', { name: /new label/i })).not.toBeInTheDocument()
+  })
 })
