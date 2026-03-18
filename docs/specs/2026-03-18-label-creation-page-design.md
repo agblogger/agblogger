@@ -8,7 +8,7 @@ A "+ New Label" button in the `LabelsPage` header bar, placed next to the search
 
 ## Route
 
-`/labels/new` → `LabelCreatePage` component. Requires authentication — redirects to `/login` if unauthenticated (same pattern as `LabelSettingsPage`).
+`/labels/new` → `LabelCreatePage` component. **Must be defined before `/labels/:labelId`** in the router to avoid the wildcard param matching "new" as a label ID. Requires authentication — redirects to `/login` if unauthenticated (same pattern as `LabelSettingsPage`).
 
 ## Create Page Layout
 
@@ -16,10 +16,11 @@ The page follows the same visual structure as `LabelSettingsPage`:
 
 1. **Back link** → "Back to labels" linking to `/labels`
 2. **Header** → Tag icon + "New Label" title + "Create Label" button (right-aligned)
-3. **Label ID section** (create-only) → text input validated against `^[a-z0-9][a-z0-9-]*$`, max 100 chars. Helper text: "Lowercase letters, numbers, and hyphens. Cannot be changed after creation."
+3. **Label ID section** (create-only) → text input validated against `^[a-z0-9][a-z0-9-]*$`, max 100 chars. Helper text linked via `aria-describedby`: "Lowercase letters, numbers, and hyphens. Cannot be changed after creation."
 4. **Display Names section** (shared) → `LabelNamesEditor` component
 5. **Parent Labels section** (shared) → `LabelParentsSelector` component
 6. No delete/danger zone section
+7. **Unsaved changes guard** → use `useUnsavedChanges` to warn before navigating away if the user has entered any data (ID, names, or parents), same pattern as `LabelSettingsPage`
 
 ## Shared Components
 
@@ -32,18 +33,22 @@ Props:
 - `onNamesChange: (names: string[]) => void` — callback when names change
 - `disabled: boolean` — disables all controls during async operations
 
-Renders the display names tag list with remove buttons, plus the add-name input and button. Handles the add/remove logic internally but delegates state to the parent via `onNamesChange`.
+Renders the display names tag list with remove buttons, plus the add-name input and button. The component owns its internal `newName` input state. Duplicate prevention is handled internally by checking against the `names` prop before calling `onNamesChange`.
 
 ### `LabelParentsSelector`
 
 Props:
 - `parents: string[]` — currently selected parent IDs
 - `onParentsChange: (parents: string[]) => void` — callback when parents change
-- `availableParents: LabelResponse[]` — labels eligible as parents (already filtered for cycle prevention)
+- `availableParents: LabelResponse[]` — labels eligible as parents (pre-filtered by the parent page)
 - `disabled: boolean` — disables all controls during async operations
-- `excludeHint?: string` — optional text explaining why some labels are excluded (e.g., "Labels that are descendants of #foo are excluded to prevent cycles.")
+- `hint?: string` — explanatory text shown below the list
 
 Renders the scrollable checkbox list of candidate parents. Handles toggle logic internally but delegates state to the parent via `onParentsChange`.
+
+The parent page is responsible for filtering `availableParents`:
+- **Settings page**: excludes the current label and its descendants (cycle prevention via `computeDescendants`)
+- **Create page**: passes all labels unfiltered (a new label has no descendants, so no cycles are possible)
 
 ## Create Flow
 
@@ -53,14 +58,15 @@ Renders the scrollable checkbox list of candidate parents. Handles toggle logic 
 4. On success: navigate to `/labels/{newId}` (the label detail page)
 5. On error:
    - 409 (conflict/duplicate ID) → "A label with this ID already exists."
-   - 400 (validation) → "Invalid label ID. Use lowercase letters, numbers, and hyphens."
+   - 422 (validation) → "Invalid label ID. Use lowercase letters, numbers, and hyphens."
+   - 404 (parent not found) → "One or more selected parent labels no longer exist."
    - 401 (auth) → "Session expired. Please log in again."
    - Other → "Failed to create label. Please try again."
 
 ## Validation
 
 - Client-side: the "Create Label" button is disabled when the label ID field is empty or doesn't match the ID regex
-- Server-side: the backend validates the ID format and checks for duplicates
+- Server-side: the backend validates the ID format (422), checks for duplicates (409), and verifies parent existence (404)
 
 ## Refactoring LabelSettingsPage
 
@@ -68,7 +74,7 @@ After extracting `LabelNamesEditor` and `LabelParentsSelector`, `LabelSettingsPa
 
 ## Testing
 
-- **LabelCreatePage tests**: render, validation (empty ID, invalid chars, valid ID), successful creation with navigation, error handling for each error code, auth redirect
+- **LabelCreatePage tests**: render, validation (empty ID, invalid chars, valid ID), successful creation with navigation, error handling for each error code (409, 422, 404, 401), auth redirect, unsaved changes guard
 - **LabelNamesEditor tests**: add name, remove name, duplicate prevention, disabled state
 - **LabelParentsSelector tests**: toggle parent, disabled state, empty state
 - **LabelSettingsPage tests**: existing tests continue to pass after refactor (no behavior change)
