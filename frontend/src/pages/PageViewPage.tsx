@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import LoadingSpinner from '@/components/LoadingSpinner'
-import { useParams, Link } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import api from '@/api/client'
 import { useRenderedHtml } from '@/hooks/useKatex'
 import type { PageResponse } from '@/api/client'
@@ -42,9 +42,6 @@ export default function PageViewPage() {
 
   return (
     <div className="animate-fade-in">
-      <Link to="/" className="text-sm text-muted hover:text-accent transition-colors mb-6 inline-block">
-        &larr; Back
-      </Link>
       <h1 className="font-display text-4xl text-ink mb-8">{page.title}</h1>
       <div
         className="prose max-w-none"
