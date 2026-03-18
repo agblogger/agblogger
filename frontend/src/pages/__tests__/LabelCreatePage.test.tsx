@@ -23,7 +23,7 @@ vi.mock('@/api/labels', () => ({
 }))
 
 vi.mock('@/hooks/useUnsavedChanges', () => ({
-  useUnsavedChanges: (...args: unknown[]) => mockUseUnsavedChanges(...args),
+  useUnsavedChanges: (...args: unknown[]) => mockUseUnsavedChanges(...args) as { markSaved: () => void },
 }))
 
 let mockUser: UserResponse | null = null

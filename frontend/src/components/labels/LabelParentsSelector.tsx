@@ -51,7 +51,7 @@ export default function LabelParentsSelector({
           ))}
         </div>
       )}
-      {hint && <p className="text-xs text-muted mt-2">{hint}</p>}
+      {hint != null && hint.length > 0 && <p className="text-xs text-muted mt-2">{hint}</p>}
     </section>
   )
 }

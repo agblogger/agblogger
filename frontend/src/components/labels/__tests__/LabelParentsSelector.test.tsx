@@ -55,7 +55,7 @@ describe('LabelParentsSelector', () => {
       />
     )
 
-    await user.click(screen.getAllByRole('checkbox')[1]) // check 'web'
+    await user.click(screen.getAllByRole('checkbox')[1]!) // check 'web'
 
     expect(onParentsChange).toHaveBeenCalledWith(['python', 'web'])
   })
@@ -72,7 +72,7 @@ describe('LabelParentsSelector', () => {
       />
     )
 
-    await user.click(screen.getAllByRole('checkbox')[0]) // uncheck 'python'
+    await user.click(screen.getAllByRole('checkbox')[0]!) // uncheck 'python'
 
     expect(onParentsChange).toHaveBeenCalledWith(['web'])
   })
