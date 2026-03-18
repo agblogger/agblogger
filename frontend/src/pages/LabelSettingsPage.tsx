@@ -4,7 +4,7 @@ import LoadingSpinner from '@/components/LoadingSpinner'
 import BackLink from '@/components/BackLink'
 import ErrorBlock from '@/components/ErrorBlock'
 import { useParams, useNavigate } from 'react-router-dom'
-import { X, Settings, Trash2 } from 'lucide-react'
+import { Settings, Trash2 } from 'lucide-react'
 
 import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
 import { useAuthStore } from '@/stores/authStore'
@@ -12,6 +12,8 @@ import { fetchLabel, fetchLabels, updateLabel, deleteLabel } from '@/api/labels'
 import { HTTPError } from '@/api/client'
 import type { LabelResponse } from '@/api/client'
 import { computeDescendants } from '@/components/labels/graphUtils'
+import LabelNamesEditor from '@/components/labels/LabelNamesEditor'
+import LabelParentsSelector from '@/components/labels/LabelParentsSelector'
 
 /** Unordered equality check for arrays with unique elements (duplicates are prevented by UI). */
 function haveSameElements(left: readonly string[], right: readonly string[]): boolean {
@@ -41,8 +43,6 @@ export default function LabelSettingsPage() {
   const [parents, setParents] = useState<string[]>([])
   const [savedNames, setSavedNames] = useState<string[]>([])
   const [savedParents, setSavedParents] = useState<string[]>([])
-  const [newName, setNewName] = useState('')
-
   // Async operation state
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -98,29 +98,6 @@ export default function LabelSettingsPage() {
   const { markSaved } = useUnsavedChanges(isDirty)
 
   const availableParents = useMemo(() => allLabels.filter((l) => !excludedIds.has(l.id)), [allLabels, excludedIds])
-
-  function handleRemoveName(index: number) {
-    setNames(names.filter((_, i) => i !== index))
-    setError(null)
-  }
-
-  function handleAddName() {
-    const trimmed = newName.trim()
-    if (!trimmed) return
-    if (names.includes(trimmed)) return
-    setNames([...names, trimmed])
-    setNewName('')
-    setError(null)
-  }
-
-  function handleToggleParent(parentId: string) {
-    if (parents.includes(parentId)) {
-      setParents(parents.filter((p) => p !== parentId))
-    } else {
-      setParents([...parents, parentId])
-    }
-    setError(null)
-  }
 
   async function handleSave() {
     if (labelId === undefined) return
@@ -211,91 +188,19 @@ export default function LabelSettingsPage() {
         <AlertBanner variant="error" className="mb-6">{error}</AlertBanner>
       )}
 
-      {/* Names section */}
-      <section className="mb-8 p-5 bg-paper border border-border rounded-lg">
-        <h2 className="text-sm font-medium text-ink mb-3">Display Names</h2>
-        <div className="flex flex-wrap gap-2 mb-3">
-          {names.map((name, i) => (
-            <span
-              key={i}
-              className="inline-flex items-center gap-1 px-3 py-1.5 text-sm
-                       bg-tag-bg text-tag-text rounded-full"
-            >
-              {name}
-              <button
-                onClick={() => handleRemoveName(i)}
-                disabled={busy}
-                className="ml-0.5 p-0.5 rounded-full hover:bg-black/10 disabled:opacity-30
-                         transition-colors"
-                aria-label={`Remove name "${name}"`}
-              >
-                <X size={12} />
-              </button>
-            </span>
-          ))}
-        </div>
-        <div className="flex items-center gap-2">
-          <input
-            type="text"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault()
-                handleAddName()
-              }
-            }}
-            disabled={busy}
-            placeholder="Add a display name..."
-            className="flex-1 px-3 py-2 bg-paper-warm border border-border rounded-lg
-                     text-ink text-sm
-                     focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/20
-                     disabled:opacity-50"
-          />
-          <button
-            onClick={handleAddName}
-            disabled={busy || newName.trim().length === 0}
-            className="px-4 py-2 text-sm font-medium border border-border rounded-lg
-                     hover:bg-paper-warm disabled:opacity-50 transition-colors"
-          >
-            Add
-          </button>
-        </div>
-        <p className="text-xs text-muted mt-2">Optional aliases shown alongside the label ID.</p>
-      </section>
+      <LabelNamesEditor
+        names={names}
+        onNamesChange={(updated) => { setNames(updated); setError(null) }}
+        disabled={busy}
+      />
 
-      {/* Parents section */}
-      <section className="mb-8 p-5 bg-paper border border-border rounded-lg">
-        <h2 className="text-sm font-medium text-ink mb-3">Parent Labels</h2>
-        {availableParents.length === 0 ? (
-          <p className="text-sm text-muted">No other labels available as parents.</p>
-        ) : (
-          <div className="space-y-2 max-h-64 overflow-y-auto">
-            {availableParents.map((candidate) => (
-              <label
-                key={candidate.id}
-                className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-paper-warm
-                         cursor-pointer transition-colors"
-              >
-                <input
-                  type="checkbox"
-                  checked={parents.includes(candidate.id)}
-                  onChange={() => handleToggleParent(candidate.id)}
-                  disabled={busy}
-                  className="rounded border-border text-accent focus:ring-accent/20"
-                />
-                <span className="text-sm text-ink">#{candidate.id}</span>
-                {candidate.names.length > 0 && (
-                  <span className="text-xs text-muted">({candidate.names.join(', ')})</span>
-                )}
-              </label>
-            ))}
-          </div>
-        )}
-        <p className="text-xs text-muted mt-2">
-          Labels that are descendants of #{labelId} are excluded to prevent cycles.
-        </p>
-      </section>
+      <LabelParentsSelector
+        parents={parents}
+        onParentsChange={(updated) => { setParents(updated); setError(null) }}
+        availableParents={availableParents}
+        disabled={busy}
+        hint={`Labels that are descendants of #${labelId} are excluded to prevent cycles.`}
+      />
 
       {/* Delete section */}
       <section className="p-5 border border-red-200 dark:border-red-800/40 rounded-lg">
