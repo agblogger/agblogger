@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { memo, useState } from 'react'
 import { X } from 'lucide-react'
 
 interface LabelNamesEditorProps {
@@ -7,7 +7,7 @@ interface LabelNamesEditorProps {
   disabled: boolean
 }
 
-export default function LabelNamesEditor({ names, onNamesChange, disabled }: LabelNamesEditorProps) {
+function LabelNamesEditor({ names, onNamesChange, disabled }: LabelNamesEditorProps) {
   const [newName, setNewName] = useState('')
 
   function handleAdd() {
@@ -76,3 +76,5 @@ export default function LabelNamesEditor({ names, onNamesChange, disabled }: Lab
     </section>
   )
 }
+
+export default memo(LabelNamesEditor)

@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useCallback, useEffect, useState, useMemo } from 'react'
 import AlertBanner from '@/components/AlertBanner'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import BackLink from '@/components/BackLink'
@@ -92,6 +92,16 @@ export default function LabelSettingsPage() {
 
   const availableParents = useMemo(() => allLabels.filter((l) => !excludedIds.has(l.id)), [allLabels, excludedIds])
 
+  const handleNamesChange = useCallback((updated: string[]) => {
+    setNames(updated)
+    setError(null)
+  }, [])
+
+  const handleParentsChange = useCallback((updated: string[]) => {
+    setParents(updated)
+    setError(null)
+  }, [])
+
   async function handleSave() {
     if (labelId === undefined) return
     setSaving(true)
@@ -183,13 +193,13 @@ export default function LabelSettingsPage() {
 
       <LabelNamesEditor
         names={names}
-        onNamesChange={(updated) => { setNames(updated); setError(null) }}
+        onNamesChange={handleNamesChange}
         disabled={busy}
       />
 
       <LabelParentsSelector
         parents={parents}
-        onParentsChange={(updated) => { setParents(updated); setError(null) }}
+        onParentsChange={handleParentsChange}
         availableParents={availableParents}
         disabled={busy}
         hint={`Labels that are descendants of #${labelId} are excluded to prevent cycles.`}

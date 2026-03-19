@@ -13,8 +13,6 @@ import PageViewPage from "@/pages/PageViewPage";
 import LoginPage from "@/pages/LoginPage";
 import LabelPostsPage from "@/pages/LabelPostsPage";
 import LabelsPage from "@/pages/LabelsPage";
-import LabelSettingsPage from "@/pages/LabelSettingsPage";
-import LabelCreatePage from "@/pages/LabelCreatePage";
 import { useSiteStore } from "@/stores/siteStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useThemeStore } from "@/stores/themeStore";
@@ -22,6 +20,8 @@ import { useThemeStore } from "@/stores/themeStore";
 const SearchPage = lazy(() => import("@/pages/SearchPage"));
 const EditorPage = lazy(() => import("@/pages/EditorPage"));
 const AdminPage = lazy(() => import("@/pages/AdminPage"));
+const LabelSettingsPage = lazy(() => import("@/pages/LabelSettingsPage"));
+const LabelCreatePage = lazy(() => import("@/pages/LabelCreatePage"));
 
 function LazyFallback() {
   return <LoadingSpinner />;

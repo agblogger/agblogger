@@ -11,6 +11,10 @@ const sampleLabels: LabelResponse[] = [
 ]
 
 describe('LabelParentsSelector', () => {
+  it('is wrapped in React.memo for re-render optimization', () => {
+    expect(LabelParentsSelector).toHaveProperty('$$typeof', Symbol.for('react.memo'))
+  })
+
   it('renders available parent labels with checkboxes', () => {
     render(
       <LabelParentsSelector

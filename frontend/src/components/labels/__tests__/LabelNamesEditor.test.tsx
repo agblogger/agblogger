@@ -4,6 +4,10 @@ import { describe, it, expect, vi } from 'vitest'
 import LabelNamesEditor from '../LabelNamesEditor'
 
 describe('LabelNamesEditor', () => {
+  it('is wrapped in React.memo for re-render optimization', () => {
+    expect(LabelNamesEditor).toHaveProperty('$$typeof', Symbol.for('react.memo'))
+  })
+
   it('renders existing names as tags', () => {
     render(<LabelNamesEditor names={['python', 'py']} onNamesChange={vi.fn()} disabled={false} />)
     expect(screen.getByText('python')).toBeInTheDocument()

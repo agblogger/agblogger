@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import AlertBanner from '@/components/AlertBanner'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import BackLink from '@/components/BackLink'
@@ -35,6 +35,16 @@ export default function LabelCreatePage() {
   const isDirty = labelId.length > 0 || names.length > 0 || parents.length > 0
 
   const { markSaved } = useUnsavedChanges(isDirty)
+
+  const handleNamesChange = useCallback((updated: string[]) => {
+    setNames(updated)
+    setError(null)
+  }, [])
+
+  const handleParentsChange = useCallback((updated: string[]) => {
+    setParents(updated)
+    setError(null)
+  }, [])
 
   useEffect(() => {
     if (!isReady) return
@@ -148,13 +158,13 @@ export default function LabelCreatePage() {
 
       <LabelNamesEditor
         names={names}
-        onNamesChange={(updated) => { setNames(updated); setError(null) }}
+        onNamesChange={handleNamesChange}
         disabled={creating}
       />
 
       <LabelParentsSelector
         parents={parents}
-        onParentsChange={(updated) => { setParents(updated); setError(null) }}
+        onParentsChange={handleParentsChange}
         availableParents={allLabels}
         disabled={creating}
       />

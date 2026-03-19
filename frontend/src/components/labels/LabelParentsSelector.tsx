@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import type { LabelResponse } from '@/api/client'
 
 interface LabelParentsSelectorProps {
@@ -8,7 +9,7 @@ interface LabelParentsSelectorProps {
   hint?: string
 }
 
-export default function LabelParentsSelector({
+function LabelParentsSelector({
   parents,
   onParentsChange,
   availableParents,
@@ -55,3 +56,5 @@ export default function LabelParentsSelector({
     </section>
   )
 }
+
+export default memo(LabelParentsSelector)
