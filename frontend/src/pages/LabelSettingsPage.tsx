@@ -30,7 +30,7 @@ function haveSameOrder(left: readonly string[], right: readonly string[]): boole
 export default function LabelSettingsPage() {
   const { labelId } = useParams()
   const navigate = useNavigate()
-  const { isReady } = useRequireAuth()
+  const { isReady } = useRequireAuth({ requireAdmin: true })
 
   const [label, setLabel] = useState<LabelResponse | null>(null)
   const [allLabels, setAllLabels] = useState<LabelResponse[]>([])

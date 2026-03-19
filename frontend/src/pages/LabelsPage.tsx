@@ -177,7 +177,7 @@ function LabelListView({ search }: { search: string }) {
             )}
           </div>
 
-          {user && (
+          {user?.is_admin === true && (
             <Link
               to={`/labels/${label.id}/settings`}
               className="relative z-10 pointer-events-auto mt-3 inline-flex items-center

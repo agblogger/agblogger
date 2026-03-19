@@ -288,6 +288,30 @@ describe('LabelsPage', () => {
     expect(screen.queryByRole('link', { name: /new label/i })).not.toBeInTheDocument()
   })
 
+  it('shows Settings links when user is admin', async () => {
+    mockUser = { id: 1, username: 'admin', email: 'a@t.com', display_name: null, is_admin: true }
+    mockFetchLabels.mockResolvedValue(sampleLabels)
+    renderLabelsPage()
+    await screen.findByLabelText('Open label #cs')
+    expect(screen.getByLabelText('Settings for cs')).toBeInTheDocument()
+  })
+
+  it('hides Settings links when user is not admin', async () => {
+    mockUser = { id: 2, username: 'author', email: 'author@t.com', display_name: null, is_admin: false }
+    mockFetchLabels.mockResolvedValue(sampleLabels)
+    renderLabelsPage()
+    await screen.findByLabelText('Open label #cs')
+    expect(screen.queryByLabelText('Settings for cs')).not.toBeInTheDocument()
+  })
+
+  it('hides Settings links when user is not authenticated', async () => {
+    mockUser = null
+    mockFetchLabels.mockResolvedValue(sampleLabels)
+    renderLabelsPage()
+    await screen.findByLabelText('Open label #cs')
+    expect(screen.queryByLabelText('Settings for cs')).not.toBeInTheDocument()
+  })
+
   it('hides New Label button when user is not authenticated', async () => {
     mockUser = null
     mockFetchLabels.mockResolvedValue(sampleLabels)

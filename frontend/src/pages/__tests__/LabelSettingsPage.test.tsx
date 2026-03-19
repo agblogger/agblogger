@@ -97,6 +97,14 @@ describe('LabelSettingsPage', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/login', { replace: true })
   })
 
+  it('redirects non-admin users to home', () => {
+    mockUser = { id: 2, username: 'author', email: 'author@t.com', display_name: null, is_admin: false }
+    mockFetchLabel.mockReturnValue(new Promise(() => {}))
+    mockFetchLabels.mockReturnValue(new Promise(() => {}))
+    renderSettings()
+    expect(mockNavigate).toHaveBeenCalledWith('/', { replace: true })
+  })
+
   it('shows spinner while loading', () => {
     mockFetchLabel.mockReturnValue(new Promise(() => {}))
     mockFetchLabels.mockReturnValue(new Promise(() => {}))
