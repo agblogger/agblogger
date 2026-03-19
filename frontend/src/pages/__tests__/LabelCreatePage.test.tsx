@@ -71,6 +71,19 @@ describe('LabelCreatePage', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/login', { replace: true })
   })
 
+  it('redirects to home when the user is not an admin', () => {
+    mockUser = {
+      id: 2,
+      username: 'author',
+      email: 'author@t.com',
+      display_name: null,
+      is_admin: false,
+    }
+    mockFetchLabels.mockReturnValue(new Promise(() => {}))
+    renderCreatePage()
+    expect(mockNavigate).toHaveBeenCalledWith('/', { replace: true })
+  })
+
   it('renders the create label form', async () => {
     renderCreatePage()
     expect(await screen.findByText('New Label')).toBeInTheDocument()

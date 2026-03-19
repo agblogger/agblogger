@@ -18,7 +18,7 @@ const LABEL_ID_REGEX = /^[a-z0-9][a-z0-9-]*$/
 
 export default function LabelCreatePage() {
   const navigate = useNavigate()
-  const { user, isReady } = useRequireAuth()
+  const { isReady } = useRequireAuth({ requireAdmin: true })
 
   const [allLabels, setAllLabels] = useState<LabelResponse[]>([])
   const [loading, setLoading] = useState(true)
@@ -37,7 +37,7 @@ export default function LabelCreatePage() {
   const { markSaved } = useUnsavedChanges(isDirty)
 
   useEffect(() => {
-    if (!user) return
+    if (!isReady) return
     fetchLabels()
       .then(setAllLabels)
       .catch((err: unknown) => {
@@ -49,7 +49,7 @@ export default function LabelCreatePage() {
         }
       })
       .finally(() => setLoading(false))
-  }, [user])
+  }, [isReady])
 
   async function handleCreate() {
     if (!isValidId) return
@@ -74,6 +74,9 @@ export default function LabelCreatePage() {
             break
           case 401:
             setError('Session expired. Please log in again.')
+            break
+          case 403:
+            setError('You do not have permission to create labels.')
             break
           default:
             console.error(`Failed to create label: unexpected HTTP ${status}`)

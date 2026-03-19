@@ -68,7 +68,7 @@ export default function LabelsPage() {
                 />
               </div>
               {viewToggle}
-              {user && (
+              {user?.is_admin === true && (
                 <Link
                   to="/labels/new"
                   className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium

@@ -41,6 +41,22 @@ describe('LabelNamesEditor', () => {
     expect(onNamesChange).toHaveBeenCalledWith(['keep'])
   })
 
+  it('removes only the clicked duplicate name', async () => {
+    const onNamesChange = vi.fn()
+    const user = userEvent.setup()
+    render(
+      <LabelNamesEditor
+        names={['duplicate', 'duplicate', 'keep']}
+        onNamesChange={onNamesChange}
+        disabled={false}
+      />,
+    )
+
+    await user.click(screen.getAllByLabelText('Remove name "duplicate"')[0]!)
+
+    expect(onNamesChange).toHaveBeenCalledWith(['duplicate', 'keep'])
+  })
+
   it('prevents adding duplicate names', async () => {
     const onNamesChange = vi.fn()
     const user = userEvent.setup()
