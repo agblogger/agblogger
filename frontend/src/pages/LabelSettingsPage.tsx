@@ -7,7 +7,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { Settings, Trash2 } from 'lucide-react'
 
 import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
-import { useAuthStore } from '@/stores/authStore'
+import { useRequireAuth } from '@/hooks/useRequireAuth'
 import { fetchLabel, fetchLabels, updateLabel, deleteLabel } from '@/api/labels'
 import { HTTPError } from '@/api/client'
 import type { LabelResponse } from '@/api/client'
@@ -30,8 +30,7 @@ function haveSameOrder(left: readonly string[], right: readonly string[]): boole
 export default function LabelSettingsPage() {
   const { labelId } = useParams()
   const navigate = useNavigate()
-  const user = useAuthStore((s) => s.user)
-  const isInitialized = useAuthStore((s) => s.isInitialized)
+  const { isReady } = useRequireAuth()
 
   const [label, setLabel] = useState<LabelResponse | null>(null)
   const [allLabels, setAllLabels] = useState<LabelResponse[]>([])
@@ -50,12 +49,6 @@ export default function LabelSettingsPage() {
   const busy = saving || deleting
 
   useEffect(() => {
-    if (isInitialized && !user) {
-      void navigate('/login', { replace: true })
-    }
-  }, [user, isInitialized, navigate])
-
-  useEffect(() => {
     if (labelId === undefined) return
     setLoading(true)
     setError(null)
@@ -63,10 +56,10 @@ export default function LabelSettingsPage() {
       .then(([l, all]) => {
         setLabel(l)
         setAllLabels(all)
-        setNames([...l.names])
-        setParents([...l.parents])
-        setSavedNames([...l.names])
-        setSavedParents([...l.parents])
+        setNames(l.names)
+        setParents(l.parents)
+        setSavedNames(l.names)
+        setSavedParents(l.parents)
       })
       .catch((err: unknown) => {
         if (err instanceof HTTPError && err.response.status === 404) {
@@ -106,10 +99,10 @@ export default function LabelSettingsPage() {
     try {
       const updated = await updateLabel(labelId, { names, parents })
       setLabel(updated)
-      setNames([...updated.names])
-      setParents([...updated.parents])
-      setSavedNames([...updated.names])
-      setSavedParents([...updated.parents])
+      setNames(updated.names)
+      setParents(updated.parents)
+      setSavedNames(updated.names)
+      setSavedParents(updated.parents)
       markSaved()
     } catch (err) {
       if (err instanceof HTTPError) {
@@ -151,7 +144,7 @@ export default function LabelSettingsPage() {
     }
   }
 
-  if (!isInitialized || !user) {
+  if (!isReady) {
     return null
   }
 

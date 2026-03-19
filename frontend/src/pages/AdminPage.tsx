@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, Link, useLocation } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { Settings } from 'lucide-react'
 
-import { useAuthStore } from '@/stores/authStore'
+import { useRequireAuth } from '@/hooks/useRequireAuth'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import BackLink from '@/components/BackLink'
 import { HTTPError } from '@/api/client'
@@ -25,10 +25,8 @@ type AdminTabKey = (typeof ADMIN_TABS)[number]['key']
 const VALID_TAB_KEYS: Set<AdminTabKey> = new Set(ADMIN_TABS.map((t) => t.key))
 
 export default function AdminPage() {
-  const navigate = useNavigate()
   const location = useLocation()
-  const user = useAuthStore((s) => s.user)
-  const isInitialized = useAuthStore((s) => s.isInitialized)
+  const { isReady } = useRequireAuth({ requireAdmin: true })
   const tabParam = new URLSearchParams(location.search).get('tab')
   const initialTab: AdminTabKey =
     tabParam !== null && VALID_TAB_KEYS.has(tabParam as AdminTabKey)
@@ -65,18 +63,9 @@ export default function AdminPage() {
 
   useUnsavedChanges(anyDirty)
 
-  // === Auth redirect ===
-  useEffect(() => {
-    if (isInitialized && !user) {
-      void navigate('/login', { replace: true })
-    } else if (isInitialized && user && !user.is_admin) {
-      void navigate('/', { replace: true })
-    }
-  }, [user, isInitialized, navigate])
-
   // === Load data ===
   useEffect(() => {
-    if (!isInitialized || user?.is_admin !== true) return
+    if (!isReady) return
     void (async () => {
       setLoading(true)
       setLoadError(null)
@@ -97,18 +86,14 @@ export default function AdminPage() {
         setLoading(false)
       }
     })()
-  }, [isInitialized, user?.is_admin])
+  }, [isReady])
 
   useEffect(() => {
     setActiveTab(initialTab)
   }, [initialTab])
 
-  // === Render guards ===
-  if (!isInitialized || !user) {
-    return null
-  }
-
-  if (!user.is_admin) {
+  // === Render guard ===
+  if (!isReady) {
     return null
   }
 

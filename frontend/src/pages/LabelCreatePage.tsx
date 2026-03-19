@@ -7,7 +7,7 @@ import { useNavigate } from 'react-router-dom'
 import { Tag } from 'lucide-react'
 
 import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
-import { useAuthStore } from '@/stores/authStore'
+import { useRequireAuth } from '@/hooks/useRequireAuth'
 import { createLabel, fetchLabels } from '@/api/labels'
 import { HTTPError } from '@/api/client'
 import type { LabelResponse } from '@/api/client'
@@ -18,8 +18,7 @@ const LABEL_ID_REGEX = /^[a-z0-9][a-z0-9-]*$/
 
 export default function LabelCreatePage() {
   const navigate = useNavigate()
-  const user = useAuthStore((s) => s.user)
-  const isInitialized = useAuthStore((s) => s.isInitialized)
+  const { user, isReady } = useRequireAuth()
 
   const [allLabels, setAllLabels] = useState<LabelResponse[]>([])
   const [loading, setLoading] = useState(true)
@@ -36,12 +35,6 @@ export default function LabelCreatePage() {
   const isDirty = labelId.length > 0 || names.length > 0 || parents.length > 0
 
   const { markSaved } = useUnsavedChanges(isDirty)
-
-  useEffect(() => {
-    if (isInitialized && !user) {
-      void navigate('/login', { replace: true })
-    }
-  }, [user, isInitialized, navigate])
 
   useEffect(() => {
     if (!user) return
@@ -95,7 +88,7 @@ export default function LabelCreatePage() {
     }
   }
 
-  if (!isInitialized || !user) {
+  if (!isReady) {
     return null
   }
 

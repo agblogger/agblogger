@@ -16,7 +16,7 @@ import { useFileUpload } from '@/components/editor/useFileUpload'
 import { buildEditorDraftStorageKey, useEditorAutoSave } from '@/hooks/useEditorAutoSave'
 import type { DraftData } from '@/hooks/useEditorAutoSave'
 import { useRenderedHtml } from '@/hooks/useKatex'
-import { useAuthStore } from '@/stores/authStore'
+import { useRequireAuth } from '@/hooks/useRequireAuth'
 import CrossPostDialog from '@/components/crosspost/CrossPostDialog'
 import PlatformIcon from '@/components/crosspost/PlatformIcon'
 import LabelInput from '@/components/editor/LabelInput'
@@ -36,8 +36,7 @@ export default function EditorPage() {
   const { '*': filePath } = useParams()
   const navigate = useNavigate()
   const isNew = filePath === undefined || filePath === 'new'
-  const user = useAuthStore((s) => s.user)
-  const isInitialized = useAuthStore((s) => s.isInitialized)
+  const { user, isReady } = useRequireAuth()
 
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
@@ -97,12 +96,6 @@ export default function EditorPage() {
       onRestore: handleRestore,
       enabled: Boolean(user) && (isNew || !loading),
     })
-
-  useEffect(() => {
-    if (isInitialized && !user) {
-      void navigate('/login', { replace: true })
-    }
-  }, [user, isInitialized, navigate])
 
   useEffect(() => {
     if (!isNew && filePath) {
@@ -295,7 +288,7 @@ export default function EditorPage() {
     })
   }
 
-  if (!isInitialized || !user) {
+  if (!isReady) {
     return null
   }
 
