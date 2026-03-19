@@ -18,23 +18,23 @@ function LabelNamesEditor({ names, onNamesChange, disabled }: LabelNamesEditorPr
     setNewName('')
   }
 
-  function handleRemove(index: number) {
-    onNamesChange(names.filter((_, currentIndex) => currentIndex !== index))
+  function handleRemove(nameToRemove: string) {
+    onNamesChange(names.filter((n) => n !== nameToRemove))
   }
 
   return (
     <section className="mb-8 p-5 bg-paper border border-border rounded-lg">
       <h2 className="text-sm font-medium text-ink mb-3">Display Names</h2>
       <div className="flex flex-wrap gap-2 mb-3">
-        {names.map((name, index) => (
+        {names.map((name) => (
           <span
-            key={`${name}-${index}`}
+            key={name}
             className="inline-flex items-center gap-1 px-3 py-1.5 text-sm
                      bg-tag-bg text-tag-text rounded-full"
           >
             {name}
             <button
-              onClick={() => handleRemove(index)}
+              onClick={() => handleRemove(name)}
               disabled={disabled}
               className="ml-0.5 p-0.5 rounded-full hover:bg-black/10 disabled:opacity-30
                        transition-colors"

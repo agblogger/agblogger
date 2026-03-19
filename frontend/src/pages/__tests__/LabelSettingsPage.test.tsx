@@ -91,18 +91,18 @@ describe('LabelSettingsPage', () => {
 
   it('redirects to login when unauthenticated', () => {
     mockUser = null
-    mockFetchLabel.mockReturnValue(new Promise(() => {}))
-    mockFetchLabels.mockReturnValue(new Promise(() => {}))
     renderSettings()
     expect(mockNavigate).toHaveBeenCalledWith('/login', { replace: true })
+    expect(mockFetchLabel).not.toHaveBeenCalled()
+    expect(mockFetchLabels).not.toHaveBeenCalled()
   })
 
   it('redirects non-admin users to home', () => {
     mockUser = { id: 2, username: 'author', email: 'author@t.com', display_name: null, is_admin: false }
-    mockFetchLabel.mockReturnValue(new Promise(() => {}))
-    mockFetchLabels.mockReturnValue(new Promise(() => {}))
     renderSettings()
     expect(mockNavigate).toHaveBeenCalledWith('/', { replace: true })
+    expect(mockFetchLabel).not.toHaveBeenCalled()
+    expect(mockFetchLabels).not.toHaveBeenCalled()
   })
 
   it('shows spinner while loading', () => {

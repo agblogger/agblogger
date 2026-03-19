@@ -49,6 +49,7 @@ export default function LabelSettingsPage() {
   const busy = saving || deleting
 
   useEffect(() => {
+    if (!isReady) return
     if (labelId === undefined) return
     setLoading(true)
     setError(null)
@@ -73,7 +74,7 @@ export default function LabelSettingsPage() {
       .finally(() => {
         setLoading(false)
       })
-  }, [labelId])
+  }, [labelId, isReady])
 
   const excludedIds = useMemo(() => {
     if (labelId === undefined) return new Set<string>()
