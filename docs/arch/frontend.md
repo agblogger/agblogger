@@ -38,3 +38,4 @@ The frontend does not own markdown rendering. It receives rendered HTML from the
 - `frontend/src/hooks/` contains client-side enhancements layered on top of backend-rendered content and editor workflows.
 - `frontend/src/components/search/` contains the live search dropdown components (`SearchDropdown`, `highlightMatch`) used by the header for as-you-type search previews.
 - `frontend/src/components/share/` contains the social sharing bar and platform-specific sharing components used by the post view.
+- `frontend/src/components/labels/` contains shared label form components (names editor, parents selector) used by both the label creation and label settings pages.

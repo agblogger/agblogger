@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import AlertBanner from '@/components/AlertBanner'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import BackLink from '@/components/BackLink'
+import ErrorBlock from '@/components/ErrorBlock'
 import { useNavigate } from 'react-router-dom'
 import { Tag } from 'lucide-react'
 
@@ -32,10 +33,7 @@ export default function LabelCreatePage() {
 
   const isValidId = labelId.length > 0 && labelId.length <= 100 && LABEL_ID_REGEX.test(labelId)
 
-  const isDirty = useMemo(
-    () => labelId.length > 0 || names.length > 0 || parents.length > 0,
-    [labelId, names, parents],
-  )
+  const isDirty = labelId.length > 0 || names.length > 0 || parents.length > 0
 
   const { markSaved } = useUnsavedChanges(isDirty)
 
@@ -46,13 +44,19 @@ export default function LabelCreatePage() {
   }, [user, isInitialized, navigate])
 
   useEffect(() => {
+    if (!user) return
     fetchLabels()
       .then(setAllLabels)
-      .catch(() => {
-        setError('Failed to load labels. Please try again later.')
+      .catch((err: unknown) => {
+        if (err instanceof HTTPError && err.response.status === 401) {
+          setError('Session expired. Please log in again.')
+        } else {
+          console.error('Failed to load labels:', err)
+          setError('Failed to load labels. Please try again later.')
+        }
       })
       .finally(() => setLoading(false))
-  }, [])
+  }, [user])
 
   async function handleCreate() {
     if (!isValidId) return
@@ -65,18 +69,25 @@ export default function LabelCreatePage() {
     } catch (err) {
       if (err instanceof HTTPError) {
         const status = err.response.status
-        if (status === 409) {
-          setError('A label with this ID already exists.')
-        } else if (status === 422) {
-          setError('Invalid label ID. Use lowercase letters, numbers, and hyphens.')
-        } else if (status === 404) {
-          setError('One or more selected parent labels no longer exist.')
-        } else if (status === 401) {
-          setError('Session expired. Please log in again.')
-        } else {
-          setError('Failed to create label. Please try again.')
+        switch (status) {
+          case 409:
+            setError('A label with this ID already exists.')
+            break
+          case 422:
+            setError('Invalid label ID. Use lowercase letters, numbers, and hyphens.')
+            break
+          case 404:
+            setError('One or more selected parent labels no longer exist.')
+            break
+          case 401:
+            setError('Session expired. Please log in again.')
+            break
+          default:
+            console.error(`Failed to create label: unexpected HTTP ${status}`)
+            setError('Failed to create label. Please try again.')
         }
       } else {
+        console.error('Failed to create label:', err)
         setError('Failed to create label. Please try again.')
       }
     } finally {
@@ -92,6 +103,10 @@ export default function LabelCreatePage() {
     return <LoadingSpinner />
   }
 
+  if (error !== null && allLabels.length === 0) {
+    return <ErrorBlock message={error} backTo="/labels" backLabel="Back to labels" />
+  }
+
   return (
     <div className="animate-fade-in">
       <div className="mb-6">
@@ -101,23 +116,20 @@ export default function LabelCreatePage() {
       <div className="flex items-center gap-3 mb-8">
         <Tag size={20} className="text-accent" />
         <h1 className="font-display text-3xl text-ink">New Label</h1>
-        <div className="ml-auto">
-          <button
-            onClick={() => void handleCreate()}
-            disabled={creating || !isValidId}
-            className="px-6 py-2.5 text-sm font-medium bg-accent text-white rounded-lg
-                     hover:bg-accent-light disabled:opacity-50 transition-colors"
-          >
-            {creating ? 'Creating...' : 'Create Label'}
-          </button>
-        </div>
+        <button
+          onClick={() => void handleCreate()}
+          disabled={creating || !isValidId}
+          className="ml-auto px-6 py-2.5 text-sm font-medium bg-accent text-white rounded-lg
+                   hover:bg-accent-light disabled:opacity-50 transition-colors"
+        >
+          {creating ? 'Creating...' : 'Create Label'}
+        </button>
       </div>
 
       {error !== null && (
         <AlertBanner variant="error" className="mb-6">{error}</AlertBanner>
       )}
 
-      {/* Label ID section */}
       <section className="mb-8 p-5 bg-paper border border-border rounded-lg">
         <h2 className="text-sm font-medium text-ink mb-3">Label ID</h2>
         <input

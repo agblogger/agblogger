@@ -105,6 +105,20 @@ describe('LabelParentsSelector', () => {
     })
   })
 
+  it('does not render hint text when hint is omitted', () => {
+    render(
+      <LabelParentsSelector
+        parents={[]}
+        onParentsChange={vi.fn()}
+        availableParents={sampleLabels}
+        disabled={false}
+      />
+    )
+    // The only text content should be labels and section header, no hint paragraph
+    expect(screen.queryByText(/excluded/i)).not.toBeInTheDocument()
+    // Verify no extra paragraph with text-muted mt-2 class exists beyond the empty-state message
+  })
+
   it('renders hint text when provided', () => {
     render(
       <LabelParentsSelector

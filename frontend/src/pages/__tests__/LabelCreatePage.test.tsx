@@ -173,6 +173,7 @@ describe('LabelCreatePage', () => {
 
   it('shows generic error on unknown failure', async () => {
     const user = userEvent.setup()
+    vi.spyOn(console, 'error').mockImplementation(() => {})
     mockCreateLabel.mockRejectedValue(new Error('network'))
     renderCreatePage()
     await screen.findByText('New Label')
@@ -223,5 +224,81 @@ describe('LabelCreatePage', () => {
     // Initial render with empty form — isDirty should be false
     const firstCall = mockUseUnsavedChanges.mock.calls[0]
     expect(firstCall?.[0]).toBe(false)
+  })
+
+  it('shows ErrorBlock when fetchLabels fails', async () => {
+    mockFetchLabels.mockRejectedValue(new Error('network'))
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    renderCreatePage()
+    expect(await screen.findByText('Back to labels')).toBeInTheDocument()
+    expect(screen.queryByPlaceholderText('e.g. machine-learning')).not.toBeInTheDocument()
+  })
+
+  it('shows session expired message when fetchLabels returns 401', async () => {
+    mockFetchLabels.mockRejectedValue(mockHttpError(401))
+    renderCreatePage()
+    expect(await screen.findByText('Session expired. Please log in again.')).toBeInTheDocument()
+  })
+
+  it('creates label with names and parents', async () => {
+    const user = userEvent.setup()
+    const created: LabelResponse = {
+      id: 'ml', names: ['Machine Learning'], is_implicit: false, parents: ['python'], children: [], post_count: 0,
+    }
+    mockCreateLabel.mockResolvedValue(created)
+    renderCreatePage()
+    await screen.findByText('New Label')
+
+    await user.type(screen.getByPlaceholderText('e.g. machine-learning'), 'ml')
+    await user.type(screen.getByPlaceholderText('Add a display name...'), 'Machine Learning')
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+    await user.click(screen.getByRole('checkbox', { name: /#python/ }))
+    await user.click(screen.getByRole('button', { name: 'Create Label' }))
+
+    await waitFor(() => {
+      expect(mockCreateLabel).toHaveBeenCalledWith({
+        id: 'ml',
+        names: ['Machine Learning'],
+        parents: ['python'],
+      })
+    })
+  })
+
+  it('clears error banner when label ID input changes', async () => {
+    const user = userEvent.setup()
+    mockCreateLabel.mockRejectedValue(mockHttpError(409))
+    renderCreatePage()
+    await screen.findByText('New Label')
+
+    await user.type(screen.getByPlaceholderText('e.g. machine-learning'), 'duplicate')
+    await user.click(screen.getByRole('button', { name: 'Create Label' }))
+    expect(await screen.findByText('A label with this ID already exists.')).toBeInTheDocument()
+
+    await user.type(screen.getByPlaceholderText('e.g. machine-learning'), 'x')
+    expect(screen.queryByText('A label with this ID already exists.')).not.toBeInTheDocument()
+  })
+
+  it('keeps Create button disabled when label ID starts with a hyphen', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await screen.findByText('New Label')
+
+    await user.type(screen.getByPlaceholderText('e.g. machine-learning'), '-test')
+    expect(screen.getByRole('button', { name: 'Create Label' })).toBeDisabled()
+  })
+
+  it('logs to console.error on non-HTTP error during create', async () => {
+    const user = userEvent.setup()
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    mockCreateLabel.mockRejectedValue(new Error('network'))
+    renderCreatePage()
+    await screen.findByText('New Label')
+
+    await user.type(screen.getByPlaceholderText('e.g. machine-learning'), 'test-id')
+    await user.click(screen.getByRole('button', { name: 'Create Label' }))
+
+    await waitFor(() => {
+      expect(consoleSpy).toHaveBeenCalled()
+    })
   })
 })
