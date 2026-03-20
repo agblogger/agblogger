@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import getpass
+import gzip
 import ipaddress
 import json
 import os
@@ -34,7 +35,7 @@ DEFAULT_EXTERNAL_CADDY_COMPOSE_FILE = "docker-compose.external-caddy.yml"
 DEFAULT_IMAGE_EXTERNAL_CADDY_COMPOSE_FILE = "docker-compose.image.external-caddy.yml"
 DEFAULT_REMOTE_README = "DEPLOY-REMOTE.md"
 DEFAULT_SETUP_SCRIPT = "setup.sh"
-DEFAULT_IMAGE_TARBALL = "agblogger-image.tar"
+DEFAULT_IMAGE_TARBALL = "agblogger-image.tar.gz"
 DEFAULT_REMOTE_PLATFORM = "linux/amd64"
 DEFAULT_BUNDLE_DIR = Path("dist/deploy")
 DEPLOY_MODE_LOCAL = "local"
@@ -144,7 +145,7 @@ class DeployConfig:
     caddy_public: bool
     expose_docs: bool
     admin_display_name: str = ""
-    deployment_mode: str = DEPLOY_MODE_LOCAL
+    deployment_mode: str = DEPLOY_MODE_TARBALL
     image_ref: str | None = None
     bundle_dir: Path = DEFAULT_BUNDLE_DIR
     tarball_filename: str = DEFAULT_IMAGE_TARBALL
@@ -1130,7 +1131,7 @@ def _validate_config(config: DeployConfig) -> None:
         raise DeployError("TARBALL_FILENAME must not be empty")
 
 
-def check_prerequisites(project_dir: Path, deployment_mode: str = DEPLOY_MODE_LOCAL) -> None:
+def check_prerequisites(project_dir: Path, deployment_mode: str = DEPLOY_MODE_TARBALL) -> None:
     """Check required deployment prerequisites."""
     dockerfile = project_dir / "Dockerfile"
     if not dockerfile.exists():
@@ -1517,10 +1518,14 @@ def push_image(project_dir: Path, image_tag: str) -> None:
 
 
 def save_image_tarball(project_dir: Path, image_tag: str, tarball_path: Path) -> None:
-    """Export a Docker image to a tarball."""
+    """Export a Docker image to a gzipped tarball."""
     print(f"Saving image tarball ({tarball_path.name})...")
     tarball_path.parent.mkdir(parents=True, exist_ok=True)
-    _run_docker(project_dir, ["save", "--output", str(tarball_path), image_tag])
+    raw_tar = tarball_path.with_suffix("")  # strip .gz for intermediate file
+    _run_docker(project_dir, ["save", "--output", str(raw_tar), image_tag])
+    with raw_tar.open("rb") as f_in, gzip.open(tarball_path, "wb") as f_out:
+        shutil.copyfileobj(f_in, f_out)
+    raw_tar.unlink()
 
 
 def _compose_base_args(config: DeployConfig) -> list[str]:
@@ -1839,14 +1844,14 @@ def _prompt_yes_no(prompt: str, default: bool) -> bool:
 
 def _prompt_deployment_mode() -> str:
     """Prompt for a supported deployment mode."""
-    prompt = f"Deployment mode [local/registry/tarball] [{DEPLOY_MODE_LOCAL}]"
+    prompt = f"Deployment mode [tarball/registry/local] [{DEPLOY_MODE_TARBALL}]"
     while True:
         value = input(f"{prompt}: ").strip().lower()
         if not value:
-            return DEPLOY_MODE_LOCAL
+            return DEPLOY_MODE_TARBALL
         if value in DEPLOY_MODES:
             return value
-        print("Please choose local, registry, or tarball.")
+        print("Please choose tarball, registry, or local.")
 
 
 def _prompt_host_port(default: int = DEFAULT_HOST_PORT) -> int:
@@ -2299,8 +2304,8 @@ def _parse_args() -> argparse.Namespace:
     config_group.add_argument(
         "--deployment-mode",
         choices=sorted(DEPLOY_MODES),
-        default=DEPLOY_MODE_LOCAL,
-        help="Choose local deploy, registry bundle, or tarball bundle mode.",
+        default=DEPLOY_MODE_TARBALL,
+        help="Choose tarball bundle, registry bundle, or local deploy mode.",
     )
     config_group.add_argument(
         "--image-ref",

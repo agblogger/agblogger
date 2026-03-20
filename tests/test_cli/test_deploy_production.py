@@ -136,6 +136,11 @@ def _stub_subprocess(monkeypatch: pytest.MonkeyPatch) -> list[tuple[list[str], P
         if kwargs.get("capture_output"):
             ns.stdout = b'{"Results":[]}'
             ns.stderr = b""
+        # Create a dummy file for docker save so the gzip step has something to read
+        if len(command) >= 4 and command[1] == "save" and command[2] == "--output":
+            output_path = Path(command[3])
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_bytes(b"fake-image-data")
         return ns
 
     monkeypatch.setattr("cli.deploy_production.subprocess.run", fake_run)
@@ -918,7 +923,9 @@ def test_deploy_tarball_mode_builds_saves_and_writes_bundle(
                 "docker",
                 "save",
                 "--output",
-                str(tmp_path / DEFAULT_BUNDLE_DIR / DEFAULT_IMAGE_TARBALL),
+                str(
+                    (tmp_path / DEFAULT_BUNDLE_DIR / DEFAULT_IMAGE_TARBALL).with_suffix("")
+                ),
                 "agblogger:portable",
             ],
             tmp_path,
@@ -1305,6 +1312,7 @@ def test_validate_config_accepts_subdomain_wildcard() -> None:
         caddy_config=None,
         caddy_public=False,
         expose_docs=False,
+        deployment_mode=DEPLOY_MODE_LOCAL,
     )
 
     from cli.deploy_production import _validate_config
@@ -1490,6 +1498,8 @@ def test_main_subprocess_error_includes_command(
             "--non-interactive",
             "--project-dir",
             str(tmp_path),
+            "--deployment-mode",
+            "local",
             "--admin-username",
             "admin",
             "--admin-password",
@@ -2684,7 +2694,7 @@ class TestCollectConfigReusesExistingSecrets:
 
         # Simulate interactive answers: reuse=yes, mode=local, caddy=none, public=no,
         # port=8000, trusted hosts=example.com, proxy ips=(none), expose docs=no
-        inputs = iter(["y", "", "none", "n", "", "example.com", "", "n"])
+        inputs = iter(["y", "local", "none", "n", "", "example.com", "", "n"])
         monkeypatch.setattr("builtins.input", lambda _prompt: next(inputs))
         monkeypatch.setattr("cli.deploy_production.getpass.getpass", lambda _prompt: "")
 
@@ -2704,7 +2714,7 @@ class TestCollectConfigReusesExistingSecrets:
         # Simulate: secret_key=auto, username=admin, display_name=admin,
         # password+confirm, mode=local,
         # caddy=none, public=no, port=8000, trusted hosts=example.com, proxy ips, docs=no
-        inputs = iter(["admin", "", "", "n", "none", "n", "", "example.com", "", "n"])
+        inputs = iter(["admin", "", "local", "n", "none", "n", "", "example.com", "", "n"])
         passwords = iter(["", "strongpass123", "strongpass123"])
         monkeypatch.setattr("builtins.input", lambda _prompt: next(inputs))
         monkeypatch.setattr(
@@ -3154,7 +3164,7 @@ class TestDnsInfoMessage:
             [
                 "admin",  # admin username
                 "",  # admin display name (default=admin)
-                "",  # deployment mode (local)
+                "local",  # deployment mode
                 "bundled",  # caddy mode
                 "blog.example.com",  # caddy domain
                 "",  # caddy email
@@ -3256,6 +3266,8 @@ class TestDockerDaemonCheck:
                 "--non-interactive",
                 "--project-dir",
                 str(tmp_path),
+                "--deployment-mode",
+                "local",
                 "--admin-username",
                 "admin",
                 "--admin-password",
@@ -3415,7 +3427,7 @@ class TestCollectConfigBundleDirReuse:
 
         # Simulate: reuse=yes, mode=local, caddy=none, public=no,
         # port=8000, trusted hosts, proxy ips, docs=no
-        inputs = iter(["y", "", "none", "n", "", "example.com", "", "n"])
+        inputs = iter(["y", "local", "none", "n", "", "example.com", "", "n"])
         monkeypatch.setattr("builtins.input", lambda _prompt: next(inputs))
         monkeypatch.setattr("cli.deploy_production.getpass.getpass", lambda _prompt: "")
 
@@ -3457,7 +3469,7 @@ class TestCollectConfigBundleDirReuse:
 
         # Simulate: reuse=yes, mode=local, caddy=none, public=no,
         # port=8000, trusted hosts, proxy ips, docs=no
-        inputs = iter(["y", "", "none", "n", "", "example.com", "", "n"])
+        inputs = iter(["y", "local", "none", "n", "", "example.com", "", "n"])
         monkeypatch.setattr("builtins.input", lambda _prompt: next(inputs))
         monkeypatch.setattr("cli.deploy_production.getpass.getpass", lambda _prompt: "")
 
