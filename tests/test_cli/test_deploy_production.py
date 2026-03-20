@@ -27,6 +27,7 @@ from cli.deploy_production import (
     DEFAULT_IMAGE_COMPOSE_FILE,
     DEFAULT_IMAGE_EXTERNAL_CADDY_COMPOSE_FILE,
     DEFAULT_IMAGE_NO_CADDY_COMPOSE_FILE,
+    DEFAULT_IMAGE_REF,
     DEFAULT_IMAGE_TARBALL,
     DEFAULT_NO_CADDY_COMPOSE_FILE,
     DEFAULT_REMOTE_PLATFORM,
@@ -923,9 +924,7 @@ def test_deploy_tarball_mode_builds_saves_and_writes_bundle(
                 "docker",
                 "save",
                 "--output",
-                str(
-                    (tmp_path / DEFAULT_BUNDLE_DIR / DEFAULT_IMAGE_TARBALL).with_suffix("")
-                ),
+                str((tmp_path / DEFAULT_BUNDLE_DIR / DEFAULT_IMAGE_TARBALL).with_suffix("")),
                 "agblogger:portable",
             ],
             tmp_path,
@@ -1202,7 +1201,7 @@ def test_config_from_args_raises_on_missing_trusted_hosts() -> None:
         config_from_args(args)
 
 
-def test_config_from_args_requires_image_ref_for_registry_mode() -> None:
+def test_config_from_args_defaults_image_ref_for_registry_mode() -> None:
     args = argparse.Namespace(
         secret_key="s" * 64,
         admin_username="admin",
@@ -1227,8 +1226,37 @@ def test_config_from_args_requires_image_ref_for_registry_mode() -> None:
         skip_scan=False,
     )
 
-    with pytest.raises(DeployError, match="--image-ref"):
-        config_from_args(args)
+    config = config_from_args(args)
+    assert config.image_ref == DEFAULT_IMAGE_REF
+
+
+def test_config_from_args_defaults_image_ref_for_tarball_mode() -> None:
+    args = argparse.Namespace(
+        secret_key="s" * 64,
+        admin_username="admin",
+        admin_password="strong-password!",
+        admin_display_name=None,
+        caddy_domain=None,
+        caddy_email=None,
+        caddy_public=False,
+        caddy_external=False,
+        shared_caddy_dir=DEFAULT_SHARED_CADDY_DIR,
+        shared_caddy_email=None,
+        trusted_hosts="example.com",
+        trusted_proxy_ips=None,
+        host_port=8000,
+        bind_public=False,
+        expose_docs=False,
+        deployment_mode=DEPLOY_MODE_TARBALL,
+        image_ref=None,
+        bundle_dir=DEFAULT_BUNDLE_DIR,
+        tarball_filename=DEFAULT_IMAGE_TARBALL,
+        platform=None,
+        skip_scan=False,
+    )
+
+    config = config_from_args(args)
+    assert config.image_ref == DEFAULT_IMAGE_REF
 
 
 def test_config_from_args_builds_registry_mode() -> None:
@@ -3185,10 +3213,12 @@ class TestDnsInfoMessage:
 
         assert config.caddy_config is not None
         assert config.caddy_config.domain == "blog.example.com"
-        # Verify a DNS info message was printed
+        # Verify a DNS info message was printed with remote-friendly wording
         output = capsys.readouterr().out
         assert "DNS" in output
         assert "blog.example.com" in output
+        assert "your server" in output
+        assert "this server" not in output
 
     def test_print_config_summary_hides_platform_when_none(
         self, capsys: pytest.CaptureFixture[str]

@@ -35,6 +35,7 @@ DEFAULT_EXTERNAL_CADDY_COMPOSE_FILE = "docker-compose.external-caddy.yml"
 DEFAULT_IMAGE_EXTERNAL_CADDY_COMPOSE_FILE = "docker-compose.image.external-caddy.yml"
 DEFAULT_REMOTE_README = "DEPLOY-REMOTE.md"
 DEFAULT_SETUP_SCRIPT = "setup.sh"
+DEFAULT_IMAGE_REF = "agblogger:latest"
 DEFAULT_IMAGE_TARBALL = "agblogger-image.tar.gz"
 DEFAULT_REMOTE_PLATFORM = "linux/amd64"
 DEFAULT_BUNDLE_DIR = Path("dist/deploy")
@@ -2014,7 +2015,8 @@ def collect_config(project_dir: Path | None = None) -> DeployConfig:
     platform: str | None = None
     if deployment_mode in {DEPLOY_MODE_REGISTRY, DEPLOY_MODE_TARBALL}:
         image_ref = _prompt_non_empty(
-            "Container image reference (e.g., ghcr.io/yourname/agblogger:v1.0)"
+            "Container image reference (e.g., agblogger:v1.0)",
+            default=DEFAULT_IMAGE_REF,
         )
         if deployment_mode == DEPLOY_MODE_TARBALL:
             tarball_filename = _prompt_non_empty(
@@ -2041,7 +2043,7 @@ def collect_config(project_dir: Path | None = None) -> DeployConfig:
         host_bind_ip = LOCALHOST_BIND_IP
         print(
             f"\n** IMPORTANT: Before starting, ensure your domain's DNS A/AAAA record"
-            f" points {caddy_domain} to this server."
+            f" points {caddy_domain} to your server."
             f" Caddy will attempt to provision a TLS certificate from Let's Encrypt"
             f" on startup and will fail if DNS is not configured.\n"
         )
@@ -2147,8 +2149,9 @@ def config_from_args(args: argparse.Namespace) -> DeployConfig:
         )
     if not args.trusted_hosts:
         raise DeployError("--trusted-hosts is required in non-interactive mode")
-    if args.deployment_mode in {DEPLOY_MODE_REGISTRY, DEPLOY_MODE_TARBALL} and not args.image_ref:
-        raise DeployError("--image-ref is required for registry and tarball deployment modes")
+    image_ref = args.image_ref
+    if args.deployment_mode in {DEPLOY_MODE_REGISTRY, DEPLOY_MODE_TARBALL} and not image_ref:
+        image_ref = DEFAULT_IMAGE_REF
 
     caddy_config: CaddyConfig | None = None
     caddy_public = False
@@ -2199,7 +2202,7 @@ def config_from_args(args: argparse.Namespace) -> DeployConfig:
         caddy_public=caddy_public,
         expose_docs=args.expose_docs,
         deployment_mode=args.deployment_mode,
-        image_ref=args.image_ref,
+        image_ref=image_ref,
         bundle_dir=args.bundle_dir,
         tarball_filename=args.tarball_filename,
         platform=platform,
