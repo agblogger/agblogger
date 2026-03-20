@@ -8,6 +8,7 @@ import ipaddress
 import json
 import os
 import re
+import readline  # imported for side effect: enhances input() with arrow-key line editing
 import secrets
 import shutil
 import subprocess

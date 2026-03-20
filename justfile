@@ -248,7 +248,7 @@ check-frontend: check-frontend-static test-frontend
 # Dead-code analysis (Vulture), scoped to runtime Python code only.
 check-vulture:
     @echo "── Runtime dead-code analysis (Vulture) ──"
-    uv run vulture backend cli --exclude "backend/migrations" --min-confidence 80
+    uv run vulture backend cli --exclude "backend/migrations" --min-confidence 80 --ignore-names "readline"
 
 # Runtime security-focused static analysis (Semgrep)
 check-semgrep:
