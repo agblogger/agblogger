@@ -41,10 +41,11 @@ RUN useradd --create-home --shell /bin/bash agblogger
 
 WORKDIR /app
 
-# Install server wheel
+# Install server wheel (uv is removed after install – it is not needed at runtime)
 COPY --from=server-wheel-build /tmp/dist/ /tmp/dist/
 RUN uv pip install --system /tmp/dist/agblogger_server-*.whl \
-    && rm -rf /tmp/dist
+    && rm -rf /tmp/dist \
+    && rm /usr/local/bin/uv
 
 # Copy built frontend
 COPY --from=frontend-build /app/frontend/dist ./frontend/dist

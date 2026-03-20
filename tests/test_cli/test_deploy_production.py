@@ -76,6 +76,7 @@ from cli.deploy_production import (
     parse_existing_env,
     print_config_summary,
     reload_shared_caddy,
+    scan_image,
     write_bundle_files,
     write_caddy_site_snippet,
     write_config_files,
@@ -94,6 +95,7 @@ def _make_config(
     caddy_mode: CaddyMode = CADDY_MODE_NONE,
     shared_caddy_config: SharedCaddyConfig | None = None,
     trusted_proxy_ips: list[str] | None = None,
+    scan_image: bool = True,
 ) -> DeployConfig:
     """Build a valid DeployConfig with sensible defaults for tests."""
     return DeployConfig(
@@ -114,6 +116,7 @@ def _make_config(
         platform=platform,
         caddy_mode=caddy_mode,
         shared_caddy_config=shared_caddy_config,
+        scan_image=scan_image,
     )
 
 
@@ -125,9 +128,15 @@ def _stub_subprocess(monkeypatch: pytest.MonkeyPatch) -> list[tuple[list[str], P
     """
     commands: list[tuple[list[str], Path, bool]] = []
 
-    def fake_run(command: list[str], cwd: Path, check: bool, **kwargs: object) -> SimpleNamespace:
+    def fake_run(
+        command: list[str], *, cwd: Path, check: bool = False, **kwargs: object
+    ) -> SimpleNamespace:
         commands.append((command, cwd, check))
-        return SimpleNamespace(returncode=0)
+        ns = SimpleNamespace(returncode=0)
+        if kwargs.get("capture_output"):
+            ns.stdout = b'{"Results":[]}'
+            ns.stderr = b""
+        return ns
 
     monkeypatch.setattr("cli.deploy_production.subprocess.run", fake_run)
     monkeypatch.setattr("cli.deploy_production._wait_for_healthy", lambda *_a, **_kw: None)
@@ -523,7 +532,7 @@ def test_write_config_files_cleans_up_stale_files(tmp_path: Path) -> None:
 
 
 def test_deploy_writes_env_file_and_runs_docker_compose_without_caddy(
-    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     (tmp_path / "docker-compose.yml").write_text("services: {}\n", encoding="utf-8")
     commands = _stub_subprocess(monkeypatch)
@@ -532,11 +541,6 @@ def test_deploy_writes_env_file_and_runs_docker_compose_without_caddy(
     config = _make_config()
     result = deploy(config=config, project_dir=tmp_path)
 
-    captured = capsys.readouterr()
-    assert (
-        "Warning: Trivy is not installed or not available on PATH; skipping Docker image scan."
-        in captured.err
-    )
     assert result.env_path == tmp_path / ".env.production"
     assert (
         result.commands["start"]
@@ -685,11 +689,10 @@ def test_deploy_runs_trivy_scan_before_compose_up(
     commands = _stub_subprocess(monkeypatch)
     _stub_with_trivy(monkeypatch)
 
-    config = _make_config()
+    config = _make_config(scan_image=True)
     deploy(config=config, project_dir=tmp_path)
 
     assert commands == [
-        (["trivy", "--version"], tmp_path, True),
         (
             [
                 "docker",
@@ -709,14 +712,15 @@ def test_deploy_runs_trivy_scan_before_compose_up(
                 "image",
                 "--scanners",
                 "vuln",
-                "--exit-code",
-                "1",
+                "--format",
+                "json",
+                "--quiet",
                 "--severity",
                 "MEDIUM,HIGH,CRITICAL",
                 LOCAL_IMAGE_TAG,
             ],
             tmp_path,
-            True,
+            False,
         ),
         (
             [
@@ -733,6 +737,117 @@ def test_deploy_runs_trivy_scan_before_compose_up(
             True,
         ),
     ]
+
+
+def test_deploy_skips_scan_when_disabled(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    (tmp_path / "docker-compose.yml").write_text("services: {}\n", encoding="utf-8")
+    commands = _stub_subprocess(monkeypatch)
+    _stub_with_trivy(monkeypatch)
+
+    config = _make_config(scan_image=False)
+    deploy(config=config, project_dir=tmp_path)
+
+    # No trivy commands at all — just compose up (with build).
+    assert commands == [
+        (
+            [
+                "docker",
+                "compose",
+                "--env-file",
+                ".env.production",
+                "-f",
+                "docker-compose.nocaddy.yml",
+                "up",
+                "-d",
+                "--build",
+            ],
+            tmp_path,
+            True,
+        ),
+    ]
+
+
+def test_scan_image_reports_findings_as_warning(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """scan_image prints a concise warning summary and returns findings."""
+    trivy_output = {
+        "Results": [
+            {
+                "Target": "usr/local/bin/uv (rustbinary)",
+                "Type": "rustbinary",
+                "Vulnerabilities": [
+                    {
+                        "VulnerabilityID": "CVE-2026-99999",
+                        "PkgName": "somecrate",
+                        "InstalledVersion": "1.0.0",
+                        "FixedVersion": "2.0.0",
+                        "Severity": "HIGH",
+                        "Title": "A bad vulnerability",
+                    },
+                ],
+            },
+        ],
+    }
+    import json
+
+    monkeypatch.setattr(
+        "cli.deploy_production.subprocess.run",
+        lambda *_a, **_kw: SimpleNamespace(
+            returncode=1,
+            stdout=json.dumps(trivy_output).encode(),
+            stderr=b"",
+        ),
+    )
+
+    findings = scan_image(tmp_path, "img:test")
+
+    assert len(findings) == 1
+    assert findings[0]["id"] == "CVE-2026-99999"
+    assert findings[0]["severity"] == "HIGH"
+
+    captured = capsys.readouterr()
+    assert "1 vulnerability" in captured.err
+    assert "1 HIGH" in captured.err
+    assert "CVE-2026-99999" in captured.err
+
+
+def test_scan_image_no_findings(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """scan_image prints a success message when no vulnerabilities are found."""
+    monkeypatch.setattr(
+        "cli.deploy_production.subprocess.run",
+        lambda *_a, **_kw: SimpleNamespace(
+            returncode=0,
+            stdout=b'{"Results":[]}',
+            stderr=b"",
+        ),
+    )
+
+    findings = scan_image(tmp_path, "img:test")
+
+    assert findings == []
+    captured = capsys.readouterr()
+    assert "no vulnerabilities found" in captured.out
+
+
+def test_scan_image_tolerates_trivy_failure(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """scan_image returns empty list and warns when trivy fails."""
+    import subprocess as _sp
+
+    monkeypatch.setattr(
+        "cli.deploy_production.subprocess.run",
+        lambda *_a, **_kw: (_ for _ in ()).throw(_sp.TimeoutExpired(["trivy"], 30)),
+    )
+
+    findings = scan_image(tmp_path, "img:test")
+
+    assert findings == []
+    captured = capsys.readouterr()
+    assert "security scan failed" in captured.err
 
 
 def test_deploy_registry_mode_builds_pushes_and_writes_bundle(
@@ -884,6 +999,7 @@ def test_config_from_args_builds_config_without_caddy() -> None:
         bundle_dir=DEFAULT_BUNDLE_DIR,
         tarball_filename=DEFAULT_IMAGE_TARBALL,
         platform=None,
+        skip_scan=False,
     )
 
     config = config_from_args(args)
@@ -918,6 +1034,7 @@ def test_config_from_args_builds_config_with_caddy() -> None:
         bundle_dir=DEFAULT_BUNDLE_DIR,
         tarball_filename=DEFAULT_IMAGE_TARBALL,
         platform=None,
+        skip_scan=False,
     )
 
     config = config_from_args(args)
@@ -952,6 +1069,7 @@ def test_config_from_args_auto_generates_secret_key() -> None:
         bundle_dir=DEFAULT_BUNDLE_DIR,
         tarball_filename=DEFAULT_IMAGE_TARBALL,
         platform=None,
+        skip_scan=False,
     )
 
     config = config_from_args(args)
@@ -980,6 +1098,7 @@ def test_config_from_args_auto_appends_caddy_domain_to_trusted_hosts() -> None:
         bundle_dir=DEFAULT_BUNDLE_DIR,
         tarball_filename=DEFAULT_IMAGE_TARBALL,
         platform=None,
+        skip_scan=False,
     )
 
     config = config_from_args(args)
@@ -1008,6 +1127,7 @@ def test_config_from_args_raises_on_missing_admin_username() -> None:
         bundle_dir=DEFAULT_BUNDLE_DIR,
         tarball_filename=DEFAULT_IMAGE_TARBALL,
         platform=None,
+        skip_scan=False,
     )
 
     with pytest.raises(DeployError, match="--admin-username"):
@@ -1039,6 +1159,7 @@ def test_config_from_args_raises_on_missing_admin_password(
         bundle_dir=DEFAULT_BUNDLE_DIR,
         tarball_filename=DEFAULT_IMAGE_TARBALL,
         platform=None,
+        skip_scan=False,
     )
 
     with pytest.raises(DeployError, match="--admin-password"):
@@ -1067,6 +1188,7 @@ def test_config_from_args_raises_on_missing_trusted_hosts() -> None:
         bundle_dir=DEFAULT_BUNDLE_DIR,
         tarball_filename=DEFAULT_IMAGE_TARBALL,
         platform=None,
+        skip_scan=False,
     )
 
     with pytest.raises(DeployError, match="--trusted-hosts"):
@@ -1095,6 +1217,7 @@ def test_config_from_args_requires_image_ref_for_registry_mode() -> None:
         bundle_dir=DEFAULT_BUNDLE_DIR,
         tarball_filename=DEFAULT_IMAGE_TARBALL,
         platform=None,
+        skip_scan=False,
     )
 
     with pytest.raises(DeployError, match="--image-ref"):
@@ -1123,6 +1246,7 @@ def test_config_from_args_builds_registry_mode() -> None:
         bundle_dir=DEFAULT_BUNDLE_DIR,
         tarball_filename=DEFAULT_IMAGE_TARBALL,
         platform=None,
+        skip_scan=False,
     )
 
     config = config_from_args(args)
@@ -1213,6 +1337,7 @@ def test_config_from_args_auto_adds_caddy_proxy_subnet() -> None:
         bundle_dir=DEFAULT_BUNDLE_DIR,
         tarball_filename=DEFAULT_IMAGE_TARBALL,
         platform=None,
+        skip_scan=False,
     )
 
     config = config_from_args(args)
@@ -1241,6 +1366,7 @@ def test_config_from_args_no_caddy_does_not_add_proxy_subnet() -> None:
         bundle_dir=DEFAULT_BUNDLE_DIR,
         tarball_filename=DEFAULT_IMAGE_TARBALL,
         platform=None,
+        skip_scan=False,
     )
 
     config = config_from_args(args)
@@ -1275,6 +1401,7 @@ def test_config_from_args_reads_admin_password_from_env(
         bundle_dir=DEFAULT_BUNDLE_DIR,
         tarball_filename=DEFAULT_IMAGE_TARBALL,
         platform=None,
+        skip_scan=False,
     )
 
     config = config_from_args(args)
@@ -2548,6 +2675,8 @@ class TestCollectConfigReusesExistingSecrets:
     ) -> None:
         from cli.deploy_production import collect_config
 
+        _stub_no_trivy(monkeypatch)
+
         # Write an existing .env.production
         existing_config = _make_config()
         env_content = build_env_content(existing_config)
@@ -2569,6 +2698,8 @@ class TestCollectConfigReusesExistingSecrets:
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         from cli.deploy_production import collect_config
+
+        _stub_no_trivy(monkeypatch)
 
         # Simulate: secret_key=auto, username=admin, display_name=admin,
         # password+confirm, mode=local,
@@ -2684,6 +2815,7 @@ class TestCrossArchitectureBuild:
             bundle_dir=DEFAULT_BUNDLE_DIR,
             tarball_filename=DEFAULT_IMAGE_TARBALL,
             platform=None,
+            skip_scan=False,
         )
         config = config_from_args(args)
         assert config.platform == DEFAULT_REMOTE_PLATFORM
@@ -2710,6 +2842,7 @@ class TestCrossArchitectureBuild:
             bundle_dir=DEFAULT_BUNDLE_DIR,
             tarball_filename=DEFAULT_IMAGE_TARBALL,
             platform=None,
+            skip_scan=False,
         )
         config = config_from_args(args)
         assert config.platform == DEFAULT_REMOTE_PLATFORM
@@ -2736,6 +2869,7 @@ class TestCrossArchitectureBuild:
             bundle_dir=DEFAULT_BUNDLE_DIR,
             tarball_filename=DEFAULT_IMAGE_TARBALL,
             platform=None,
+            skip_scan=False,
         )
         config = config_from_args(args)
         assert config.platform is None
@@ -2762,6 +2896,7 @@ class TestCrossArchitectureBuild:
             bundle_dir=DEFAULT_BUNDLE_DIR,
             tarball_filename=DEFAULT_IMAGE_TARBALL,
             platform="linux/arm64",
+            skip_scan=False,
         )
         config = config_from_args(args)
         assert config.platform == "linux/arm64"
@@ -3009,6 +3144,8 @@ class TestDnsInfoMessage:
     ) -> None:
         from cli.deploy_production import collect_config
 
+        _stub_no_trivy(monkeypatch)
+
         # Simulate: no existing env, secret_key=auto, username=admin,
         # display_name=admin, password+confirm,
         # mode=local, caddy=bundled, domain, email, caddy_public=yes,
@@ -3159,6 +3296,7 @@ def test_config_from_args_external_caddy() -> None:
         bundle_dir=DEFAULT_BUNDLE_DIR,
         tarball_filename=DEFAULT_IMAGE_TARBALL,
         platform=None,
+        skip_scan=False,
     )
     config = config_from_args(args)
     assert config.caddy_mode == CADDY_MODE_EXTERNAL
@@ -3191,6 +3329,7 @@ def test_config_from_args_external_caddy_with_explicit_shared_email() -> None:
         bundle_dir=DEFAULT_BUNDLE_DIR,
         tarball_filename=DEFAULT_IMAGE_TARBALL,
         platform=None,
+        skip_scan=False,
     )
     config = config_from_args(args)
     assert config.shared_caddy_config is not None
@@ -3265,6 +3404,8 @@ class TestCollectConfigBundleDirReuse:
     ) -> None:
         from cli.deploy_production import collect_config
 
+        _stub_no_trivy(monkeypatch)
+
         # Write .env.production only in the bundle dir, not project root
         existing_config = _make_config()
         env_content = build_env_content(existing_config)
@@ -3288,6 +3429,8 @@ class TestCollectConfigBundleDirReuse:
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         from cli.deploy_production import collect_config
+
+        _stub_no_trivy(monkeypatch)
 
         # Write different configs in both locations
         root_config = _make_config()
@@ -3332,6 +3475,8 @@ class TestCollectConfigExternalCaddy:
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         from cli.deploy_production import collect_config
+
+        _stub_no_trivy(monkeypatch)
 
         # Simulate: no reuse, mode=local, caddy=external,
         # domain=blog.example.com, email=ops@example.com, public=no,
@@ -3602,6 +3747,7 @@ def test_config_from_args_sets_bundled_mode_when_caddy_domain_given() -> None:
         bundle_dir=DEFAULT_BUNDLE_DIR,
         tarball_filename=DEFAULT_IMAGE_TARBALL,
         platform=None,
+        skip_scan=False,
     )
 
     config = config_from_args(args)
@@ -3630,6 +3776,7 @@ def test_config_from_args_sets_none_mode_when_no_caddy_domain() -> None:
         bundle_dir=DEFAULT_BUNDLE_DIR,
         tarball_filename=DEFAULT_IMAGE_TARBALL,
         platform=None,
+        skip_scan=False,
     )
 
     config = config_from_args(args)
@@ -4088,6 +4235,7 @@ def test_config_from_args_raises_on_caddy_external_without_domain() -> None:
         bundle_dir=DEFAULT_BUNDLE_DIR,
         tarball_filename=DEFAULT_IMAGE_TARBALL,
         platform=None,
+        skip_scan=False,
     )
     with pytest.raises(DeployError, match="--caddy-external requires --caddy-domain"):
         config_from_args(args)
@@ -4127,6 +4275,7 @@ def test_config_from_args_external_caddy_uses_placeholder_not_compose_subnet() -
         bundle_dir=DEFAULT_BUNDLE_DIR,
         tarball_filename=DEFAULT_IMAGE_TARBALL,
         platform=None,
+        skip_scan=False,
     )
     config = config_from_args(args)
     assert CADDY_NETWORK_SUBNET_PLACEHOLDER in config.trusted_proxy_ips

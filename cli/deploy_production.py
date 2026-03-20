@@ -150,6 +150,7 @@ class DeployConfig:
     platform: str | None = None
     caddy_mode: CaddyMode = CADDY_MODE_NONE
     shared_caddy_config: SharedCaddyConfig | None = None
+    scan_image: bool = True
 
     @property
     def use_bundled_caddy(self) -> bool:
@@ -1428,26 +1429,82 @@ def build_image(project_dir: Path, image_tag: str, platform: str | None = None) 
     _run_docker(project_dir, args)
 
 
-def scan_image(project_dir: Path, image_tag: str) -> None:
-    """Scan a Docker image with Trivy."""
-    print(f"Scanning image with Trivy ({image_tag})...")
-    _run_trivy(
-        project_dir,
-        [
-            "image",
-            "--scanners",
-            "vuln",
-            "--exit-code",
-            "1",
-            "--severity",
-            "MEDIUM,HIGH,CRITICAL",
-            image_tag,
-        ],
+def scan_image(project_dir: Path, image_tag: str) -> list[dict[str, str]]:
+    """Scan a Docker image with Trivy and return a list of findings.
+
+    Prints a concise summary of MEDIUM/HIGH/CRITICAL vulnerabilities.
+    Never raises on scan failures — returns an empty list and prints a
+    warning instead.
+    """
+    print(f"Scanning image for vulnerabilities ({image_tag})...")
+    try:
+        result = subprocess.run(
+            [
+                "trivy",
+                "image",
+                "--scanners",
+                "vuln",
+                "--format",
+                "json",
+                "--quiet",
+                "--severity",
+                "MEDIUM,HIGH,CRITICAL",
+                image_tag,
+            ],
+            cwd=project_dir,
+            capture_output=True,
+            timeout=COMMAND_TIMEOUT_SECONDS,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+        print(f"Warning: security scan failed ({exc})", file=sys.stderr)
+        return []
+
+    try:
+        data = json.loads(result.stdout)
+    except json.JSONDecodeError, ValueError:
+        print("Warning: could not parse security scan output.", file=sys.stderr)
+        return []
+
+    findings: list[dict[str, str]] = []
+    for target in data.get("Results") or []:
+        for vuln in target.get("Vulnerabilities") or []:
+            findings.append(
+                {
+                    "id": vuln.get("VulnerabilityID", ""),
+                    "pkg": vuln.get("PkgName", ""),
+                    "severity": vuln.get("Severity", ""),
+                    "installed": vuln.get("InstalledVersion", ""),
+                    "fixed": vuln.get("FixedVersion", ""),
+                    "title": vuln.get("Title", ""),
+                }
+            )
+
+    if not findings:
+        print("Security scan passed — no vulnerabilities found.")
+        return findings
+
+    by_severity: dict[str, int] = {}
+    for f in findings:
+        by_severity[f["severity"]] = by_severity.get(f["severity"], 0) + 1
+
+    parts = [f"{by_severity[s]} {s}" for s in ("CRITICAL", "HIGH", "MEDIUM") if s in by_severity]
+    print(
+        f"Warning: security scan found {len(findings)} "
+        f"{'vulnerability' if len(findings) == 1 else 'vulnerabilities'} ({', '.join(parts)}):",
+        file=sys.stderr,
     )
+    for f in findings:
+        fixed_info = f" (fix: {f['fixed']})" if f["fixed"] else ""
+        print(
+            f"  {f['severity']:8s} {f['id']}: {f['pkg']} {f['installed']}{fixed_info}",
+            file=sys.stderr,
+        )
+
+    return findings
 
 
 def build_and_scan(project_dir: Path, image_tag: str, platform: str | None = None) -> None:
-    """Build the Docker image and scan with Trivy before deployment."""
+    """Build the Docker image and optionally scan with Trivy before deployment."""
     build_image(project_dir, image_tag, platform=platform)
     scan_image(project_dir, image_tag)
 
@@ -1552,14 +1609,7 @@ def deploy(config: DeployConfig, project_dir: Path) -> DeployResult:
     """
     _validate_config(config)
 
-    trivy_available = shutil.which("trivy") is not None
-    if trivy_available:
-        _run_trivy(project_dir, ["--version"])
-    else:
-        print(
-            "Warning: Trivy is not installed or not available on PATH; skipping Docker image scan.",
-            file=sys.stderr,
-        )
+    do_scan = config.scan_image and shutil.which("trivy") is not None
 
     backup_messages = backup_existing_configs(project_dir)
     for msg in backup_messages:
@@ -1586,7 +1636,7 @@ def deploy(config: DeployConfig, project_dir: Path) -> DeployResult:
             )
             reload_shared_caddy()
 
-        if trivy_available:
+        if do_scan:
             print(f"Building Docker image ({LOCAL_IMAGE_TAG})...")
             _run_docker(project_dir, _compose_build_command(config))
             scan_image(project_dir, LOCAL_IMAGE_TAG)
@@ -1614,7 +1664,7 @@ def deploy(config: DeployConfig, project_dir: Path) -> DeployResult:
     if image_tag is None:
         raise DeployError("IMAGE_REF is required for remote deployment modes")
 
-    if trivy_available:
+    if do_scan:
         build_and_scan(project_dir, image_tag, platform=config.platform)
     else:
         build_image(project_dir, image_tag, platform=config.platform)
@@ -2043,6 +2093,13 @@ def collect_config(project_dir: Path | None = None) -> DeployConfig:
         default=False,
     )
 
+    do_scan = False
+    if shutil.which("trivy") is not None:
+        do_scan = _prompt_yes_no(
+            "Run security scan on the Docker image before deploying?",
+            default=True,
+        )
+
     return DeployConfig(
         secret_key=secret_key,
         admin_username=admin_username,
@@ -2062,6 +2119,7 @@ def collect_config(project_dir: Path | None = None) -> DeployConfig:
         platform=platform,
         caddy_mode=caddy_mode,
         shared_caddy_config=shared_caddy_config,
+        scan_image=do_scan,
     )
 
 
@@ -2141,6 +2199,7 @@ def config_from_args(args: argparse.Namespace) -> DeployConfig:
         platform=platform,
         caddy_mode=caddy_mode,
         shared_caddy_config=shared_caddy_config,
+        scan_image=not args.skip_scan,
     )
 
 
@@ -2261,6 +2320,12 @@ def _parse_args() -> argparse.Namespace:
         "--platform",
         help="Target platform for Docker image build (e.g., linux/arm64). "
         f"Defaults to {DEFAULT_REMOTE_PLATFORM} for remote deployment modes.",
+    )
+    config_group.add_argument(
+        "--skip-scan",
+        action="store_true",
+        default=False,
+        help="Skip the Trivy security scan of the Docker image.",
     )
 
     return parser.parse_args()
