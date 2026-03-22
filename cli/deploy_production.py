@@ -580,24 +580,111 @@ def build_setup_script_content(config: DeployConfig) -> str:
             ]
         )
 
+    # Diagnostics function — defined early so both compose-failure and
+    # health-timeout paths can call it.
+    lines.extend(
+        [
+            "# ── Diagnostics function ────────────────────────────────────────────",
+            "show_diagnostics() {",
+            '    echo "" >&2',
+            '    echo "=== Diagnostic Information ===" >&2',
+            '    echo "" >&2',
+            '    echo "--- Container status ---" >&2',
+            f"    {compose_cmd} ps -a 2>/dev/null >&2 || true",
+            '    echo "" >&2',
+            f"    CONTAINER_ID=$({compose_cmd} ps -q agblogger 2>/dev/null)",
+            '    if [ -n "$CONTAINER_ID" ]; then',
+            (
+                "        STATE=$(docker inspect"
+                ' --format "{{.State.Status}}"'
+                ' "$CONTAINER_ID" 2>/dev/null || echo "unknown")'
+            ),
+            (
+                "        HEALTH=$(docker inspect"
+                ' --format "{{.State.Health.Status}}"'
+                ' "$CONTAINER_ID" 2>/dev/null || echo "unknown")'
+            ),
+            (
+                "        EXIT_CODE=$(docker inspect"
+                ' --format "{{.State.ExitCode}}"'
+                ' "$CONTAINER_ID" 2>/dev/null || echo "unknown")'
+            ),
+            '        echo "--- AgBlogger container ---" >&2',
+            '        echo "  State:     $STATE" >&2',
+            '        echo "  Health:    $HEALTH" >&2',
+            '        echo "  Exit code: $EXIT_CODE" >&2',
+            '        echo "" >&2',
+            (
+                "        LAST_HC=$(docker inspect"
+                " --format"
+                ' "{{(index .State.Health.Log (sub (len .State.Health.Log) 1)).Output}}"'
+                ' "$CONTAINER_ID" 2>/dev/null || true)'
+            ),
+            '        if [ -n "$LAST_HC" ]; then',
+            '            echo "--- Last health check output ---" >&2',
+            '            echo "$LAST_HC" >&2',
+            '            echo "" >&2',
+            "        fi",
+            '        echo "--- AgBlogger logs (last 30 lines) ---" >&2',
+            (
+                f"        {compose_cmd} logs --no-log-prefix --tail 30"
+                " agblogger 2>/dev/null >&2 || true"
+            ),
+            '        echo "" >&2',
+            "    fi",
+        ]
+    )
+    bundled_caddy_enabled = (
+        config.caddy_config is not None and config.caddy_mode == CADDY_MODE_BUNDLED
+    )
+    if bundled_caddy_enabled:
+        lines.extend(
+            [
+                f"    CADDY_ID=$({compose_cmd} ps -q caddy 2>/dev/null)",
+                '    if [ -n "$CADDY_ID" ]; then',
+                '        echo "--- Caddy logs (last 15 lines) ---" >&2',
+                (
+                    f"        {compose_cmd} logs --no-log-prefix --tail 15"
+                    " caddy 2>/dev/null >&2 || true"
+                ),
+                '        echo "" >&2',
+                "    fi",
+            ]
+        )
+    lines.extend(
+        [
+            '    echo "=== Full logs ===" >&2',
+            f'    echo "  {compose_cmd} logs" >&2',
+            f'    echo "  {compose_cmd} logs agblogger" >&2',
+            '    echo "" >&2',
+            "}",
+            "",
+        ]
+    )
+
     # Start/restart AgBlogger
     lines.extend(
         [
             "# ── Start services ───────────────────────────────────────────────────",
             'echo "Starting AgBlogger..."',
             "# Force-recreate ensures the newly loaded image is used, not a stale container.",
-            "# Capture exit code so diagnostics run even if compose reports dependency failure.",
-            "COMPOSE_EXIT=0",
-            f"{compose_cmd} up -d --force-recreate || COMPOSE_EXIT=$?",
+            "# Disable errexit so a compose dependency failure doesn't skip diagnostics.",
+            "set +e",
+            f"{compose_cmd} up -d --force-recreate",
+            "COMPOSE_EXIT=$?",
+            "set -e",
             'if [ "$COMPOSE_EXIT" -ne 0 ]; then',
-            '    echo "Warning: docker compose up exited with code $COMPOSE_EXIT —'
-            ' checking service status..." >&2',
+            '    echo "" >&2',
+            '    echo "Error: docker compose up failed with exit code'
+            ' $COMPOSE_EXIT." >&2',
+            "    show_diagnostics",
+            "    exit 1",
             "fi",
             "",
         ]
     )
 
-    # Health check
+    # Health check — only reached when compose itself succeeded
     lines.extend(
         [
             "# ── Health check ─────────────────────────────────────────────────────",
@@ -621,9 +708,6 @@ def build_setup_script_content(config: DeployConfig) -> str:
             '    echo "  [${ELAPSED}s] agblogger: $HEALTH"',
             '    if [ "$HEALTH" = "healthy" ]; then',
         ]
-    )
-    bundled_caddy_enabled = (
-        config.caddy_config is not None and config.caddy_mode == CADDY_MODE_BUNDLED
     )
     if bundled_caddy_enabled:
         lines.extend(
@@ -652,69 +736,7 @@ def build_setup_script_content(config: DeployConfig) -> str:
             "done",
             'echo "" >&2',
             'echo "Error: Health check timed out after ${TIMEOUT}s." >&2',
-            'echo "" >&2',
-            "# ── Diagnostics ──────────────────────────────────────────────────────",
-            'echo "=== Diagnostic Information ===" >&2',
-            'echo "" >&2',
-            'echo "--- Container status ---" >&2',
-            f"{compose_cmd} ps -a 2>/dev/null >&2 || true",
-            'echo "" >&2',
-            f"CONTAINER_ID=$({compose_cmd} ps -q agblogger 2>/dev/null)",
-            'if [ -n "$CONTAINER_ID" ]; then',
-            (
-                "    STATE=$(docker inspect"
-                ' --format "{{.State.Status}}"'
-                ' "$CONTAINER_ID" 2>/dev/null || echo "unknown")'
-            ),
-            (
-                "    HEALTH=$(docker inspect"
-                ' --format "{{.State.Health.Status}}"'
-                ' "$CONTAINER_ID" 2>/dev/null || echo "unknown")'
-            ),
-            (
-                "    EXIT_CODE=$(docker inspect"
-                ' --format "{{.State.ExitCode}}"'
-                ' "$CONTAINER_ID" 2>/dev/null || echo "unknown")'
-            ),
-            '    echo "--- AgBlogger container ---" >&2',
-            '    echo "  State:     $STATE" >&2',
-            '    echo "  Health:    $HEALTH" >&2',
-            '    echo "  Exit code: $EXIT_CODE" >&2',
-            '    echo "" >&2',
-            (
-                "    LAST_HC=$(docker inspect"
-                " --format"
-                ' "{{(index .State.Health.Log (sub (len .State.Health.Log) 1)).Output}}"'
-                ' "$CONTAINER_ID" 2>/dev/null || true)'
-            ),
-            '    if [ -n "$LAST_HC" ]; then',
-            '        echo "--- Last health check output ---" >&2',
-            '        echo "$LAST_HC" >&2',
-            '        echo "" >&2',
-            "    fi",
-            '    echo "--- AgBlogger logs (last 30 lines) ---" >&2',
-            f"    {compose_cmd} logs --no-log-prefix --tail 30 agblogger 2>/dev/null >&2 || true",
-            '    echo "" >&2',
-            "fi",
-        ]
-    )
-    if bundled_caddy_enabled:
-        lines.extend(
-            [
-                f"CADDY_ID=$({compose_cmd} ps -q caddy 2>/dev/null)",
-                'if [ -n "$CADDY_ID" ]; then',
-                '    echo "--- Caddy logs (last 15 lines) ---" >&2',
-                f"    {compose_cmd} logs --no-log-prefix --tail 15 caddy 2>/dev/null >&2 || true",
-                '    echo "" >&2',
-                "fi",
-            ]
-        )
-    lines.extend(
-        [
-            'echo "=== Full logs ===" >&2',
-            f'echo "  {compose_cmd} logs" >&2',
-            f'echo "  {compose_cmd} logs agblogger" >&2',
-            'echo "" >&2',
+            "show_diagnostics",
             "exit 1",
         ]
     )
@@ -2490,7 +2512,7 @@ def main() -> None:
             print(f"Open the app at: http://<your-server-host>:{config.host_port}/login")
     else:
         print("\nTo copy the bundle to the remote server:")
-        print(f"  scp -r {result.bundle_path} user@your-server:~/agblogger")
+        print(f"  rsync -av {result.bundle_path}/ user@your-server:~/agblogger/")
         print("Then follow the instructions in DEPLOY-REMOTE.md on the server.")
 
 

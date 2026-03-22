@@ -4512,15 +4512,30 @@ class TestBuildSetupScript:
         script = build_setup_script_content(config)
         assert "--force-recreate" in script
 
-    def test_compose_failure_does_not_skip_diagnostics(self) -> None:
-        """Compose exit code is captured so set -e doesn't skip diagnostics."""
+    def test_compose_failure_shows_diagnostics_immediately(self) -> None:
+        """Compose failure triggers diagnostics without waiting for health timeout."""
         config = _make_config(
             deployment_mode=DEPLOY_MODE_TARBALL,
             image_ref="ghcr.io/example/agblogger:v1.0",
         )
         script = build_setup_script_content(config)
-        assert "COMPOSE_EXIT=0" in script
-        assert "|| COMPOSE_EXIT=$?" in script
+        # errexit is disabled around compose so failure doesn't kill the script
+        assert "set +e" in script
+        assert "COMPOSE_EXIT=$?" in script
+        assert "set -e" in script
+        # Diagnostics are called immediately on compose failure
+        assert "show_diagnostics" in script
+
+    def test_diagnostics_function_shows_container_info(self) -> None:
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+        )
+        script = build_setup_script_content(config)
+        assert "show_diagnostics() {" in script
+        assert "AgBlogger container" in script
+        assert "AgBlogger logs" in script
+        assert "Full logs" in script
 
 
 class TestRemoteReadmeSetupScript:
