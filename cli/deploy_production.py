@@ -585,7 +585,14 @@ def build_setup_script_content(config: DeployConfig) -> str:
         [
             "# ── Start services ───────────────────────────────────────────────────",
             'echo "Starting AgBlogger..."',
-            f"{compose_cmd} up -d",
+            "# Force-recreate ensures the newly loaded image is used, not a stale container.",
+            "# Capture exit code so diagnostics run even if compose reports dependency failure.",
+            "COMPOSE_EXIT=0",
+            f"{compose_cmd} up -d --force-recreate || COMPOSE_EXIT=$?",
+            'if [ "$COMPOSE_EXIT" -ne 0 ]; then',
+            '    echo "Warning: docker compose up exited with code $COMPOSE_EXIT —'
+            ' checking service status..." >&2',
+            "fi",
             "",
         ]
     )

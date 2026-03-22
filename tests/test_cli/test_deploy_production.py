@@ -4504,6 +4504,24 @@ class TestBuildSetupScript:
         assert "docker inspect" in script
         assert ".State.Health.Status" in script
 
+    def test_force_recreate_ensures_fresh_containers(self) -> None:
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+        )
+        script = build_setup_script_content(config)
+        assert "--force-recreate" in script
+
+    def test_compose_failure_does_not_skip_diagnostics(self) -> None:
+        """Compose exit code is captured so set -e doesn't skip diagnostics."""
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+        )
+        script = build_setup_script_content(config)
+        assert "COMPOSE_EXIT=0" in script
+        assert "|| COMPOSE_EXIT=$?" in script
+
 
 class TestRemoteReadmeSetupScript:
     """Remote README should reference setup.sh instead of manual steps."""
