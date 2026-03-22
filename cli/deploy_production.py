@@ -590,7 +590,7 @@ def build_setup_script_content(config: DeployConfig) -> str:
             '    echo "=== Diagnostic Information ===" >&2',
             '    echo "" >&2',
             '    echo "--- Container status ---" >&2',
-            f"    {compose_cmd} ps -a 2>/dev/null >&2 || true",
+            f"    {compose_cmd} ps -a >&2 2>/dev/null || true",
             '    echo "" >&2',
             f"    CONTAINER_ID=$({compose_cmd} ps -q agblogger 2>/dev/null)",
             '    if [ -n "$CONTAINER_ID" ]; then',
@@ -628,7 +628,7 @@ def build_setup_script_content(config: DeployConfig) -> str:
             '        echo "--- AgBlogger logs (last 30 lines) ---" >&2',
             (
                 f"        {compose_cmd} logs --no-log-prefix --tail 30"
-                " agblogger 2>/dev/null >&2 || true"
+                " agblogger >&2 2>/dev/null || true"
             ),
             '        echo "" >&2',
             "    fi",
@@ -645,7 +645,7 @@ def build_setup_script_content(config: DeployConfig) -> str:
                 '        echo "--- Caddy logs (last 15 lines) ---" >&2',
                 (
                     f"        {compose_cmd} logs --no-log-prefix --tail 15"
-                    " caddy 2>/dev/null >&2 || true"
+                    " caddy >&2 2>/dev/null || true"
                 ),
                 '        echo "" >&2',
                 "    fi",
@@ -775,7 +775,7 @@ def _agblogger_healthcheck_section(*, include_network: bool = False) -> str:
         '      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen(\'http://localhost:8000/api/health\')"]\n'
         "      interval: 30s\n"
         "      timeout: 5s\n"
-        "      start_period: 10s\n"
+        "      start_period: 30s\n"
         "      retries: 3\n"
     )
     if include_network:
