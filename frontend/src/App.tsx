@@ -39,6 +39,7 @@ function Layout() {
       : "max-w-3xl mx-auto px-6 py-10";
 
   const fetchConfig = useSiteStore((s) => s.fetchConfig);
+  const siteTitle = useSiteStore((s) => s.config?.title);
   const checkAuth = useAuthStore((s) => s.checkAuth);
   const initTheme = useThemeStore((s) => s.init);
 
@@ -48,6 +49,12 @@ function Layout() {
     const cleanupTheme = initTheme();
     return cleanupTheme;
   }, [fetchConfig, checkAuth, initTheme]);
+
+  useEffect(() => {
+    if (siteTitle !== undefined && siteTitle !== "") {
+      document.title = siteTitle;
+    }
+  }, [siteTitle]);
 
   return (
     <div className="min-h-screen bg-paper">
