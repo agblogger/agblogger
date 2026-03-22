@@ -579,6 +579,11 @@ class TestProductionHardeningDefaults:
 
             health_resp = await local_client.get("/api/health")
             assert health_resp.status_code == 200
+
+            # 127.0.0.1 is always trusted for container health checks
+            loopback_resp = await local_client.get("/api/health", headers={"host": "127.0.0.1"})
+            assert loopback_resp.status_code == 200
+
             assert health_resp.headers.get("x-content-type-options") == "nosniff"
             assert health_resp.headers.get("x-frame-options") == "DENY"
             assert health_resp.headers.get("referrer-policy") == "strict-origin-when-cross-origin"

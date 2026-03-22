@@ -309,6 +309,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     trusted_hosts = settings.trusted_hosts or (
         ["localhost", "127.0.0.1", "::1", "test", "testserver"] if settings.debug else []
     )
+    # Always allow loopback for container health checks (not reachable externally).
+    if trusted_hosts and "127.0.0.1" not in trusted_hosts:
+        trusted_hosts = [*trusted_hosts, "127.0.0.1"]
     if trusted_hosts:
         app.add_middleware(TrustedHostMiddleware, allowed_hosts=trusted_hosts)
 

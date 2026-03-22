@@ -74,7 +74,7 @@ EXPOSE 8000
 
 # Health check (wget is provided by busybox on Alpine — no extra dependencies needed)
 HEALTHCHECK --interval=10s --timeout=5s --start-period=120s --retries=3 \
-    CMD wget -qO/dev/null http://localhost:8000/api/health
+    CMD wget -qO/dev/null http://127.0.0.1:8000/api/health
 
 COPY docker-entrypoint.sh /usr/local/bin/
 

@@ -614,11 +614,18 @@ def build_setup_script_content(config: DeployConfig) -> str:
             '        echo "  Health:    $HEALTH" >&2',
             '        echo "  Exit code: $EXIT_CODE" >&2',
             '        echo "" >&2',
-            '        echo "--- Last health check output ---" >&2',
+            '        echo "--- Health check log ---" >&2',
             (
                 "        docker inspect"
                 ' --format "{{json .State.Health}}"'
-                ' "$CONTAINER_ID" 2>/dev/null >&2 || true'
+                ' "$CONTAINER_ID" >&2 2>/dev/null || true'
+            ),
+            '        echo "" >&2',
+            '        echo "--- Manual health check probe ---" >&2',
+            (
+                '        docker exec "$CONTAINER_ID"'
+                " wget -O - http://127.0.0.1:8000/api/health"
+                " >&2 2>&1 || true"
             ),
             '        echo "" >&2',
             '        echo "--- AgBlogger logs (last 30 lines) ---" >&2',
@@ -638,6 +645,20 @@ def build_setup_script_content(config: DeployConfig) -> str:
             [
                 f"    CADDY_ID=$({compose_cmd} ps -q caddy 2>/dev/null)",
                 '    if [ -n "$CADDY_ID" ]; then',
+                (
+                    "        CADDY_STATE=$(docker inspect"
+                    ' --format "{{.State.Status}}"'
+                    ' "$CADDY_ID" 2>/dev/null || echo "unknown")'
+                ),
+                (
+                    "        CADDY_EXIT=$(docker inspect"
+                    ' --format "{{.State.ExitCode}}"'
+                    ' "$CADDY_ID" 2>/dev/null || echo "unknown")'
+                ),
+                '        echo "--- Caddy container ---" >&2',
+                '        echo "  State:     $CADDY_STATE" >&2',
+                '        echo "  Exit code: $CADDY_EXIT" >&2',
+                '        echo "" >&2',
                 '        echo "--- Caddy logs (last 15 lines) ---" >&2',
                 (
                     f"        {compose_cmd} logs --no-log-prefix --tail 15"
@@ -671,8 +692,7 @@ def build_setup_script_content(config: DeployConfig) -> str:
             "set -e",
             'if [ "$COMPOSE_EXIT" -ne 0 ]; then',
             '    echo "" >&2',
-            '    echo "Error: docker compose up failed with exit code'
-            ' $COMPOSE_EXIT." >&2',
+            '    echo "Error: docker compose up failed with exit code $COMPOSE_EXIT." >&2',
             "    show_diagnostics",
             "    exit 1",
             "fi",
@@ -710,16 +730,22 @@ def build_setup_script_content(config: DeployConfig) -> str:
             [
                 f"        CADDY_ID=$({compose_cmd} ps -q caddy 2>/dev/null)",
                 '        if [ -z "$CADDY_ID" ]; then',
-                '            echo "  [${ELAPSED}s] caddy container not running yet"',
+                '            echo "  [${ELAPSED}s] caddy container not found yet"',
                 "            continue",
                 "        fi",
                 (
-                    "        CADDY_RUNNING=$(docker inspect"
-                    ' --format "{{.State.Running}}"'
-                    ' "$CADDY_ID" 2>/dev/null || echo "false")'
+                    "        CADDY_STATE=$(docker inspect"
+                    ' --format "{{.State.Status}}"'
+                    ' "$CADDY_ID" 2>/dev/null || echo "unknown")'
                 ),
-                '        if [ "$CADDY_RUNNING" != "true" ]; then',
-                '            echo "  [${ELAPSED}s] caddy container not running yet"',
+                '        if [ "$CADDY_STATE" = "exited" ] || [ "$CADDY_STATE" = "dead" ]; then',
+                '            echo "" >&2',
+                '            echo "Error: Caddy container failed (state: $CADDY_STATE)." >&2',
+                "            show_diagnostics",
+                "            exit 1",
+                "        fi",
+                '        if [ "$CADDY_STATE" != "running" ]; then',
+                '            echo "  [${ELAPSED}s] caddy: $CADDY_STATE"',
                 "            continue",
                 "        fi",
             ]
@@ -774,7 +800,7 @@ def _agblogger_healthcheck_section(*, include_network: bool = False) -> str:
     block = (
         "    restart: unless-stopped\n"
         "    healthcheck:\n"
-        '      test: ["CMD-SHELL", "wget -qO/dev/null http://localhost:8000/api/health"]\n'
+        '      test: ["CMD-SHELL", "wget -qO/dev/null http://127.0.0.1:8000/api/health"]\n'
         "      interval: 10s\n"
         "      timeout: 5s\n"
         "      start_period: 120s\n"
@@ -785,14 +811,24 @@ def _agblogger_healthcheck_section(*, include_network: bool = False) -> str:
     return block
 
 
-def _caddy_service_section() -> str:
-    """Return the Caddy service YAML block with static proxy IP."""
+def _caddy_service_section(*, caddy_public: bool = False) -> str:
+    """Return the Caddy service YAML block with static proxy IP.
+
+    When *caddy_public* is ``True``, ports are bound to all interfaces
+    (``0.0.0.0``).  Otherwise they are bound to ``127.0.0.1`` only.
+
+    Ports are baked directly into this block rather than using a separate
+    compose override file because Docker Compose merges ``ports`` arrays
+    additively — an override that appends public ports to a base with
+    localhost ports results in a duplicate-binding conflict.
+    """
+    port_prefix = "" if caddy_public else "127.0.0.1:"
     return (
         "  caddy:\n"
         "    image: caddy:2\n"
         "    ports:\n"
-        '      - "127.0.0.1:80:80"\n'
-        '      - "127.0.0.1:443:443"\n'
+        f'      - "{port_prefix}80:80"\n'
+        f'      - "{port_prefix}443:443"\n'
         "    volumes:\n"
         "      - ./Caddyfile.production:/etc/caddy/Caddyfile:ro\n"
         "      - caddy-data:/data\n"
@@ -840,7 +876,7 @@ def build_direct_compose_content() -> str:
     )
 
 
-def build_image_compose_content() -> str:
+def build_image_compose_content(*, caddy_public: bool = False) -> str:
     """Build an image-based compose file with bundled Caddy reverse proxy for remote deployment."""
     return (
         "services:\n"
@@ -855,7 +891,7 @@ def build_image_compose_content() -> str:
         + _agblogger_env_section()
         + _agblogger_healthcheck_section(include_network=True)
         + "\n"
-        + _caddy_service_section()
+        + _caddy_service_section(caddy_public=caddy_public)
         + "\n"
         + _compose_network_block()
         + "\n"
@@ -1110,8 +1146,8 @@ def _compose_filenames(
             return ["docker-compose.yml"]
         return [DEFAULT_NO_CADDY_COMPOSE_FILE]
 
-    if use_caddy and caddy_public:
-        return [DEFAULT_IMAGE_COMPOSE_FILE, DEFAULT_CADDY_PUBLIC_COMPOSE_FILE]
+    # Image mode bakes caddy_public ports directly into the base compose file
+    # (see build_image_compose_content) so no overlay is needed.
     if use_caddy:
         return [DEFAULT_IMAGE_COMPOSE_FILE]
     return [DEFAULT_IMAGE_NO_CADDY_COMPOSE_FILE]
@@ -1467,17 +1503,14 @@ def write_bundle_files(config: DeployConfig, bundle_dir: Path) -> None:
         (bundle_dir / DEFAULT_CADDYFILE).write_text(
             build_caddyfile_content(config.caddy_config), encoding="utf-8"
         )
+        # Ports are baked into the compose file based on caddy_public to avoid
+        # Docker Compose additive port merge conflicts with a separate overlay.
         (bundle_dir / DEFAULT_IMAGE_COMPOSE_FILE).write_text(
-            build_image_compose_content(), encoding="utf-8"
+            build_image_compose_content(caddy_public=config.caddy_public), encoding="utf-8"
         )
         stale_files.append(DEFAULT_IMAGE_NO_CADDY_COMPOSE_FILE)
         stale_files.append(DEFAULT_IMAGE_EXTERNAL_CADDY_COMPOSE_FILE)
-        if config.caddy_public:
-            (bundle_dir / DEFAULT_CADDY_PUBLIC_COMPOSE_FILE).write_text(
-                build_caddy_public_compose_override_content(), encoding="utf-8"
-            )
-        else:
-            stale_files.append(DEFAULT_CADDY_PUBLIC_COMPOSE_FILE)
+        stale_files.append(DEFAULT_CADDY_PUBLIC_COMPOSE_FILE)
     else:
         (bundle_dir / DEFAULT_IMAGE_NO_CADDY_COMPOSE_FILE).write_text(
             build_image_direct_compose_content(), encoding="utf-8"
@@ -1851,10 +1884,7 @@ def dry_run(config: DeployConfig) -> None:
         print(f"=== {DEFAULT_CADDYFILE} ===")
         print(build_caddyfile_content(caddy_config))
         print(f"=== {DEFAULT_IMAGE_COMPOSE_FILE} ===")
-        print(build_image_compose_content())
-        if config.caddy_public:
-            print(f"=== {DEFAULT_CADDY_PUBLIC_COMPOSE_FILE} ===")
-            print(build_caddy_public_compose_override_content())
+        print(build_image_compose_content(caddy_public=config.caddy_public))
     else:
         print(f"=== {DEFAULT_IMAGE_NO_CADDY_COMPOSE_FILE} ===")
         print(build_image_direct_compose_content())

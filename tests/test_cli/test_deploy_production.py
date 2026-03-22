@@ -337,6 +337,21 @@ def test_build_image_compose_content_passes_all_env_vars() -> None:
     assert "AUTH_ENFORCE_LOGIN_ORIGIN=${AUTH_ENFORCE_LOGIN_ORIGIN:-true}" in content
 
 
+def test_build_image_compose_content_localhost_ports_by_default() -> None:
+    content = build_image_compose_content()
+    assert '"127.0.0.1:80:80"' in content
+    assert '"127.0.0.1:443:443"' in content
+
+
+def test_build_image_compose_content_public_ports_when_caddy_public() -> None:
+    content = build_image_compose_content(caddy_public=True)
+    assert '"80:80"' in content
+    assert '"443:443"' in content
+    # Must NOT have duplicate localhost ports — Docker Compose merges additively.
+    assert '"127.0.0.1:80:80"' not in content
+    assert '"127.0.0.1:443:443"' not in content
+
+
 def test_build_image_direct_compose_content_uses_required_image_reference() -> None:
     content = build_image_direct_compose_content()
     assert "${AGBLOGGER_IMAGE?Set AGBLOGGER_IMAGE}" in content
@@ -4390,8 +4405,10 @@ class TestBuildSetupScript:
         )
         script = build_setup_script_content(config)
         assert "CADDY_ID=$(" in script
-        assert ".State.Running" in script
-        assert "caddy container not running yet" in script
+        assert ".State.Status" in script
+        # Detects exited/dead Caddy and reports a specific error
+        assert "Caddy container failed" in script
+        assert "caddy container not found yet" in script
 
     def test_external_caddy_bootstraps_shared_caddy(self) -> None:
         config = _make_config(
@@ -4542,8 +4559,23 @@ class TestBuildSetupScript:
         script = build_setup_script_content(config)
         assert "show_diagnostics() {" in script
         assert "AgBlogger container" in script
+        assert "Manual health check probe" in script
+        assert "docker exec" in script
+        assert "wget -O -" in script
         assert "AgBlogger logs" in script
         assert "Full logs" in script
+
+    def test_diagnostics_includes_caddy_state_when_bundled(self) -> None:
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+            caddy_config=CaddyConfig(domain="blog.example.com", email="a@b.com"),
+            caddy_mode=CADDY_MODE_BUNDLED,
+            caddy_public=True,
+        )
+        script = build_setup_script_content(config)
+        assert "Caddy container" in script
+        assert "Caddy logs" in script
 
 
 class TestRemoteReadmeSetupScript:
