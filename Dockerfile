@@ -14,30 +14,31 @@ COPY packaging/server/pyproject.toml /app/server-src/pyproject.toml
 COPY backend/ /app/server-src/backend/
 RUN uv build --wheel /app/server-src --out-dir /tmp/dist
 
-# ── Stage 3: Production image ───────────────────────────────────────
-FROM python:3.14-slim
-
-# Install pandoc from GitHub releases (pinned version with +server support)
+# ── Stage 3: Fetch pandoc ────────────────────────────────────────────
+FROM alpine:3.21 AS pandoc-fetch
 ARG PANDOC_VERSION=3.8.3
-ARG GOSU_VERSION=1.17
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl git \
-    && ARCH=$(dpkg --print-architecture) \
-    && curl -fsSL "https://github.com/jgm/pandoc/releases/download/${PANDOC_VERSION}/pandoc-${PANDOC_VERSION}-1-${ARCH}.deb" \
-       -o /tmp/pandoc.deb \
-    && dpkg -i /tmp/pandoc.deb \
-    && rm /tmp/pandoc.deb \
-    && curl -fsSL "https://github.com/tianon/gosu/releases/download/${GOSU_VERSION}/gosu-${ARCH}" \
-       -o /usr/local/bin/gosu \
-    && chmod +x /usr/local/bin/gosu \
-    && gosu --version \
-    && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache curl \
+    && ARCH=$(uname -m) \
+    && case "$ARCH" in x86_64) ARCH=amd64;; aarch64) ARCH=arm64;; esac \
+    && curl -fsSL "https://github.com/jgm/pandoc/releases/download/${PANDOC_VERSION}/pandoc-${PANDOC_VERSION}-linux-${ARCH}.tar.gz" \
+       | tar xz -C /tmp \
+    && mv "/tmp/pandoc-${PANDOC_VERSION}/bin/pandoc" /usr/local/bin/pandoc
+
+# ── Stage 4: Production image ───────────────────────────────────────
+FROM python:3.14-alpine
+
+# Install runtime dependencies (Alpine has no systemd/libudev, smaller attack surface)
+RUN apk upgrade --no-cache \
+    && apk add --no-cache git su-exec
+
+# Copy pandoc (statically-linked binary)
+COPY --from=pandoc-fetch /usr/local/bin/pandoc /usr/local/bin/pandoc
 
 # Install uv for fast dependency resolution
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 # Create non-root user
-RUN useradd --create-home --shell /bin/bash agblogger
+RUN adduser -D -s /bin/sh agblogger
 
 WORKDIR /app
 
@@ -68,9 +69,9 @@ ENV PORT=8000
 
 EXPOSE 8000
 
-# Health check
+# Health check (uses python instead of curl to avoid pulling curl into the final image)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:8000/api/health || exit 1
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"
 
 COPY docker-entrypoint.sh /usr/local/bin/
 

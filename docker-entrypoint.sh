@@ -9,7 +9,7 @@ if [ "$(id -u)" = "0" ]; then
     if ! chown -R agblogger:agblogger /data/content /data/db 2>&1; then
         echo "WARNING: chown failed for /data directories. The application may lack write access." >&2
     fi
-    exec gosu agblogger "$@"
+    exec su-exec agblogger "$@"
 fi
 
 exec "$@"
