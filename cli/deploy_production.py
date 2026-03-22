@@ -689,7 +689,7 @@ def build_setup_script_content(config: DeployConfig) -> str:
         [
             "# ── Health check ─────────────────────────────────────────────────────",
             'echo "Waiting for services to become healthy..."',
-            "TIMEOUT=60",
+            "TIMEOUT=180",
             "INTERVAL=5",
             "ELAPSED=0",
             "while [ $ELAPSED -lt $TIMEOUT ]; do",
@@ -775,7 +775,7 @@ def _agblogger_healthcheck_section(*, include_network: bool = False) -> str:
         '      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen(\'http://localhost:8000/api/health\')"]\n'
         "      interval: 30s\n"
         "      timeout: 5s\n"
-        "      start_period: 30s\n"
+        "      start_period: 120s\n"
         "      retries: 3\n"
     )
     if include_network:
