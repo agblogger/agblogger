@@ -2146,6 +2146,10 @@ def collect_config(project_dir: Path | None = None) -> DeployConfig:
         secret_key = _prompt_secret_key()
         admin_username = _prompt_non_empty("Admin username", default="admin")
         admin_display_name = _prompt_non_empty("Admin display name", default=admin_username)
+        print(
+            "\nNote: this password will be stored in plaintext in .env.production on the"
+            "\nserver. Change your password through the app after first login."
+        )
         admin_password = _prompt_password()
     deployment_mode = _prompt_deployment_mode()
     image_ref: str | None = None
