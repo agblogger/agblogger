@@ -614,17 +614,13 @@ def build_setup_script_content(config: DeployConfig) -> str:
             '        echo "  Health:    $HEALTH" >&2',
             '        echo "  Exit code: $EXIT_CODE" >&2',
             '        echo "" >&2',
+            '        echo "--- Last health check output ---" >&2',
             (
-                "        LAST_HC=$(docker inspect"
-                " --format"
-                ' "{{(index .State.Health.Log (sub (len .State.Health.Log) 1)).Output}}"'
-                ' "$CONTAINER_ID" 2>/dev/null || true)'
+                "        docker inspect"
+                ' --format "{{json .State.Health}}"'
+                ' "$CONTAINER_ID" 2>/dev/null >&2 || true'
             ),
-            '        if [ -n "$LAST_HC" ]; then',
-            '            echo "--- Last health check output ---" >&2',
-            '            echo "$LAST_HC" >&2',
-            '            echo "" >&2',
-            "        fi",
+            '        echo "" >&2',
             '        echo "--- AgBlogger logs (last 30 lines) ---" >&2',
             (
                 f"        {compose_cmd} logs --no-log-prefix --tail 30"
@@ -778,8 +774,8 @@ def _agblogger_healthcheck_section(*, include_network: bool = False) -> str:
     block = (
         "    restart: unless-stopped\n"
         "    healthcheck:\n"
-        '      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen(\'http://localhost:8000/api/health\')"]\n'
-        "      interval: 30s\n"
+        '      test: ["CMD-SHELL", "wget -qO/dev/null http://localhost:8000/api/health"]\n'
+        "      interval: 10s\n"
         "      timeout: 5s\n"
         "      start_period: 120s\n"
         "      retries: 3\n"

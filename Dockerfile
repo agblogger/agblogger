@@ -72,9 +72,9 @@ ENV PORT=8000
 
 EXPOSE 8000
 
-# Health check (uses python instead of curl to avoid pulling curl into the final image)
+# Health check (wget is provided by busybox on Alpine — no extra dependencies needed)
 HEALTHCHECK --interval=10s --timeout=5s --start-period=120s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"
+    CMD wget -qO/dev/null http://localhost:8000/api/health
 
 COPY docker-entrypoint.sh /usr/local/bin/
 
