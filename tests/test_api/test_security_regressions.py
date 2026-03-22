@@ -521,6 +521,56 @@ class TestLoginOriginValidation:
         )
         assert resp.status_code == 403
 
+    @pytest.mark.asyncio
+    async def test_login_succeeds_behind_tls_terminating_proxy(
+        self, tmp_content_dir: Path, tmp_path: Path
+    ) -> None:
+        """Login must work when a reverse proxy terminates TLS.
+
+        The browser sends Origin: https://blog.example.com but the proxy
+        forwards over HTTP with X-Forwarded-Proto: https.  The origin check
+        must reconstruct the public URL from forwarded headers so it matches
+        the browser Origin.
+        """
+        settings = Settings(
+            secret_key="test-secret-key-long-enough-here",
+            debug=False,
+            database_url=f"sqlite+aiosqlite:///{tmp_path / 'proxy.db'}",
+            content_dir=tmp_content_dir,
+            frontend_dir=tmp_path / "frontend",
+            admin_username="admin",
+            admin_password="admin123",
+            trusted_hosts=["blog.example.com"],
+            trusted_proxy_ips=["127.0.0.1"],
+        )
+
+        async with create_test_client(settings) as local_client:
+            resp = await local_client.post(
+                "/api/auth/login",
+                json={"username": "admin", "password": "admin123"},
+                headers={
+                    "Host": "blog.example.com",
+                    "Origin": "https://blog.example.com",
+                    "X-Forwarded-Proto": "https",
+                },
+            )
+            assert resp.status_code == 200, resp.text
+
+    @pytest.mark.asyncio
+    async def test_untrusted_proxy_cannot_forge_forwarded_proto(self, client: AsyncClient) -> None:
+        """X-Forwarded-Proto from non-trusted clients must be ignored."""
+        resp = await client.post(
+            "/api/auth/login",
+            json={"username": "admin", "password": "admin123"},
+            headers={
+                "Origin": "https://test",
+                "X-Forwarded-Proto": "https",
+            },
+        )
+        # The test fixture has no trusted_proxy_ips, so the header is ignored
+        # and Origin https://test doesn't match request base http://test → 403
+        assert resp.status_code == 403
+
 
 class TestRateLimitClientIpHandling:
     @pytest.mark.asyncio

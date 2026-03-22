@@ -36,6 +36,8 @@ External providers are treated as untrusted systems. Their credentials are prote
 
 Production hardening combines application and deployment controls: startup validation of critical security settings, controlled proxy and host boundaries, hardened HTTP behavior, and container-oriented deployment practices that minimize exposed surface area.
 
+When deployed behind a TLS-terminating reverse proxy (e.g. Caddy), the `_ProxyHeadersMiddleware` in `backend/main.py` rewrites the ASGI scope using `X-Forwarded-Proto` and `X-Forwarded-For` headers — but only from IPs listed in `TRUSTED_PROXY_IPS`. This ensures `request.url.scheme`, `request.base_url`, and `request.client` reflect the public connection so that origin checks, cookie `Secure` flags, and rate limiting work correctly behind a proxy.
+
 ## Verification Strategy
 
 Security verification is spread across multiple layers:

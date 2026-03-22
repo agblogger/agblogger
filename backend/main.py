@@ -47,7 +47,7 @@ if TYPE_CHECKING:
     from sqlalchemy import Connection
     from sqlalchemy.ext.asyncio import AsyncEngine
     from starlette.responses import Response
-    from starlette.types import Message
+    from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 logger = logging.getLogger(__name__)
 
@@ -272,6 +272,53 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         logger.info("AgBlogger stopped")
 
 
+class _ProxyHeadersMiddleware:
+    """Trust ``X-Forwarded-Proto`` and ``X-Forwarded-For`` from known proxies.
+
+    When ``TRUSTED_PROXY_IPS`` is configured, this middleware rewrites the ASGI
+    scope so that ``request.url.scheme``, ``request.base_url``, and
+    ``request.client`` reflect the public-facing connection rather than the
+    internal proxy-to-backend hop.  This is essential for TLS-terminating
+    reverse proxies (e.g. Caddy) where the backend sees plain HTTP but the
+    client connected over HTTPS.
+    """
+
+    def __init__(self, app: ASGIApp, trusted_ips: list[str]) -> None:
+        self.app = app
+        self.trusted_ips = trusted_ips
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] in ("http", "websocket") and self.trusted_ips:
+            client = scope.get("client")
+            if client and self._is_trusted(client[0]):
+                headers = dict(scope["headers"])
+                proto = headers.get(b"x-forwarded-proto")
+                if proto:
+                    scope["scheme"] = proto.decode("latin-1")
+                xff = headers.get(b"x-forwarded-for")
+                if xff:
+                    scope["client"] = (xff.decode("latin-1").split(",")[0].strip(), 0)
+        await self.app(scope, receive, send)
+
+    def _is_trusted(self, client_ip: str) -> bool:
+        import ipaddress
+
+        try:
+            addr = ipaddress.ip_address(client_ip)
+        except ValueError:
+            return False
+        for entry in self.trusted_ips:
+            try:
+                if "/" in entry:
+                    if addr in ipaddress.ip_network(entry, strict=False):
+                        return True
+                elif client_ip == entry:
+                    return True
+            except ValueError:
+                continue
+        return False
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     """Create and configure the FastAPI application."""
     if settings is None:
@@ -314,6 +361,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         trusted_hosts = [*trusted_hosts, "127.0.0.1"]
     if trusted_hosts:
         app.add_middleware(TrustedHostMiddleware, allowed_hosts=trusted_hosts)
+
+    # Proxy headers must be added AFTER (= runs BEFORE) TrustedHostMiddleware
+    # so scope["scheme"] and scope["client"] are corrected before any other
+    # middleware sees them.
+    if settings.trusted_proxy_ips:
+        app.add_middleware(_ProxyHeadersMiddleware, trusted_ips=settings.trusted_proxy_ips)
 
     @app.middleware("http")
     async def multipart_request_limits(
