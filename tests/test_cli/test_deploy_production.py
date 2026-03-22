@@ -4526,6 +4526,14 @@ class TestBuildSetupScript:
         # Diagnostics are called immediately on compose failure
         assert "show_diagnostics" in script
 
+    def test_prunes_dangling_images_on_success(self) -> None:
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+        )
+        script = build_setup_script_content(config)
+        assert "docker image prune" in script
+
     def test_diagnostics_function_shows_container_info(self) -> None:
         config = _make_config(
             deployment_mode=DEPLOY_MODE_TARBALL,

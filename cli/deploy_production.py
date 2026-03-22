@@ -731,6 +731,12 @@ def build_setup_script_content(config: DeployConfig) -> str:
     lines.extend(
         [
             '        echo "All services healthy."',
+            "        # Remove old dangling images left after tag replacement.",
+            '        PRUNED=$(docker image prune -f --filter "dangling=true" 2>/dev/null'
+            " | grep 'Total reclaimed space' || true)",
+            '        if [ -n "$PRUNED" ]; then',
+            '            echo "$PRUNED"',
+            "        fi",
             "        exit 0",
             "    fi",
             "done",
