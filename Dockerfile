@@ -48,6 +48,9 @@ RUN uv pip install --system /tmp/dist/agblogger_server-*.whl \
     && rm -rf /tmp/dist \
     && rm /usr/local/bin/uv
 
+# Copy Alembic migrations (not in the wheel — Alembic needs a filesystem path)
+COPY backend/migrations ./backend/migrations
+
 # Copy built frontend
 COPY --from=frontend-build /app/frontend/dist ./frontend/dist
 
