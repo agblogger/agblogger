@@ -52,8 +52,9 @@ data/
 # ── Content (auto-generated on first startup) ──────────────────────
 content/
 
-# ── DAST (ZAP) ─────────────────────────────────────────────────────
+# ── Security scanning ──────────────────────────────────────────────
 zap.yaml
+trivy-report.json
 
 # ── CodeQL ──────────────────────────────────────────────────────────
 codeql-db/

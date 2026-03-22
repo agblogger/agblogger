@@ -817,6 +817,13 @@ def test_scan_image_reports_findings_as_warning(
     assert "1 HIGH" in captured.err
     assert "CVE-2026-99999" in captured.err
 
+    # Full report file is written and the user is told where to find it.
+    report_path = tmp_path / "trivy-report.json"
+    assert report_path.exists()
+    report_data = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report_data == trivy_output
+    assert str(report_path) in captured.err
+
 
 def test_scan_image_no_findings(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -836,6 +843,8 @@ def test_scan_image_no_findings(
     assert findings == []
     captured = capsys.readouterr()
     assert "no vulnerabilities found" in captured.out
+    # No report file when there are no findings.
+    assert not (tmp_path / "trivy-report.json").exists()
 
 
 def test_scan_image_tolerates_trivy_failure(

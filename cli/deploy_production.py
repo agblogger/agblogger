@@ -1486,6 +1486,10 @@ def scan_image(project_dir: Path, image_tag: str) -> list[dict[str, str]]:
         print("Security scan passed — no vulnerabilities found.")
         return findings
 
+    # Save full scan output so the user can inspect details later.
+    log_path = project_dir / "trivy-report.json"
+    log_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
     by_severity: dict[str, int] = {}
     for f in findings:
         by_severity[f["severity"]] = by_severity.get(f["severity"], 0) + 1
@@ -1502,6 +1506,7 @@ def scan_image(project_dir: Path, image_tag: str) -> list[dict[str, str]]:
             f"  {f['severity']:8s} {f['id']}: {f['pkg']} {f['installed']}{fixed_info}",
             file=sys.stderr,
         )
+    print(f"Full scan report saved to {log_path}", file=sys.stderr)
 
     return findings
 
