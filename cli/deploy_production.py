@@ -759,6 +759,9 @@ def build_setup_script_content(config: DeployConfig) -> str:
             '        if [ -n "$PRUNED" ]; then',
             '            echo "$PRUNED"',
             "        fi",
+            '        echo ""',
+            '        echo "Note: ADMIN_PASSWORD in .env.production is stored in plaintext."',
+            '        echo "Change your password through the app after first login."',
             "        exit 0",
             "    fi",
             "done",
@@ -1403,6 +1406,12 @@ def _build_remote_readme_content(config: DeployConfig, commands: dict[str, str])
             "```",
             "bash setup.sh",
             "```",
+            "",
+            "## Security note",
+            "",
+            "`ADMIN_PASSWORD` in `.env.production` is stored in plaintext on the server.",
+            "Change your password through the app after first login.",
+            "The env var is only used for initial admin account creation and password resets.",
             "",
             "## Management commands",
             "",
@@ -2546,6 +2555,11 @@ def main() -> None:
         print("\nTo copy the bundle to the remote server:")
         print(f"  rsync -av {result.bundle_path}/ user@your-server:~/agblogger/")
         print("Then follow the instructions in DEPLOY-REMOTE.md on the server.")
+
+    print(
+        "\nNote: ADMIN_PASSWORD in .env.production is stored in plaintext on the"
+        "\nserver. Change your password through the app after first login."
+    )
 
 
 if __name__ == "__main__":

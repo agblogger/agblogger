@@ -360,7 +360,12 @@ async def authenticate_personal_access_token(
 
 
 async def ensure_admin_user(session: AsyncSession, settings: Settings) -> None:
-    """Create the admin user if it doesn't exist."""
+    """Create or update the admin user to match environment configuration.
+
+    On first run the admin is created.  On subsequent runs the password and
+    display name are synced with the environment variables so that changing
+    ``ADMIN_PASSWORD`` or ``ADMIN_DISPLAY_NAME`` takes effect on next restart.
+    """
     stmt = select(User).where(User.username == settings.admin_username)
     result = await session.execute(stmt)
     existing = result.scalar_one_or_none()
@@ -377,4 +382,21 @@ async def ensure_admin_user(session: AsyncSession, settings: Settings) -> None:
             updated_at=now,
         )
         session.add(admin)
+        await session.commit()
+        return
+
+    # Sync mutable fields with env config.
+    dirty = False
+    if not verify_password(settings.admin_password, existing.password_hash):
+        existing.password_hash = hash_password(settings.admin_password)
+        logger.info("Admin password updated to match ADMIN_PASSWORD environment variable")
+        dirty = True
+
+    target_display = settings.admin_display_name.strip() or settings.admin_username
+    if existing.display_name != target_display:
+        existing.display_name = target_display
+        dirty = True
+
+    if dirty:
+        existing.updated_at = format_iso(now_utc())
         await session.commit()

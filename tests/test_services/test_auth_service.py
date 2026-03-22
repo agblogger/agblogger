@@ -401,3 +401,53 @@ class TestEnsureAdminUser:
         result = await session.execute(stmt)
         admin = result.scalar_one()
         assert admin.display_name == test_settings.admin_username
+
+    @pytest.mark.asyncio
+    async def test_updates_password_when_env_changes(
+        self, session: AsyncSession, test_settings: Settings
+    ) -> None:
+        """Changing ADMIN_PASSWORD should update the stored hash on next startup."""
+        test_settings.admin_password = "original_password"
+        await ensure_admin_user(session, test_settings)
+
+        # Change the env password and re-run bootstrap
+        test_settings.admin_password = "new_password_123"
+        await ensure_admin_user(session, test_settings)
+
+        stmt = select(User).where(User.username == test_settings.admin_username)
+        result = await session.execute(stmt)
+        admin = result.scalar_one()
+        assert verify_password("new_password_123", admin.password_hash)
+        assert not verify_password("original_password", admin.password_hash)
+
+    @pytest.mark.asyncio
+    async def test_preserves_password_when_env_unchanged(
+        self, session: AsyncSession, test_settings: Settings
+    ) -> None:
+        """Re-running bootstrap with same password should not rehash."""
+        await ensure_admin_user(session, test_settings)
+
+        stmt = select(User).where(User.username == test_settings.admin_username)
+        result = await session.execute(stmt)
+        admin = result.scalar_one()
+        original_hash = admin.password_hash
+
+        await ensure_admin_user(session, test_settings)
+        await session.refresh(admin)
+        assert admin.password_hash == original_hash
+
+    @pytest.mark.asyncio
+    async def test_updates_display_name_when_env_changes(
+        self, session: AsyncSession, test_settings: Settings
+    ) -> None:
+        """Changing ADMIN_DISPLAY_NAME should update on next startup."""
+        test_settings.admin_display_name = "Old Name"
+        await ensure_admin_user(session, test_settings)
+
+        test_settings.admin_display_name = "New Name"
+        await ensure_admin_user(session, test_settings)
+
+        stmt = select(User).where(User.username == test_settings.admin_username)
+        result = await session.execute(stmt)
+        admin = result.scalar_one()
+        assert admin.display_name == "New Name"
