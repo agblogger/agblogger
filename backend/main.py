@@ -291,32 +291,35 @@ class _ProxyHeadersMiddleware:
         if scope["type"] in ("http", "websocket") and self.trusted_ips:
             client = scope.get("client")
             if client and self._is_trusted(client[0]):
-                headers = dict(scope["headers"])
-                proto = headers.get(b"x-forwarded-proto")
-                if proto:
-                    scope["scheme"] = proto.decode("latin-1")
-                xff = headers.get(b"x-forwarded-for")
-                if xff:
+                # Iterate the raw header list to pick the FIRST occurrence of each
+                # header.  dict(scope["headers"]) would silently drop duplicates,
+                # keeping only the last value — wrong for X-Forwarded-For.
+                proto: bytes | None = None
+                xff: bytes | None = None
+                for name, value in scope["headers"]:
+                    if proto is None and name == b"x-forwarded-proto":
+                        proto = value
+                    if xff is None and name == b"x-forwarded-for":
+                        xff = value
+                    if proto is not None and xff is not None:
+                        break
+                if proto is not None:
+                    proto_str = proto.decode("latin-1")
+                    if proto_str in ("http", "https"):
+                        scope["scheme"] = proto_str
+                    else:
+                        logger.warning(
+                            "Unexpected X-Forwarded-Proto value %r from trusted proxy; ignoring",
+                            proto_str,
+                        )
+                if xff is not None:
                     scope["client"] = (xff.decode("latin-1").split(",")[0].strip(), 0)
         await self.app(scope, receive, send)
 
     def _is_trusted(self, client_ip: str) -> bool:
-        import ipaddress
+        from backend.net_utils import is_trusted_proxy
 
-        try:
-            addr = ipaddress.ip_address(client_ip)
-        except ValueError:
-            return False
-        for entry in self.trusted_ips:
-            try:
-                if "/" in entry:
-                    if addr in ipaddress.ip_network(entry, strict=False):
-                        return True
-                elif client_ip == entry:
-                    return True
-            except ValueError:
-                continue
-        return False
+        return is_trusted_proxy(client_ip, self.trusted_ips)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -362,9 +365,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     if trusted_hosts:
         app.add_middleware(TrustedHostMiddleware, allowed_hosts=trusted_hosts)
 
-    # Proxy headers must be added AFTER (= runs BEFORE) TrustedHostMiddleware
-    # so scope["scheme"] and scope["client"] are corrected before any other
-    # middleware sees them.
+    # Starlette wraps middleware in the reverse of registration order: the last
+    # middleware added becomes the outermost layer and therefore runs FIRST on
+    # incoming requests.  Consequently, _ProxyHeadersMiddleware must be added
+    # AFTER TrustedHostMiddleware so that it wraps around it and executes before
+    # it at request time.  This ensures scope["scheme"] and scope["client"] are
+    # rewritten from forwarded headers before TrustedHostMiddleware (or any
+    # other middleware) inspects them.
     if settings.trusted_proxy_ips:
         app.add_middleware(_ProxyHeadersMiddleware, trusted_ips=settings.trusted_proxy_ips)
 

@@ -451,3 +451,67 @@ class TestEnsureAdminUser:
         result = await session.execute(stmt)
         admin = result.scalar_one()
         assert admin.display_name == "New Name"
+
+    @pytest.mark.asyncio
+    async def test_corrupted_password_hash_does_not_crash(
+        self,
+        session: AsyncSession,
+        test_settings: Settings,
+        caplog: pytest.LogCaptureFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A corrupted password_hash on an existing admin should not crash ensure_admin_user.
+
+        When verify_password or hash_password raises an unexpected exception, the error must
+        be logged and the sync skipped — the server must never crash on startup.
+        """
+        await ensure_admin_user(session, test_settings)
+
+        # Simulate verify_password raising (e.g. due to an unforeseen bcrypt error).
+        def _raise_on_verify(plain: str, hashed: str) -> bool:
+            raise RuntimeError("bcrypt internal error — simulated corruption")
+
+        monkeypatch.setattr("backend.services.auth_service.verify_password", _raise_on_verify)
+
+        # Re-running bootstrap must not raise.
+        with caplog.at_level(logging.ERROR, logger="backend.services.auth_service"):
+            await ensure_admin_user(session, test_settings)
+
+        assert any("password" in record.message.lower() for record in caplog.records)
+
+    @pytest.mark.asyncio
+    async def test_updated_at_advances_after_password_sync(
+        self, session: AsyncSession, test_settings: Settings
+    ) -> None:
+        """updated_at should be later than created_at after a password change sync."""
+        test_settings.admin_password = "first_password"
+        await ensure_admin_user(session, test_settings)
+
+        stmt = select(User).where(User.username == test_settings.admin_username)
+        result = await session.execute(stmt)
+        admin = result.scalar_one()
+        created_at = admin.created_at
+
+        test_settings.admin_password = "second_password"
+        await ensure_admin_user(session, test_settings)
+        await session.refresh(admin)
+
+        assert admin.updated_at > created_at
+
+    @pytest.mark.asyncio
+    async def test_updated_at_unchanged_on_noop(
+        self, session: AsyncSession, test_settings: Settings
+    ) -> None:
+        """updated_at must not change when ensure_admin_user runs with nothing to sync."""
+        await ensure_admin_user(session, test_settings)
+
+        stmt = select(User).where(User.username == test_settings.admin_username)
+        result = await session.execute(stmt)
+        admin = result.scalar_one()
+        original_updated_at = admin.updated_at
+
+        # Second call with identical settings — nothing should change.
+        await ensure_admin_user(session, test_settings)
+        await session.refresh(admin)
+
+        assert admin.updated_at == original_updated_at

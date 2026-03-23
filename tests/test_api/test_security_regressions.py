@@ -728,7 +728,7 @@ class TestIsTrustedProxy:
 
         from backend.api.auth import _is_trusted_proxy
 
-        with caplog.at_level(logging.WARNING, logger="backend.api.auth"):
+        with caplog.at_level(logging.WARNING, logger="backend.net_utils"):
             _is_trusted_proxy("127.0.0.1", ["not-valid-cidr/33", "127.0.0.1"])
         assert any("not-valid-cidr/33" in msg for msg in caplog.messages)
 
@@ -736,6 +736,323 @@ class TestIsTrustedProxy:
         from backend.api.auth import _is_trusted_proxy
 
         assert _is_trusted_proxy("127.0.0.1", []) is False
+
+
+class TestSharedIsTrustedFunction:
+    """Issue #1 and #6: Shared is_trusted_proxy in backend.net_utils."""
+
+    def test_shared_function_exists_in_net_utils(self) -> None:
+        from backend.net_utils import is_trusted_proxy
+
+        assert callable(is_trusted_proxy)
+
+    def test_auth_uses_shared_function(self) -> None:
+        """_is_trusted_proxy in auth.py should delegate to the shared function."""
+        from backend.api.auth import _is_trusted_proxy
+        from backend.net_utils import is_trusted_proxy
+
+        # Both should return the same result for identical inputs
+        assert _is_trusted_proxy("127.0.0.1", ["127.0.0.1"]) == is_trusted_proxy(
+            "127.0.0.1", ["127.0.0.1"]
+        )
+        assert _is_trusted_proxy("10.0.0.2", ["127.0.0.1"]) == is_trusted_proxy(
+            "10.0.0.2", ["127.0.0.1"]
+        )
+
+    def test_middleware_uses_shared_function(self) -> None:
+        """_ProxyHeadersMiddleware._is_trusted should delegate to the shared function."""
+        from backend.main import _ProxyHeadersMiddleware
+        from backend.net_utils import is_trusted_proxy
+
+        mw = _ProxyHeadersMiddleware(app=None, trusted_ips=["127.0.0.1"])  # type: ignore[arg-type]
+        assert mw._is_trusted("127.0.0.1") == is_trusted_proxy("127.0.0.1", ["127.0.0.1"])
+        assert mw._is_trusted("10.0.0.2") == is_trusted_proxy("10.0.0.2", ["127.0.0.1"])
+
+    def test_exact_ip_match(self) -> None:
+        from backend.net_utils import is_trusted_proxy
+
+        assert is_trusted_proxy("127.0.0.1", ["127.0.0.1"]) is True
+        assert is_trusted_proxy("10.0.0.1", ["127.0.0.1"]) is False
+
+    def test_cidr_match(self) -> None:
+        from backend.net_utils import is_trusted_proxy
+
+        assert is_trusted_proxy("172.30.0.2", ["172.30.0.0/24"]) is True
+        assert is_trusted_proxy("172.30.0.99", ["172.30.0.0/24"]) is True
+        assert is_trusted_proxy("172.31.0.2", ["172.30.0.0/24"]) is False
+
+    def test_ipv6_exact_match(self) -> None:
+        from backend.net_utils import is_trusted_proxy
+
+        assert is_trusted_proxy("::1", ["::1"]) is True
+        assert is_trusted_proxy("::2", ["::1"]) is False
+
+    def test_ipv6_cidr_match(self) -> None:
+        from backend.net_utils import is_trusted_proxy
+
+        assert is_trusted_proxy("fd00::1", ["fd00::/8"]) is True
+        assert is_trusted_proxy("fe80::1", ["fd00::/8"]) is False
+
+    def test_ipv6_equivalent_representations(self) -> None:
+        """Equivalent IPv6 representations should match (parsed objects, not raw strings)."""
+        from backend.net_utils import is_trusted_proxy
+
+        # "::1" and "0:0:0:0:0:0:0:1" are the same address
+        assert is_trusted_proxy("0:0:0:0:0:0:0:1", ["::1"]) is True
+        assert is_trusted_proxy("::1", ["0:0:0:0:0:0:0:1"]) is True
+
+    def test_malformed_entry_logs_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        import logging
+
+        from backend.net_utils import is_trusted_proxy
+
+        with caplog.at_level(logging.WARNING, logger="backend.net_utils"):
+            result = is_trusted_proxy("127.0.0.1", ["not-valid/33", "127.0.0.1"])
+        assert result is True
+        assert any("not-valid/33" in msg for msg in caplog.messages)
+
+    def test_invalid_client_ip(self) -> None:
+        from backend.net_utils import is_trusted_proxy
+
+        assert is_trusted_proxy("not-an-ip", ["127.0.0.1"]) is False
+
+    def test_empty_trusted_list(self) -> None:
+        from backend.net_utils import is_trusted_proxy
+
+        assert is_trusted_proxy("127.0.0.1", []) is False
+
+    def test_middleware_malformed_entry_logs_warning(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Middleware _is_trusted should log warnings for malformed entries."""
+        import logging
+
+        from backend.main import _ProxyHeadersMiddleware
+
+        mw = _ProxyHeadersMiddleware(app=None, trusted_ips=["bad-entry/999"])  # type: ignore[arg-type]
+        with caplog.at_level(logging.WARNING, logger="backend.net_utils"):
+            result = mw._is_trusted("127.0.0.1")
+        assert result is False
+        assert any("bad-entry/999" in msg for msg in caplog.messages)
+
+
+class TestDuplicateXForwardedForHeaders:
+    """Issue #3: dict(scope['headers']) drops duplicate headers — first occurrence must be used."""
+
+    @pytest.fixture
+    def proxy_settings(self, tmp_content_dir: Path, tmp_path: Path) -> Settings:
+        """Settings with 127.0.0.1 as trusted proxy."""
+        (tmp_content_dir / "posts").mkdir(exist_ok=True)
+        (tmp_content_dir / "labels.toml").write_text("[labels]\n", encoding="utf-8")
+        return Settings(
+            secret_key="test-secret-key-very-long-for-security",
+            debug=True,
+            database_url=f"sqlite+aiosqlite:///{tmp_path / 'dup_xff.db'}",
+            content_dir=tmp_content_dir,
+            frontend_dir=tmp_path / "frontend",
+            admin_username="admin",
+            admin_password="admin123",
+            auth_login_max_failures=5,
+            auth_rate_limit_window_seconds=300,
+            trusted_proxy_ips=["127.0.0.1"],
+        )
+
+    @pytest.mark.asyncio
+    async def test_duplicate_xff_first_occurrence_used(self, proxy_settings: Settings) -> None:
+        """When multiple X-Forwarded-For headers are present, the FIRST must be used."""
+        import ipaddress
+
+        from backend.main import _ProxyHeadersMiddleware
+
+        seen_clients: list[str] = []
+
+        async def capture_app(scope, receive, send):
+            if scope["type"] == "http":
+                client = scope.get("client")
+                if client:
+                    seen_clients.append(client[0])
+            await send(
+                {
+                    "type": "http.response.start",
+                    "status": 200,
+                    "headers": [(b"content-type", b"text/plain")],
+                }
+            )
+            await send({"type": "http.response.body", "body": b"ok"})
+
+        mw = _ProxyHeadersMiddleware(app=capture_app, trusted_ips=["127.0.0.1"])
+
+        # Simulate ASGI with duplicate X-Forwarded-For headers
+        scope = {
+            "type": "http",
+            "method": "GET",
+            "path": "/",
+            "query_string": b"",
+            "headers": [
+                (b"x-forwarded-for", b"203.0.113.10"),
+                (b"x-forwarded-for", b"198.51.100.42"),
+            ],
+            "client": ("127.0.0.1", 12345),
+        }
+
+        messages: list[dict[str, object]] = []
+
+        async def receive():
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        async def send(message):
+            messages.append(message)
+
+        await mw(scope, receive, send)
+
+        assert len(seen_clients) == 1
+        # Should use the FIRST X-Forwarded-For value, not the second
+        assert seen_clients[0] == "203.0.113.10"
+        # Extra safety: confirm it is a valid IP
+        ipaddress.ip_address(seen_clients[0])
+
+
+class TestXForwardedProtoValidation:
+    """Issue #4: X-Forwarded-Proto must be restricted to 'http'/'https'."""
+
+    @pytest.fixture
+    def proxy_settings(self, tmp_content_dir: Path, tmp_path: Path) -> Settings:
+        (tmp_content_dir / "posts").mkdir(exist_ok=True)
+        (tmp_content_dir / "labels.toml").write_text("[labels]\n", encoding="utf-8")
+        return Settings(
+            secret_key="test-secret-key-very-long-for-security",
+            debug=True,
+            database_url=f"sqlite+aiosqlite:///{tmp_path / 'xfp_test.db'}",
+            content_dir=tmp_content_dir,
+            frontend_dir=tmp_path / "frontend",
+            admin_username="admin",
+            admin_password="admin123",
+            trusted_proxy_ips=["127.0.0.1"],
+        )
+
+    @pytest.mark.asyncio
+    async def test_valid_https_proto_is_accepted(self) -> None:
+        from backend.main import _ProxyHeadersMiddleware
+
+        seen_schemes: list[str] = []
+
+        async def capture_app(scope, receive, send):
+            seen_schemes.append(scope.get("scheme", ""))
+            await send(
+                {
+                    "type": "http.response.start",
+                    "status": 200,
+                    "headers": [(b"content-type", b"text/plain")],
+                }
+            )
+            await send({"type": "http.response.body", "body": b"ok"})
+
+        mw = _ProxyHeadersMiddleware(app=capture_app, trusted_ips=["127.0.0.1"])
+        scope = {
+            "type": "http",
+            "method": "GET",
+            "path": "/",
+            "query_string": b"",
+            "headers": [(b"x-forwarded-proto", b"https")],
+            "client": ("127.0.0.1", 12345),
+            "scheme": "http",
+        }
+
+        async def receive():
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        async def send(message):
+            pass
+
+        await mw(scope, receive, send)
+        assert scope["scheme"] == "https"
+
+    @pytest.mark.asyncio
+    async def test_valid_http_proto_is_accepted(self) -> None:
+        from backend.main import _ProxyHeadersMiddleware
+
+        async def dummy_app(scope, receive, send):
+            pass
+
+        mw_with_app = _ProxyHeadersMiddleware(app=dummy_app, trusted_ips=["127.0.0.1"])
+        scope = {
+            "type": "http",
+            "method": "GET",
+            "path": "/",
+            "query_string": b"",
+            "headers": [(b"x-forwarded-proto", b"http")],
+            "client": ("127.0.0.1", 12345),
+            "scheme": "https",
+        }
+
+        async def receive():
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        async def send(message):
+            pass
+
+        await mw_with_app(scope, receive, send)
+        assert scope["scheme"] == "http"
+
+    @pytest.mark.asyncio
+    async def test_unexpected_proto_is_rejected_with_warning(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        import logging
+
+        from backend.main import _ProxyHeadersMiddleware
+
+        async def dummy_app(scope, receive, send):
+            await send(
+                {
+                    "type": "http.response.start",
+                    "status": 200,
+                    "headers": [(b"content-type", b"text/plain")],
+                }
+            )
+            await send({"type": "http.response.body", "body": b"ok"})
+
+        mw = _ProxyHeadersMiddleware(app=dummy_app, trusted_ips=["127.0.0.1"])
+        scope = {
+            "type": "http",
+            "method": "GET",
+            "path": "/",
+            "query_string": b"",
+            "headers": [(b"x-forwarded-proto", b"ftp")],
+            "client": ("127.0.0.1", 12345),
+            "scheme": "http",
+        }
+
+        async def receive():
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        async def send(message):
+            pass
+
+        with caplog.at_level(logging.WARNING, logger="backend.main"):
+            await mw(scope, receive, send)
+
+        # Unexpected proto should NOT be applied to the scope
+        assert scope["scheme"] == "http"
+        # A warning should be logged
+        assert any(
+            "ftp" in msg.lower() or "forwarded-proto" in msg.lower() for msg in caplog.messages
+        )
+
+
+class TestMiddlewareOrderingComment:
+    """Issue #16: Middleware ordering comment should clarify request-time inversion."""
+
+    def test_ordering_comment_explains_inversion(self) -> None:
+        """The middleware ordering comment must mention request-time inversion."""
+        import inspect
+
+        from backend import main
+
+        source = inspect.getsource(main.create_app)
+        # The comment near add_middleware calls should explain that Starlette
+        # wraps middleware in reverse order (outermost = last added = first at request time)
+        assert "invert" in source.lower() or "wrap" in source.lower() or "last" in source.lower()
 
 
 class TestTrustedProxyForwarding:

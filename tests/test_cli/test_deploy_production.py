@@ -10,6 +10,8 @@ from typing import cast
 from unittest.mock import patch
 
 import pytest
+from hypothesis import HealthCheck, given, settings
+from hypothesis import strategies as st
 
 from cli.deploy_production import (
     AGBLOGGER_STATIC_IP,
@@ -50,6 +52,7 @@ from cli.deploy_production import (
     DeployConfig,
     DeployError,
     SharedCaddyConfig,
+    _bash_quote,
     _build_remote_readme_content,
     _is_valid_caddy_domain,
     _read_version,
@@ -5004,9 +5007,12 @@ class TestSetupScriptTeardown:
     def test_tears_down_old_stack_on_mode_change(self) -> None:
         """When flags differ, teardown runs docker compose ... down using .bak files."""
         script = build_setup_script_content(self._nocaddy_config())
-        # Teardown builds command with .bak files and runs down
+        # Teardown builds command with .bak files and runs down.
         assert "${flag}.bak" in script
-        assert "$OLD_TEARDOWN_CMD down || true" in script
+        assert "$OLD_TEARDOWN_CMD down" in script
+        # Exit code is captured and reported — not silently suppressed.
+        assert "$OLD_TEARDOWN_CMD down || true" not in script
+        assert "TEARDOWN_EXIT" in script
 
     def test_skips_teardown_when_flags_match(self) -> None:
         """When CURRENT_COMPOSE_FLAGS equals OLD_COMPOSE_FLAGS, teardown is skipped."""
@@ -5243,3 +5249,208 @@ class TestReadmeRedesign:
     def test_no_longer_mentions_manual_env_backup(self) -> None:
         readme = self._readme()
         assert "backs up .env.production" not in readme.lower()
+
+
+# ── _bash_quote ───────────────────────────────────────────────────────
+
+
+def test_bash_quote_plain_string() -> None:
+    """Plain strings are wrapped in single quotes."""
+    assert _bash_quote("hello") == "'hello'"
+
+
+def test_bash_quote_empty_string() -> None:
+    """Empty string is represented as two single quotes."""
+    assert _bash_quote("") == "''"
+
+
+def test_bash_quote_string_with_spaces() -> None:
+    """Strings with spaces are safely quoted."""
+    result = _bash_quote("hello world")
+    assert result == "'hello world'"
+
+
+def test_bash_quote_string_with_single_quote() -> None:
+    """Embedded single quotes are escaped correctly."""
+    result = _bash_quote("it's")
+    # The standard technique: end quote, escaped quote, reopen quote
+    assert result == "'it'\\''s'"
+
+
+def test_bash_quote_string_with_double_quotes() -> None:
+    """Double quotes need no special treatment inside single-quoted strings."""
+    result = _bash_quote('say "hello"')
+    assert result == "'say \"hello\"'"
+
+
+def test_bash_quote_string_with_backslash() -> None:
+    """Backslashes are treated literally inside single-quoted strings."""
+    result = _bash_quote("a\\b")
+    assert result == "'a\\b'"
+
+
+def test_bash_quote_string_with_dollar_sign() -> None:
+    """Dollar signs are not interpreted inside single-quoted strings."""
+    result = _bash_quote("$HOME")
+    assert result == "'$HOME'"
+
+
+def test_bash_quote_string_with_multiple_single_quotes() -> None:
+    """Multiple embedded single quotes are all escaped."""
+    result = _bash_quote("a'b'c")
+    assert result == "'a'\\''b'\\''c'"
+
+
+@given(st.text())
+@settings(max_examples=500, suppress_health_check=[HealthCheck.too_slow])
+def test_bash_quote_property_starts_and_ends_with_single_quote(value: str) -> None:
+    """The output always starts and ends with a single quote."""
+    result = _bash_quote(value)
+    assert result.startswith("'")
+    assert result.endswith("'")
+
+
+@given(st.text())
+@settings(max_examples=500, suppress_health_check=[HealthCheck.too_slow])
+def test_bash_quote_property_no_unescaped_single_quotes_in_body(value: str) -> None:
+    """Any single quote in the input is escaped as '\\'' in the output."""
+    result = _bash_quote(value)
+    # Strip the outer quotes; remaining bare single quotes would be unsafe.
+    inner = result[1:-1]
+    # After removing all escaped-quote sequences, no lone single quote should remain.
+    sanitised = inner.replace("'\\''", "")
+    assert "'" not in sanitised
+
+
+# ── scan_image: trivy report write failure ────────────────────────────
+
+
+def test_scan_image_prints_summary_even_when_report_write_fails(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Vulnerability summary is always printed even if the report file cannot be written."""
+    import json
+
+    trivy_output = {
+        "Results": [
+            {
+                "Target": "usr/local/bin/uv (rustbinary)",
+                "Type": "rustbinary",
+                "Vulnerabilities": [
+                    {
+                        "VulnerabilityID": "CVE-2026-11111",
+                        "PkgName": "badcrate",
+                        "InstalledVersion": "0.1.0",
+                        "FixedVersion": "",
+                        "Severity": "CRITICAL",
+                        "Title": "Critical bug",
+                    },
+                ],
+            },
+        ],
+    }
+
+    monkeypatch.setattr(
+        "cli.deploy_production.subprocess.run",
+        lambda *_a, **_kw: SimpleNamespace(
+            returncode=1,
+            stdout=json.dumps(trivy_output).encode(),
+            stderr=b"",
+        ),
+    )
+
+    # Make the report directory read-only so write_text raises OSError.
+    tmp_path.chmod(0o555)
+    try:
+        findings = scan_image(tmp_path, "img:test")
+    finally:
+        tmp_path.chmod(0o755)
+
+    # Results are still returned.
+    assert len(findings) == 1
+    assert findings[0]["id"] == "CVE-2026-11111"
+
+    captured = capsys.readouterr()
+    # Summary is always printed to stderr.
+    assert "CVE-2026-11111" in captured.err
+    assert "1 vulnerability" in captured.err
+    # A warning about the failed write is shown.
+    assert "trivy-report.json" in captured.err
+
+
+def test_scan_image_warns_when_report_write_fails(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A clear warning is printed when the trivy report cannot be saved to disk."""
+    import json
+
+    trivy_output = {
+        "Results": [
+            {
+                "Target": "some/binary",
+                "Type": "gobinary",
+                "Vulnerabilities": [
+                    {
+                        "VulnerabilityID": "CVE-2026-22222",
+                        "PkgName": "pkg",
+                        "InstalledVersion": "1.0.0",
+                        "FixedVersion": "1.0.1",
+                        "Severity": "HIGH",
+                        "Title": "Another bug",
+                    },
+                ],
+            },
+        ],
+    }
+
+    monkeypatch.setattr(
+        "cli.deploy_production.subprocess.run",
+        lambda *_a, **_kw: SimpleNamespace(
+            returncode=1,
+            stdout=json.dumps(trivy_output).encode(),
+            stderr=b"",
+        ),
+    )
+
+    # Use a read-only directory to trigger a real OSError on file write.
+    report_dir = tmp_path / "readonly"
+    report_dir.mkdir()
+    report_dir.chmod(0o555)
+    try:
+        findings = scan_image(report_dir, "img:test")
+    finally:
+        report_dir.chmod(0o755)
+
+    assert len(findings) == 1
+    captured = capsys.readouterr()
+    # Warning about failed save.
+    assert "warning" in captured.err.lower()
+    assert "trivy-report.json" in captured.err
+
+
+# ── build_setup_script_content: teardown exit code ────────────────────
+
+
+def test_setup_script_teardown_does_not_suppress_errors_with_or_true() -> None:
+    """The generated setup.sh must not use '|| true' to silently swallow teardown failures."""
+    config = _make_config(caddy_mode=CADDY_MODE_NONE)
+    script = build_setup_script_content(config)
+
+    # '|| true' on the teardown command hides failures — it must not appear.
+    assert "$OLD_TEARDOWN_CMD down || true" not in script
+    # Exit code capture must be present instead.
+    assert "TEARDOWN_EXIT" in script
+
+
+def test_setup_script_teardown_warns_on_failure() -> None:
+    """The generated setup.sh emits a warning when teardown exits with non-zero."""
+    config = _make_config(caddy_mode=CADDY_MODE_BUNDLED)
+    script = build_setup_script_content(config)
+
+    # Exit code is captured.
+    assert "TEARDOWN_EXIT=$?" in script
+    # Non-zero exit is checked.
+    assert '"$TEARDOWN_EXIT" -ne 0' in script
+    # A warning is emitted to stderr.
+    assert ">&2" in script
+    assert "Warning:" in script

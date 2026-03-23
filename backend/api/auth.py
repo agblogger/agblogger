@@ -100,23 +100,9 @@ def _clear_auth_cookies(response: Response) -> None:
 
 def _is_trusted_proxy(client_ip: str, trusted_proxy_ips: list[str]) -> bool:
     """Check if a client IP matches any trusted proxy entry (exact IP or CIDR range)."""
-    import ipaddress
+    from backend.net_utils import is_trusted_proxy
 
-    try:
-        addr = ipaddress.ip_address(client_ip)
-    except ValueError:
-        return False
-    for entry in trusted_proxy_ips:
-        try:
-            if "/" in entry:
-                if addr in ipaddress.ip_network(entry, strict=False):
-                    return True
-            elif client_ip == entry:
-                return True
-        except ValueError:
-            logger.warning("Malformed trusted proxy entry: %s", entry)
-            continue
-    return False
+    return is_trusted_proxy(client_ip, trusted_proxy_ips)
 
 
 def _get_client_ip(request: Request) -> str:

@@ -64,7 +64,7 @@ The `sed` replacement targets the placeholder string, so it's safe to run on fil
 
 ### 2. Old-stack teardown
 
-setup.sh writes a `.last-teardown` marker file after each successful deploy. The file contains the compose `-f` flags used for the deploy (one per line, e.g., `docker-compose.image.yml`). This is sufficient to reconstruct the full teardown command and to detect mode changes by comparing flag lists.
+setup.sh writes a `.last-teardown` marker file after each successful deploy. The file contains the compose `-f` flags used for the deploy as a single space-separated line (e.g., `docker-compose.image.yml` or `docker-compose.image.yml docker-compose.caddy-bundled.yml`). This is sufficient to reconstruct the full teardown command and to detect mode changes by comparing flag lists.
 
 On each run, setup.sh:
 

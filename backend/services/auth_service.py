@@ -365,6 +365,10 @@ async def ensure_admin_user(session: AsyncSession, settings: Settings) -> None:
     On first run the admin is created.  On subsequent runs the password and
     display name are synced with the environment variables so that changing
     ``ADMIN_PASSWORD`` or ``ADMIN_DISPLAY_NAME`` takes effect on next restart.
+
+    Note: the admin *username* is NOT updated on existing accounts.  If
+    ``ADMIN_USERNAME`` is changed, a new admin account is created alongside
+    the old one rather than the existing account being renamed.
     """
     stmt = select(User).where(User.username == settings.admin_username)
     result = await session.execute(stmt)
@@ -387,10 +391,17 @@ async def ensure_admin_user(session: AsyncSession, settings: Settings) -> None:
 
     # Sync mutable fields with env config.
     dirty = False
-    if not verify_password(settings.admin_password, existing.password_hash):
-        existing.password_hash = hash_password(settings.admin_password)
-        logger.info("Admin password updated to match ADMIN_PASSWORD environment variable")
-        dirty = True
+    try:
+        if not verify_password(settings.admin_password, existing.password_hash):
+            existing.password_hash = hash_password(settings.admin_password)
+            logger.info("Admin password updated to match ADMIN_PASSWORD environment variable")
+            dirty = True
+    except Exception:
+        logger.error(
+            "Failed to verify or update admin password hash — skipping password sync."
+            " Fix the stored hash or restart with a clean database.",
+            exc_info=True,
+        )
 
     target_display = settings.admin_display_name.strip() or settings.admin_username
     if existing.display_name != target_display:

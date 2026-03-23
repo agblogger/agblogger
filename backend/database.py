@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import event
@@ -17,6 +18,8 @@ if TYPE_CHECKING:
 
     from backend.config import Settings
 
+logger = logging.getLogger(__name__)
+
 
 def _set_sqlite_pragmas(dbapi_conn: Any, _connection_record: Any) -> None:
     """Configure SQLite for concurrent access on each new connection.
@@ -24,12 +27,27 @@ def _set_sqlite_pragmas(dbapi_conn: Any, _connection_record: Any) -> None:
     - WAL mode allows readers to proceed concurrently with a single writer.
     - busy_timeout makes writers retry for up to 5 s instead of failing immediately.
     - synchronous=NORMAL is safe under WAL and avoids redundant fsync on every commit.
+
+    These PRAGMAs are essential for correct concurrent operation. If any of them
+    fail, the error is logged with remediation advice and re-raised so the server
+    exits cleanly rather than running with a misconfigured database connection.
     """
     cursor = dbapi_conn.cursor()
-    cursor.execute("PRAGMA journal_mode=WAL")
-    cursor.execute("PRAGMA busy_timeout=5000")
-    cursor.execute("PRAGMA synchronous=NORMAL")
-    cursor.close()
+    try:
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA busy_timeout=5000")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+    except Exception as exc:
+        logger.error(
+            "Failed to configure essential SQLite PRAGMAs (journal_mode=WAL, "
+            "busy_timeout, synchronous=NORMAL): %s. "
+            "Check filesystem permissions on the database file and its parent directory, "
+            "and ensure the database file is not corrupted.",
+            exc,
+        )
+        raise
+    finally:
+        cursor.close()
 
 
 def create_engine(
