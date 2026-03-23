@@ -476,7 +476,7 @@ def build_setup_script_content(config: DeployConfig) -> str:
     )
 
     # Stack teardown on mode change
-    current_flags_value = "\n".join(compose_flags)
+    current_flags_value = " ".join(compose_flags)
     lines.extend(
         [
             "# ── Stack teardown on mode change ───────────────────────────────────",

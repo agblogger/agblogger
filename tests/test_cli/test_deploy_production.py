@@ -5003,16 +5003,9 @@ class TestSetupScriptTeardown:
     def test_tears_down_old_stack_on_mode_change(self) -> None:
         """When flags differ, teardown runs docker compose ... down using .bak files."""
         script = build_setup_script_content(self._nocaddy_config())
-        # Must reference .bak suffix for teardown compose files
-        assert ".bak" in script
-        # Must run docker compose down
-        assert "down" in script
-        # Teardown command must use .env.production
-        lines = script.splitlines()
-        down_lines = [ln for ln in lines if "down" in ln and "docker compose" in ln]
-        assert down_lines or any(
-            "down" in ln for ln in lines if "$OLD_TEARDOWN_CMD" in ln or "OLD_TEARDOWN_CMD" in ln
-        ), "Expected a teardown (down) invocation"
+        # Teardown builds command with .bak files and runs down
+        assert "${flag}.bak" in script
+        assert "$OLD_TEARDOWN_CMD down || true" in script
 
     def test_skips_teardown_when_flags_match(self) -> None:
         """When CURRENT_COMPOSE_FLAGS equals OLD_COMPOSE_FLAGS, teardown is skipped."""
