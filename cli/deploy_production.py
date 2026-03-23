@@ -100,17 +100,6 @@ GENERATED_CONFIG_FILES = [
     DEFAULT_EXTERNAL_CADDY_COMPOSE_FILE,
 ]
 
-BUNDLE_CONFIG_FILES = [
-    DEFAULT_ENV_GENERATED_FILE,
-    DEFAULT_CADDYFILE + ".generated",
-    DEFAULT_CADDY_PUBLIC_COMPOSE_FILE + ".generated",
-    DEFAULT_IMAGE_COMPOSE_FILE + ".generated",
-    DEFAULT_IMAGE_NO_CADDY_COMPOSE_FILE + ".generated",
-    DEFAULT_IMAGE_EXTERNAL_CADDY_COMPOSE_FILE + ".generated",
-    DEFAULT_REMOTE_README,
-    DEFAULT_SETUP_SCRIPT,
-]
-
 
 class DeployError(RuntimeError):
     """Raised for deployment workflow failures."""
@@ -1446,16 +1435,6 @@ def write_config_files(config: DeployConfig, project_dir: Path) -> None:
             (project_dir / name).unlink()
 
 
-def _backup_bundle_configs(bundle_dir: Path) -> list[str]:
-    """Back up generated bundle config files before overwriting them."""
-    messages: list[str] = []
-    for filename in BUNDLE_CONFIG_FILES:
-        backup = backup_file(bundle_dir / filename)
-        if backup is not None:
-            messages.append(f"Backed up {filename} to {backup.name}")
-    return messages
-
-
 def _remote_bundle_commands(config: DeployConfig) -> dict[str, str]:
     """Build lifecycle commands for a remote deployment bundle."""
     return build_lifecycle_commands(
@@ -1875,11 +1854,11 @@ def deploy(config: DeployConfig, project_dir: Path) -> DeployResult:
 
     do_scan = config.scan_image and shutil.which("trivy") is not None
 
-    backup_messages = backup_existing_configs(project_dir)
-    for msg in backup_messages:
-        print(msg)
-
     if config.deployment_mode == DEPLOY_MODE_LOCAL:
+        backup_messages = backup_existing_configs(project_dir)
+        for msg in backup_messages:
+            print(msg)
+
         if config.caddy_mode == CADDY_MODE_EXTERNAL and config.shared_caddy_config is not None:
             ensure_shared_caddy(
                 caddy_dir=config.shared_caddy_config.caddy_dir,
@@ -1920,10 +1899,6 @@ def deploy(config: DeployConfig, project_dir: Path) -> DeployResult:
         )
 
     bundle_dir = project_dir / config.bundle_dir
-    bundle_backup_messages = _backup_bundle_configs(bundle_dir)
-    for msg in bundle_backup_messages:
-        print(msg)
-
     image_tag = config.image_ref
     if image_tag is None:
         raise DeployError("IMAGE_REF is required for remote deployment modes")

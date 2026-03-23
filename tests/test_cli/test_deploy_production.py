@@ -5119,3 +5119,39 @@ class TestSetupScriptDualSubnetPatch:
         )
         script = build_setup_script_content(config)
         assert CADDY_NETWORK_SUBNET_PLACEHOLDER not in script
+
+
+class TestLocalBackupGuard:
+    def test_no_backup_files_created_for_remote_bundle(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Remote bundle generation should NOT create .bak files in project root."""
+        (tmp_path / DEFAULT_ENV_FILE).write_text("old", encoding="utf-8")
+        (tmp_path / DEFAULT_CADDYFILE).write_text("old", encoding="utf-8")
+        commands = _stub_subprocess(monkeypatch)
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+            caddy_config=CaddyConfig(domain="blog.example.com", email="admin@example.com"),
+            caddy_mode=CADDY_MODE_BUNDLED,
+            caddy_public=True,
+        )
+        deploy(config, tmp_path)
+        bak_files = list(tmp_path.glob("*.bak"))
+        assert not bak_files, f"Unexpected .bak files in project root: {bak_files}"
+
+    def test_no_backup_files_created_in_bundle_dir(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Bundle dir should NOT have .bak files."""
+        bundle_dir = tmp_path / DEFAULT_BUNDLE_DIR
+        bundle_dir.mkdir(parents=True)
+        (bundle_dir / DEFAULT_ENV_FILE).write_text("old", encoding="utf-8")
+        commands = _stub_subprocess(monkeypatch)
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+        )
+        deploy(config, tmp_path)
+        bak_files = list(bundle_dir.glob("*.bak"))
+        assert not bak_files, f"Unexpected .bak files in bundle dir: {bak_files}"
