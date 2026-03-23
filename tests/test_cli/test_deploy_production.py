@@ -5155,3 +5155,32 @@ class TestLocalBackupGuard:
         deploy(config, tmp_path)
         bak_files = list(bundle_dir.glob("*.bak"))
         assert not bak_files, f"Unexpected .bak files in bundle dir: {bak_files}"
+
+
+class TestStaleGeneratedCleanup:
+    def test_cleans_stale_generated_files_from_other_modes(self, tmp_path: Path) -> None:
+        """Switching from bundled to no-caddy should clean bundled .generated files."""
+        (tmp_path / "docker-compose.image.yml.generated").write_text("old", encoding="utf-8")
+        (tmp_path / "Caddyfile.production.generated").write_text("old", encoding="utf-8")
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+        )
+        write_bundle_files(config, tmp_path)
+        assert not (tmp_path / "docker-compose.image.yml.generated").exists()
+        assert not (tmp_path / "Caddyfile.production.generated").exists()
+        assert (tmp_path / "docker-compose.image.nocaddy.yml.generated").exists()
+
+    def test_cleans_old_unsuffixed_files_on_transition(self, tmp_path: Path) -> None:
+        """First .generated bundle should clean up old un-suffixed files."""
+        (tmp_path / ".env.production").write_text("old", encoding="utf-8")
+        (tmp_path / "docker-compose.image.yml").write_text("old", encoding="utf-8")
+        (tmp_path / "Caddyfile.production").write_text("old", encoding="utf-8")
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+        )
+        write_bundle_files(config, tmp_path)
+        assert not (tmp_path / ".env.production").exists()
+        assert not (tmp_path / "docker-compose.image.yml").exists()
+        assert not (tmp_path / "Caddyfile.production").exists()
