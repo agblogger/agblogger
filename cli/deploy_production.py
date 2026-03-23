@@ -1535,7 +1535,9 @@ def _build_remote_readme_content(config: DeployConfig, commands: dict[str, str])
             "",
             "   `.env.production` is preserved automatically on upgrades — `setup.sh` never"
             " overwrites it. `.env.production.generated` is available as a reference for"
-            " any new configuration variables introduced in the new version.",
+            " any new configuration variables introduced in the new version."
+            " Caddy mode switches are handled automatically — `setup.sh` tears down the"
+            " old stack before starting the new one.",
             "",
             "## Rollback",
             "",

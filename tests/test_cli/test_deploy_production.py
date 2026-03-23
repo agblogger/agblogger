@@ -5207,8 +5207,16 @@ class TestReadmeRedesign:
 
     def test_upgrade_mentions_env_preserved(self) -> None:
         readme = self._readme()
-        assert ".env.production" in readme
-        assert "preserved" in readme.lower() or "automatically" in readme.lower()
+        # Find lines that mention .env.production and check for preservation language.
+        # Use replace() to strip .env.production.generated occurrences so we only match
+        # lines that reference the plain .env.production file.
+        env_lines = [
+            line for line in readme.splitlines()
+            if ".env.production" in line.replace(".env.production.generated", "")
+        ]
+        assert any(
+            "preserved" in line.lower() or "automatically" in line.lower() for line in env_lines
+        )
 
     def test_upgrade_mentions_generated_reference(self) -> None:
         readme = self._readme()
@@ -5216,7 +5224,14 @@ class TestReadmeRedesign:
 
     def test_rollback_no_longer_references_env_bak(self) -> None:
         readme = self._readme()
+        assert "## Rollback" in readme
+        assert ".bak" in readme
         assert ".env.production.bak" not in readme
+
+    def test_upgrade_mentions_caddy_mode_switch(self) -> None:
+        readme = self._readme()
+        assert "caddy mode" in readme.lower()
+        assert "tears down" in readme.lower() or "torn down" in readme.lower()
 
     def test_no_longer_mentions_manual_env_backup(self) -> None:
         readme = self._readme()
