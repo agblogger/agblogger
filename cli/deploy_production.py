@@ -1305,30 +1305,15 @@ def backup_existing_configs(project_dir: Path) -> list[str]:
     return messages
 
 
-def _write_env_file(config: DeployConfig, target_dir: Path) -> None:
-    """Write the generated environment file with restrictive permissions."""
-    env_path = target_dir / DEFAULT_ENV_FILE
+def _write_env_to(config: DeployConfig, target_dir: Path, filename: str) -> None:
+    """Write environment file with restrictive permissions."""
+    env_path = target_dir / filename
     env_path.write_text(build_env_content(config), encoding="utf-8")
     try:
         env_path.chmod(0o600)
     except OSError as exc:
         print(
-            f"WARNING: Could not set restrictive permissions on {DEFAULT_ENV_FILE}: {exc}\n"
-            f"This file contains sensitive secrets and may be readable by other users.",
-            file=sys.stderr,
-        )
-
-
-def _write_env_generated_file(config: DeployConfig, target_dir: Path) -> None:
-    """Write the generated environment file with .generated suffix and restrictive permissions."""
-    env_path = target_dir / DEFAULT_ENV_GENERATED_FILE
-    env_path.write_text(build_env_content(config), encoding="utf-8")
-    try:
-        env_path.chmod(0o600)
-    except OSError as exc:
-        print(
-            f"WARNING: Could not set restrictive permissions on"
-            f" {DEFAULT_ENV_GENERATED_FILE}: {exc}\n"
+            f"WARNING: Could not set restrictive permissions on {filename}: {exc}\n"
             f"This file contains sensitive secrets and may be readable by other users.",
             file=sys.stderr,
         )
@@ -1336,7 +1321,7 @@ def _write_env_generated_file(config: DeployConfig, target_dir: Path) -> None:
 
 def write_config_files(config: DeployConfig, project_dir: Path) -> None:
     """Write local deployment config files and clean up stale alternatives."""
-    _write_env_file(config, project_dir)
+    _write_env_to(config, project_dir, DEFAULT_ENV_FILE)
     (project_dir / "content").mkdir(exist_ok=True)
 
     stale_files: list[str] = []
@@ -1508,7 +1493,7 @@ def write_bundle_files(config: DeployConfig, bundle_dir: Path) -> None:
     keep their original names.
     """
     bundle_dir.mkdir(parents=True, exist_ok=True)
-    _write_env_generated_file(config, bundle_dir)
+    _write_env_to(config, bundle_dir, DEFAULT_ENV_GENERATED_FILE)
 
     # Seed content directory so first-time users have the mount target ready
     (bundle_dir / "content").mkdir(exist_ok=True)
