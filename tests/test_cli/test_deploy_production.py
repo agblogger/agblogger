@@ -22,7 +22,9 @@ from cli.deploy_production import (
     COMPOSE_SUBNET,
     DEFAULT_BUNDLE_DIR,
     DEFAULT_CADDY_PUBLIC_COMPOSE_FILE,
+    DEFAULT_CADDYFILE,
     DEFAULT_ENV_FILE,
+    DEFAULT_ENV_GENERATED_FILE,
     DEFAULT_EXTERNAL_CADDY_COMPOSE_FILE,
     DEFAULT_IMAGE_COMPOSE_FILE,
     DEFAULT_IMAGE_EXTERNAL_CADDY_COMPOSE_FILE,
@@ -31,6 +33,7 @@ from cli.deploy_production import (
     DEFAULT_IMAGE_TARBALL,
     DEFAULT_NO_CADDY_COMPOSE_FILE,
     DEFAULT_REMOTE_PLATFORM,
+    DEFAULT_REMOTE_README,
     DEFAULT_SETUP_SCRIPT,
     DEFAULT_SHARED_CADDY_DIR,
     DEPLOY_MODE_LOCAL,
@@ -897,9 +900,11 @@ def test_deploy_registry_mode_builds_pushes_and_writes_bundle(
     result = deploy(config=config, project_dir=tmp_path)
 
     assert result.bundle_path == tmp_path / DEFAULT_BUNDLE_DIR
-    assert result.env_path == tmp_path / DEFAULT_BUNDLE_DIR / ".env.production"
-    assert (tmp_path / DEFAULT_BUNDLE_DIR / DEFAULT_IMAGE_COMPOSE_FILE).exists()
-    assert not (tmp_path / DEFAULT_BUNDLE_DIR / DEFAULT_IMAGE_NO_CADDY_COMPOSE_FILE).exists()
+    assert result.env_path == tmp_path / DEFAULT_BUNDLE_DIR / DEFAULT_ENV_GENERATED_FILE
+    assert (tmp_path / DEFAULT_BUNDLE_DIR / (DEFAULT_IMAGE_COMPOSE_FILE + ".generated")).exists()
+    assert not (
+        tmp_path / DEFAULT_BUNDLE_DIR / (DEFAULT_IMAGE_NO_CADDY_COMPOSE_FILE + ".generated")
+    ).exists()
     assert commands == [
         (
             [
@@ -935,8 +940,10 @@ def test_deploy_tarball_mode_builds_saves_and_writes_bundle(
     result = deploy(config=config, project_dir=tmp_path)
 
     assert result.bundle_path == tmp_path / DEFAULT_BUNDLE_DIR
-    assert result.env_path == tmp_path / DEFAULT_BUNDLE_DIR / ".env.production"
-    assert (tmp_path / DEFAULT_BUNDLE_DIR / DEFAULT_IMAGE_NO_CADDY_COMPOSE_FILE).exists()
+    assert result.env_path == tmp_path / DEFAULT_BUNDLE_DIR / DEFAULT_ENV_GENERATED_FILE
+    assert (
+        tmp_path / DEFAULT_BUNDLE_DIR / (DEFAULT_IMAGE_NO_CADDY_COMPOSE_FILE + ".generated")
+    ).exists()
     assert commands == [
         (
             ["docker", "build", "--tag", "agblogger:portable", "."],
@@ -4100,10 +4107,10 @@ def test_write_bundle_files_external_caddy(tmp_path: Path) -> None:
         image_ref="ghcr.io/example/agblogger:1.0",
     )
     write_bundle_files(config, bundle_dir)
-    assert (bundle_dir / DEFAULT_IMAGE_EXTERNAL_CADDY_COMPOSE_FILE).exists()
-    assert not (bundle_dir / DEFAULT_IMAGE_COMPOSE_FILE).exists()
-    assert not (bundle_dir / DEFAULT_IMAGE_NO_CADDY_COMPOSE_FILE).exists()
-    assert not (bundle_dir / "Caddyfile.production").exists()
+    assert (bundle_dir / (DEFAULT_IMAGE_EXTERNAL_CADDY_COMPOSE_FILE + ".generated")).exists()
+    assert not (bundle_dir / (DEFAULT_IMAGE_COMPOSE_FILE + ".generated")).exists()
+    assert not (bundle_dir / (DEFAULT_IMAGE_NO_CADDY_COMPOSE_FILE + ".generated")).exists()
+    assert not (bundle_dir / "Caddyfile.production.generated").exists()
 
 
 # ── Task 15: deploy with external Caddy bootstraps shared Caddy ───────
@@ -4703,3 +4710,97 @@ class TestSetupScriptInBundle:
         assert setup_path.read_text(encoding="utf-8").startswith("#!/usr/bin/env bash")
         # Check executable permission
         assert setup_path.stat().st_mode & 0o111 != 0
+
+
+# ── Generated suffix for bundle config files ──────────────────────────
+
+
+class TestGeneratedSuffix:
+    """Bundle config files should be written with a .generated suffix."""
+
+    def test_bundled_caddy_creates_generated_files(self, tmp_path: Path) -> None:
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+            caddy_config=CaddyConfig(domain="blog.example.com", email="admin@example.com"),
+            caddy_mode=CADDY_MODE_BUNDLED,
+            caddy_public=True,
+        )
+        bundle_dir = tmp_path / "bundle"
+        write_bundle_files(config, bundle_dir)
+
+        # .generated versions must exist
+        assert (bundle_dir / DEFAULT_ENV_GENERATED_FILE).exists()
+        assert (bundle_dir / (DEFAULT_IMAGE_COMPOSE_FILE + ".generated")).exists()
+        assert (bundle_dir / (DEFAULT_CADDYFILE + ".generated")).exists()
+
+        # Un-suffixed config files must NOT exist
+        assert not (bundle_dir / DEFAULT_ENV_FILE).exists()
+        assert not (bundle_dir / DEFAULT_IMAGE_COMPOSE_FILE).exists()
+        assert not (bundle_dir / DEFAULT_CADDYFILE).exists()
+
+    def test_external_caddy_creates_generated_files(self, tmp_path: Path) -> None:
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_REGISTRY,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+            caddy_mode=CADDY_MODE_EXTERNAL,
+            caddy_config=CaddyConfig(domain="blog.example.com", email=None),
+            host_bind_ip=LOCALHOST_BIND_IP,
+            shared_caddy_config=SharedCaddyConfig(caddy_dir=tmp_path / "caddy", acme_email=None),
+        )
+        bundle_dir = tmp_path / "bundle"
+        write_bundle_files(config, bundle_dir)
+
+        assert (bundle_dir / DEFAULT_ENV_GENERATED_FILE).exists()
+        assert (bundle_dir / (DEFAULT_IMAGE_EXTERNAL_CADDY_COMPOSE_FILE + ".generated")).exists()
+
+        assert not (bundle_dir / DEFAULT_ENV_FILE).exists()
+        assert not (bundle_dir / DEFAULT_IMAGE_EXTERNAL_CADDY_COMPOSE_FILE).exists()
+
+    def test_no_caddy_creates_generated_files(self, tmp_path: Path) -> None:
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+        )
+        bundle_dir = tmp_path / "bundle"
+        write_bundle_files(config, bundle_dir)
+
+        assert (bundle_dir / DEFAULT_ENV_GENERATED_FILE).exists()
+        assert (bundle_dir / (DEFAULT_IMAGE_NO_CADDY_COMPOSE_FILE + ".generated")).exists()
+
+        assert not (bundle_dir / DEFAULT_ENV_FILE).exists()
+        assert not (bundle_dir / DEFAULT_IMAGE_NO_CADDY_COMPOSE_FILE).exists()
+
+    def test_env_generated_has_restrictive_permissions(self, tmp_path: Path) -> None:
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+        )
+        bundle_dir = tmp_path / "bundle"
+        write_bundle_files(config, bundle_dir)
+
+        env_path = bundle_dir / DEFAULT_ENV_GENERATED_FILE
+        assert env_path.exists()
+        assert env_path.stat().st_mode & 0o777 == 0o600
+
+    def test_non_config_files_have_no_generated_suffix(self, tmp_path: Path) -> None:
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+            caddy_config=CaddyConfig(domain="blog.example.com", email="a@example.com"),
+            caddy_mode=CADDY_MODE_BUNDLED,
+            caddy_public=True,
+        )
+        bundle_dir = tmp_path / "bundle"
+        write_bundle_files(config, bundle_dir)
+
+        # These should keep their original names (no .generated suffix)
+        assert (bundle_dir / DEFAULT_SETUP_SCRIPT).exists()
+        assert (bundle_dir / DEFAULT_REMOTE_README).exists()
+        assert (bundle_dir / "VERSION").exists()
+        assert (bundle_dir / "content").is_dir()
+
+        # Make sure .generated versions of non-config files do NOT exist
+        assert not (bundle_dir / (DEFAULT_SETUP_SCRIPT + ".generated")).exists()
+        assert not (bundle_dir / (DEFAULT_REMOTE_README + ".generated")).exists()
+        assert not (bundle_dir / "VERSION.generated").exists()

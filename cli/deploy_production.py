@@ -26,6 +26,7 @@ MIN_SECRET_KEY_LENGTH = 32
 MIN_ADMIN_PASSWORD_LENGTH = 8
 DEFAULT_HOST_PORT = 8000
 DEFAULT_ENV_FILE = ".env.production"
+DEFAULT_ENV_GENERATED_FILE = ".env.production.generated"
 DEFAULT_CADDYFILE = "Caddyfile.production"
 DEFAULT_NO_CADDY_COMPOSE_FILE = "docker-compose.nocaddy.yml"
 DEFAULT_CADDY_PUBLIC_COMPOSE_FILE = "docker-compose.caddy-public.yml"
@@ -100,12 +101,12 @@ GENERATED_CONFIG_FILES = [
 ]
 
 BUNDLE_CONFIG_FILES = [
-    DEFAULT_ENV_FILE,
-    DEFAULT_CADDYFILE,
-    DEFAULT_CADDY_PUBLIC_COMPOSE_FILE,
-    DEFAULT_IMAGE_COMPOSE_FILE,
-    DEFAULT_IMAGE_NO_CADDY_COMPOSE_FILE,
-    DEFAULT_IMAGE_EXTERNAL_CADDY_COMPOSE_FILE,
+    DEFAULT_ENV_GENERATED_FILE,
+    DEFAULT_CADDYFILE + ".generated",
+    DEFAULT_CADDY_PUBLIC_COMPOSE_FILE + ".generated",
+    DEFAULT_IMAGE_COMPOSE_FILE + ".generated",
+    DEFAULT_IMAGE_NO_CADDY_COMPOSE_FILE + ".generated",
+    DEFAULT_IMAGE_EXTERNAL_CADDY_COMPOSE_FILE + ".generated",
     DEFAULT_REMOTE_README,
     DEFAULT_SETUP_SCRIPT,
 ]
@@ -1318,6 +1319,21 @@ def _write_env_file(config: DeployConfig, target_dir: Path) -> None:
         )
 
 
+def _write_env_generated_file(config: DeployConfig, target_dir: Path) -> None:
+    """Write the generated environment file with .generated suffix and restrictive permissions."""
+    env_path = target_dir / DEFAULT_ENV_GENERATED_FILE
+    env_path.write_text(build_env_content(config), encoding="utf-8")
+    try:
+        env_path.chmod(0o600)
+    except OSError as exc:
+        print(
+            f"WARNING: Could not set restrictive permissions on"
+            f" {DEFAULT_ENV_GENERATED_FILE}: {exc}\n"
+            f"This file contains sensitive secrets and may be readable by other users.",
+            file=sys.stderr,
+        )
+
+
 def write_config_files(config: DeployConfig, project_dir: Path) -> None:
     """Write local deployment config files and clean up stale alternatives."""
     _write_env_file(config, project_dir)
@@ -1484,9 +1500,15 @@ def _build_remote_readme_content(config: DeployConfig, commands: dict[str, str])
 
 
 def write_bundle_files(config: DeployConfig, bundle_dir: Path) -> None:
-    """Write a self-contained remote deployment bundle."""
+    """Write a self-contained remote deployment bundle.
+
+    Config files (env, compose, Caddyfile) are written with a ``.generated``
+    suffix so that ``setup.sh`` can handle first-run vs. upgrade placement on
+    the remote server.  Non-config files (setup.sh, README, VERSION, content/)
+    keep their original names.
+    """
     bundle_dir.mkdir(parents=True, exist_ok=True)
-    _write_env_file(config, bundle_dir)
+    _write_env_generated_file(config, bundle_dir)
 
     # Seed content directory so first-time users have the mount target ready
     (bundle_dir / "content").mkdir(exist_ok=True)
@@ -1495,41 +1517,63 @@ def write_bundle_files(config: DeployConfig, bundle_dir: Path) -> None:
     version = _read_version()
     (bundle_dir / "VERSION").write_text(version + "\n", encoding="utf-8")
 
+    generated_suffix = ".generated"
     stale_files: list[str] = []
     if config.caddy_mode == CADDY_MODE_EXTERNAL:
-        (bundle_dir / DEFAULT_IMAGE_EXTERNAL_CADDY_COMPOSE_FILE).write_text(
+        (bundle_dir / (DEFAULT_IMAGE_EXTERNAL_CADDY_COMPOSE_FILE + generated_suffix)).write_text(
             build_image_external_caddy_compose_content(), encoding="utf-8"
         )
         stale_files.extend(
             [
+                DEFAULT_CADDYFILE + generated_suffix,
+                DEFAULT_CADDY_PUBLIC_COMPOSE_FILE + generated_suffix,
+                DEFAULT_IMAGE_COMPOSE_FILE + generated_suffix,
+                DEFAULT_IMAGE_NO_CADDY_COMPOSE_FILE + generated_suffix,
+                # Clean up old un-suffixed files from previous bundle versions
                 DEFAULT_CADDYFILE,
                 DEFAULT_CADDY_PUBLIC_COMPOSE_FILE,
                 DEFAULT_IMAGE_COMPOSE_FILE,
                 DEFAULT_IMAGE_NO_CADDY_COMPOSE_FILE,
+                DEFAULT_ENV_FILE,
             ]
         )
     elif config.caddy_config is not None:
-        (bundle_dir / DEFAULT_CADDYFILE).write_text(
+        (bundle_dir / (DEFAULT_CADDYFILE + generated_suffix)).write_text(
             build_caddyfile_content(config.caddy_config), encoding="utf-8"
         )
         # Ports are baked into the compose file based on caddy_public to avoid
         # Docker Compose additive port merge conflicts with a separate overlay.
-        (bundle_dir / DEFAULT_IMAGE_COMPOSE_FILE).write_text(
+        (bundle_dir / (DEFAULT_IMAGE_COMPOSE_FILE + generated_suffix)).write_text(
             build_image_compose_content(caddy_public=config.caddy_public), encoding="utf-8"
         )
-        stale_files.append(DEFAULT_IMAGE_NO_CADDY_COMPOSE_FILE)
-        stale_files.append(DEFAULT_IMAGE_EXTERNAL_CADDY_COMPOSE_FILE)
-        stale_files.append(DEFAULT_CADDY_PUBLIC_COMPOSE_FILE)
+        stale_files.extend(
+            [
+                DEFAULT_IMAGE_NO_CADDY_COMPOSE_FILE + generated_suffix,
+                DEFAULT_IMAGE_EXTERNAL_CADDY_COMPOSE_FILE + generated_suffix,
+                DEFAULT_CADDY_PUBLIC_COMPOSE_FILE + generated_suffix,
+                # Clean up old un-suffixed files
+                DEFAULT_IMAGE_NO_CADDY_COMPOSE_FILE,
+                DEFAULT_IMAGE_EXTERNAL_CADDY_COMPOSE_FILE,
+                DEFAULT_CADDY_PUBLIC_COMPOSE_FILE,
+                DEFAULT_ENV_FILE,
+            ]
+        )
     else:
-        (bundle_dir / DEFAULT_IMAGE_NO_CADDY_COMPOSE_FILE).write_text(
+        (bundle_dir / (DEFAULT_IMAGE_NO_CADDY_COMPOSE_FILE + generated_suffix)).write_text(
             build_image_direct_compose_content(), encoding="utf-8"
         )
         stale_files.extend(
             [
+                DEFAULT_CADDYFILE + generated_suffix,
+                DEFAULT_CADDY_PUBLIC_COMPOSE_FILE + generated_suffix,
+                DEFAULT_IMAGE_COMPOSE_FILE + generated_suffix,
+                DEFAULT_IMAGE_EXTERNAL_CADDY_COMPOSE_FILE + generated_suffix,
+                # Clean up old un-suffixed files
                 DEFAULT_CADDYFILE,
                 DEFAULT_CADDY_PUBLIC_COMPOSE_FILE,
                 DEFAULT_IMAGE_COMPOSE_FILE,
                 DEFAULT_IMAGE_EXTERNAL_CADDY_COMPOSE_FILE,
+                DEFAULT_ENV_FILE,
             ]
         )
 
@@ -1825,7 +1869,7 @@ def deploy(config: DeployConfig, project_dir: Path) -> DeployResult:
         save_image_tarball(project_dir, image_tag, bundle_dir / config.tarball_filename)
 
     return DeployResult(
-        env_path=bundle_dir / DEFAULT_ENV_FILE,
+        env_path=bundle_dir / DEFAULT_ENV_GENERATED_FILE,
         commands=_remote_bundle_commands(config),
         bundle_path=bundle_dir,
     )
