@@ -5128,7 +5128,7 @@ class TestLocalBackupGuard:
         """Remote bundle generation should NOT create .bak files in project root."""
         (tmp_path / DEFAULT_ENV_FILE).write_text("old", encoding="utf-8")
         (tmp_path / DEFAULT_CADDYFILE).write_text("old", encoding="utf-8")
-        commands = _stub_subprocess(monkeypatch)
+        _stub_subprocess(monkeypatch)
         config = _make_config(
             deployment_mode=DEPLOY_MODE_TARBALL,
             image_ref="ghcr.io/example/agblogger:v1.0",
@@ -5147,7 +5147,7 @@ class TestLocalBackupGuard:
         bundle_dir = tmp_path / DEFAULT_BUNDLE_DIR
         bundle_dir.mkdir(parents=True)
         (bundle_dir / DEFAULT_ENV_FILE).write_text("old", encoding="utf-8")
-        commands = _stub_subprocess(monkeypatch)
+        _stub_subprocess(monkeypatch)
         config = _make_config(
             deployment_mode=DEPLOY_MODE_TARBALL,
             image_ref="ghcr.io/example/agblogger:v1.0",
