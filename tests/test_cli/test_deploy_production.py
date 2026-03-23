@@ -4612,11 +4612,9 @@ class TestSetupScriptFilePlacement:
         )
         script = build_setup_script_content(config)
         # Default tarball+no-caddy uses docker-compose.image.nocaddy.yml
-        assert "cp docker-compose.image.nocaddy.yml docker-compose.image.nocaddy.yml.bak" in script
-        assert (
-            "mv docker-compose.image.nocaddy.yml.generated docker-compose.image.nocaddy.yml"
-            in script
-        )
+        f = "docker-compose.image.nocaddy.yml"
+        assert f'cp "{f}" "{f}.bak"' in script
+        assert f'mv "{f}.generated" "{f}"' in script
 
     def test_config_files_backed_up_and_moved_bundled_caddy(self) -> None:
         """Caddyfile.production is also backed up and moved in bundled caddy mode."""
@@ -4628,8 +4626,8 @@ class TestSetupScriptFilePlacement:
             caddy_public=True,
         )
         script = build_setup_script_content(config)
-        assert "cp Caddyfile.production Caddyfile.production.bak" in script
-        assert "mv Caddyfile.production.generated Caddyfile.production" in script
+        assert 'cp "Caddyfile.production" "Caddyfile.production.bak"' in script
+        assert 'mv "Caddyfile.production.generated" "Caddyfile.production"' in script
 
     def test_config_files_no_caddyfile_for_external_caddy(self) -> None:
         """External caddy mode does not back up or place Caddyfile.production."""
@@ -4645,7 +4643,7 @@ class TestSetupScriptFilePlacement:
         )
         script = build_setup_script_content(config)
         # External caddy uses different compose file
-        assert "mv docker-compose.image.external-caddy.yml.generated" in script
+        assert 'mv "docker-compose.image.external-caddy.yml.generated"' in script
         assert "Caddyfile.production.generated" not in script
 
     def test_env_production_seed_only_on_first_install(self) -> None:

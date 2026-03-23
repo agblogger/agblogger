@@ -423,11 +423,7 @@ def build_setup_script_content(config: DeployConfig) -> str:
     ]
 
     # File placement — move .generated files into their final positions
-    lines.extend(
-        [
-            "# ── File placement ──────────────────────────────────────────────────",
-        ]
-    )
+    lines.append("# ── File placement ──────────────────────────────────────────────────")
 
     # Config files: compose files and Caddyfile (known at generation time)
     config_files_to_place: list[str] = list(compose_flags)
@@ -437,10 +433,15 @@ def build_setup_script_content(config: DeployConfig) -> str:
     for filename in config_files_to_place:
         lines.extend(
             [
-                f"if [ -f {filename} ]; then",
-                f"    cp {filename} {filename}.bak",
+                f'if [ ! -f "{filename}.generated" ]; then',
+                f'    echo "Error: {filename}.generated not found.'
+                f' The deployment bundle may be incomplete." >&2',
+                "    exit 1",
                 "fi",
-                f"mv {filename}.generated {filename}",
+                f'if [ -f "{filename}" ]; then',
+                f'    cp "{filename}" "{filename}.bak"',
+                "fi",
+                f'mv "{filename}.generated" "{filename}"',
             ]
         )
 
@@ -459,6 +460,7 @@ def build_setup_script_content(config: DeployConfig) -> str:
             '    echo "To use the newly generated config instead, run:"',
             '    echo "  cp .env.production.generated .env.production"',
             "    chmod 600 .env.production",
+            "    chmod 600 .env.production.generated",
             "fi",
             "",
         ]
