@@ -4945,3 +4945,144 @@ class TestGeneratedSuffix:
         assert not (bundle_dir / (DEFAULT_SETUP_SCRIPT + ".generated")).exists()
         assert not (bundle_dir / (DEFAULT_REMOTE_README + ".generated")).exists()
         assert not (bundle_dir / "VERSION.generated").exists()
+
+
+# ── Old-stack teardown via .last-teardown marker ──────────────────────
+
+
+class TestSetupScriptTeardown:
+    """setup.sh detects Caddy mode changes and tears down the old stack."""
+
+    def _nocaddy_config(self) -> DeployConfig:
+        return _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+        )
+
+    def _bundled_config(self) -> DeployConfig:
+        return _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+            caddy_config=CaddyConfig(domain="blog.example.com", email="a@b.com"),
+            caddy_mode=CADDY_MODE_BUNDLED,
+        )
+
+    def _external_config(self) -> DeployConfig:
+        return _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+            caddy_config=CaddyConfig(domain="blog.example.com", email="a@b.com"),
+            caddy_mode=CADDY_MODE_EXTERNAL,
+            shared_caddy_config=SharedCaddyConfig(
+                caddy_dir=Path("/opt/caddy"),
+                acme_email="a@b.com",
+            ),
+        )
+
+    def test_writes_last_teardown_marker_on_success(self) -> None:
+        """After 'All services healthy', .last-teardown is written with compose flags."""
+        script = build_setup_script_content(self._nocaddy_config())
+        lines = script.splitlines()
+
+        healthy_idx = next(i for i, ln in enumerate(lines) if "All services healthy" in ln)
+        marker_write_indices = [
+            i for i, ln in enumerate(lines) if ".last-teardown" in ln and ">" in ln
+        ]
+        assert marker_write_indices, "Expected a write to .last-teardown"
+        assert any(idx > healthy_idx for idx in marker_write_indices), (
+            ".last-teardown must be written after 'All services healthy'"
+        )
+
+    def test_reads_and_compares_last_teardown(self) -> None:
+        """The script checks for the .last-teardown file and compares flags."""
+        script = build_setup_script_content(self._nocaddy_config())
+        assert "if [ -f .last-teardown ]" in script
+        assert "OLD_COMPOSE_FLAGS" in script
+        assert "CURRENT_COMPOSE_FLAGS" in script
+
+    def test_tears_down_old_stack_on_mode_change(self) -> None:
+        """When flags differ, teardown runs docker compose ... down using .bak files."""
+        script = build_setup_script_content(self._nocaddy_config())
+        # Must reference .bak suffix for teardown compose files
+        assert ".bak" in script
+        # Must run docker compose down
+        assert "down" in script
+        # Teardown command must use .env.production
+        lines = script.splitlines()
+        down_lines = [ln for ln in lines if "down" in ln and "docker compose" in ln]
+        assert down_lines or any(
+            "down" in ln for ln in lines if "$OLD_TEARDOWN_CMD" in ln or "OLD_TEARDOWN_CMD" in ln
+        ), "Expected a teardown (down) invocation"
+
+    def test_skips_teardown_when_flags_match(self) -> None:
+        """When CURRENT_COMPOSE_FLAGS equals OLD_COMPOSE_FLAGS, teardown is skipped."""
+        script = build_setup_script_content(self._nocaddy_config())
+        # The comparison logic must be present
+        assert "CURRENT_COMPOSE_FLAGS" in script
+        assert '"$OLD_COMPOSE_FLAGS" != "$CURRENT_COMPOSE_FLAGS"' in script
+
+    def test_no_teardown_on_first_install(self) -> None:
+        """Teardown is guarded by marker file existence — safe on first install."""
+        script = build_setup_script_content(self._nocaddy_config())
+        # The entire teardown block is inside the if-file-exists guard
+        lines = script.splitlines()
+        marker_check_idx = next(
+            (i for i, ln in enumerate(lines) if "if [ -f .last-teardown ]" in ln), None
+        )
+        assert marker_check_idx is not None, "Expected 'if [ -f .last-teardown ]' guard"
+
+    def test_skips_teardown_with_warning_when_bak_missing(self) -> None:
+        """If a .bak file is missing, a warning is printed and teardown is skipped."""
+        script = build_setup_script_content(self._nocaddy_config())
+        assert "TEARDOWN_OK" in script
+        # Warning message when .bak not found
+        assert ".bak not found" in script or "cannot tear down old stack" in script
+
+    def test_marker_contains_compose_flags_nocaddy(self) -> None:
+        """The .last-teardown marker write uses the correct compose filename (no-caddy mode)."""
+        script = build_setup_script_content(self._nocaddy_config())
+        lines = script.splitlines()
+        # CURRENT_COMPOSE_FLAGS must be set to the no-caddy compose filename
+        flag_lines = [ln for ln in lines if "CURRENT_COMPOSE_FLAGS=" in ln]
+        assert flag_lines, "Expected CURRENT_COMPOSE_FLAGS assignment"
+        assert any(DEFAULT_IMAGE_NO_CADDY_COMPOSE_FILE in ln for ln in flag_lines), (
+            f"CURRENT_COMPOSE_FLAGS must contain {DEFAULT_IMAGE_NO_CADDY_COMPOSE_FILE}"
+        )
+
+    def test_marker_contains_compose_flags_bundled(self) -> None:
+        """The .last-teardown marker write uses the correct compose filename (bundled caddy)."""
+        script = build_setup_script_content(self._bundled_config())
+        lines = script.splitlines()
+        flag_lines = [ln for ln in lines if "CURRENT_COMPOSE_FLAGS=" in ln]
+        assert flag_lines, "Expected CURRENT_COMPOSE_FLAGS assignment"
+        assert any(DEFAULT_IMAGE_COMPOSE_FILE in ln for ln in flag_lines), (
+            f"CURRENT_COMPOSE_FLAGS must contain {DEFAULT_IMAGE_COMPOSE_FILE}"
+        )
+
+    def test_marker_contains_compose_flags_external(self) -> None:
+        """The .last-teardown marker write uses the correct compose filename (external caddy)."""
+        script = build_setup_script_content(self._external_config())
+        lines = script.splitlines()
+        flag_lines = [ln for ln in lines if "CURRENT_COMPOSE_FLAGS=" in ln]
+        assert flag_lines, "Expected CURRENT_COMPOSE_FLAGS assignment"
+        assert any(DEFAULT_IMAGE_EXTERNAL_CADDY_COMPOSE_FILE in ln for ln in flag_lines), (
+            f"CURRENT_COMPOSE_FLAGS must contain {DEFAULT_IMAGE_EXTERNAL_CADDY_COMPOSE_FILE}"
+        )
+
+    def test_teardown_section_before_version_info(self) -> None:
+        """Teardown section must appear after file placement but before version info."""
+        script = build_setup_script_content(self._nocaddy_config())
+        lines = script.splitlines()
+
+        placement_idx = next((i for i, ln in enumerate(lines) if "File placement" in ln), None)
+        teardown_idx = next(
+            (i for i, ln in enumerate(lines) if "Stack teardown" in ln or "last-teardown" in ln),
+            None,
+        )
+        version_idx = next((i for i, ln in enumerate(lines) if "Version info" in ln), None)
+        assert placement_idx is not None
+        assert teardown_idx is not None
+        assert version_idx is not None
+        assert placement_idx < teardown_idx < version_idx, (
+            "Teardown section must be between file placement and version info"
+        )

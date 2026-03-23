@@ -382,6 +382,15 @@ def build_shared_caddy_compose_content() -> str:
     )
 
 
+def _bash_quote(value: str) -> str:
+    """Wrap a value in single quotes for safe embedding in a bash script.
+
+    Single-quote each segment; embedded single quotes are handled by ending the
+    single-quoted string, inserting an escaped quote, then resuming.
+    """
+    return "'" + value.replace("'", "'\\''") + "'"
+
+
 def build_setup_script_content(config: DeployConfig) -> str:
     """Build an idempotent setup script for remote deployment bundles."""
     compose_flags = _compose_filenames(
@@ -461,6 +470,39 @@ def build_setup_script_content(config: DeployConfig) -> str:
             '    echo "  cp .env.production.generated .env.production"',
             "    chmod 600 .env.production",
             "    chmod 600 .env.production.generated",
+            "fi",
+            "",
+        ]
+    )
+
+    # Stack teardown on mode change
+    current_flags_value = "\n".join(compose_flags)
+    lines.extend(
+        [
+            "# ── Stack teardown on mode change ───────────────────────────────────",
+            f"CURRENT_COMPOSE_FLAGS={_bash_quote(current_flags_value)}",
+            "if [ -f .last-teardown ]; then",
+            "    OLD_COMPOSE_FLAGS=$(cat .last-teardown)",
+            '    if [ "$OLD_COMPOSE_FLAGS" != "$CURRENT_COMPOSE_FLAGS" ]; then',
+            '        echo "Caddy mode changed — tearing down old stack..."',
+            '        OLD_TEARDOWN_CMD="docker compose --env-file .env.production"',
+            "        TEARDOWN_OK=true",
+            "        for flag in $OLD_COMPOSE_FLAGS; do",
+            '            if [ -f "${flag}.bak" ]; then',
+            '                OLD_TEARDOWN_CMD="$OLD_TEARDOWN_CMD -f ${flag}.bak"',
+            "            else",
+            (
+                '                echo "Warning: ${flag}.bak not found,'
+                ' cannot tear down old stack cleanly." >&2'
+            ),
+            "                TEARDOWN_OK=false",
+            "                break",
+            "            fi",
+            "        done",
+            '        if [ "$TEARDOWN_OK" = true ]; then',
+            "            $OLD_TEARDOWN_CMD down || true",
+            "        fi",
+            "    fi",
             "fi",
             "",
         ]
@@ -803,6 +845,8 @@ def build_setup_script_content(config: DeployConfig) -> str:
             '        echo ""',
             '        echo "Note: ADMIN_PASSWORD in .env.production is stored in plaintext."',
             '        echo "Change your password through the app after first login."',
+            "        # Record current compose flags so next run can detect mode changes.",
+            "        printf '%s' \"$CURRENT_COMPOSE_FLAGS\" > .last-teardown",
             "        exit 0",
             "    fi",
             "done",
