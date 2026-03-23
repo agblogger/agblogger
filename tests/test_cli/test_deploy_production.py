@@ -5090,7 +5090,8 @@ class TestSetupScriptDualSubnetPatch:
             caddy_config=CaddyConfig(domain="blog.example.com", email="admin@example.com"),
             caddy_mode=CADDY_MODE_EXTERNAL,
             shared_caddy_config=SharedCaddyConfig(
-                caddy_dir=Path("/opt/caddy"), acme_email="admin@example.com",
+                caddy_dir=Path("/opt/caddy"),
+                acme_email="admin@example.com",
             ),
             trusted_proxy_ips=[CADDY_NETWORK_SUBNET_PLACEHOLDER],
         )
@@ -5108,7 +5109,7 @@ class TestSetupScriptDualSubnetPatch:
             f'sed -i "s|{CADDY_NETWORK_SUBNET_PLACEHOLDER}|$CADDY_SUBNET|"'
             " .env.production.generated" in script
         )
-        assert 'if [ -f .env.production.generated ]' in script
+        assert "if [ -f .env.production.generated ]" in script
 
     def test_no_subnet_patch_for_bundled_mode(self) -> None:
         config = _make_config(
@@ -5124,7 +5125,9 @@ class TestSetupScriptDualSubnetPatch:
 
 class TestLocalBackupGuard:
     def test_no_backup_files_created_for_remote_bundle(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Remote bundle generation should NOT create .bak files in project root."""
         (tmp_path / DEFAULT_ENV_FILE).write_text("old", encoding="utf-8")
@@ -5142,7 +5145,9 @@ class TestLocalBackupGuard:
         assert not bak_files, f"Unexpected .bak files in project root: {bak_files}"
 
     def test_no_backup_files_created_in_bundle_dir(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Bundle dir should NOT have .bak files."""
         bundle_dir = tmp_path / DEFAULT_BUNDLE_DIR
@@ -5195,7 +5200,8 @@ class TestReadmeRedesign:
         )
         commands = build_lifecycle_commands(
             deployment_mode=config.deployment_mode,
-            use_caddy=False, caddy_public=False,
+            use_caddy=False,
+            caddy_public=False,
             caddy_mode=config.caddy_mode,
         )
         return _build_remote_readme_content(config, commands)
@@ -5211,7 +5217,8 @@ class TestReadmeRedesign:
         # Use replace() to strip .env.production.generated occurrences so we only match
         # lines that reference the plain .env.production file.
         env_lines = [
-            line for line in readme.splitlines()
+            line
+            for line in readme.splitlines()
             if ".env.production" in line.replace(".env.production.generated", "")
         ]
         assert any(
