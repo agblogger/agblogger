@@ -3102,9 +3102,9 @@ class TestBundleVersionMarker:
 
 
 class TestTarballUpgradeInstructions:
-    """Tarball upgrade numbered steps should include replacing bundle files."""
+    """Tarball upgrade numbered steps should include copying bundle files."""
 
-    def test_tarball_upgrade_has_replace_as_numbered_step(self) -> None:
+    def test_tarball_upgrade_has_copy_as_numbered_step(self) -> None:
         config = _make_config(
             deployment_mode=DEPLOY_MODE_TARBALL,
             image_ref="agblogger:v1",
@@ -3116,11 +3116,11 @@ class TestTarballUpgradeInstructions:
         )
         content = _build_remote_readme_content(config, commands)
         upgrade_section = content[content.index("## Upgrading") :]
-        # "Replace" or "replace" should appear in a numbered step, not just prose
+        # "copy" should appear in a numbered step, not just prose
         numbered_steps = re.findall(r"^\d+\..+", upgrade_section, re.MULTILINE)
-        assert any("replace" in step.lower() or "Replace" in step for step in numbered_steps)
+        assert any("copy" in step.lower() for step in numbered_steps)
 
-    def test_registry_upgrade_has_replace_as_numbered_step(self) -> None:
+    def test_registry_upgrade_has_copy_as_numbered_step(self) -> None:
         config = _make_config(
             deployment_mode=DEPLOY_MODE_REGISTRY,
             image_ref="ghcr.io/example/agblogger:v1",
@@ -3133,7 +3133,7 @@ class TestTarballUpgradeInstructions:
         content = _build_remote_readme_content(config, commands)
         upgrade_section = content[content.index("## Upgrading") :]
         numbered_steps = re.findall(r"^\d+\..+", upgrade_section, re.MULTILINE)
-        assert any("replace" in step.lower() or "Replace" in step for step in numbered_steps)
+        assert any("copy" in step.lower() for step in numbered_steps)
 
 
 # ── Issue #4: Health timeout includes logs command ────────────────────
@@ -3621,9 +3621,9 @@ class TestHealthTimeoutMessage:
 
 
 class TestRemoteReadmeBundleUpgradeNote:
-    """Remote deployment README should advise replacing the full bundle on upgrade."""
+    """Remote deployment README should advise copying the full bundle on upgrade."""
 
-    def test_registry_readme_mentions_full_bundle_replacement(self) -> None:
+    def test_registry_readme_mentions_copy_all_files(self) -> None:
         config = _make_config(
             caddy_config=CaddyConfig(domain="blog.example.com", email=None),
             host_bind_ip=LOCALHOST_BIND_IP,
@@ -3636,11 +3636,11 @@ class TestRemoteReadmeBundleUpgradeNote:
             caddy_public=False,
         )
         content = _build_remote_readme_content(config, commands)
-        assert "Regenerate the bundle locally and replace all files" in content
+        assert "copy all files" in content.lower()
         assert "compose files and config may change" in content
-        assert "Preserve your `.env.production`" in content
+        assert ".env.production" in content
 
-    def test_tarball_readme_mentions_full_bundle_replacement(self) -> None:
+    def test_tarball_readme_mentions_copy_all_files(self) -> None:
         config = _make_config(
             deployment_mode=DEPLOY_MODE_TARBALL,
             image_ref="agblogger:v1",
@@ -3651,8 +3651,8 @@ class TestRemoteReadmeBundleUpgradeNote:
             caddy_public=False,
         )
         content = _build_remote_readme_content(config, commands)
-        assert "Regenerate the bundle locally and replace all files" in content
-        assert "Preserve your `.env.production`" in content
+        assert "copy all files" in content.lower()
+        assert ".env.production" in content
 
 
 # ── Version banner ───────────────────────────────────────────────────
@@ -4823,7 +4823,7 @@ class TestRemoteReadmeSetupScript:
         upgrade_idx = readme.index("Upgrading")
         assert "setup.sh" in readme[upgrade_idx:]
 
-    def test_readme_mentions_env_backup(self) -> None:
+    def test_readme_mentions_env_preserved(self) -> None:
         config = _make_config(
             deployment_mode=DEPLOY_MODE_TARBALL,
             image_ref="ghcr.io/example/agblogger:v1.0",
@@ -4835,7 +4835,8 @@ class TestRemoteReadmeSetupScript:
             tarball_filename=config.tarball_filename,
         )
         readme = _build_remote_readme_content(config, commands)
-        assert "backs up `.env.production`" in readme
+        assert ".env.production" in readme
+        assert "preserved" in readme.lower() or "never" in readme.lower()
 
 
 class TestSetupScriptInBundle:
@@ -5184,3 +5185,39 @@ class TestStaleGeneratedCleanup:
         assert not (tmp_path / ".env.production").exists()
         assert not (tmp_path / "docker-compose.image.yml").exists()
         assert not (tmp_path / "Caddyfile.production").exists()
+
+
+class TestReadmeRedesign:
+    def _readme(self) -> str:
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+        )
+        commands = build_lifecycle_commands(
+            deployment_mode=config.deployment_mode,
+            use_caddy=False, caddy_public=False,
+            caddy_mode=config.caddy_mode,
+        )
+        return _build_remote_readme_content(config, commands)
+
+    def test_upgrade_no_longer_excludes_env_production(self) -> None:
+        readme = self._readme()
+        assert "except" not in readme.lower() or ".env.production" not in readme.split("except")[1]
+        assert "copy all files" in readme.lower()
+
+    def test_upgrade_mentions_env_preserved(self) -> None:
+        readme = self._readme()
+        assert ".env.production" in readme
+        assert "preserved" in readme.lower() or "automatically" in readme.lower()
+
+    def test_upgrade_mentions_generated_reference(self) -> None:
+        readme = self._readme()
+        assert ".env.production.generated" in readme
+
+    def test_rollback_no_longer_references_env_bak(self) -> None:
+        readme = self._readme()
+        assert ".env.production.bak" not in readme
+
+    def test_no_longer_mentions_manual_env_backup(self) -> None:
+        readme = self._readme()
+        assert "backs up .env.production" not in readme.lower()

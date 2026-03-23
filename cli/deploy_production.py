@@ -1516,14 +1516,10 @@ def _build_remote_readme_content(config: DeployConfig, commands: dict[str, str])
             "",
             data_note,
             "",
-            "`setup.sh` automatically backs up `.env.production` before each run.",
-            "",
             "To upgrade to a new version:",
             "",
-            "1. Regenerate the bundle locally and replace all files in this directory"
-            " **except `.env.production`** (compose files and config may change between"
-            " versions). Preserve your `.env.production` to keep your existing secrets"
-            " and credentials."
+            "1. Regenerate the bundle locally and copy all files to the server"
+            " (compose files and config may change between versions)."
             " Check the `VERSION` file to see what version generated the current bundle."
             " The `./content/` directory and `agblogger-db` Docker volume are not part"
             " of the bundle and will be preserved automatically.",
@@ -1537,12 +1533,18 @@ def _build_remote_readme_content(config: DeployConfig, commands: dict[str, str])
         [
             "3. Run `bash setup.sh` again.",
             "",
+            "   `.env.production` is preserved automatically on upgrades — `setup.sh` never"
+            " overwrites it. `.env.production.generated` is available as a reference for"
+            " any new configuration variables introduced in the new version.",
+            "",
             "## Rollback",
             "",
-            "If an upgrade causes problems, restore from the `.bak` backup files created",
-            "during the previous deployment and restart with the previous image:",
+            "If an upgrade causes problems, config files (`docker-compose.*.yml`,"
+            " `Caddyfile.production`) have `.bak` backups created during the previous"
+            " deployment. `.env.production` is never overwritten by `setup.sh`, so no"
+            " rollback is needed for it. To roll back, restore the `.bak` config files"
+            " and restart with the previous image:",
             "```",
-            "cp .env.production.bak .env.production",
             f"{commands['start']}",
             "```",
         ]
