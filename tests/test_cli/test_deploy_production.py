@@ -4489,12 +4489,13 @@ class TestBuildSetupScript:
         assert "docker compose version" in script
 
     def test_backs_up_env_production(self) -> None:
+        """Old unconditional env backup is replaced by per-file conditional backup."""
         config = _make_config(
             deployment_mode=DEPLOY_MODE_TARBALL,
             image_ref="ghcr.io/example/agblogger:v1.0",
         )
         script = build_setup_script_content(config)
-        assert "cp .env.production .env.production.bak" in script
+        assert "cp .env.production .env.production.bak" not in script
 
     def test_displays_version_on_fresh_install(self) -> None:
         config = _make_config(
@@ -4583,6 +4584,148 @@ class TestBuildSetupScript:
         script = build_setup_script_content(config)
         assert "Caddy container" in script
         assert "Caddy logs" in script
+
+
+class TestSetupScriptFilePlacement:
+    """File placement logic: .generated files moved into final positions."""
+
+    def test_preflight_checks_for_generated_env_not_plain(self) -> None:
+        """Old preflight exit-on-missing-.env.production replaced; new check covers .generated."""
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+        )
+        script = build_setup_script_content(config)
+        # Old preflight that exits when only .env.production is missing must be gone
+        assert "Error: .env.production not found" not in script, (
+            "Old 'not found' preflight error must be removed"
+        )
+        # New check must reference both files and the .generated file
+        assert ".env.production.generated" in script
+        assert "Neither .env.production nor .env.production.generated found" in script
+
+    def test_config_files_backed_up_and_moved(self) -> None:
+        """Compose .generated files are backed up then moved into final position."""
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+        )
+        script = build_setup_script_content(config)
+        # Default tarball+no-caddy uses docker-compose.image.nocaddy.yml
+        assert "cp docker-compose.image.nocaddy.yml docker-compose.image.nocaddy.yml.bak" in script
+        assert (
+            "mv docker-compose.image.nocaddy.yml.generated docker-compose.image.nocaddy.yml"
+            in script
+        )
+
+    def test_config_files_backed_up_and_moved_bundled_caddy(self) -> None:
+        """Caddyfile.production is also backed up and moved in bundled caddy mode."""
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+            caddy_config=CaddyConfig(domain="blog.example.com", email="a@b.com"),
+            caddy_mode=CADDY_MODE_BUNDLED,
+            caddy_public=True,
+        )
+        script = build_setup_script_content(config)
+        assert "cp Caddyfile.production Caddyfile.production.bak" in script
+        assert "mv Caddyfile.production.generated Caddyfile.production" in script
+
+    def test_config_files_no_caddyfile_for_external_caddy(self) -> None:
+        """External caddy mode does not back up or place Caddyfile.production."""
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+            caddy_config=CaddyConfig(domain="blog.example.com", email="a@b.com"),
+            caddy_mode=CADDY_MODE_EXTERNAL,
+            shared_caddy_config=SharedCaddyConfig(
+                caddy_dir=Path("/opt/caddy"),
+                acme_email="a@b.com",
+            ),
+        )
+        script = build_setup_script_content(config)
+        # External caddy uses different compose file
+        assert "mv docker-compose.image.external-caddy.yml.generated" in script
+        assert "Caddyfile.production.generated" not in script
+
+    def test_env_production_seed_only_on_first_install(self) -> None:
+        """On first install (no .env.production), the generated template is moved into place."""
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+        )
+        script = build_setup_script_content(config)
+        assert "if [ ! -f .env.production ]" in script
+        assert "mv .env.production.generated .env.production" in script
+        assert "Created .env.production from generated template." in script
+
+    def test_env_production_kept_on_upgrade(self) -> None:
+        """On upgrade (existing .env.production), generated file is not applied automatically."""
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+        )
+        script = build_setup_script_content(config)
+        assert "Existing .env.production found" in script
+        assert "cp .env.production.generated .env.production" in script
+
+    def test_chmod_600_applied_in_both_branches(self) -> None:
+        """chmod 600 must appear after mv (first install) AND after the upgrade message."""
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+        )
+        script = build_setup_script_content(config)
+        lines = script.splitlines()
+
+        # Find the if-branch mv line and the else-branch message line
+        mv_idx = next(
+            i
+            for i, line in enumerate(lines)
+            if "mv .env.production.generated .env.production" in line
+        )
+        upgrade_msg_idx = next(
+            i for i, line in enumerate(lines) if "Existing .env.production found" in line
+        )
+
+        # chmod 600 must appear after each of those lines
+        chmod_indices = [i for i, line in enumerate(lines) if "chmod 600 .env.production" in line]
+        assert len(chmod_indices) >= 2, "Expected chmod 600 in both branches"
+        assert any(idx > mv_idx for idx in chmod_indices), "chmod 600 must appear after mv"
+        assert any(idx > upgrade_msg_idx for idx in chmod_indices), (
+            "chmod 600 must appear after upgrade message"
+        )
+
+    def test_file_placement_before_image_load(self) -> None:
+        """File placement section must appear before docker load / docker pull."""
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+        )
+        script = build_setup_script_content(config)
+        lines = script.splitlines()
+
+        placement_idx = next(
+            i for i, line in enumerate(lines) if "mv .env.production.generated" in line
+        )
+        load_idx = next(i for i, line in enumerate(lines) if "docker load" in line)
+        assert placement_idx < load_idx, "File placement must happen before docker load"
+
+    def test_compose_commands_use_final_filenames(self) -> None:
+        """docker compose up must use the final (non-.generated) compose filename."""
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+        )
+        script = build_setup_script_content(config)
+        # Default tarball+no-caddy compose up uses the nocaddy file
+        assert "-f docker-compose.image.nocaddy.yml" in script
+        # .generated suffix must NOT appear in any compose up invocation
+        lines = script.splitlines()
+        compose_up_lines = [line for line in lines if "compose" in line and "up -d" in line]
+        assert compose_up_lines, "Expected at least one compose up line"
+        for line in compose_up_lines:
+            assert ".generated" not in line, f"compose up must not reference .generated: {line}"
 
 
 class TestRemoteReadmeSetupScript:

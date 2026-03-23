@@ -414,22 +414,60 @@ def build_setup_script_content(config: DeployConfig) -> str:
         ' Install the Docker Compose plugin." >&2',
         "    exit 1",
         "fi",
-        "if [ ! -f .env.production ]; then",
-        '    echo "Error: .env.production not found.'
-        ' This file is required and should be part of the deployment bundle." >&2',
+        "if [ ! -f .env.production ] && [ ! -f .env.production.generated ]; then",
+        '    echo "Error: Neither .env.production nor .env.production.generated found.'
+        ' The deployment bundle may be incomplete." >&2',
         "    exit 1",
         "fi",
-        "# Ensure secrets file is not world-readable regardless of transfer method",
-        "chmod 600 .env.production",
         "",
     ]
 
-    # Backup and version info
+    # File placement — move .generated files into their final positions
     lines.extend(
         [
-            "# ── Backup and version info ──────────────────────────────────────────",
-            "cp .env.production .env.production.bak",
-            'echo "Backed up .env.production to .env.production.bak"',
+            "# ── File placement ──────────────────────────────────────────────────",
+        ]
+    )
+
+    # Config files: compose files and Caddyfile (known at generation time)
+    config_files_to_place: list[str] = list(compose_flags)
+    if config.use_bundled_caddy:
+        config_files_to_place.append(DEFAULT_CADDYFILE)
+
+    for filename in config_files_to_place:
+        lines.extend(
+            [
+                f"if [ -f {filename} ]; then",
+                f"    cp {filename} {filename}.bak",
+                "fi",
+                f"mv {filename}.generated {filename}",
+            ]
+        )
+
+    # .env.production: seed-only — only place on first install
+    lines.extend(
+        [
+            "if [ ! -f .env.production ]; then",
+            "    mv .env.production.generated .env.production",
+            '    echo "Created .env.production from generated template."',
+            "    chmod 600 .env.production",
+            "else",
+            (
+                '    echo "Existing .env.production found'
+                ' — keeping it (not overwriting with generated version)."'
+            ),
+            '    echo "To use the newly generated config instead, run:"',
+            '    echo "  cp .env.production.generated .env.production"',
+            "    chmod 600 .env.production",
+            "fi",
+            "",
+        ]
+    )
+
+    # Version info
+    lines.extend(
+        [
+            "# ── Version info ─────────────────────────────────────────────────────",
             'NEW_VERSION=$(cat VERSION 2>/dev/null || echo "unknown")',
             f"if {compose_cmd} ps -q agblogger 2>/dev/null | grep -q .; then",
             '    echo "Upgrading AgBlogger to v${NEW_VERSION}..."',
