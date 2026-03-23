@@ -633,6 +633,9 @@ def build_setup_script_content(config: DeployConfig) -> str:
                 "    exit 1",
                 "fi",
                 sed_cmd,
+                'if [ -f .env.production.generated ]; then',
+                f'    sed -i "s|{CADDY_NETWORK_SUBNET_PLACEHOLDER}|$CADDY_SUBNET|" .env.production.generated',
+                'fi',
                 "",
             ]
         )

@@ -5079,3 +5079,50 @@ class TestSetupScriptTeardown:
         assert placement_idx < teardown_idx < version_idx, (
             "Teardown section must be between file placement and version info"
         )
+
+
+class TestSetupScriptDualSubnetPatch:
+    def test_patches_env_production(self) -> None:
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+            caddy_config=CaddyConfig(domain="blog.example.com", email="admin@example.com"),
+            caddy_mode=CADDY_MODE_EXTERNAL,
+            shared_caddy_config=SharedCaddyConfig(
+                caddy_dir=Path("/opt/caddy"), acme_email="admin@example.com",
+            ),
+            trusted_proxy_ips=[CADDY_NETWORK_SUBNET_PLACEHOLDER],
+        )
+        script = build_setup_script_content(config)
+        # Must patch .env.production
+        assert 'sed -i' in script
+        assert CADDY_NETWORK_SUBNET_PLACEHOLDER in script
+        assert '.env.production"' in script or ".env.production'" in script
+
+    def test_patches_env_generated_with_existence_guard(self) -> None:
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+            caddy_config=CaddyConfig(domain="blog.example.com", email="admin@example.com"),
+            caddy_mode=CADDY_MODE_EXTERNAL,
+            shared_caddy_config=SharedCaddyConfig(
+                caddy_dir=Path("/opt/caddy"), acme_email="admin@example.com",
+            ),
+            trusted_proxy_ips=[CADDY_NETWORK_SUBNET_PLACEHOLDER],
+        )
+        script = build_setup_script_content(config)
+        # Must patch .env.production.generated with guard
+        assert '.env.production.generated' in script
+        # Guard: only patch if file exists
+        assert 'if [ -f .env.production.generated ]' in script
+
+    def test_no_subnet_patch_for_bundled_mode(self) -> None:
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+            caddy_config=CaddyConfig(domain="blog.example.com", email="admin@example.com"),
+            caddy_mode=CADDY_MODE_BUNDLED,
+            caddy_public=True,
+        )
+        script = build_setup_script_content(config)
+        assert CADDY_NETWORK_SUBNET_PLACEHOLDER not in script
