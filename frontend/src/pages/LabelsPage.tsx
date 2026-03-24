@@ -47,44 +47,43 @@ export default function LabelsPage() {
 
   return (
     <div className="animate-fade-in">
-      {view === 'list' ? (
-        <>
-          <div className="flex items-center justify-between mb-8">
-            <div className="flex items-center gap-3">
-              <Tag size={20} className="text-accent" />
-              <h1 className="font-display text-3xl text-ink">Labels</h1>
-            </div>
-            <div className="flex items-center gap-3 ml-auto">
-              <div className="relative">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
-                <input
-                  type="text"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Filter labels..."
-                  aria-label="Filter labels"
-                  className="w-48 pl-9 pr-3 py-2 text-sm border border-border rounded-lg
-                    bg-paper focus:outline-none focus:border-accent/50 transition-colors"
-                />
-              </div>
-              {viewToggle}
-              {user?.is_admin === true && (
-                <Link
-                  to="/labels/new"
-                  className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium
-                           bg-accent text-white rounded-lg hover:bg-accent-light transition-colors"
-                >
-                  <Plus size={16} />
-                  New Label
-                </Link>
-              )}
-            </div>
+      <div className="flex flex-wrap items-center gap-3 mb-8">
+        <div className="flex items-center gap-3">
+          <Tag size={20} className="text-accent" />
+          <h1 className="font-display text-3xl text-ink">Labels</h1>
+        </div>
+        <div className="flex flex-wrap items-center gap-3 ml-auto">
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Filter labels..."
+              aria-label="Filter labels"
+              className="w-48 pl-9 pr-3 py-2 text-sm border border-border rounded-lg
+                bg-paper focus:outline-none focus:border-accent/50 transition-colors"
+            />
           </div>
-          <LabelListView search={search} />
-        </>
+          {viewToggle}
+          {user?.is_admin === true && (
+            <Link
+              to="/labels/new"
+              className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium
+                       bg-accent text-white rounded-lg hover:bg-accent-light transition-colors"
+            >
+              <Plus size={16} />
+              New Label
+            </Link>
+          )}
+        </div>
+      </div>
+
+      {view === 'list' ? (
+        <LabelListView search={search} />
       ) : (
         <Suspense fallback={<LoadingSpinner />}>
-          <LabelGraphPage viewToggle={viewToggle} />
+          <LabelGraphPage search={search} />
         </Suspense>
       )}
     </div>

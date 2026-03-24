@@ -19,7 +19,6 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import Dagre from '@dagrejs/dagre'
-import { Search, GitFork } from 'lucide-react'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import { useAuthStore } from '@/stores/authStore'
 import { fetchLabel, fetchLabelGraph, updateLabel } from '@/api/labels'
@@ -125,14 +124,13 @@ function layoutGraph(
 
 /* ── Main component ────────────────────────────────── */
 
-export default function LabelGraphPage({ viewToggle }: { viewToggle: React.ReactNode }) {
+export default function LabelGraphPage({ search }: { search: string }) {
   const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
   const initialNodes: Node[] = []
   const initialEdges: Edge[] = []
   const [graphData, setGraphData] = useState<LabelGraphResponse | null>(null)
   const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
   const [mutating, setMutating] = useState(false)
@@ -293,15 +291,9 @@ export default function LabelGraphPage({ viewToggle }: { viewToggle: React.React
   }
 
   return (
-    <div className="animate-fade-in -mx-6 -my-10">
-      {/* Header bar */}
-      <div className="px-6 py-4 border-b border-border bg-paper flex items-center gap-4">
-        <div className="flex items-center gap-2">
-          <GitFork size={18} className="text-accent" />
-          <h1 className="font-display text-2xl text-ink">Label Graph</h1>
-          <span className="text-xs font-mono text-muted ml-2">
-            {graphData.nodes.length} labels
-          </span>
+    <div className="-mx-6">
+      {(mutating || editError !== null) && (
+        <div className="px-6 pb-3 flex items-center gap-3">
           {mutating && (
             <div className="w-4 h-4 border-2 border-accent/30 border-t-accent rounded-full animate-spin" />
           )}
@@ -311,26 +303,9 @@ export default function LabelGraphPage({ viewToggle }: { viewToggle: React.React
             </div>
           )}
         </div>
+      )}
 
-        <div className="flex items-center gap-3 ml-auto">
-          {/* Search */}
-          <div className="relative">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Filter labels..."
-              className="w-48 pl-9 pr-3 py-2 text-sm border border-border rounded-lg
-                bg-paper focus:outline-none focus:border-accent/50 transition-colors"
-            />
-          </div>
-          {viewToggle}
-        </div>
-      </div>
-
-      {/* Graph canvas */}
-      <div style={{ height: 'calc(100vh - 200px)' }}>
+      <div style={{ height: 'calc(100vh - 220px)' }}>
         <ReactFlow
           nodes={filteredNodes}
           edges={edges}

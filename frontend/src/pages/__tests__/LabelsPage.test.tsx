@@ -11,8 +11,8 @@ vi.mock('@/api/labels', () => ({
 }))
 
 vi.mock('@/pages/LabelGraphPage', () => ({
-  default: ({ viewToggle }: { viewToggle: React.ReactNode }) => (
-    <div data-testid="graph-view">Graph View{viewToggle}</div>
+  default: ({ search }: { search: string }) => (
+    <div data-testid="graph-view">Graph View (search: {search})</div>
   ),
 }))
 

@@ -1,5 +1,4 @@
 import { render, screen, waitFor, act } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { useState } from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -135,10 +134,10 @@ const graphData: LabelGraphResponse = {
   edges: [{ source: 'swe', target: 'cs' }],
 }
 
-function renderGraph() {
+function renderGraph(search = '') {
   return render(
     <MemoryRouter>
-      <LabelGraphPage viewToggle={<button>Toggle</button>} />
+      <LabelGraphPage search={search} />
     </MemoryRouter>,
   )
 }
@@ -176,39 +175,12 @@ describe('LabelGraphPage', () => {
     })
   })
 
-  it('shows label count in header', async () => {
-    mockFetchLabelGraph.mockResolvedValue(graphData)
-    renderGraph()
-
-    await waitFor(() => {
-      expect(screen.getByText('3 labels')).toBeInTheDocument()
-    })
-  })
-
   it('renders the graph with nodes', async () => {
     mockFetchLabelGraph.mockResolvedValue(graphData)
     renderGraph()
 
     await waitFor(() => {
       expect(screen.getByTestId('react-flow')).toBeInTheDocument()
-    })
-  })
-
-  it('renders search input', async () => {
-    mockFetchLabelGraph.mockResolvedValue(graphData)
-    renderGraph()
-
-    await waitFor(() => {
-      expect(screen.getByPlaceholderText('Filter labels...')).toBeInTheDocument()
-    })
-  })
-
-  it('renders view toggle', async () => {
-    mockFetchLabelGraph.mockResolvedValue(graphData)
-    renderGraph()
-
-    await waitFor(() => {
-      expect(screen.getByText('Toggle')).toBeInTheDocument()
     })
   })
 
@@ -223,20 +195,6 @@ describe('LabelGraphPage', () => {
     })
   })
 
-  it('accepts search input', async () => {
-    const user = userEvent.setup()
-    mockFetchLabelGraph.mockResolvedValue(graphData)
-    renderGraph()
-
-    await waitFor(() => {
-      expect(screen.getByPlaceholderText('Filter labels...')).toBeInTheDocument()
-    })
-
-    await user.type(screen.getByPlaceholderText('Filter labels...'), 'cs')
-
-    expect(screen.getByPlaceholderText('Filter labels...')).toHaveValue('cs')
-  })
-
   it('renders without edit controls when unauthenticated', async () => {
     mockUser = null
     mockFetchLabelGraph.mockResolvedValue(graphData)
@@ -244,15 +202,6 @@ describe('LabelGraphPage', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('react-flow')).toBeInTheDocument()
-    })
-  })
-
-  it('renders "Label Graph" heading', async () => {
-    mockFetchLabelGraph.mockResolvedValue(graphData)
-    renderGraph()
-
-    await waitFor(() => {
-      expect(screen.getByText('Label Graph')).toBeInTheDocument()
     })
   })
 
@@ -270,21 +219,16 @@ describe('LabelGraphPage', () => {
   })
 
   it('search dims non-matching nodes', async () => {
-    const user = userEvent.setup()
     mockFetchLabelGraph.mockResolvedValue(graphData)
-    renderGraph()
+    renderGraph('math')
 
     await waitFor(() => {
-      expect(screen.getByTestId('node-cs')).toBeInTheDocument()
+      expect(screen.getByTestId('node-math')).toBeInTheDocument()
     })
-
-    await user.type(screen.getByPlaceholderText('Filter labels...'), 'math')
 
     // math node should not have opacity set (matches search)
-    await waitFor(() => {
-      const mathNode = screen.getByTestId('node-math')
-      expect(mathNode.dataset['opacity']).toBeUndefined()
-    })
+    const mathNode = screen.getByTestId('node-math')
+    expect(mathNode.dataset['opacity']).toBeUndefined()
 
     // cs node should have reduced opacity (does not match search)
     const csNode = screen.getByTestId('node-cs')
@@ -292,21 +236,16 @@ describe('LabelGraphPage', () => {
   })
 
   it('search matches by label name (alias)', async () => {
-    const user = userEvent.setup()
     mockFetchLabelGraph.mockResolvedValue(graphData)
-    renderGraph()
+    renderGraph('software')
 
     await waitFor(() => {
       expect(screen.getByTestId('node-swe')).toBeInTheDocument()
     })
 
-    await user.type(screen.getByPlaceholderText('Filter labels...'), 'software')
-
     // swe node matches via its name "software engineering"
-    await waitFor(() => {
-      const sweNode = screen.getByTestId('node-swe')
-      expect(sweNode.dataset['opacity']).toBeUndefined()
-    })
+    const sweNode = screen.getByTestId('node-swe')
+    expect(sweNode.dataset['opacity']).toBeUndefined()
 
     // cs should be dimmed
     const csNode = screen.getByTestId('node-cs')
