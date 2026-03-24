@@ -20,15 +20,24 @@ if TYPE_CHECKING:
 def og_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
     """Create settings for OG tag tests with a published post, a draft, and a frontend dir."""
     posts_dir = tmp_content_dir / "posts"
-    (posts_dir / "hello.md").write_text(
+    hello_post = posts_dir / "hello"
+    hello_post.mkdir()
+    (hello_post / "index.md").write_text(
         "---\ntitle: Hello World\ncreated_at: 2026-02-02 22:21:29.975359+00\n"
         "author: admin\nlabels: []\n---\n"
         "This is the post body with some content for the excerpt.\n"
     )
-    (posts_dir / "my-draft.md").write_text(
+    draft_post = posts_dir / "my-draft"
+    draft_post.mkdir()
+    (draft_post / "index.md").write_text(
         "---\ntitle: Secret Draft\ncreated_at: 2026-02-02 22:21:29+00\n"
         "author: admin\nlabels: []\ndraft: true\n---\n"
         "Draft content that should not leak.\n"
+    )
+    (posts_dir / "legacy-flat.md").write_text(
+        "---\ntitle: Legacy Flat\ncreated_at: 2026-02-02 22:21:29.975359+00\n"
+        "author: admin\nlabels: []\n---\n"
+        "Legacy flat-file content.\n"
     )
     # Add a directory-backed post
     dir_post = posts_dir / "my-dir-post"
@@ -37,6 +46,13 @@ def og_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
         "---\ntitle: Directory Post Title\ncreated_at: 2026-02-03 10:00:00+00\n"
         "author: admin\nlabels: []\n---\n"
         "Directory-backed post body for the excerpt.\n"
+    )
+    nested_post = posts_dir / "2026" / "recap"
+    nested_post.mkdir(parents=True)
+    (nested_post / "index.md").write_text(
+        "---\ntitle: Nested Recap\ncreated_at: 2026-02-04 10:00:00+00\n"
+        "author: admin\nlabels: []\n---\n"
+        "Nested directory-backed post body.\n"
     )
 
     # Create a fake frontend dist directory with index.html
@@ -133,3 +149,18 @@ class TestPostOgTagsDirectoryBacked:
         resp = await client.get("/post/my-dir-post")
         assert resp.status_code == 200
         assert "/post/my-dir-post" in resp.text
+
+    async def test_og_title_for_nested_directory_post(self, client: AsyncClient) -> None:
+        resp = await client.get("/post/2026/recap")
+        assert resp.status_code == 200
+        assert 'og:title" content="Nested Recap"' in resp.text
+
+
+class TestPostRouteCompatibility:
+    """Legacy and nested /post routes must render the SPA instead of redirecting as assets."""
+
+    async def test_legacy_md_permalink_serves_spa(self, client: AsyncClient) -> None:
+        resp = await client.get("/post/posts/legacy-flat.md", follow_redirects=False)
+        assert resp.status_code == 200
+        assert "text/html" in resp.headers["content-type"]
+        assert "location" not in resp.headers

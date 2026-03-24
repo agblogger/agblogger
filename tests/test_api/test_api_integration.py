@@ -2421,16 +2421,10 @@ class TestSorting:
 class TestSlugResolution:
     """Slug-based post resolution returns the same post as full file_path."""
 
-    async def test_bare_slug_resolves_flat_file(self, client: AsyncClient) -> None:
-        """GET /api/posts/hello returns the flat-file post."""
+    async def test_bare_slug_does_not_resolve_flat_file(self, client: AsyncClient) -> None:
+        """GET /api/posts/<slug> only resolves directory-backed posts."""
         resp = await client.get("/api/posts/hello")
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["title"] == "Hello World"
-        # Verify it's the same as requesting via full file_path
-        full_resp = await client.get("/api/posts/posts/hello.md")
-        assert full_resp.status_code == 200
-        assert full_resp.json()["file_path"] == data["file_path"]
+        assert resp.status_code == 404
 
     async def test_bare_slug_resolves_directory_backed(self, client: AsyncClient) -> None:
         """GET /api/posts/<slug> resolves a directory-backed post."""
@@ -2449,11 +2443,11 @@ class TestPostAssetRedirect:
     """Asset requests under /post/<slug>/<file> redirect to content API."""
 
     async def test_asset_redirects_to_content_api(self, client: AsyncClient) -> None:
-        resp = await client.get("/post/hello/photo.png", follow_redirects=False)
+        resp = await client.get("/post/dir-post/photo.png", follow_redirects=False)
         assert resp.status_code == 301
-        assert resp.headers["location"] == "/api/content/posts/hello/photo.png"
+        assert resp.headers["location"] == "/api/content/posts/dir-post/photo.png"
 
     async def test_nested_asset_redirects(self, client: AsyncClient) -> None:
-        resp = await client.get("/post/hello/img/photo.png", follow_redirects=False)
+        resp = await client.get("/post/dir-post/img/photo.png", follow_redirects=False)
         assert resp.status_code == 301
-        assert resp.headers["location"] == "/api/content/posts/hello/img/photo.png"
+        assert resp.headers["location"] == "/api/content/posts/dir-post/img/photo.png"

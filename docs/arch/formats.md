@@ -58,6 +58,7 @@ Format notes:
 - the YAML front matter carries canonical metadata
 - the markdown body carries the post content itself
 - assets that belong to a post live next to its `index.md`
+- clean public post slugs and clean post-asset URLs are derived from these directory-backed post units
 - shared assets can live under `content/assets/` when they are not scoped to a single post
 
 ## Site Configuration

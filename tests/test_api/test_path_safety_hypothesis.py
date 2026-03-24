@@ -46,8 +46,6 @@ _SKIP_VALUES = st.sampled_from(
 
 @st.composite
 def _post_file_path(draw: st.DrawFn) -> str:
-    if draw(st.booleans()):
-        return "posts/" + draw(_SEGMENT) + ".md"
     return "posts/" + draw(_SEGMENT) + "/" + draw(_SEGMENT) + "/index.md"
 
 

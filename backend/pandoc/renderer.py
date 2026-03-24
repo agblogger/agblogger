@@ -391,8 +391,9 @@ _SKIP_PREFIXES = ("/", "#", "data:", "http:", "https:", "mailto:", "tel:")
 def rewrite_relative_urls(html: str, file_path: str) -> str:
     """Rewrite relative src and href attributes in HTML to absolute paths.
 
-    Post assets (under ``posts/``) are rewritten to ``/post/<slug>/<file>`` URLs.
-    Other content assets are rewritten to ``/api/content/{resolved_path}`` URLs.
+    Directory-backed post assets are rewritten to ``/post/<slug>/<file>`` URLs.
+    Other content assets, including legacy flat-file post assets, are rewritten
+    to ``/api/content/{resolved_path}`` URLs.
 
     Args:
         html: Rendered HTML string.
@@ -403,6 +404,7 @@ def rewrite_relative_urls(html: str, file_path: str) -> str:
         HTML with relative URLs resolved to absolute paths.
     """
     base_dir = posixpath.dirname(file_path)
+    is_directory_backed_post = file_path.startswith("posts/") and file_path.endswith("/index.md")
 
     def _replace(match: re.Match[str]) -> str:
         attr = match.group(1)
@@ -420,8 +422,8 @@ def rewrite_relative_urls(html: str, file_path: str) -> str:
         if resolved.startswith(".."):
             return match.group(0)
 
-        # Post assets get clean /post/<slug>/<file> URLs
-        if resolved.startswith("posts/"):
+        # Only canonical directory-backed posts get clean /post URLs.
+        if is_directory_backed_post and resolved.startswith("posts/"):
             short = resolved.removeprefix("posts/")
             return f"{attr}={quote}/post/{short}{quote}"
         return f"{attr}={quote}/api/content/{resolved}{quote}"

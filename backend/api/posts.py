@@ -681,9 +681,9 @@ async def get_post_endpoint(
     """Get a single post by file path or slug.
 
     Accepts a full file_path (``posts/slug/index.md``) **or** a bare slug
-    (``slug``).  When a bare slug is given the endpoint tries the two canonical
-    layouts — directory-backed (``posts/<slug>/index.md``) and flat
-    (``posts/<slug>.md``) — before falling through to symlink resolution.
+    (``slug``). When a bare slug is given the endpoint resolves only the
+    canonical directory-backed layout (``posts/<slug>/index.md``) before
+    falling through to symlink resolution.
     """
     draft_owner_username = user.username if user else None
     post = await get_post(session, file_path, draft_owner_username=draft_owner_username)

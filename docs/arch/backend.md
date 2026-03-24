@@ -39,6 +39,7 @@ Markdown rendering is handled by a long-lived Pandoc server process that is star
 
 - rendering stays behind one backend-controlled boundary for sanitization and output consistency
 - preview and published rendering use the same core pipeline
+- clean public post routes and clean post-asset URLs are derived from directory-backed posts only
 - the application avoids paying full Pandoc process startup cost on every render
 
 The backend treats the Pandoc server as runtime infrastructure, not a per-request helper command.

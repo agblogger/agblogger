@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import posixpath
 import subprocess
 import sys
 from contextlib import asynccontextmanager
@@ -57,6 +58,16 @@ _DEFAULT_INDEX_TOML = (
     '[[pages]]\nid = "labels"\ntitle = "Labels"\n'
 )
 _DEFAULT_LABELS_TOML = "[labels]\n"
+
+
+def _looks_like_post_asset_path(file_path: str) -> bool:
+    """Return True when a /post path should be treated as an asset request."""
+    leaf = posixpath.basename(file_path.rstrip("/"))
+    if leaf == "" or leaf == "index.md":
+        return False
+
+    suffix = posixpath.splitext(leaf)[1]
+    return suffix != "" and suffix != ".md"
 
 
 class _MultipartBodyTooLargeError(Exception):
@@ -776,11 +787,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # StaticFiles catch-all.
     @app.get("/post/{file_path:path}", include_in_schema=False, response_model=None)
     async def post_route(file_path: str, request: Request) -> HTMLResponse | RedirectResponse:
-        # Asset request: /post/<slug>/<sub-path> → redirect to content API
-        if "/" in file_path:
-            if ".." in file_path.split("/"):
-                logger.warning("Path traversal attempt in post asset URL: %s", file_path)
-                return HTMLResponse("<html><body>Not found</body></html>", status_code=404)
+        if ".." in file_path.split("/"):
+            logger.warning("Path traversal attempt in post asset URL: %s", file_path)
+            return HTMLResponse("<html><body>Not found</body></html>", status_code=404)
+
+        content_path = request.app.state.settings.content_dir / "posts" / file_path
+        if (
+            content_path.exists() and content_path.is_file() and content_path.suffix != ".md"
+        ) or _looks_like_post_asset_path(file_path):
             return RedirectResponse(
                 url=f"/api/content/posts/{file_path}",
                 status_code=301,
@@ -804,7 +818,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 logger.warning("index.html not found at %s", index_path)
                 return HTMLResponse("<html><body>Not found</body></html>", status_code=404)
 
-        # Look up the post by slug — try directory-backed and flat-file layouts
+        # Look up the post by exact file path or canonical directory-backed slug.
         from backend.utils.slug import resolve_slug_candidates
 
         slug = file_path
@@ -812,7 +826,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         try:
             session_factory = request.app.state.session_factory
             async with session_factory() as session:
-                for candidate in resolve_slug_candidates(slug):
+                candidates: tuple[str, ...]
+                if file_path.startswith("posts/") and file_path.endswith(".md"):
+                    candidates = (file_path,)
+                else:
+                    candidates = resolve_slug_candidates(slug)
+
+                for candidate in candidates:
                     stmt = select(PostCache).where(PostCache.file_path == candidate)
                     result = await session.execute(stmt)
                     post = result.scalar_one_or_none()

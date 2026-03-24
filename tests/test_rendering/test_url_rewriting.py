@@ -68,11 +68,11 @@ class TestRewriteRelativeUrls:
         result = rewrite_relative_urls(html, "posts/2026-02-20-my-post/index.md")
         assert result == '<a href="/post/2026-02-20-my-post/doc.pdf">'
 
-    def test_flat_post_path(self) -> None:
-        """For flat post path (posts/hello.md), base dir is posts/."""
+    def test_flat_post_path_uses_content_api(self) -> None:
+        """Flat-file posts do not get clean /post asset URLs."""
         html = '<img src="photo.png">'
         result = rewrite_relative_urls(html, "posts/hello.md")
-        assert result == '<img src="/post/photo.png">'
+        assert result == '<img src="/api/content/posts/photo.png">'
 
     def test_multiple_attributes(self) -> None:
         """Multiple src/href attributes in the same HTML are all rewritten."""

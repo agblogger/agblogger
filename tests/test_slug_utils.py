@@ -12,7 +12,7 @@ class TestFilePathToSlug:
         assert file_path_to_slug("posts/my-post/index.md") == "my-post"
 
     def test_flat_file_post(self) -> None:
-        assert file_path_to_slug("posts/hello.md") == "hello"
+        assert file_path_to_slug("posts/hello.md") == "hello.md"
 
     def test_bare_slug_is_idempotent(self) -> None:
         assert file_path_to_slug("my-post") == "my-post"
@@ -24,7 +24,7 @@ class TestFilePathToSlug:
         assert file_path_to_slug("posts/my-long-post-title/index.md") == "my-long-post-title"
 
     def test_flat_file_with_hyphens(self) -> None:
-        assert file_path_to_slug("posts/another-post.md") == "another-post"
+        assert file_path_to_slug("posts/another-post.md") == "another-post.md"
 
     def test_bare_slug_with_hyphens_is_idempotent(self) -> None:
         assert file_path_to_slug("some-bare-slug") == "some-bare-slug"
@@ -58,32 +58,28 @@ class TestFilePathToSlugRegressions:
         post_url = f"{site_url.rstrip('/')}/post/{slug}"
         assert post_url == "https://example.com/post/my-first-post"
 
-    def test_crosspost_url_with_flat_file_post(self) -> None:
+    def test_crosspost_url_with_flat_file_post_preserves_md_suffix(self) -> None:
         site_url = "https://example.com"
         post_path = "posts/hello.md"
         slug = file_path_to_slug(post_path)
         post_url = f"{site_url.rstrip('/')}/post/{slug}"
-        assert post_url == "https://example.com/post/hello"
+        assert post_url == "https://example.com/post/hello.md"
 
 
 class TestResolveSlugCandidates:
     """Tests for resolve_slug_candidates path expansion."""
 
-    def test_returns_tuple_of_two_candidates(self) -> None:
+    def test_returns_tuple_of_one_candidate(self) -> None:
         candidates = resolve_slug_candidates("my-post")
-        assert len(candidates) == 2
+        assert len(candidates) == 1
 
-    def test_directory_backed_candidate_first(self) -> None:
+    def test_directory_backed_candidate(self) -> None:
         candidates = resolve_slug_candidates("my-post")
         assert candidates[0] == "posts/my-post/index.md"
 
-    def test_flat_file_candidate_second(self) -> None:
-        candidates = resolve_slug_candidates("my-post")
-        assert candidates[1] == "posts/my-post.md"
-
     def test_slug_with_hyphens(self) -> None:
         candidates = resolve_slug_candidates("hello-world")
-        assert candidates == ("posts/hello-world/index.md", "posts/hello-world.md")
+        assert candidates == ("posts/hello-world/index.md",)
 
     def test_returns_tuple_type(self) -> None:
         result = resolve_slug_candidates("my-post")
