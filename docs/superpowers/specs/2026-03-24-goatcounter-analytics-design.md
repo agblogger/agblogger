@@ -18,11 +18,15 @@ GoatCounter runs alongside the existing `agblogger` and `caddy` services in dock
 
 ### API Token Provisioning
 
-GoatCounter requires an API token for stat queries. On first boot, the GoatCounter container entrypoint:
+GoatCounter requires an API token for stat queries. A custom entrypoint script handles first-boot provisioning:
 
-1. Creates a site and generates an API token
-2. Writes the token to a shared volume that AgBlogger reads on startup
-3. Skips on subsequent boots if already initialized
+1. Check if the site already exists (presence of `/data/goatcounter/token` file)
+2. If not, run `goatcounter db create-site -createdb -vhost=stats.internal -user.email=admin@localhost` to create the site with its SQLite database
+3. Run `goatcounter db create-apitoken -site-id=1 -perm=2` to generate a read+write API token
+4. Write the token to `/data/goatcounter/token` (a shared volume mounted by both containers)
+5. On subsequent boots, skip steps 2-4 if the token file already exists
+
+**AgBlogger reads the token lazily** — on the first analytics operation (hit recording or dashboard request), the analytics service checks for the token file. If not yet available, the operation is skipped with a warning log. Each subsequent request re-checks if the token file has appeared. No polling loop, no restart required.
 
 ### Data Flow
 
@@ -64,7 +68,7 @@ Admin endpoints (require `require_admin`):
 
 Public endpoint:
 
-- `GET /api/analytics/views/{slug}` — view count for a single post. Returns data only when `analytics_show_views_on_posts` is enabled; returns `null` when disabled.
+- `GET /api/analytics/views/{slug}` — view count for a single post. Returns data only when `analytics_show_views_on_posts` is enabled; returns `null` when disabled. Must not reveal the existence of draft or unpublished posts — returns the same response for non-existent and draft slugs.
 
 ### Hit Recording Integration
 
@@ -83,13 +87,13 @@ In the existing post and page API handlers, after serving a successful response,
 
 **What does NOT get tracked**:
 
-- API calls from authenticated users (admin/editor activity)
+- Requests from authenticated users — if the request carries a valid session cookie, the hit is not recorded. This distinguishes admin/editor browsing from public readers on the same endpoints.
 - Search, label browsing, timeline
 - Bot requests (common crawlers filtered by User-Agent)
 
 ### Admin Settings (Durable Database Table)
 
-Two settings, stored in a durable table:
+Two settings, stored in a new durable table (managed by Alembic migration):
 
 | Setting | Type | Default | Description |
 |---|---|---|---|
@@ -117,7 +121,7 @@ On `PostPage`, when `analytics_show_views_on_posts` is enabled, fetch `GET /api/
 
 ### Dependencies
 
-- **Recharts** (~45KB gzipped) for charts — area charts, bar charts
+- **Recharts** (~45KB gzipped) for charts — area charts, bar charts. Lazy-loaded (dynamic import) since it's only used in the admin Analytics tab.
 
 ## Error Handling & Reliability
 
