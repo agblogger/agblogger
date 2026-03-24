@@ -146,14 +146,14 @@ export default function Header() {
         <div className="flex items-center justify-between h-16">
           <Link
             to="/"
-            className="font-display text-2xl tracking-tight text-ink hover:text-accent transition-colors"
+            className={`font-display text-2xl tracking-tight text-ink hover:text-accent transition-colors ${searchOpen ? 'hidden sm:block' : ''}`}
           >
             {siteTitle}
           </Link>
 
-          <div className="flex items-center gap-3">
+          <div className={`flex items-center gap-3 ${searchOpen ? 'flex-1 sm:flex-initial' : ''}`}>
             {searchOpen ? (
-              <div className="relative">
+              <div className="relative flex-1 sm:flex-initial">
                 <form onSubmit={handleSearch} className="flex items-center gap-1">
                   <input
                     type="text"
@@ -201,7 +201,7 @@ export default function Header() {
                     aria-controls="search-results-listbox"
                     aria-activedescendant={highlightIndex >= 0 ? `search-result-${highlightIndex}` : undefined}
                     aria-autocomplete="list"
-                    className="w-48 px-3 py-1.5 text-sm bg-paper-warm border border-border rounded-lg
+                    className="flex-1 min-w-0 sm:w-72 md:w-96 sm:flex-none px-3 py-1.5 text-sm bg-paper-warm border border-border rounded-lg
                              focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/20
                              font-body placeholder:text-muted"
                     onBlur={(e) => {
@@ -263,7 +263,7 @@ export default function Header() {
                   panelState === 'open'
                     ? 'text-accent bg-accent/10'
                     : 'text-muted hover:text-ink hover:bg-paper-warm'
-                }`}
+                } ${searchOpen ? 'hidden sm:block' : ''}`}
                 aria-label="Toggle filters"
                 title="Filters"
               >
@@ -280,7 +280,7 @@ export default function Header() {
 
             <button
               onClick={toggleTheme}
-              className="p-2 text-muted hover:text-ink transition-colors rounded-lg hover:bg-paper-warm"
+              className={`p-2 text-muted hover:text-ink transition-colors rounded-lg hover:bg-paper-warm ${searchOpen ? 'hidden sm:block' : ''}`}
               title={`Theme: ${theme}`}
               aria-label="Toggle theme"
             >
@@ -331,7 +331,7 @@ export default function Header() {
 
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden p-2 text-muted hover:text-ink transition-colors rounded-lg hover:bg-paper-warm"
+              className={`md:hidden p-2 text-muted hover:text-ink transition-colors rounded-lg hover:bg-paper-warm ${searchOpen ? 'hidden' : ''}`}
               aria-label="Menu"
             >
               {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
