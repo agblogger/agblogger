@@ -18,7 +18,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select, text
-from sqlalchemy.exc import IntegrityError, OperationalError
+from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from backend.api.admin import router as admin_router
@@ -778,6 +778,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def post_route(file_path: str, request: Request) -> HTMLResponse | RedirectResponse:
         # Asset request: /post/<slug>/<sub-path> → redirect to content API
         if "/" in file_path:
+            if ".." in file_path.split("/"):
+                logger.warning("Path traversal attempt in post asset URL: %s", file_path)
+                return HTMLResponse("<html><body>Not found</body></html>", status_code=404)
             return RedirectResponse(
                 url=f"/api/content/posts/{file_path}",
                 status_code=301,
@@ -802,21 +805,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 return HTMLResponse("<html><body>Not found</body></html>", status_code=404)
 
         # Look up the post by slug — try directory-backed and flat-file layouts
+        from backend.utils.slug import resolve_slug_candidates
+
         slug = file_path
         post = None
         try:
             session_factory = request.app.state.session_factory
             async with session_factory() as session:
-                for candidate in (
-                    f"posts/{slug}/index.md",
-                    f"posts/{slug}.md",
-                ):
+                for candidate in resolve_slug_candidates(slug):
                     stmt = select(PostCache).where(PostCache.file_path == candidate)
                     result = await session.execute(stmt)
                     post = result.scalar_one_or_none()
                     if post is not None:
                         break
-        except Exception:
+        except SQLAlchemyError:
             logger.exception("DB error looking up post for OG tags: %s", slug)
             return HTMLResponse(base_html)
 

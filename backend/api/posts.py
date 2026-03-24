@@ -58,6 +58,7 @@ from backend.services.post_service import (
     search_posts,
 )
 from backend.services.slug_service import generate_post_path, generate_post_slug
+from backend.utils.slug import resolve_slug_candidates
 
 logger = logging.getLogger(__name__)
 
@@ -691,16 +692,18 @@ async def get_post_endpoint(
 
     # Slug-based resolution: try canonical file layouts when a bare slug is given
     if not file_path.startswith("posts/"):
-        for candidate in (
-            f"posts/{file_path}/index.md",
-            f"posts/{file_path}.md",
-        ):
+        for candidate in resolve_slug_candidates(file_path):
             post = await get_post(session, candidate, draft_owner_username=draft_owner_username)
             if post is not None:
                 return post
 
     # Check if the path resolves through a symlink to a renamed post
     resolved = _resolve_symlink_redirect(file_path, content_manager)
+    if resolved is None and not file_path.startswith("posts/"):
+        for candidate in resolve_slug_candidates(file_path):
+            resolved = _resolve_symlink_redirect(candidate, content_manager)
+            if resolved is not None:
+                break
     if resolved is not None:
         redirect_target = await get_post(
             session,

@@ -389,7 +389,10 @@ _SKIP_PREFIXES = ("/", "#", "data:", "http:", "https:", "mailto:", "tel:")
 
 
 def rewrite_relative_urls(html: str, file_path: str) -> str:
-    """Rewrite relative src and href attributes in HTML to absolute /api/content/ paths.
+    """Rewrite relative src and href attributes in HTML to absolute paths.
+
+    Post assets (under ``posts/``) are rewritten to ``/post/<slug>/<file>`` URLs.
+    Other content assets are rewritten to ``/api/content/{resolved_path}`` URLs.
 
     Args:
         html: Rendered HTML string.
@@ -397,7 +400,7 @@ def rewrite_relative_urls(html: str, file_path: str) -> str:
             e.g. ``posts/2026-02-20-my-post/index.md``.
 
     Returns:
-        HTML with relative URLs resolved to ``/api/content/{resolved_path}``.
+        HTML with relative URLs resolved to absolute paths.
     """
     base_dir = posixpath.dirname(file_path)
 

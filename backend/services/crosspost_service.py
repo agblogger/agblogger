@@ -18,6 +18,7 @@ from backend.models.post import PostCache
 from backend.schemas.crosspost import CrossPostStatus
 from backend.services.crypto_service import decrypt_value, encrypt_value
 from backend.services.datetime_service import format_datetime, now_utc
+from backend.utils.slug import file_path_to_slug
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -143,12 +144,7 @@ async def crosspost(
         raise PostNotFoundError(msg)
 
     # Build the post URL
-    # Strip .md extension and leading posts/ for the URL slug
-    slug = post_path
-    if slug.startswith("posts/"):
-        slug = slug.removeprefix("posts/")
-    if slug.endswith(".md"):
-        slug = slug.removesuffix(".md")
+    slug = file_path_to_slug(post_path)
     post_url = f"{site_url.rstrip('/')}/post/{slug}"
 
     excerpt = content_manager.get_plain_excerpt(post_data)

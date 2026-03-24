@@ -30,6 +30,14 @@ def og_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
         "author: admin\nlabels: []\ndraft: true\n---\n"
         "Draft content that should not leak.\n"
     )
+    # Add a directory-backed post
+    dir_post = posts_dir / "my-dir-post"
+    dir_post.mkdir()
+    (dir_post / "index.md").write_text(
+        "---\ntitle: Directory Post Title\ncreated_at: 2026-02-03 10:00:00+00\n"
+        "author: admin\nlabels: []\n---\n"
+        "Directory-backed post body for the excerpt.\n"
+    )
 
     # Create a fake frontend dist directory with index.html
     frontend_dir = tmp_path / "frontend"
@@ -111,3 +119,17 @@ class TestPostOgTagsDraft:
         assert resp.status_code == 200
         assert "og:title" not in resp.text
         assert "Secret Draft" not in resp.text
+
+
+class TestPostOgTagsDirectoryBacked:
+    """OG tags work for directory-backed posts accessed by slug."""
+
+    async def test_og_title_for_directory_post(self, client: AsyncClient) -> None:
+        resp = await client.get("/post/my-dir-post")
+        assert resp.status_code == 200
+        assert 'og:title" content="Directory Post Title"' in resp.text
+
+    async def test_og_url_for_directory_post(self, client: AsyncClient) -> None:
+        resp = await client.get("/post/my-dir-post")
+        assert resp.status_code == 200
+        assert "/post/my-dir-post" in resp.text

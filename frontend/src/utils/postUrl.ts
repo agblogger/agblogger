@@ -3,6 +3,7 @@
  *
  *   "posts/2026-03-23-my-post/index.md" → "2026-03-23-my-post"
  *   "posts/hello.md"                    → "hello"
+ *   "posts/my-post/"                    → "my-post" (trailing slash)
  *   "2026-03-23-my-post"                → "2026-03-23-my-post" (idempotent)
  */
 export function filePathToSlug(filePath: string): string {

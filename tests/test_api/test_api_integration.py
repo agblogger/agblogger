@@ -32,6 +32,13 @@ def app_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
         "---\ncreated_at: 2026-02-03 10:00:00+00\n"
         "labels: []\n---\n# No Author Post\n\nPost without author field.\n"
     )
+    # Add a directory-backed post
+    dir_post = posts_dir / "dir-post"
+    dir_post.mkdir()
+    (dir_post / "index.md").write_text(
+        "---\ntitle: Directory Post\ncreated_at: 2026-02-04 10:00:00+00\n"
+        "author: admin\nlabels: []\n---\n# Dir Post\n\nDirectory-backed content.\n"
+    )
     # Add labels
     (tmp_content_dir / "labels.toml").write_text(
         "[labels]\n[labels.swe]\nnames = ['software engineering']\n"
@@ -157,7 +164,7 @@ class TestPosts:
         )
         token = login_resp.json()["access_token"]
 
-        # Create 12 published posts (there are already 2 from fixture = 14 total)
+        # Create 12 published posts (there are already 3 from fixture = 15 total)
         for i in range(12):
             resp = await client.post(
                 "/api/posts",
@@ -175,7 +182,7 @@ class TestPosts:
         page1_resp = await client.get("/api/posts", params={"page": 1, "per_page": 5})
         assert page1_resp.status_code == 200
         page1_data = page1_resp.json()
-        assert page1_data["total"] == 14
+        assert page1_data["total"] == 15
         assert len(page1_data["posts"]) == 5
 
         # Request page 2 with per_page=5
@@ -2409,3 +2416,44 @@ class TestSorting:
         assert list_resp.status_code == 200
         titles = [p["title"] for p in list_resp.json()["posts"]]
         assert titles.index("Apple Title") < titles.index("Zebra Title")
+
+
+class TestSlugResolution:
+    """Slug-based post resolution returns the same post as full file_path."""
+
+    async def test_bare_slug_resolves_flat_file(self, client: AsyncClient) -> None:
+        """GET /api/posts/hello returns the flat-file post."""
+        resp = await client.get("/api/posts/hello")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["title"] == "Hello World"
+        # Verify it's the same as requesting via full file_path
+        full_resp = await client.get("/api/posts/posts/hello.md")
+        assert full_resp.status_code == 200
+        assert full_resp.json()["file_path"] == data["file_path"]
+
+    async def test_bare_slug_resolves_directory_backed(self, client: AsyncClient) -> None:
+        """GET /api/posts/<slug> resolves a directory-backed post."""
+        resp = await client.get("/api/posts/dir-post")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["title"] == "Directory Post"
+        assert data["file_path"] == "posts/dir-post/index.md"
+
+    async def test_nonexistent_slug_returns_404(self, client: AsyncClient) -> None:
+        resp = await client.get("/api/posts/nonexistent-slug")
+        assert resp.status_code == 404
+
+
+class TestPostAssetRedirect:
+    """Asset requests under /post/<slug>/<file> redirect to content API."""
+
+    async def test_asset_redirects_to_content_api(self, client: AsyncClient) -> None:
+        resp = await client.get("/post/hello/photo.png", follow_redirects=False)
+        assert resp.status_code == 301
+        assert resp.headers["location"] == "/api/content/posts/hello/photo.png"
+
+    async def test_nested_asset_redirects(self, client: AsyncClient) -> None:
+        resp = await client.get("/post/hello/img/photo.png", follow_redirects=False)
+        assert resp.status_code == 301
+        assert resp.headers["location"] == "/api/content/posts/hello/img/photo.png"
