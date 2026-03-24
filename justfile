@@ -195,7 +195,7 @@ check-backend-static:
     @echo "\n── Backend: format check ──"
     uv run ruff format --check backend/ cli/ tests/
     @echo "\n── Backend: vulnerability audit ──"
-    requirements_file="$(mktemp)"; trap 'rm -f "$requirements_file"' EXIT; uv export --format requirements.txt --no-dev --no-emit-project --frozen -o "$requirements_file"; uv run pip-audit --progress-spinner off --requirement "$requirements_file"
+    @requirements_file="$(mktemp)"; trap 'rm -f "$requirements_file"' EXIT; uv export --format requirements.txt --no-dev --no-emit-project --frozen -o "$requirements_file" > /dev/null; uv run pip-audit --progress-spinner off --requirement "$requirements_file"
 
 # Backend tests, excluding slow tests (pass coverage=true for coverage report)
 test-backend coverage="false":
