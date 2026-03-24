@@ -71,7 +71,9 @@ async def test_startup_backfilled_files_are_committed_and_cache_rebuilt(tmp_path
     content_dir = tmp_path / "content"
     posts_dir = content_dir / "posts"
     posts_dir.mkdir(parents=True)
-    (posts_dir / "hello.md").write_text(
+    hello_post = posts_dir / "hello"
+    hello_post.mkdir()
+    (hello_post / "index.md").write_text(
         "---\n"
         "title: Hello World\n"
         "created_at: 2026-02-02 22:21:29.975359+00\n"

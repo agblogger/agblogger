@@ -66,6 +66,12 @@ def _build_sync_client(
     return client, http_client
 
 
+def _post_file(posts_dir: Path, slug: str) -> Path:
+    post_dir = posts_dir / slug
+    post_dir.mkdir(parents=True, exist_ok=True)
+    return post_dir / "index.md"
+
+
 class TestSyncClientStatus:
     def test_status_calls_new_endpoint(self, tmp_path: Path, monkeypatch: Any) -> None:
         content_dir = tmp_path / "content"
@@ -81,7 +87,7 @@ class TestSyncClientSync:
         content_dir = tmp_path / "content"
         posts_dir = content_dir / "posts"
         posts_dir.mkdir(parents=True)
-        (posts_dir / "new.md").write_text("# New\n")
+        _post_file(posts_dir, "new").write_text("# New\n")
 
         commit_resp = _DummyResponse(
             json_data={
@@ -96,7 +102,7 @@ class TestSyncClientSync:
             content_dir, responses={"/api/sync/commit": commit_resp}
         )
         client.status = lambda: {
-            "to_upload": ["posts/new.md"],
+            "to_upload": ["posts/new/index.md"],
             "to_download": [],
             "to_delete_remote": [],
             "to_delete_local": [],
@@ -155,7 +161,7 @@ class TestSyncClientSync:
                 "status": "ok",
                 "commit_hash": "dl123",
                 "conflicts": [],
-                "to_download": ["posts/remote.md"],
+                "to_download": ["posts/remote/index.md"],
                 "warnings": [],
             }
         )
@@ -164,12 +170,12 @@ class TestSyncClientSync:
             content_dir,
             responses={
                 "/api/sync/commit": commit_resp,
-                "/api/sync/download/posts/remote.md": download_resp,
+                "/api/sync/download/posts/remote/index.md": download_resp,
             },
         )
         client.status = lambda: {
             "to_upload": [],
-            "to_download": ["posts/remote.md"],
+            "to_download": ["posts/remote/index.md"],
             "to_delete_remote": [],
             "to_delete_local": [],
             "conflicts": [],
@@ -180,13 +186,13 @@ class TestSyncClientSync:
 
         client.sync()
 
-        assert (posts_dir / "remote.md").exists()
+        assert (posts_dir / "remote" / "index.md").exists()
 
     def test_sync_reports_conflicts(self, tmp_path: Path, monkeypatch: Any) -> None:
         content_dir = tmp_path / "content"
         posts_dir = content_dir / "posts"
         posts_dir.mkdir(parents=True)
-        (posts_dir / "conflict.md").write_text("# Client\n")
+        _post_file(posts_dir, "conflict").write_text("# Client\n")
 
         commit_resp = _DummyResponse(
             json_data={
@@ -194,7 +200,7 @@ class TestSyncClientSync:
                 "commit_hash": "c123",
                 "conflicts": [
                     {
-                        "file_path": "posts/conflict.md",
+                        "file_path": "posts/conflict/index.md",
                         "body_conflicted": True,
                         "field_conflicts": [],
                     }
@@ -207,7 +213,7 @@ class TestSyncClientSync:
             content_dir, responses={"/api/sync/commit": commit_resp}
         )
         client.status = lambda: {
-            "to_upload": ["posts/conflict.md"],
+            "to_upload": ["posts/conflict/index.md"],
             "to_download": [],
             "to_delete_remote": [],
             "to_delete_local": [],
@@ -224,7 +230,7 @@ class TestSyncClientSync:
         content_dir = tmp_path / "content"
         posts_dir = content_dir / "posts"
         posts_dir.mkdir(parents=True)
-        local_file = posts_dir / "old.md"
+        local_file = _post_file(posts_dir, "old")
         local_file.write_text("# Old\n")
 
         commit_resp = _DummyResponse(
@@ -243,7 +249,7 @@ class TestSyncClientSync:
             "to_upload": [],
             "to_download": [],
             "to_delete_remote": [],
-            "to_delete_local": ["posts/old.md"],
+            "to_delete_local": ["posts/old/index.md"],
             "conflicts": [],
         }
 
@@ -273,7 +279,7 @@ class TestSyncClientSync:
         client.status = lambda: {
             "to_upload": [],
             "to_download": [],
-            "to_delete_remote": ["posts/deleted.md"],
+            "to_delete_remote": ["posts/deleted/index.md"],
             "to_delete_local": [],
             "conflicts": [],
         }
@@ -329,7 +335,7 @@ class TestSyncClientSync:
         content_dir = tmp_path / "content"
         posts_dir = content_dir / "posts"
         posts_dir.mkdir(parents=True)
-        (posts_dir / "conflict.md").write_text("# Client version\n")
+        _post_file(posts_dir, "conflict").write_text("# Client version\n")
 
         commit_resp = _DummyResponse(
             json_data={
@@ -348,7 +354,7 @@ class TestSyncClientSync:
             "to_download": [],
             "to_delete_remote": [],
             "to_delete_local": [],
-            "conflicts": [{"file_path": "posts/conflict.md", "action": "merge"}],
+            "conflicts": [{"file_path": "posts/conflict/index.md", "action": "merge"}],
         }
 
         monkeypatch.setattr(sync_client, "scan_local_files", lambda _: {})
@@ -384,12 +390,12 @@ class TestSyncClientErrorHandling:
             content_dir,
             responses={
                 "/api/sync/commit": commit_resp,
-                "/api/sync/download/posts/missing.md": download_resp,
+                "/api/sync/download/posts/missing/index.md": download_resp,
             },
         )
         client.status = lambda: {
             "to_upload": [],
-            "to_download": ["posts/missing.md"],
+            "to_download": ["posts/missing/index.md"],
             "to_delete_remote": [],
             "to_delete_local": [],
             "conflicts": [],
@@ -503,13 +509,13 @@ class TestSyncClientErrorHandling:
             content_dir,
             responses={
                 "/api/sync/commit": commit_resp,
-                "/api/sync/download/posts/ok.md": ok_resp,
-                "/api/sync/download/posts/fail.md": fail_resp,
+                "/api/sync/download/posts/ok/index.md": ok_resp,
+                "/api/sync/download/posts/fail/index.md": fail_resp,
             },
         )
         client.status = lambda: {
             "to_upload": [],
-            "to_download": ["posts/ok.md", "posts/fail.md"],
+            "to_download": ["posts/ok/index.md", "posts/fail/index.md"],
             "to_delete_remote": [],
             "to_delete_local": [],
             "conflicts": [],
@@ -542,7 +548,7 @@ class TestSyncClientErrorHandling:
         client.status = lambda: {
             "to_upload": [],
             "to_download": [],
-            "to_delete_remote": ["posts/deleted.md"],
+            "to_delete_remote": ["posts/deleted/index.md"],
             "to_delete_local": [],
             "conflicts": [],
         }
@@ -559,7 +565,7 @@ class TestSyncClientErrorHandling:
         import json
 
         sent_metadata = json.loads(commit_calls[0][1]["data"]["metadata"])
-        assert "posts/deleted.md" in sent_metadata["deleted_files"]
+        assert "posts/deleted/index.md" in sent_metadata["deleted_files"]
 
 
 class TestBackupConflictedFiles:
@@ -569,17 +575,21 @@ class TestBackupConflictedFiles:
         content_dir = tmp_path / "content"
         posts_dir = content_dir / "posts"
         posts_dir.mkdir(parents=True)
-        (posts_dir / "conflict.md").write_text("# My local changes\n")
+        _post_file(posts_dir, "conflict").write_text("# My local changes\n")
 
         client, _http = _build_sync_client(content_dir)
         conflicts = [
-            {"file_path": "posts/conflict.md", "body_conflicted": True, "field_conflicts": []},
+            {
+                "file_path": "posts/conflict/index.md",
+                "body_conflicted": True,
+                "field_conflicts": [],
+            },
         ]
 
         backup_dir = client._backup_conflicted_files(conflicts)
 
         assert backup_dir is not None
-        backed_up = backup_dir / "posts" / "conflict.md"
+        backed_up = backup_dir / "posts" / "conflict" / "index.md"
         assert backed_up.exists()
         assert backed_up.read_text() == "# My local changes\n"
 
@@ -598,7 +608,7 @@ class TestBackupConflictedFiles:
 
         client, _http = _build_sync_client(content_dir)
         conflicts = [
-            {"file_path": "posts/gone.md", "body_conflicted": True, "field_conflicts": []},
+            {"file_path": "posts/gone/index.md", "body_conflicted": True, "field_conflicts": []},
         ]
 
         backup_dir = client._backup_conflicted_files(conflicts)
@@ -625,11 +635,15 @@ class TestBackupConflictedFiles:
         content_dir = tmp_path / "content"
         posts_dir = content_dir / "posts"
         posts_dir.mkdir(parents=True)
-        (posts_dir / "conflict.md").write_text("local\n")
+        _post_file(posts_dir, "conflict").write_text("local\n")
 
         client, _http = _build_sync_client(content_dir)
         conflicts = [
-            {"file_path": "posts/conflict.md", "body_conflicted": True, "field_conflicts": []},
+            {
+                "file_path": "posts/conflict/index.md",
+                "body_conflicted": True,
+                "field_conflicts": [],
+            },
         ]
 
         backup_dir = client._backup_conflicted_files(conflicts)
@@ -650,7 +664,7 @@ class TestBackupConflictedFiles:
         content_dir = tmp_path / "content"
         posts_dir = content_dir / "posts"
         posts_dir.mkdir(parents=True)
-        conflict_file = posts_dir / "conflict.md"
+        conflict_file = _post_file(posts_dir, "conflict")
         conflict_file.write_text("first version\n")
 
         class _FixedDatetime(dt.datetime):
@@ -664,12 +678,18 @@ class TestBackupConflictedFiles:
 
         client, _http = _build_sync_client(content_dir)
         conflicts = [
-            {"file_path": "posts/conflict.md", "body_conflicted": True, "field_conflicts": []},
+            {
+                "file_path": "posts/conflict/index.md",
+                "body_conflicted": True,
+                "field_conflicts": [],
+            },
         ]
 
         first_backup_dir = client._backup_conflicted_files(conflicts)
         assert first_backup_dir is not None
-        assert (first_backup_dir / "posts" / "conflict.md").read_text() == "first version\n"
+        assert (
+            first_backup_dir / "posts" / "conflict" / "index.md"
+        ).read_text() == "first version\n"
 
         conflict_file.write_text("second version\n")
 
@@ -677,8 +697,12 @@ class TestBackupConflictedFiles:
         assert second_backup_dir is not None
 
         assert second_backup_dir != first_backup_dir
-        assert (first_backup_dir / "posts" / "conflict.md").read_text() == "first version\n"
-        assert (second_backup_dir / "posts" / "conflict.md").read_text() == "second version\n"
+        assert (
+            first_backup_dir / "posts" / "conflict" / "index.md"
+        ).read_text() == "first version\n"
+        assert (
+            second_backup_dir / "posts" / "conflict" / "index.md"
+        ).read_text() == "second version\n"
 
 
 class TestSyncBackupIntegration:
@@ -688,7 +712,7 @@ class TestSyncBackupIntegration:
         content_dir = tmp_path / "content"
         posts_dir = content_dir / "posts"
         posts_dir.mkdir(parents=True)
-        (posts_dir / "conflict.md").write_text("# My local version\n")
+        _post_file(posts_dir, "conflict").write_text("# My local version\n")
 
         commit_resp = _DummyResponse(
             json_data={
@@ -696,12 +720,12 @@ class TestSyncBackupIntegration:
                 "commit_hash": "c123",
                 "conflicts": [
                     {
-                        "file_path": "posts/conflict.md",
+                        "file_path": "posts/conflict/index.md",
                         "body_conflicted": True,
                         "field_conflicts": [],
                     }
                 ],
-                "to_download": ["posts/conflict.md"],
+                "to_download": ["posts/conflict/index.md"],
                 "warnings": [],
             }
         )
@@ -710,7 +734,7 @@ class TestSyncBackupIntegration:
             content_dir,
             responses={
                 "/api/sync/commit": commit_resp,
-                "/api/sync/download/posts/conflict.md": download_resp,
+                "/api/sync/download/posts/conflict/index.md": download_resp,
             },
         )
         client.status = lambda: {
@@ -718,7 +742,7 @@ class TestSyncBackupIntegration:
             "to_download": [],
             "to_delete_remote": [],
             "to_delete_local": [],
-            "conflicts": [{"file_path": "posts/conflict.md", "action": "merge"}],
+            "conflicts": [{"file_path": "posts/conflict/index.md", "action": "merge"}],
         }
 
         monkeypatch.setattr(sync_client, "scan_local_files", lambda _: {})
@@ -727,14 +751,14 @@ class TestSyncBackupIntegration:
         client.sync()
 
         # The downloaded file should have server content
-        assert (posts_dir / "conflict.md").read_text() == "# Server resolved version\n"
+        assert (posts_dir / "conflict" / "index.md").read_text() == "# Server resolved version\n"
 
         # A backup should exist with the original local content
         backups_dir = content_dir / ".backups"
         assert backups_dir.exists()
         backup_dirs = list(backups_dir.iterdir())
         assert len(backup_dirs) == 1
-        backed_up = backup_dirs[0] / "posts" / "conflict.md"
+        backed_up = backup_dirs[0] / "posts" / "conflict" / "index.md"
         assert backed_up.read_text() == "# My local version\n"
 
         # User should be informed where backups went
@@ -747,22 +771,26 @@ class TestSyncBackupIntegration:
         content_dir = tmp_path / "content"
         posts_dir = content_dir / "posts"
         posts_dir.mkdir(parents=True)
-        (posts_dir / "a.md").write_text("local a\n")
-        (posts_dir / "b.md").write_text("local b\n")
+        _post_file(posts_dir, "a").write_text("local a\n")
+        _post_file(posts_dir, "b").write_text("local b\n")
 
         commit_resp = _DummyResponse(
             json_data={
                 "status": "ok",
                 "commit_hash": "c456",
                 "conflicts": [
-                    {"file_path": "posts/a.md", "body_conflicted": True, "field_conflicts": []},
                     {
-                        "file_path": "posts/b.md",
+                        "file_path": "posts/a/index.md",
+                        "body_conflicted": True,
+                        "field_conflicts": [],
+                    },
+                    {
+                        "file_path": "posts/b/index.md",
                         "body_conflicted": False,
                         "field_conflicts": ["title"],
                     },
                 ],
-                "to_download": ["posts/a.md", "posts/b.md"],
+                "to_download": ["posts/a/index.md", "posts/b/index.md"],
                 "warnings": [],
             }
         )
@@ -772,8 +800,8 @@ class TestSyncBackupIntegration:
             content_dir,
             responses={
                 "/api/sync/commit": commit_resp,
-                "/api/sync/download/posts/a.md": download_a,
-                "/api/sync/download/posts/b.md": download_b,
+                "/api/sync/download/posts/a/index.md": download_a,
+                "/api/sync/download/posts/b/index.md": download_b,
             },
         )
         client.status = lambda: {
@@ -782,8 +810,8 @@ class TestSyncBackupIntegration:
             "to_delete_remote": [],
             "to_delete_local": [],
             "conflicts": [
-                {"file_path": "posts/a.md", "action": "merge"},
-                {"file_path": "posts/b.md", "action": "merge"},
+                {"file_path": "posts/a/index.md", "action": "merge"},
+                {"file_path": "posts/b/index.md", "action": "merge"},
             ],
         }
 
@@ -795,8 +823,8 @@ class TestSyncBackupIntegration:
         captured = capsys.readouterr()
         assert ".backups/" in captured.out
         # Both conflicts should be reported
-        assert "posts/a.md" in captured.out
-        assert "posts/b.md" in captured.out
+        assert "posts/a/index.md" in captured.out
+        assert "posts/b/index.md" in captured.out
 
 
 class TestRemovedMethods:
@@ -820,8 +848,8 @@ class TestBackupOSErrorHandling:
         content_dir = tmp_path / "content"
         posts_dir = content_dir / "posts"
         posts_dir.mkdir(parents=True)
-        (posts_dir / "a.md").write_text("local a\n")
-        (posts_dir / "b.md").write_text("local b\n")
+        _post_file(posts_dir, "a").write_text("local a\n")
+        _post_file(posts_dir, "b").write_text("local b\n")
 
         def _fail_copy(src: object, dst: object) -> None:
             raise OSError("Permission denied")
@@ -830,8 +858,8 @@ class TestBackupOSErrorHandling:
 
         client, _http = _build_sync_client(content_dir)
         conflicts = [
-            {"file_path": "posts/a.md", "body_conflicted": True, "field_conflicts": []},
-            {"file_path": "posts/b.md", "body_conflicted": True, "field_conflicts": []},
+            {"file_path": "posts/a/index.md", "body_conflicted": True, "field_conflicts": []},
+            {"file_path": "posts/b/index.md", "body_conflicted": True, "field_conflicts": []},
         ]
 
         # Must not raise
@@ -854,7 +882,7 @@ class TestBackupOSErrorHandling:
                 "commit_hash": "c123",
                 "conflicts": [
                     {
-                        "file_path": "posts/conflict.md",
+                        "file_path": "posts/conflict/index.md",
                         "body_conflicted": True,
                         "field_conflicts": [],
                     }
@@ -869,7 +897,7 @@ class TestBackupOSErrorHandling:
             "to_download": [],
             "to_delete_remote": [],
             "to_delete_local": [],
-            "conflicts": [{"file_path": "posts/conflict.md", "action": "merge"}],
+            "conflicts": [{"file_path": "posts/conflict/index.md", "action": "merge"}],
         }
 
         def _raise_oserror(conflicts: list[dict[str, Any]]) -> None:
@@ -893,14 +921,14 @@ class TestBackupSkipNonExistentMessage:
 
         client, _http = _build_sync_client(content_dir)
         conflicts = [
-            {"file_path": "posts/gone.md", "body_conflicted": True, "field_conflicts": []},
+            {"file_path": "posts/gone/index.md", "body_conflicted": True, "field_conflicts": []},
         ]
 
         client._backup_conflicted_files(conflicts)
 
         captured = capsys.readouterr()
         assert "skip backup" in captured.out.lower()
-        assert "posts/gone.md" in captured.out
+        assert "posts/gone/index.md" in captured.out
 
 
 class TestBackupTimestampUTC:
@@ -913,7 +941,7 @@ class TestBackupTimestampUTC:
         content_dir = tmp_path / "content"
         posts_dir = content_dir / "posts"
         posts_dir.mkdir(parents=True)
-        (posts_dir / "conflict.md").write_text("local\n")
+        _post_file(posts_dir, "conflict").write_text("local\n")
 
         class _FixedDatetime(dt.datetime):
             @classmethod
@@ -926,7 +954,11 @@ class TestBackupTimestampUTC:
 
         client, _http = _build_sync_client(content_dir)
         conflicts = [
-            {"file_path": "posts/conflict.md", "body_conflicted": True, "field_conflicts": []},
+            {
+                "file_path": "posts/conflict/index.md",
+                "body_conflicted": True,
+                "field_conflicts": [],
+            },
         ]
 
         backup_dir = client._backup_conflicted_files(conflicts)
@@ -953,12 +985,12 @@ class TestDownloadTransportError:
         client, _ = _build_sync_client(content_dir)
         client.client = _RaisingHttpClient()  # type: ignore[assignment]
 
-        result = client._download_file("posts/some.md")
+        result = client._download_file("posts/some/index.md")
 
         assert result is False
         captured = capsys.readouterr()
         assert "error" in captured.out.lower()
-        assert "posts/some.md" in captured.out
+        assert "posts/some/index.md" in captured.out
 
     def test_transport_error_does_not_crash_sync(self, tmp_path: Path, monkeypatch: Any) -> None:
         """A transport error during download must not abort the entire sync."""
@@ -986,7 +1018,7 @@ class TestDownloadTransportError:
 
         client.status = lambda: {
             "to_upload": [],
-            "to_download": ["posts/some.md"],
+            "to_download": ["posts/some/index.md"],
             "to_delete_remote": [],
             "to_delete_local": [],
             "conflicts": [],
@@ -1009,8 +1041,8 @@ class TestBackupEmptyDirCleanup:
         content_dir = tmp_path / "content"
         posts_dir = content_dir / "posts"
         posts_dir.mkdir(parents=True)
-        (posts_dir / "a.md").write_text("local a\n")
-        (posts_dir / "b.md").write_text("local b\n")
+        _post_file(posts_dir, "a").write_text("local a\n")
+        _post_file(posts_dir, "b").write_text("local b\n")
 
         def _fail_copy(src: object, dst: object) -> None:
             raise OSError("Permission denied")
@@ -1019,8 +1051,16 @@ class TestBackupEmptyDirCleanup:
 
         client, _http = _build_sync_client(content_dir)
         conflicts = [
-            {"file_path": "posts/a.md", "body_conflicted": True, "field_conflicts": []},
-            {"file_path": "posts/b.md", "body_conflicted": True, "field_conflicts": []},
+            {
+                "file_path": "posts/a/index.md",
+                "body_conflicted": True,
+                "field_conflicts": [],
+            },
+            {
+                "file_path": "posts/b/index.md",
+                "body_conflicted": True,
+                "field_conflicts": [],
+            },
         ]
 
         backup_dir_result = client._backup_conflicted_files(conflicts)
@@ -1043,11 +1083,15 @@ class TestTimestampFormatRegex:
         content_dir = tmp_path / "content"
         posts_dir = content_dir / "posts"
         posts_dir.mkdir(parents=True)
-        (posts_dir / "conflict.md").write_text("local\n")
+        _post_file(posts_dir, "conflict").write_text("local\n")
 
         client, _http = _build_sync_client(content_dir)
         conflicts = [
-            {"file_path": "posts/conflict.md", "body_conflicted": True, "field_conflicts": []},
+            {
+                "file_path": "posts/conflict/index.md",
+                "body_conflicted": True,
+                "field_conflicts": [],
+            },
         ]
 
         backup_dir = client._backup_conflicted_files(conflicts)

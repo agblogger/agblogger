@@ -392,8 +392,7 @@ def rewrite_relative_urls(html: str, file_path: str) -> str:
     """Rewrite relative src and href attributes in HTML to absolute paths.
 
     Directory-backed post assets are rewritten to ``/post/<slug>/<file>`` URLs.
-    Other content assets, including legacy flat-file post assets, are rewritten
-    to ``/api/content/{resolved_path}`` URLs.
+    Other content assets are rewritten to ``/api/content/{resolved_path}`` URLs.
 
     Args:
         html: Rendered HTML string.

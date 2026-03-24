@@ -24,7 +24,9 @@ if TYPE_CHECKING:
 def app_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
     """Create settings for test app."""
     posts_dir = tmp_content_dir / "posts"
-    (posts_dir / "hello.md").write_text(
+    hello_post = posts_dir / "hello"
+    hello_post.mkdir()
+    (hello_post / "index.md").write_text(
         "---\ncreated_at: 2026-02-02 22:21:29.975359+00\n"
         "author: admin\nlabels: ['#swe']\n---\n# Hello World\n\nTest content.\n"
     )

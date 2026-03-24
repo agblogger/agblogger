@@ -17,6 +17,8 @@ This gives the application fast reads without moving ownership of content into t
 
 The editor, uploads, administrative configuration changes, and sync all converge on the same content model. Different entry points may collect different inputs, but they update the same on-disk structures and then refresh derived state.
 
+For posts, those mutation paths now normalize to the directory-backed layout only: `posts/<slug>/index.md` plus any co-located assets. Legacy flat post files under `posts/*.md` are rejected rather than normalized or preserved.
+
 ## Read Paths
 
 Published post reads, search, labels, and page views are served through backend-controlled representations rather than direct filesystem exposure. This keeps authorization, rendering policy, sanitization, and asset access behind one boundary.

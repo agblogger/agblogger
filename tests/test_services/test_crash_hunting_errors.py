@@ -102,7 +102,7 @@ class TestCrosspostCatchAllExceptions:
         results = await crosspost(
             session=session,
             content_manager=mock_cm,
-            post_path="posts/test.md",
+            post_path="posts/test/index.md",
             platforms=["bluesky"],
             actor=MagicMock(id=1, username="u", display_name="U", is_admin=False),
             site_url="https://example.com",
@@ -151,7 +151,7 @@ class TestCrosspostCatchAllExceptions:
         results = await crosspost(
             session=session,
             content_manager=mock_cm,
-            post_path="posts/test.md",
+            post_path="posts/test/index.md",
             platforms=["bluesky"],
             actor=MagicMock(id=1, username="u", display_name="U", is_admin=False),
             site_url="https://example.com",

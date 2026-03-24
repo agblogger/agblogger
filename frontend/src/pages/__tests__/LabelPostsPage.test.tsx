@@ -52,12 +52,12 @@ const testLabel: LabelResponse = {
 const postsData: PostListResponse = {
   posts: [
     {
-      id: 1, file_path: 'posts/a.md', title: 'Post A', author: 'Admin',
+      id: 1, file_path: 'posts/a/index.md', title: 'Post A', author: 'Admin',
       created_at: '2026-02-01 12:00:00+00:00', modified_at: '2026-02-01 12:00:00+00:00',
       is_draft: false, rendered_excerpt: '<p>A</p>', labels: ['swe'],
     },
     {
-      id: 2, file_path: 'posts/b.md', title: 'Post B', author: 'Admin',
+      id: 2, file_path: 'posts/b/index.md', title: 'Post B', author: 'Admin',
       created_at: '2026-02-02 12:00:00+00:00', modified_at: '2026-02-02 12:00:00+00:00',
       is_draft: false, rendered_excerpt: '<p>B</p>', labels: ['swe'],
     },

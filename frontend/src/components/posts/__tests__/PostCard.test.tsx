@@ -12,7 +12,7 @@ import PostCard from '../PostCard'
 function makePost(overrides: Partial<PostSummary> = {}): PostSummary {
   return {
     id: 1,
-    file_path: 'posts/test.md',
+    file_path: 'posts/test/index.md',
     title: 'Test Post',
     author: 'Admin',
     created_at: '2026-02-01 12:00:00+00:00',

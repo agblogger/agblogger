@@ -515,7 +515,7 @@ class TestIssue3SyncNoPathLeak:
                     (
                         "files",
                         (
-                            "posts/test-path-leak.md",
+                            "posts/test-path-leak/index.md",
                             b"---\ntitle: T\ncreated_at: 2026-02-02 22:21:29+00\n"
                             b"author: admin\nlabels: []\n"
                             b"---\nBody",
@@ -590,7 +590,7 @@ class TestIssue14SyncDeletionFailureCount:
                 (
                     "files",
                     (
-                        "posts/to-delete.md",
+                        "posts/to-delete/index.md",
                         b"---\ntitle: X\ncreated_at: 2026-02-02 22:21:29+00\n"
                         b"author: admin\nlabels: []\n"
                         b"---\nBody",
@@ -609,7 +609,7 @@ class TestIssue14SyncDeletionFailureCount:
                 data={
                     "metadata": json.dumps(
                         {
-                            "deleted_files": ["posts/to-delete.md"],
+                            "deleted_files": ["posts/to-delete/index.md"],
                             "last_sync_commit": None,
                         }
                     ),

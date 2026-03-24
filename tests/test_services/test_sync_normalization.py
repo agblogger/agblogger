@@ -20,10 +20,10 @@ class TestFrontMatterNormalization:
         """New posts get created_at and modified_at filled in."""
         content_dir = tmp_path / "content"
         (content_dir / "posts").mkdir(parents=True)
-        self._write_post(content_dir, "posts/new.md", "# New Post\n\nContent.\n")
+        self._write_post(content_dir, "posts/new/index.md", "# New Post\n\nContent.\n")
 
         warnings = normalize_post_frontmatter(
-            uploaded_files=["posts/new.md"],
+            uploaded_files=["posts/new/index.md"],
             old_manifest={},
             content_dir=content_dir,
         )
@@ -31,7 +31,7 @@ class TestFrontMatterNormalization:
 
         import frontmatter as fm
 
-        post = fm.loads((content_dir / "posts/new.md").read_text())
+        post = fm.loads((content_dir / "posts/new/index.md").read_text())
         assert "created_at" in post.metadata
         assert "modified_at" in post.metadata
 
@@ -41,12 +41,12 @@ class TestFrontMatterNormalization:
         (content_dir / "posts").mkdir(parents=True)
         self._write_post(
             content_dir,
-            "posts/existing.md",
+            "posts/existing/index.md",
             "---\ncreated_at: '2026-01-01T00:00:00+00:00'\nauthor: admin\n---\n# Existing\n",
         )
         old_manifest = {
-            "posts/existing.md": FileEntry(
-                file_path="posts/existing.md",
+            "posts/existing/index.md": FileEntry(
+                file_path="posts/existing/index.md",
                 content_hash="abc123",
                 file_size=100,
                 file_mtime="12345",
@@ -54,14 +54,14 @@ class TestFrontMatterNormalization:
         }
 
         normalize_post_frontmatter(
-            uploaded_files=["posts/existing.md"],
+            uploaded_files=["posts/existing/index.md"],
             old_manifest=old_manifest,
             content_dir=content_dir,
         )
 
         import frontmatter as fm
 
-        post = fm.loads((content_dir / "posts/existing.md").read_text())
+        post = fm.loads((content_dir / "posts/existing/index.md").read_text())
         assert "2026-01-01" in post["created_at"]
         assert post["modified_at"] != post["created_at"]
 
@@ -72,12 +72,12 @@ class TestFrontMatterNormalization:
         # YAML with unquoted datetime — python-frontmatter may parse as datetime
         self._write_post(
             content_dir,
-            "posts/dt.md",
+            "posts/dt/index.md",
             "---\ncreated_at: 2026-02-02 22:21:29+00:00\n---\n# Post\n",
         )
 
         warnings = normalize_post_frontmatter(
-            uploaded_files=["posts/dt.md"],
+            uploaded_files=["posts/dt/index.md"],
             old_manifest={},
             content_dir=content_dir,
         )
@@ -85,7 +85,7 @@ class TestFrontMatterNormalization:
 
         import frontmatter as fm
 
-        post = fm.loads((content_dir / "posts/dt.md").read_text())
+        post = fm.loads((content_dir / "posts/dt/index.md").read_text())
         # Should be a string now, not a datetime object
         assert isinstance(post["created_at"], str)
 
@@ -95,12 +95,12 @@ class TestFrontMatterNormalization:
         (content_dir / "posts").mkdir(parents=True)
         self._write_post(
             content_dir,
-            "posts/custom.md",
+            "posts/custom/index.md",
             "---\ncustom_field: hello\nweird_key: 42\n---\n# Custom\n",
         )
 
         warnings = normalize_post_frontmatter(
-            uploaded_files=["posts/custom.md"],
+            uploaded_files=["posts/custom/index.md"],
             old_manifest={},
             content_dir=content_dir,
         )
@@ -139,12 +139,12 @@ class TestFrontMatterNormalization:
         # YAML with just a date (no time component)
         self._write_post(
             content_dir,
-            "posts/date-only.md",
+            "posts/date-only/index.md",
             "---\ncreated_at: 2026-02-02\n---\n# Date Only\n",
         )
 
         warnings = normalize_post_frontmatter(
-            uploaded_files=["posts/date-only.md"],
+            uploaded_files=["posts/date-only/index.md"],
             old_manifest={},
             content_dir=content_dir,
         )
@@ -152,7 +152,7 @@ class TestFrontMatterNormalization:
 
         import frontmatter as fm
 
-        post = fm.loads((content_dir / "posts/date-only.md").read_text())
+        post = fm.loads((content_dir / "posts/date-only/index.md").read_text())
         # Should be a normalized string
         assert isinstance(post["created_at"], str)
         assert "2026-02-02" in post["created_at"]

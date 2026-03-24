@@ -31,7 +31,9 @@ if TYPE_CHECKING:
 def app_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
     """Create settings for test app."""
     posts_dir = tmp_content_dir / "posts"
-    (posts_dir / "hello.md").write_text(
+    hello_post = posts_dir / "hello"
+    hello_post.mkdir()
+    (hello_post / "index.md").write_text(
         "---\ncreated_at: 2026-02-02 22:21:29.975359+00\n"
         "author: admin\nlabels: ['#swe']\n---\n# Hello World\n\nTest content.\n"
     )
@@ -255,7 +257,7 @@ class TestPostUpdatePandocFailure:
             side_effect=RenderError("pandoc crashed"),
         ):
             resp = await client.put(
-                "/api/posts/posts/hello.md",
+                "/api/posts/posts/hello/index.md",
                 json={
                     "title": "Updated",
                     "body": "Updated content",
@@ -660,12 +662,12 @@ class TestCrosspostPostNotFound:
         with patch(
             "backend.api.crosspost.crosspost",
             new_callable=AsyncMock,
-            side_effect=PostNotFoundError("Post not found: posts/nonexistent.md"),
+            side_effect=PostNotFoundError("Post not found: posts/nonexistent/index.md"),
         ):
             resp = await client.post(
                 "/api/crosspost/post",
                 json={
-                    "post_path": "posts/nonexistent.md",
+                    "post_path": "posts/nonexistent/index.md",
                     "platforms": ["bluesky"],
                 },
                 headers={"Authorization": f"Bearer {token}"},
@@ -685,7 +687,7 @@ class TestCrosspostPostNotFound:
             resp = await client.post(
                 "/api/crosspost/post",
                 json={
-                    "post_path": "posts/hello.md",
+                    "post_path": "posts/hello/index.md",
                     "platforms": ["invalid"],
                 },
                 headers={"Authorization": f"Bearer {token}"},
@@ -886,7 +888,7 @@ class TestPostWriteNarrowedExceptions:
             side_effect=OSError("disk full"),
         ):
             resp = await client.put(
-                "/api/posts/posts/hello.md",
+                "/api/posts/posts/hello/index.md",
                 json={
                     "title": "Updated",
                     "body": "Updated content",
@@ -907,7 +909,7 @@ class TestPostWriteNarrowedExceptions:
             side_effect=TypeError("bad type"),
         ):
             resp = await client.put(
-                "/api/posts/posts/hello.md",
+                "/api/posts/posts/hello/index.md",
                 json={
                     "title": "Updated",
                     "body": "Updated content",

@@ -22,6 +22,8 @@ The backend follows a layered structure:
 
 The filesystem remains the source of truth for content. The database exists primarily to support efficient reads, search, and integration state.
 
+Within that filesystem model, posts are canonical only when they live at `posts/<slug>/index.md`. Backend content reads, sync normalization, slug resolution, and asset management reject legacy `posts/<slug>.md` flat-file posts.
+
 ## Core Runtime Services
 
 Several long-lived services define the runtime architecture:

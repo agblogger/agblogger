@@ -301,13 +301,13 @@ class TestListPostsIncludeDescendantsDefault:
         await post_session.flush()
 
         # Post A: tagged 'tech' only
-        post_a = _make_post("posts/post-a.md", "Post A")
+        post_a = _make_post("posts/post-a/index.md", "Post A")
         post_session.add(post_a)
         await post_session.flush()
         post_session.add(PostLabelCache(post_id=post_a.id, label_id="tech"))
 
         # Post B: tagged 'python' only
-        post_b = _make_post("posts/post-b.md", "Post B")
+        post_b = _make_post("posts/post-b/index.md", "Post B")
         post_session.add(post_b)
         await post_session.flush()
         post_session.add(PostLabelCache(post_id=post_b.id, label_id="python"))

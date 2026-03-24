@@ -23,7 +23,7 @@ const labelArb = fc
 const pathVariantArb = fc.record({
   hasPostsPrefix: fc.boolean(),
   slug: slugArb,
-  suffix: fc.constantFrom('', '.md', '/index.md'),
+  suffix: fc.constantFrom('', '/index.md'),
 })
 
 describe('cross-post text/url property tests', () => {

@@ -65,14 +65,11 @@ export default function EditorPage() {
   const [effectiveFilePath, setEffectiveFilePath] = useState<string | null>(
     isNew ? null : filePath,
   )
-  const showFileStrip = effectiveFilePath === null || effectiveFilePath.endsWith('/index.md')
-  const imageUploadEnabled = showFileStrip && effectiveFilePath !== null
+  const imageUploadEnabled = effectiveFilePath !== null
   const imageDisabledReason =
     effectiveFilePath === null
       ? 'Save post first to add images'
-      : !showFileStrip
-        ? 'Only directory-backed posts support images'
-        : undefined
+      : undefined
 
   useCodeBlockEnhance(previewRef, renderedPreview)
 
@@ -481,18 +478,16 @@ export default function EditorPage() {
         )}
       </div>
 
-      {showFileStrip && (
-        <div className="mb-4">
-          <FileStrip
-            filePath={effectiveFilePath}
-            body={body}
-            onBodyChange={setBody}
-            onInsertAtCursor={handleInsertAtCursor}
-            disabled={saving}
-            refreshToken={fileStripRefreshToken}
-          />
-        </div>
-      )}
+      <div className="mb-4">
+        <FileStrip
+          filePath={effectiveFilePath}
+          body={body}
+          onBodyChange={setBody}
+          onInsertAtCursor={handleInsertAtCursor}
+          disabled={saving}
+          refreshToken={fileStripRefreshToken}
+        />
+      </div>
 
       <div className="flex lg:hidden mb-4 border-b border-border">
         <button

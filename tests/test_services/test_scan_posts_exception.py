@@ -16,7 +16,9 @@ class TestScanPostsNarrowException:
         """A programming error (AttributeError) should NOT be silently caught."""
         posts_dir = tmp_path / "posts"
         posts_dir.mkdir()
-        (posts_dir / "test.md").write_text("---\ntitle: test\n---\n# Hello")
+        test_post = posts_dir / "test"
+        test_post.mkdir()
+        (test_post / "index.md").write_text("---\ntitle: test\n---\n# Hello")
         (tmp_path / "index.toml").write_text('[site]\ntitle = "Test"\n')
         (tmp_path / "labels.toml").write_text("")
 
@@ -35,8 +37,12 @@ class TestScanPostsNarrowException:
         """A YAML parse error should be caught and the post skipped."""
         posts_dir = tmp_path / "posts"
         posts_dir.mkdir()
-        (posts_dir / "bad.md").write_text("---\n: invalid yaml [\n---\n# Hello")
-        (posts_dir / "good.md").write_text("---\ncreated_at: 2025-01-01\n---\n# Good Post")
+        bad_post = posts_dir / "bad"
+        bad_post.mkdir()
+        (bad_post / "index.md").write_text("---\n: invalid yaml [\n---\n# Hello")
+        good_post = posts_dir / "good"
+        good_post.mkdir()
+        (good_post / "index.md").write_text("---\ncreated_at: 2025-01-01\n---\n# Good Post")
         (tmp_path / "index.toml").write_text('[site]\ntitle = "Test"\n')
         (tmp_path / "labels.toml").write_text("")
 
@@ -50,8 +56,12 @@ class TestScanPostsNarrowException:
         """A UnicodeDecodeError should be caught and the post skipped."""
         posts_dir = tmp_path / "posts"
         posts_dir.mkdir()
-        (posts_dir / "binary.md").write_bytes(b"\xff\xfe invalid utf8")
-        (posts_dir / "good.md").write_text("---\ncreated_at: 2025-01-01\n---\n# Good")
+        binary_post = posts_dir / "binary"
+        binary_post.mkdir()
+        (binary_post / "index.md").write_bytes(b"\xff\xfe invalid utf8")
+        good_post = posts_dir / "good"
+        good_post.mkdir()
+        (good_post / "index.md").write_text("---\ncreated_at: 2025-01-01\n---\n# Good")
         (tmp_path / "index.toml").write_text('[site]\ntitle = "Test"\n')
         (tmp_path / "labels.toml").write_text("")
 

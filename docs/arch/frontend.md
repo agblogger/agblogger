@@ -27,6 +27,8 @@ The frontend talks to the backend through a shared HTTP client shaped around the
 
 The editor is built around structured post authoring instead of raw filesystem manipulation. Metadata editing, markdown editing, preview, and asset management are presented as one workflow over a canonical post unit. Preview rendering is delegated to the backend so the editor and published site use the same rendering and sanitization pipeline.
 
+Frontend post navigation and editor workflows assume the backend canonical post shape `posts/<slug>/index.md`. The SPA no longer preserves or generates legacy `posts/<slug>.md` flat-file paths.
+
 ## Rendering Model
 
 The frontend does not own markdown rendering. It receives rendered HTML from the backend and then adds browser-only enhancements such as navigation affordances, math hydration, and interaction helpers.

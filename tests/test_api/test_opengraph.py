@@ -34,11 +34,6 @@ def og_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
         "author: admin\nlabels: []\ndraft: true\n---\n"
         "Draft content that should not leak.\n"
     )
-    (posts_dir / "legacy-flat.md").write_text(
-        "---\ntitle: Legacy Flat\ncreated_at: 2026-02-02 22:21:29.975359+00\n"
-        "author: admin\nlabels: []\n---\n"
-        "Legacy flat-file content.\n"
-    )
     # Add a directory-backed post
     dir_post = posts_dir / "my-dir-post"
     dir_post.mkdir()
@@ -154,13 +149,3 @@ class TestPostOgTagsDirectoryBacked:
         resp = await client.get("/post/2026/recap")
         assert resp.status_code == 200
         assert 'og:title" content="Nested Recap"' in resp.text
-
-
-class TestPostRouteCompatibility:
-    """Legacy and nested /post routes must render the SPA instead of redirecting as assets."""
-
-    async def test_legacy_md_permalink_serves_spa(self, client: AsyncClient) -> None:
-        resp = await client.get("/post/posts/legacy-flat.md", follow_redirects=False)
-        assert resp.status_code == 200
-        assert "text/html" in resp.headers["content-type"]
-        assert "location" not in resp.headers

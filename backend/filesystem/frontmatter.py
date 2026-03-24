@@ -56,9 +56,12 @@ def extract_title(content: str, file_path: str = "") -> str:
         stripped = line.strip()
         if stripped.startswith("# ") and not stripped.startswith("## "):
             return stripped.removeprefix("# ").strip()
-    # Fallback: derive from filename
+    # Fallback: derive from filename, or from the directory name for
+    # canonical posts stored as posts/<slug>/index.md.
     if file_path:
         name = file_path.rsplit("/", maxsplit=1)[-1]
+        if name == "index.md" and "/" in file_path:
+            name = file_path.rstrip("/").split("/")[-2]
         name = re.sub(r"^\d{4}-\d{2}-\d{2}-?", "", name)  # strip date prefix
         name = name.removesuffix(".md")
         title = name.replace("-", " ").replace("_", " ").title().strip()

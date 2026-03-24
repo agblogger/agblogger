@@ -19,7 +19,6 @@ if TYPE_CHECKING:
 
 
 POST_PATH = "posts/2026-02-02-hello-world/index.md"
-LEGACY_POST_PATH = "posts/legacy-post.md"
 
 
 @pytest.fixture
@@ -31,10 +30,6 @@ def app_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
     (hello_post_dir / "index.md").write_text(
         "---\ntitle: Hello World\ncreated_at: 2026-02-02 22:21:29.975359+00\n"
         "author: admin\nlabels: []\n---\n\nTest content.\n"
-    )
-    (posts_dir / "legacy-post.md").write_text(
-        "---\ntitle: Legacy Post\ncreated_at: 2026-02-03 09:00:00+00\n"
-        "author: admin\nlabels: []\n---\n\nLegacy content.\n"
     )
     (tmp_content_dir / "labels.toml").write_text("[labels]\n")
     db_path = tmp_path / "test.db"
@@ -208,19 +203,6 @@ class TestUploadAssets:
         assert resp.status_code == 400
         assert "content file" in resp.json()["detail"].lower()
 
-    @pytest.mark.asyncio
-    async def test_upload_rejects_legacy_flat_file_post(self, client: AsyncClient) -> None:
-        token = await _login(client)
-
-        resp = await client.post(
-            f"/api/posts/{LEGACY_POST_PATH}/assets",
-            files=[("files", ("photo.png", b"data", "image/png"))],
-            headers={"Authorization": f"Bearer {token}"},
-        )
-
-        assert resp.status_code == 400
-        assert "directory-style" in resp.json()["detail"]
-
 
 class TestListAssets:
     @pytest.mark.asyncio
@@ -236,24 +218,6 @@ class TestListAssets:
         assert resp.status_code == 200
         data = resp.json()
         assert data["assets"] == []
-
-    @pytest.mark.asyncio
-    async def test_list_assets_rejects_legacy_flat_file_post(
-        self, client: AsyncClient, app_settings: Settings
-    ) -> None:
-        """Legacy flat-file posts do not support editor asset management."""
-        token = await _login(client)
-
-        posts_dir = app_settings.content_dir / "posts"
-        (posts_dir / "stray-image.png").write_bytes(b"fake png data")
-
-        resp = await client.get(
-            f"/api/posts/{LEGACY_POST_PATH}/assets",
-            headers={"Authorization": f"Bearer {token}"},
-        )
-
-        assert resp.status_code == 400
-        assert "directory-style" in resp.json()["detail"]
 
     @pytest.mark.asyncio
     async def test_list_assets_after_upload(

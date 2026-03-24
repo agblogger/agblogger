@@ -14,9 +14,9 @@ if TYPE_CHECKING:
 
 class TestIsSafeLocalPath:
     def test_normal_path_resolves(self, tmp_path: Path):
-        result = _is_safe_local_path(tmp_path, "posts/hello.md")
+        result = _is_safe_local_path(tmp_path, "posts/hello/index.md")
         assert result is not None
-        assert result == (tmp_path / "posts" / "hello.md").resolve()
+        assert result == (tmp_path / "posts" / "hello" / "index.md").resolve()
 
     def test_traversal_returns_none(self, tmp_path: Path):
         result = _is_safe_local_path(tmp_path, "../../etc/passwd")

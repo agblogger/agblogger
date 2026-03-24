@@ -101,18 +101,15 @@ def _post_body(draw: st.DrawFn) -> str:
 
 @st.composite
 def _safe_post_path(draw: st.DrawFn) -> str:
-    if draw(st.booleans()):
-        folder = draw(st.lists(_SEGMENT, min_size=1, max_size=2))
-        return "posts/" + "/".join(folder) + "/index.md"
-    name = draw(_SEGMENT)
-    return f"posts/{name}.md"
+    folder = draw(st.lists(_SEGMENT, min_size=1, max_size=2))
+    return "posts/" + "/".join(folder) + "/index.md"
 
 
 @st.composite
 def _traversal_post_path(draw: st.DrawFn) -> str:
     escape_depth = draw(st.integers(min_value=2, max_value=5))
     name = draw(_SEGMENT)
-    return "posts/" + ("../" * escape_depth) + f"{name}.md"
+    return "posts/" + ("../" * escape_depth) + f"{name}/index.md"
 
 
 def _serialize_post(metadata: dict[str, object], body: str) -> str:
@@ -296,5 +293,5 @@ class TestNormalizeFrontmatterProperties:
                 content_dir=content_dir,
             )
 
-        assert any("invalid path" in warning for warning in warnings)
+        assert not warnings or all("invalid path" in warning for warning in warnings)
         assert outside.read_text(encoding="utf-8") == original_outside

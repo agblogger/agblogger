@@ -306,20 +306,20 @@ describe('MarkdownToolbar', () => {
     expect(imageBtn).toHaveAttribute('title', 'Save post first to add images')
   })
 
-  it('image button shows flat-file disabled reason as tooltip when provided', () => {
+  it('image button shows provided disabled reason as tooltip', () => {
     const ref = createRef<HTMLTextAreaElement>()
     render(
       <MarkdownToolbar
         textareaRef={ref}
         value=""
         onChange={() => {}}
-        imageDisabledReason="Only directory-backed posts support images"
+        imageDisabledReason="Save post first to add images"
       />,
     )
 
     const imageBtn = screen.getByLabelText(/^Image/)
     expect(imageBtn).toBeDisabled()
-    expect(imageBtn).toHaveAttribute('title', 'Only directory-backed posts support images')
+    expect(imageBtn).toHaveAttribute('title', 'Save post first to add images')
   })
 
   it('image button is enabled when onImageClick is provided and no imageDisabledReason', () => {

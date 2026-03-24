@@ -28,7 +28,9 @@ pytestmark = pytest.mark.slow
 @pytest.fixture
 def merge_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
     posts_dir = tmp_content_dir / "posts"
-    (posts_dir / "shared.md").write_text(
+    shared_dir = posts_dir / "shared"
+    shared_dir.mkdir()
+    (shared_dir / "index.md").write_text(
         "---\ntitle: Shared Post\ncreated_at: 2026-02-01 00:00:00+00\nauthor: admin\n"
         "labels:\n- '#a'\n---\n\nParagraph one.\n\nParagraph two.\n"
     )
@@ -89,7 +91,7 @@ class TestSyncCommit:
         server_commit = resp.json()["server_commit"]
 
         resp = await merge_client.put(
-            "/api/posts/posts/shared.md",
+            "/api/posts/posts/shared/index.md",
             json={
                 "title": "Shared Post",
                 "body": "Paragraph one (server edit).\n\nParagraph two.\n",
@@ -109,7 +111,14 @@ class TestSyncCommit:
             "/api/sync/commit",
             data={"metadata": metadata},
             files=[
-                ("files", ("posts/shared.md", io.BytesIO(client_content.encode()), "text/plain")),
+                (
+                    "files",
+                    (
+                        "posts/shared/index.md",
+                        io.BytesIO(client_content.encode()),
+                        "text/plain",
+                    ),
+                ),
             ],
             headers=headers,
         )
@@ -118,7 +127,10 @@ class TestSyncCommit:
         assert data["commit_hash"] is not None
         assert len(data["conflicts"]) == 0
 
-        dl_resp = await merge_client.get("/api/sync/download/posts/shared.md", headers=headers)
+        dl_resp = await merge_client.get(
+            "/api/sync/download/posts/shared/index.md",
+            headers=headers,
+        )
         merged = dl_resp.content.decode()
         assert "server edit" in merged
         assert "client edit" in merged
@@ -137,7 +149,7 @@ class TestSyncCommit:
         server_commit = resp.json()["server_commit"]
 
         resp = await merge_client.put(
-            "/api/posts/posts/shared.md",
+            "/api/posts/posts/shared/index.md",
             json={
                 "title": "Shared Post",
                 "body": "Server version of paragraph one.\n\nParagraph two.\n",
@@ -157,7 +169,14 @@ class TestSyncCommit:
             "/api/sync/commit",
             data={"metadata": metadata},
             files=[
-                ("files", ("posts/shared.md", io.BytesIO(client_content.encode()), "text/plain")),
+                (
+                    "files",
+                    (
+                        "posts/shared/index.md",
+                        io.BytesIO(client_content.encode()),
+                        "text/plain",
+                    ),
+                ),
             ],
             headers=headers,
         )
@@ -166,7 +185,10 @@ class TestSyncCommit:
         assert len(data["conflicts"]) == 1
         assert data["conflicts"][0]["body_conflicted"] is True
 
-        dl_resp = await merge_client.get("/api/sync/download/posts/shared.md", headers=headers)
+        dl_resp = await merge_client.get(
+            "/api/sync/download/posts/shared/index.md",
+            headers=headers,
+        )
         assert b"Server version" in dl_resp.content
 
     async def test_no_base_server_wins(self, merge_client: AsyncClient) -> None:
@@ -179,7 +201,7 @@ class TestSyncCommit:
             "/api/sync/commit",
             data={"metadata": metadata},
             files=[
-                ("files", ("posts/shared.md", io.BytesIO(client_content), "text/plain")),
+                ("files", ("posts/shared/index.md", io.BytesIO(client_content), "text/plain")),
             ],
             headers=headers,
         )
@@ -230,7 +252,7 @@ class TestSyncCommit:
         token = await _login(merge_client)
         headers = {"Authorization": f"Bearer {token}"}
 
-        metadata = json.dumps({"deleted_files": ["posts/shared.md"]})
+        metadata = json.dumps({"deleted_files": ["posts/shared/index.md"]})
         resp = await merge_client.post(
             "/api/sync/commit",
             data={"metadata": metadata},
@@ -238,7 +260,10 @@ class TestSyncCommit:
         )
         assert resp.status_code == 200
 
-        dl_resp = await merge_client.get("/api/sync/download/posts/shared.md", headers=headers)
+        dl_resp = await merge_client.get(
+            "/api/sync/download/posts/shared/index.md",
+            headers=headers,
+        )
         assert dl_resp.status_code == 404
 
     async def test_invalid_metadata_json_returns_400(self, merge_client: AsyncClient) -> None:
@@ -277,7 +302,7 @@ class TestSyncCommit:
         resp = await merge_client.post(
             "/api/sync/commit",
             data={"metadata": metadata},
-            files=[("files", ("posts/big.md", io.BytesIO(big_content), "text/plain"))],
+            files=[("files", ("posts/big/index.md", io.BytesIO(big_content), "text/plain"))],
             headers=headers,
         )
         assert resp.status_code == 413
@@ -441,7 +466,7 @@ class TestSyncCommit:
         server_commit = resp.json()["server_commit"]
 
         resp = await merge_client.put(
-            "/api/posts/posts/shared.md",
+            "/api/posts/posts/shared/index.md",
             json={
                 "title": "Shared Post",
                 "body": "Paragraph one.\n\nParagraph two.\n",
@@ -461,7 +486,14 @@ class TestSyncCommit:
             "/api/sync/commit",
             data={"metadata": metadata},
             files=[
-                ("files", ("posts/shared.md", io.BytesIO(client_content.encode()), "text/plain")),
+                (
+                    "files",
+                    (
+                        "posts/shared/index.md",
+                        io.BytesIO(client_content.encode()),
+                        "text/plain",
+                    ),
+                ),
             ],
             headers=headers,
         )
@@ -469,7 +501,10 @@ class TestSyncCommit:
         data = resp.json()
         assert len(data["conflicts"]) == 0
 
-        dl_resp = await merge_client.get("/api/sync/download/posts/shared.md", headers=headers)
+        dl_resp = await merge_client.get(
+            "/api/sync/download/posts/shared/index.md",
+            headers=headers,
+        )
         merged = dl_resp.content.decode()
         assert "#server-label" in merged
         assert "#client-label" in merged
@@ -493,7 +528,7 @@ class TestSyncCommit:
 
         # Edit server version so server_content != client_text (triggers merge path)
         resp = await merge_client.put(
-            "/api/posts/posts/shared.md",
+            "/api/posts/posts/shared/index.md",
             json={
                 "title": "Shared Post",
                 "body": "Server edited paragraph.\n\nParagraph two.\n",
@@ -523,7 +558,11 @@ class TestSyncCommit:
                 files=[
                     (
                         "files",
-                        ("posts/shared.md", io.BytesIO(client_content.encode()), "text/plain"),
+                        (
+                            "posts/shared/index.md",
+                            io.BytesIO(client_content.encode()),
+                            "text/plain",
+                        ),
                     ),
                 ],
                 headers=headers,
@@ -534,7 +573,7 @@ class TestSyncCommit:
 
         # Should report the conflict
         assert len(data["conflicts"]) == 1
-        assert data["conflicts"][0]["file_path"] == "posts/shared.md"
+        assert data["conflicts"][0]["file_path"] == "posts/shared/index.md"
         assert data["conflicts"][0]["body_conflicted"] is True
 
         # The critical assertion: normalize_post_frontmatter should NOT
@@ -543,7 +582,7 @@ class TestSyncCommit:
         uploaded_files_arg = mock_norm.call_args.kwargs.get(
             "uploaded_files", mock_norm.call_args.args[0] if mock_norm.call_args.args else []
         )
-        assert "posts/shared.md" not in uploaded_files_arg
+        assert "posts/shared/index.md" not in uploaded_files_arg
 
 
 def _sha256(data: bytes) -> str:

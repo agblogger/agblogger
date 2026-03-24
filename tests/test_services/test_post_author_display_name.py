@@ -112,7 +112,7 @@ class TestListPostsAuthorDisplayName:
     async def test_resolves_display_name(self, session: AsyncSession) -> None:
         """Post by 'admin' where admin has display_name='John Smith' returns 'John Smith'."""
         await _create_user(session, username="admin", display_name="John Smith")
-        await _create_post(session, file_path="posts/hello.md", title="Hello", author="admin")
+        await _create_post(session, file_path="posts/hello/index.md", title="Hello", author="admin")
         await session.commit()
 
         result = await list_posts(session)
@@ -123,7 +123,7 @@ class TestListPostsAuthorDisplayName:
     async def test_fallback_for_deleted_user(self, session: AsyncSession) -> None:
         """Post by 'deleteduser' where no user exists returns 'deleteduser'."""
         await _create_post(
-            session, file_path="posts/orphan.md", title="Orphan", author="deleteduser"
+            session, file_path="posts/orphan/index.md", title="Orphan", author="deleteduser"
         )
         await session.commit()
 
@@ -135,7 +135,12 @@ class TestListPostsAuthorDisplayName:
     async def test_fallback_for_null_display_name(self, session: AsyncSession) -> None:
         """Post by 'nodisplay' where user has display_name=None returns 'nodisplay'."""
         await _create_user(session, username="nodisplay", display_name=None)
-        await _create_post(session, file_path="posts/plain.md", title="Plain", author="nodisplay")
+        await _create_post(
+            session,
+            file_path="posts/plain/index.md",
+            title="Plain",
+            author="nodisplay",
+        )
         await session.commit()
 
         result = await list_posts(session)
@@ -146,7 +151,7 @@ class TestListPostsAuthorDisplayName:
     async def test_filter_by_display_name(self, session: AsyncSession) -> None:
         """Filtering by author=John should match the display name, not the username."""
         await _create_user(session, username="admin", display_name="John Smith")
-        await _create_post(session, file_path="posts/a.md", title="Post A", author="admin")
+        await _create_post(session, file_path="posts/a/index.md", title="Post A", author="admin")
         await session.commit()
 
         # Should match "John" in display name
@@ -163,7 +168,12 @@ class TestListPostsAuthorDisplayName:
     async def test_filter_by_username_fallback(self, session: AsyncSession) -> None:
         """When user has no display name, filtering by username still works."""
         await _create_user(session, username="nodisplay", display_name=None)
-        await _create_post(session, file_path="posts/b.md", title="Post B", author="nodisplay")
+        await _create_post(
+            session,
+            file_path="posts/b/index.md",
+            title="Post B",
+            author="nodisplay",
+        )
         await session.commit()
 
         result = await list_posts(session, author="nodisplay")
@@ -175,8 +185,8 @@ class TestListPostsAuthorDisplayName:
         """Sorting by author should sort on the resolved display name."""
         await _create_user(session, username="alice", display_name="Zara")
         await _create_user(session, username="bob", display_name="Albert")
-        await _create_post(session, file_path="posts/p1.md", title="Post 1", author="alice")
-        await _create_post(session, file_path="posts/p2.md", title="Post 2", author="bob")
+        await _create_post(session, file_path="posts/p1/index.md", title="Post 1", author="alice")
+        await _create_post(session, file_path="posts/p2/index.md", title="Post 2", author="bob")
         await session.commit()
 
         # Sort ascending by author. Albert < Zara, so Post 2 first.
@@ -193,10 +203,10 @@ class TestGetPostAuthorDisplayName:
     async def test_resolves_display_name(self, session: AsyncSession) -> None:
         """get_post returns display_name for an existing user."""
         await _create_user(session, username="admin", display_name="John Smith")
-        await _create_post(session, file_path="posts/hello.md", title="Hello", author="admin")
+        await _create_post(session, file_path="posts/hello/index.md", title="Hello", author="admin")
         await session.commit()
 
-        result = await get_post(session, "posts/hello.md")
+        result = await get_post(session, "posts/hello/index.md")
         assert result is not None
         assert result.author == "John Smith"
 
@@ -204,11 +214,11 @@ class TestGetPostAuthorDisplayName:
     async def test_fallback_for_deleted_user(self, session: AsyncSession) -> None:
         """get_post returns raw username when user doesn't exist."""
         await _create_post(
-            session, file_path="posts/orphan.md", title="Orphan", author="deleteduser"
+            session, file_path="posts/orphan/index.md", title="Orphan", author="deleteduser"
         )
         await session.commit()
 
-        result = await get_post(session, "posts/orphan.md")
+        result = await get_post(session, "posts/orphan/index.md")
         assert result is not None
         assert result.author == "deleteduser"
 
@@ -216,10 +226,15 @@ class TestGetPostAuthorDisplayName:
     async def test_fallback_for_null_display_name(self, session: AsyncSession) -> None:
         """get_post returns username when user's display_name is None."""
         await _create_user(session, username="nodisplay", display_name=None)
-        await _create_post(session, file_path="posts/plain.md", title="Plain", author="nodisplay")
+        await _create_post(
+            session,
+            file_path="posts/plain/index.md",
+            title="Plain",
+            author="nodisplay",
+        )
         await session.commit()
 
-        result = await get_post(session, "posts/plain.md")
+        result = await get_post(session, "posts/plain/index.md")
         assert result is not None
         assert result.author == "nodisplay"
 
@@ -227,22 +242,22 @@ class TestGetPostAuthorDisplayName:
     async def test_draft_hidden_without_owner(self, session: AsyncSession) -> None:
         """get_post hides drafts when no draft_owner_username is given."""
         await _create_post(
-            session, file_path="posts/draft.md", title="Draft", author="admin", is_draft=True
+            session, file_path="posts/draft/index.md", title="Draft", author="admin", is_draft=True
         )
         await session.commit()
 
-        assert await get_post(session, "posts/draft.md") is None
+        assert await get_post(session, "posts/draft/index.md") is None
 
     @pytest.mark.asyncio
     async def test_draft_visible_to_owner(self, session: AsyncSession) -> None:
         """get_post returns draft when draft_owner_username matches author."""
         await _create_user(session, username="admin", display_name="Admin")
         await _create_post(
-            session, file_path="posts/draft.md", title="Draft", author="admin", is_draft=True
+            session, file_path="posts/draft/index.md", title="Draft", author="admin", is_draft=True
         )
         await session.commit()
 
-        result = await get_post(session, "posts/draft.md", draft_owner_username="admin")
+        result = await get_post(session, "posts/draft/index.md", draft_owner_username="admin")
         assert result is not None
         assert result.title == "Draft"
         assert result.author == "Admin"
@@ -251,11 +266,11 @@ class TestGetPostAuthorDisplayName:
     async def test_draft_hidden_from_wrong_user(self, session: AsyncSession) -> None:
         """get_post hides drafts from users who are not the author."""
         await _create_post(
-            session, file_path="posts/draft.md", title="Draft", author="alice", is_draft=True
+            session, file_path="posts/draft/index.md", title="Draft", author="alice", is_draft=True
         )
         await session.commit()
 
-        assert await get_post(session, "posts/draft.md", draft_owner_username="bob") is None
+        assert await get_post(session, "posts/draft/index.md", draft_owner_username="bob") is None
 
 
 class TestResolveAuthorDisplayName:
@@ -307,7 +322,7 @@ class TestNullAuthorInQueries:
     @pytest.mark.asyncio
     async def test_list_posts_with_null_author(self, session: AsyncSession) -> None:
         """list_posts handles PostCache.author=None gracefully."""
-        await _create_post(session, file_path="posts/no-author.md", title="No Author")
+        await _create_post(session, file_path="posts/no-author/index.md", title="No Author")
         await session.commit()
 
         result = await list_posts(session)
@@ -317,9 +332,9 @@ class TestNullAuthorInQueries:
     @pytest.mark.asyncio
     async def test_get_post_with_null_author(self, session: AsyncSession) -> None:
         """get_post handles PostCache.author=None gracefully."""
-        await _create_post(session, file_path="posts/no-author.md", title="No Author")
+        await _create_post(session, file_path="posts/no-author/index.md", title="No Author")
         await session.commit()
 
-        result = await get_post(session, "posts/no-author.md")
+        result = await get_post(session, "posts/no-author/index.md")
         assert result is not None
         assert result.author is None

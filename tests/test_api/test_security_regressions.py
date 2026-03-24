@@ -20,7 +20,9 @@ if TYPE_CHECKING:
 def app_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
     """Create application settings for security regression tests."""
     posts_dir = tmp_content_dir / "posts"
-    (posts_dir / "hello.md").write_text(
+    hello_post = posts_dir / "hello"
+    hello_post.mkdir()
+    (hello_post / "index.md").write_text(
         "---\n"
         "title: Hello World\n"
         "created_at: 2026-02-02 22:21:29.975359+00\n"
@@ -31,16 +33,18 @@ def app_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
         "Hello from fixture.\n",
         encoding="utf-8",
     )
-    (posts_dir / "admin-flat-draft.md").write_text(
+    admin_draft = posts_dir / "admin-draft"
+    admin_draft.mkdir()
+    (admin_draft / "index.md").write_text(
         "---\n"
-        "title: Admin Flat Draft\n"
+        "title: Admin Draft\n"
         "created_at: 2026-02-02 22:21:29.975359+00\n"
         "modified_at: 2026-02-02 22:21:29.975359+00\n"
         "author: admin\n"
         "labels: []\n"
         "draft: true\n"
         "---\n"
-        "Top secret legacy draft.\n",
+        "Top secret draft.\n",
         encoding="utf-8",
     )
     (tmp_content_dir / "labels.toml").write_text(
@@ -226,7 +230,7 @@ class TestCrosspostHistoryIsolation:
         admin_token = await _login(client, "admin", "admin123")
         trigger_resp = await client.post(
             "/api/crosspost/post",
-            json={"post_path": "posts/hello.md", "platforms": ["bluesky"]},
+            json={"post_path": "posts/hello/index.md", "platforms": ["bluesky"]},
             headers={"Authorization": f"Bearer {admin_token}"},
         )
         assert trigger_resp.status_code == 200
@@ -236,42 +240,40 @@ class TestCrosspostHistoryIsolation:
         await _register(client, "reader", "reader@test.com", "reader-password")
         reader_token = await _login(client, "reader", "reader-password")
         history_resp = await client.get(
-            "/api/crosspost/history/posts/hello.md",
+            "/api/crosspost/history/posts/hello/index.md",
             headers={"Authorization": f"Bearer {reader_token}"},
         )
         assert history_resp.status_code == 200
         assert history_resp.json()["items"] == []
 
 
-class TestFlatDraftContentVisibility:
+class TestDraftContentVisibility:
     @pytest.mark.asyncio
-    async def test_flat_draft_markdown_returns_404_for_unauthenticated(
+    async def test_draft_markdown_returns_404_for_unauthenticated(
         self, client: AsyncClient
     ) -> None:
-        resp = await client.get("/api/content/posts/admin-flat-draft.md")
+        resp = await client.get("/api/content/posts/admin-draft/index.md")
         assert resp.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_flat_draft_markdown_returns_404_for_wrong_user(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_draft_markdown_returns_404_for_wrong_user(self, client: AsyncClient) -> None:
         await _register(client, "reader2", "reader2@test.com", "reader2-password")
         reader_token = await _login(client, "reader2", "reader2-password")
         resp = await client.get(
-            "/api/content/posts/admin-flat-draft.md",
+            "/api/content/posts/admin-draft/index.md",
             headers={"Authorization": f"Bearer {reader_token}"},
         )
         assert resp.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_flat_draft_markdown_returns_200_for_author(self, client: AsyncClient) -> None:
+    async def test_draft_markdown_returns_200_for_author(self, client: AsyncClient) -> None:
         admin_token = await _login(client, "admin", "admin123")
         resp = await client.get(
-            "/api/content/posts/admin-flat-draft.md",
+            "/api/content/posts/admin-draft/index.md",
             headers={"Authorization": f"Bearer {admin_token}"},
         )
         assert resp.status_code == 200
-        assert b"Top secret legacy draft" in resp.content
+        assert b"Top secret draft" in resp.content
 
 
 class TestCrosspostDraftIsolation:
@@ -283,7 +285,7 @@ class TestCrosspostDraftIsolation:
         reader_token = await _login(client, "reader3", "reader3-password")
         resp = await client.post(
             "/api/crosspost/post",
-            json={"post_path": "posts/admin-flat-draft.md", "platforms": ["bluesky"]},
+            json={"post_path": "posts/admin-draft/index.md", "platforms": ["bluesky"]},
             headers={"Authorization": f"Bearer {reader_token}"},
         )
         assert resp.status_code == 404
@@ -311,17 +313,17 @@ class TestDraftDisplayNameImpersonation:
         listing_resp = await client.get("/api/posts", headers=headers)
         assert listing_resp.status_code == 200
         titles = [post["title"] for post in listing_resp.json()["posts"]]
-        assert "Admin Flat Draft" not in titles
+        assert "Admin Draft" not in titles
 
-        detail_resp = await client.get("/api/posts/posts/admin-flat-draft.md", headers=headers)
+        detail_resp = await client.get("/api/posts/posts/admin-draft/index.md", headers=headers)
         assert detail_resp.status_code == 404
 
-        content_resp = await client.get("/api/content/posts/admin-flat-draft.md", headers=headers)
+        content_resp = await client.get("/api/content/posts/admin-draft/index.md", headers=headers)
         assert content_resp.status_code == 404
 
         crosspost_resp = await client.post(
             "/api/crosspost/post",
-            json={"post_path": "posts/admin-flat-draft.md", "platforms": ["bluesky"]},
+            json={"post_path": "posts/admin-draft/index.md", "platforms": ["bluesky"]},
             headers=headers,
         )
         assert crosspost_resp.status_code == 404
@@ -347,7 +349,7 @@ class TestPostMutationAuthorization:
         assert create_resp.status_code == 403
 
         update_resp = await client.put(
-            "/api/posts/posts/hello.md",
+            "/api/posts/posts/hello/index.md",
             json={
                 "title": "Updated",
                 "body": "changed",
@@ -358,7 +360,7 @@ class TestPostMutationAuthorization:
         )
         assert update_resp.status_code == 403
 
-        delete_resp = await client.delete("/api/posts/posts/hello.md", headers=headers)
+        delete_resp = await client.delete("/api/posts/posts/hello/index.md", headers=headers)
         assert delete_resp.status_code == 403
 
     @pytest.mark.asyncio
@@ -394,13 +396,13 @@ class TestPostMutationAuthorization:
         assert upload_resp.status_code == 403
 
         assets_resp = await client.post(
-            "/api/posts/posts/hello.md/assets",
+            "/api/posts/posts/hello/index.md/assets",
             files={"files": ("a.txt", b"x", "text/plain")},
             headers=headers,
         )
         assert assets_resp.status_code == 403
 
-        edit_resp = await client.get("/api/posts/posts/hello.md/edit", headers=headers)
+        edit_resp = await client.get("/api/posts/posts/hello/index.md/edit", headers=headers)
         assert edit_resp.status_code == 403
 
 
@@ -667,7 +669,9 @@ class TestRegistrationDisabled:
     @pytest.fixture
     def disabled_settings(self, tmp_content_dir: Path, tmp_path: Path) -> Settings:
         posts_dir = tmp_content_dir / "posts"
-        (posts_dir / "hello.md").write_text("# Hello\n", encoding="utf-8")
+        hello_post = posts_dir / "hello"
+        hello_post.mkdir()
+        (hello_post / "index.md").write_text("# Hello\n", encoding="utf-8")
         (tmp_content_dir / "labels.toml").write_text("[labels]\n", encoding="utf-8")
         db_path = tmp_path / "test_disabled.db"
         return Settings(
@@ -1060,7 +1064,9 @@ class TestTrustedProxyForwarding:
     def trusted_proxy_settings(self, tmp_content_dir: Path, tmp_path: Path) -> Settings:
         """Settings with 127.0.0.1 as a trusted proxy."""
         posts_dir = tmp_content_dir / "posts"
-        (posts_dir / "hello.md").write_text(
+        hello_post = posts_dir / "hello"
+        hello_post.mkdir()
+        (hello_post / "index.md").write_text(
             "---\n"
             "title: Hello World\n"
             "created_at: 2026-02-02 22:21:29.975359+00\n"
@@ -1131,7 +1137,9 @@ class TestTrustedProxyForwarding:
     ) -> None:
         """CIDR-based trusted proxy entries correctly separate forwarded client IPs."""
         posts_dir = tmp_content_dir / "posts"
-        (posts_dir / "hello.md").write_text(
+        hello_post = posts_dir / "hello"
+        hello_post.mkdir()
+        (hello_post / "index.md").write_text(
             "---\n"
             "title: Hello World\n"
             "created_at: 2026-02-02 22:21:29.975359+00\n"

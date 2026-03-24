@@ -24,11 +24,15 @@ def app_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
     """Create settings for test app."""
     # Add a sample post
     posts_dir = tmp_content_dir / "posts"
-    (posts_dir / "hello.md").write_text(
+    hello_post = posts_dir / "hello"
+    hello_post.mkdir()
+    (hello_post / "index.md").write_text(
         "---\ncreated_at: 2026-02-02 22:21:29.975359+00\n"
         "author: admin\nlabels: ['#swe']\n---\n# Hello World\n\nTest content.\n"
     )
-    (posts_dir / "no-author.md").write_text(
+    no_author_post = posts_dir / "no-author"
+    no_author_post.mkdir()
+    (no_author_post / "index.md").write_text(
         "---\ncreated_at: 2026-02-03 10:00:00+00\n"
         "labels: []\n---\n# No Author Post\n\nPost without author field.\n"
     )
@@ -100,7 +104,7 @@ class TestPosts:
 
     @pytest.mark.asyncio
     async def test_get_post(self, client: AsyncClient) -> None:
-        resp = await client.get("/api/posts/posts/hello.md")
+        resp = await client.get("/api/posts/posts/hello/index.md")
         assert resp.status_code == 200
         data = resp.json()
         assert data["title"] == "Hello World"
@@ -108,7 +112,7 @@ class TestPosts:
 
     @pytest.mark.asyncio
     async def test_get_nonexistent_post(self, client: AsyncClient) -> None:
-        resp = await client.get("/api/posts/posts/nope.md")
+        resp = await client.get("/api/posts/posts/nope/index.md")
         assert resp.status_code == 404
 
     @pytest.mark.asyncio
@@ -372,7 +376,7 @@ class TestSync:
         token = login_resp.json()["access_token"]
 
         resp = await client.get(
-            "/api/sync/download/posts/hello.md",
+            "/api/sync/download/posts/hello/index.md",
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 200
@@ -427,14 +431,14 @@ class TestSync:
             "/api/sync/commit",
             data={"metadata": metadata},
             files=[
-                ("files", ("posts/synced-new.md", io.BytesIO(content), "text/plain")),
+                ("files", ("posts/synced-new/index.md", io.BytesIO(content), "text/plain")),
             ],
             headers=headers,
         )
         assert resp.status_code == 200
 
         # Verify the post was cached with normalized timestamps
-        resp = await client.get("/api/posts/posts/synced-new.md")
+        resp = await client.get("/api/posts/posts/synced-new/index.md")
         assert resp.status_code == 200
         data = resp.json()
         assert data["title"] == "New Synced Post"
@@ -457,7 +461,7 @@ class TestSync:
             "/api/sync/commit",
             data={"metadata": metadata},
             files=[
-                ("files", ("posts/custom-fields.md", io.BytesIO(content), "text/plain")),
+                ("files", ("posts/custom-fields/index.md", io.BytesIO(content), "text/plain")),
             ],
             headers=headers,
         )
@@ -491,10 +495,10 @@ class TestSync:
         token = login_resp.json()["access_token"]
         headers = {"Authorization": f"Bearer {token}"}
 
-        before_resp = await client.get("/api/sync/download/posts/hello.md", headers=headers)
+        before_resp = await client.get("/api/sync/download/posts/hello/index.md", headers=headers)
         assert before_resp.status_code == 200
 
-        metadata = json.dumps({"deleted_files": ["posts/hello.md"]})
+        metadata = json.dumps({"deleted_files": ["posts/hello/index.md"]})
         commit_resp = await client.post(
             "/api/sync/commit",
             data={"metadata": metadata},
@@ -502,7 +506,7 @@ class TestSync:
         )
         assert commit_resp.status_code == 200
 
-        after_resp = await client.get("/api/sync/download/posts/hello.md", headers=headers)
+        after_resp = await client.get("/api/sync/download/posts/hello/index.md", headers=headers)
         assert after_resp.status_code == 404
 
 
@@ -557,7 +561,7 @@ class TestCrosspost:
         )
         token = login_resp.json()["access_token"]
         resp = await client.get(
-            "/api/crosspost/history/posts/hello.md",
+            "/api/crosspost/history/posts/hello/index.md",
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 200
@@ -677,7 +681,7 @@ class TestPostCRUD:
         token = login_resp.json()["access_token"]
 
         resp = await client.put(
-            "/api/posts/posts/hello.md",
+            "/api/posts/posts/hello/index.md",
             json={
                 "title": "Hello World Updated",
                 "body": "Updated content.\n",
@@ -698,7 +702,7 @@ class TestPostCRUD:
         token = login_resp.json()["access_token"]
 
         resp = await client.put(
-            "/api/posts/posts/nope.md",
+            "/api/posts/posts/nope/index.md",
             json={
                 "title": "Nope",
                 "body": "Content.\n",
@@ -745,7 +749,7 @@ class TestPostCRUD:
         token = login_resp.json()["access_token"]
 
         resp = await client.delete(
-            "/api/posts/posts/nope.md",
+            "/api/posts/posts/nope/index.md",
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 404
@@ -759,12 +763,12 @@ class TestPostCRUD:
         token = login_resp.json()["access_token"]
 
         resp = await client.get(
-            "/api/posts/posts/hello.md/edit",
+            "/api/posts/posts/hello/index.md/edit",
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 200
         data = resp.json()
-        assert data["file_path"] == "posts/hello.md"
+        assert data["file_path"] == "posts/hello/index.md"
         assert data["title"] == "Hello World"
         assert "# Hello World" not in data["body"]
         assert data["labels"] == ["swe"]
@@ -774,7 +778,7 @@ class TestPostCRUD:
 
     @pytest.mark.asyncio
     async def test_get_post_for_edit_requires_auth(self, client: AsyncClient) -> None:
-        resp = await client.get("/api/posts/posts/hello.md/edit")
+        resp = await client.get("/api/posts/posts/hello/index.md/edit")
         assert resp.status_code == 401
 
     @pytest.mark.asyncio
@@ -786,7 +790,7 @@ class TestPostCRUD:
         token = login_resp.json()["access_token"]
 
         resp = await client.get(
-            "/api/posts/posts/nonexistent.md/edit",
+            "/api/posts/posts/nonexistent/index.md/edit",
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 404
@@ -875,7 +879,7 @@ class TestPostCRUD:
         )
         token = login_resp.json()["access_token"]
         resp = await client.get(
-            "/api/posts/posts/hello.md/edit",
+            "/api/posts/posts/hello/index.md/edit",
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 200
@@ -890,7 +894,7 @@ class TestPostCRUD:
         )
         token = login_resp.json()["access_token"]
         resp = await client.put(
-            "/api/posts/posts/hello.md",
+            "/api/posts/posts/hello/index.md",
             json={
                 "title": "Updated Title",
                 "body": "Updated content.",
@@ -936,7 +940,7 @@ class TestPostCRUD:
         token = login_resp.json()["access_token"]
 
         resp = await client.put(
-            "/api/posts/posts/hello.md",
+            "/api/posts/posts/hello/index.md",
             json={
                 "title": "Hello World Structured",
                 "body": "Updated structured content.\n",
@@ -959,7 +963,7 @@ class TestPostCRUD:
         token = login_resp.json()["access_token"]
 
         resp = await client.put(
-            "/api/posts/posts/no-author.md",
+            "/api/posts/posts/no-author/index.md",
             json={
                 "title": "No Author Post",
                 "body": "Edited content.",
@@ -1083,7 +1087,7 @@ class TestPostCRUD:
 
         await client.post("/api/labels", json={"id": "cache-update"}, headers=headers)
         update_resp = await client.put(
-            "/api/posts/posts/hello.md",
+            "/api/posts/posts/hello/index.md",
             json={
                 "title": "Hello World",
                 "body": "Retagged.\n",
@@ -1097,12 +1101,12 @@ class TestPostCRUD:
         new_label_resp = await client.get("/api/posts", params={"labels": "cache-update"})
         assert new_label_resp.status_code == 200
         new_label_paths = [post["file_path"] for post in new_label_resp.json()["posts"]]
-        assert "posts/hello.md" in new_label_paths
+        assert "posts/hello/index.md" in new_label_paths
 
         old_label_resp = await client.get("/api/posts", params={"labels": "swe"})
         assert old_label_resp.status_code == 200
         old_label_paths = [post["file_path"] for post in old_label_resp.json()["posts"]]
-        assert "posts/hello.md" not in old_label_paths
+        assert "posts/hello/index.md" not in old_label_paths
 
 
 class TestLabelCRUD:
@@ -1510,7 +1514,7 @@ class TestSearch:
         token = login_resp.json()["access_token"]
 
         update_resp = await client.put(
-            "/api/posts/posts/hello.md",
+            "/api/posts/posts/hello/index.md",
             json={
                 "title": "Hello World",
                 "body": "uniquekeyupdate654\n",
@@ -1524,7 +1528,7 @@ class TestSearch:
         search_resp = await client.get("/api/posts/search", params={"q": "uniquekeyupdate654"})
         assert search_resp.status_code == 200
         file_paths = [result["file_path"] for result in search_resp.json()]
-        assert "posts/hello.md" in file_paths
+        assert "posts/hello/index.md" in file_paths
 
     @pytest.mark.asyncio
     async def test_search_special_characters(self, client: AsyncClient) -> None:
@@ -2421,10 +2425,13 @@ class TestSorting:
 class TestSlugResolution:
     """Slug-based post resolution returns the same post as full file_path."""
 
-    async def test_bare_slug_does_not_resolve_flat_file(self, client: AsyncClient) -> None:
-        """GET /api/posts/<slug> only resolves directory-backed posts."""
+    async def test_bare_slug_resolves_canonical_post(self, client: AsyncClient) -> None:
+        """GET /api/posts/<slug> resolves canonical directory-backed posts."""
         resp = await client.get("/api/posts/hello")
-        assert resp.status_code == 404
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["title"] == "Hello World"
+        assert data["file_path"] == "posts/hello/index.md"
 
     async def test_bare_slug_resolves_directory_backed(self, client: AsyncClient) -> None:
         """GET /api/posts/<slug> resolves a directory-backed post."""

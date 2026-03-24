@@ -37,19 +37,19 @@ class TestNormalizeNewPost:
         """File with no front matter gets created_at and modified_at filled."""
         content_dir = tmp_path / "content"
         (content_dir / "posts").mkdir(parents=True)
-        _write_post(content_dir, "posts/hello.md", "---\n---\n# Hello\n")
+        _write_post(content_dir, "posts/hello/index.md", "---\n---\n# Hello\n")
 
         with patch("backend.services.sync_service.now_utc") as mock_now:
             from datetime import UTC, datetime
 
             mock_now.return_value = datetime(2026, 2, 18, 12, 0, 0, tzinfo=UTC)
             warnings = normalize_post_frontmatter(
-                uploaded_files=["posts/hello.md"],
+                uploaded_files=["posts/hello/index.md"],
                 old_manifest={},
                 content_dir=content_dir,
             )
 
-        post = _read_post(content_dir, "posts/hello.md")
+        post = _read_post(content_dir, "posts/hello/index.md")
         assert post["created_at"] == FROZEN_NOW
         assert post["modified_at"] == FROZEN_NOW
         assert warnings == []
@@ -58,19 +58,19 @@ class TestNormalizeNewPost:
         """File with author: Alice keeps Alice, gets timestamps filled."""
         content_dir = tmp_path / "content"
         (content_dir / "posts").mkdir(parents=True)
-        _write_post(content_dir, "posts/hello.md", "---\nauthor: Alice\n---\n# Hello\n")
+        _write_post(content_dir, "posts/hello/index.md", "---\nauthor: Alice\n---\n# Hello\n")
 
         with patch("backend.services.sync_service.now_utc") as mock_now:
             from datetime import UTC, datetime
 
             mock_now.return_value = datetime(2026, 2, 18, 12, 0, 0, tzinfo=UTC)
             normalize_post_frontmatter(
-                uploaded_files=["posts/hello.md"],
+                uploaded_files=["posts/hello/index.md"],
                 old_manifest={},
                 content_dir=content_dir,
             )
 
-        post = _read_post(content_dir, "posts/hello.md")
+        post = _read_post(content_dir, "posts/hello/index.md")
         assert post["author"] == "Alice"
         assert post["created_at"] == FROZEN_NOW
         assert post["modified_at"] == FROZEN_NOW
@@ -79,95 +79,95 @@ class TestNormalizeNewPost:
         """Both timestamps are the same for new posts."""
         content_dir = tmp_path / "content"
         (content_dir / "posts").mkdir(parents=True)
-        _write_post(content_dir, "posts/hello.md", "---\n---\n# Hello\n")
+        _write_post(content_dir, "posts/hello/index.md", "---\n---\n# Hello\n")
 
         with patch("backend.services.sync_service.now_utc") as mock_now:
             from datetime import UTC, datetime
 
             mock_now.return_value = datetime(2026, 2, 18, 12, 0, 0, tzinfo=UTC)
             normalize_post_frontmatter(
-                uploaded_files=["posts/hello.md"],
+                uploaded_files=["posts/hello/index.md"],
                 old_manifest={},
                 content_dir=content_dir,
             )
 
-        post = _read_post(content_dir, "posts/hello.md")
+        post = _read_post(content_dir, "posts/hello/index.md")
         assert post["created_at"] == post["modified_at"]
 
     def test_default_labels_empty_not_added(self, tmp_path: Path) -> None:
         """Labels field not added if not present (matches serialize_post convention)."""
         content_dir = tmp_path / "content"
         (content_dir / "posts").mkdir(parents=True)
-        _write_post(content_dir, "posts/hello.md", "---\n---\n# Hello\n")
+        _write_post(content_dir, "posts/hello/index.md", "---\n---\n# Hello\n")
 
         with patch("backend.services.sync_service.now_utc") as mock_now:
             from datetime import UTC, datetime
 
             mock_now.return_value = datetime(2026, 2, 18, 12, 0, 0, tzinfo=UTC)
             normalize_post_frontmatter(
-                uploaded_files=["posts/hello.md"],
+                uploaded_files=["posts/hello/index.md"],
                 old_manifest={},
                 content_dir=content_dir,
             )
 
-        post = _read_post(content_dir, "posts/hello.md")
+        post = _read_post(content_dir, "posts/hello/index.md")
         assert "labels" not in post.metadata
 
     def test_default_draft_false_not_added(self, tmp_path: Path) -> None:
         """Draft field not added if not present (matches convention)."""
         content_dir = tmp_path / "content"
         (content_dir / "posts").mkdir(parents=True)
-        _write_post(content_dir, "posts/hello.md", "---\n---\n# Hello\n")
+        _write_post(content_dir, "posts/hello/index.md", "---\n---\n# Hello\n")
 
         with patch("backend.services.sync_service.now_utc") as mock_now:
             from datetime import UTC, datetime
 
             mock_now.return_value = datetime(2026, 2, 18, 12, 0, 0, tzinfo=UTC)
             normalize_post_frontmatter(
-                uploaded_files=["posts/hello.md"],
+                uploaded_files=["posts/hello/index.md"],
                 old_manifest={},
                 content_dir=content_dir,
             )
 
-        post = _read_post(content_dir, "posts/hello.md")
+        post = _read_post(content_dir, "posts/hello/index.md")
         assert "draft" not in post.metadata
 
     def test_no_author_backfill_for_new_posts(self, tmp_path: Path) -> None:
         """A synced post with no author field remains without an author field."""
         content_dir = tmp_path / "content"
         (content_dir / "posts").mkdir(parents=True)
-        _write_post(content_dir, "posts/hello.md", "---\n---\n# Hello\n")
+        _write_post(content_dir, "posts/hello/index.md", "---\n---\n# Hello\n")
 
         with patch("backend.services.sync_service.now_utc") as mock_now:
             from datetime import UTC, datetime
 
             mock_now.return_value = datetime(2026, 2, 18, 12, 0, 0, tzinfo=UTC)
             normalize_post_frontmatter(
-                uploaded_files=["posts/hello.md"],
+                uploaded_files=["posts/hello/index.md"],
                 old_manifest={},
                 content_dir=content_dir,
             )
 
-        post = _read_post(content_dir, "posts/hello.md")
+        post = _read_post(content_dir, "posts/hello/index.md")
         assert "author" not in post.metadata
 
     def test_invalid_created_at_is_replaced_with_current_time(self, tmp_path: Path) -> None:
         """Malformed created_at should not crash normalization for new posts."""
         content_dir = tmp_path / "content"
         (content_dir / "posts").mkdir(parents=True)
-        _write_post(content_dir, "posts/hello.md", "---\ncreated_at: ':'\n---\n# Hello\n")
+        _write_post(content_dir, "posts/hello/index.md", "---\ncreated_at: ':'\n---\n# Hello\n")
 
         with patch("backend.services.sync_service.now_utc") as mock_now:
             from datetime import UTC, datetime
 
             mock_now.return_value = datetime(2026, 2, 18, 12, 0, 0, tzinfo=UTC)
             warnings = normalize_post_frontmatter(
-                uploaded_files=["posts/hello.md"],
+                uploaded_files=["posts/hello/index.md"],
                 old_manifest={},
                 content_dir=content_dir,
             )
 
-        post = _read_post(content_dir, "posts/hello.md")
+        post = _read_post(content_dir, "posts/hello/index.md")
         assert post["created_at"] == FROZEN_NOW
         assert any("invalid created_at value" in warning for warning in warnings)
 
@@ -181,25 +181,25 @@ class TestNormalizeEditedPost:
         (content_dir / "posts").mkdir(parents=True)
         _write_post(
             content_dir,
-            "posts/hello.md",
+            "posts/hello/index.md",
             "---\ncreated_at: 2026-01-01 10:00:00.000000+00:00\n"
             "modified_at: 2026-01-01 10:00:00.000000+00:00\n"
             "author: admin\n---\n# Hello\n",
         )
 
-        old_manifest = {"posts/hello.md": _entry("posts/hello.md")}
+        old_manifest = {"posts/hello/index.md": _entry("posts/hello/index.md")}
 
         with patch("backend.services.sync_service.now_utc") as mock_now:
             from datetime import UTC, datetime
 
             mock_now.return_value = datetime(2026, 2, 18, 12, 0, 0, tzinfo=UTC)
             normalize_post_frontmatter(
-                uploaded_files=["posts/hello.md"],
+                uploaded_files=["posts/hello/index.md"],
                 old_manifest=old_manifest,
                 content_dir=content_dir,
             )
 
-        post = _read_post(content_dir, "posts/hello.md")
+        post = _read_post(content_dir, "posts/hello/index.md")
         assert post["modified_at"] == FROZEN_NOW
         assert post["created_at"] == "2026-01-01 10:00:00.000000+0000"
 
@@ -209,23 +209,23 @@ class TestNormalizeEditedPost:
         (content_dir / "posts").mkdir(parents=True)
         _write_post(
             content_dir,
-            "posts/hello.md",
+            "posts/hello/index.md",
             "---\nauthor: Alice\ncreated_at: 2026-01-01 10:00:00.000000+00:00\n---\n# Hello\n",
         )
 
-        old_manifest = {"posts/hello.md": _entry("posts/hello.md")}
+        old_manifest = {"posts/hello/index.md": _entry("posts/hello/index.md")}
 
         with patch("backend.services.sync_service.now_utc") as mock_now:
             from datetime import UTC, datetime
 
             mock_now.return_value = datetime(2026, 2, 18, 12, 0, 0, tzinfo=UTC)
             normalize_post_frontmatter(
-                uploaded_files=["posts/hello.md"],
+                uploaded_files=["posts/hello/index.md"],
                 old_manifest=old_manifest,
                 content_dir=content_dir,
             )
 
-        post = _read_post(content_dir, "posts/hello.md")
+        post = _read_post(content_dir, "posts/hello/index.md")
         assert post["author"] == "Alice"
 
     def test_edit_fills_missing_created_at(self, tmp_path: Path) -> None:
@@ -234,23 +234,23 @@ class TestNormalizeEditedPost:
         (content_dir / "posts").mkdir(parents=True)
         _write_post(
             content_dir,
-            "posts/hello.md",
+            "posts/hello/index.md",
             "---\nauthor: admin\n---\n# Hello\n",
         )
 
-        old_manifest = {"posts/hello.md": _entry("posts/hello.md")}
+        old_manifest = {"posts/hello/index.md": _entry("posts/hello/index.md")}
 
         with patch("backend.services.sync_service.now_utc") as mock_now:
             from datetime import UTC, datetime
 
             mock_now.return_value = datetime(2026, 2, 18, 12, 0, 0, tzinfo=UTC)
             normalize_post_frontmatter(
-                uploaded_files=["posts/hello.md"],
+                uploaded_files=["posts/hello/index.md"],
                 old_manifest=old_manifest,
                 content_dir=content_dir,
             )
 
-        post = _read_post(content_dir, "posts/hello.md")
+        post = _read_post(content_dir, "posts/hello/index.md")
         assert post["created_at"] == FROZEN_NOW
 
     def test_edit_invalid_created_at_is_replaced(self, tmp_path: Path) -> None:
@@ -259,23 +259,23 @@ class TestNormalizeEditedPost:
         (content_dir / "posts").mkdir(parents=True)
         _write_post(
             content_dir,
-            "posts/hello.md",
+            "posts/hello/index.md",
             "---\ncreated_at: 0\nauthor: admin\n---\n# Hello\n",
         )
 
-        old_manifest = {"posts/hello.md": _entry("posts/hello.md")}
+        old_manifest = {"posts/hello/index.md": _entry("posts/hello/index.md")}
 
         with patch("backend.services.sync_service.now_utc") as mock_now:
             from datetime import UTC, datetime
 
             mock_now.return_value = datetime(2026, 2, 18, 12, 0, 0, tzinfo=UTC)
             warnings = normalize_post_frontmatter(
-                uploaded_files=["posts/hello.md"],
+                uploaded_files=["posts/hello/index.md"],
                 old_manifest=old_manifest,
                 content_dir=content_dir,
             )
 
-        post = _read_post(content_dir, "posts/hello.md")
+        post = _read_post(content_dir, "posts/hello/index.md")
         assert post["created_at"] == FROZEN_NOW
         assert post["modified_at"] == FROZEN_NOW
         assert any("invalid created_at value" in warning for warning in warnings)
@@ -290,7 +290,7 @@ class TestNormalizeUnrecognizedFields:
         (content_dir / "posts").mkdir(parents=True)
         _write_post(
             content_dir,
-            "posts/hello.md",
+            "posts/hello/index.md",
             "---\ncustom_field: hello\ntags:\n  - a\n  - b\n---\n# Hello\n",
         )
 
@@ -299,7 +299,7 @@ class TestNormalizeUnrecognizedFields:
 
             mock_now.return_value = datetime(2026, 2, 18, 12, 0, 0, tzinfo=UTC)
             warnings = normalize_post_frontmatter(
-                uploaded_files=["posts/hello.md"],
+                uploaded_files=["posts/hello/index.md"],
                 old_manifest={},
                 content_dir=content_dir,
             )
@@ -314,7 +314,7 @@ class TestNormalizeUnrecognizedFields:
         (content_dir / "posts").mkdir(parents=True)
         _write_post(
             content_dir,
-            "posts/hello.md",
+            "posts/hello/index.md",
             "---\ncustom_field: hello\n---\n# Hello\n",
         )
 
@@ -323,12 +323,12 @@ class TestNormalizeUnrecognizedFields:
 
             mock_now.return_value = datetime(2026, 2, 18, 12, 0, 0, tzinfo=UTC)
             normalize_post_frontmatter(
-                uploaded_files=["posts/hello.md"],
+                uploaded_files=["posts/hello/index.md"],
                 old_manifest={},
                 content_dir=content_dir,
             )
 
-        post = _read_post(content_dir, "posts/hello.md")
+        post = _read_post(content_dir, "posts/hello/index.md")
         assert post["custom_field"] == "hello"
 
 
@@ -339,19 +339,19 @@ class TestNormalizeTitleBackfill:
         """Post without title in front matter gets it from first heading."""
         content_dir = tmp_path / "content"
         (content_dir / "posts").mkdir(parents=True)
-        _write_post(content_dir, "posts/hello.md", "---\n---\n# My Post Title\n\nContent.\n")
+        _write_post(content_dir, "posts/hello/index.md", "---\n---\n# My Post Title\n\nContent.\n")
 
         with patch("backend.services.sync_service.now_utc") as mock_now:
             from datetime import UTC, datetime
 
             mock_now.return_value = datetime(2026, 2, 18, 12, 0, 0, tzinfo=UTC)
             normalize_post_frontmatter(
-                uploaded_files=["posts/hello.md"],
+                uploaded_files=["posts/hello/index.md"],
                 old_manifest={},
                 content_dir=content_dir,
             )
 
-        post = _read_post(content_dir, "posts/hello.md")
+        post = _read_post(content_dir, "posts/hello/index.md")
         assert post["title"] == "My Post Title"
         assert not post.content.lstrip().startswith("# ")
 
@@ -361,7 +361,7 @@ class TestNormalizeTitleBackfill:
         (content_dir / "posts").mkdir(parents=True)
         _write_post(
             content_dir,
-            "posts/hello.md",
+            "posts/hello/index.md",
             "---\ntitle: Explicit Title\n---\n\nContent.\n",
         )
 
@@ -370,31 +370,31 @@ class TestNormalizeTitleBackfill:
 
             mock_now.return_value = datetime(2026, 2, 18, 12, 0, 0, tzinfo=UTC)
             normalize_post_frontmatter(
-                uploaded_files=["posts/hello.md"],
+                uploaded_files=["posts/hello/index.md"],
                 old_manifest={},
                 content_dir=content_dir,
             )
 
-        post = _read_post(content_dir, "posts/hello.md")
+        post = _read_post(content_dir, "posts/hello/index.md")
         assert post["title"] == "Explicit Title"
 
     def test_title_from_filename_when_no_heading(self, tmp_path: Path) -> None:
         """Post without title or heading gets title derived from filename."""
         content_dir = tmp_path / "content"
         (content_dir / "posts").mkdir(parents=True)
-        _write_post(content_dir, "posts/my-cool-post.md", "---\n---\nJust content.\n")
+        _write_post(content_dir, "posts/my-cool-post/index.md", "---\n---\nJust content.\n")
 
         with patch("backend.services.sync_service.now_utc") as mock_now:
             from datetime import UTC, datetime
 
             mock_now.return_value = datetime(2026, 2, 18, 12, 0, 0, tzinfo=UTC)
             normalize_post_frontmatter(
-                uploaded_files=["posts/my-cool-post.md"],
+                uploaded_files=["posts/my-cool-post/index.md"],
                 old_manifest={},
                 content_dir=content_dir,
             )
 
-        post = _read_post(content_dir, "posts/my-cool-post.md")
+        post = _read_post(content_dir, "posts/my-cool-post/index.md")
         assert post["title"] == "My Cool Post"
 
     def test_title_backfill_on_edited_post(self, tmp_path: Path) -> None:
@@ -403,23 +403,23 @@ class TestNormalizeTitleBackfill:
         (content_dir / "posts").mkdir(parents=True)
         _write_post(
             content_dir,
-            "posts/hello.md",
+            "posts/hello/index.md",
             "---\ncreated_at: 2026-01-01 10:00:00.000000+00:00\n"
             "author: admin\n---\n# Edited Title\n\nContent.\n",
         )
-        old_manifest = {"posts/hello.md": _entry("posts/hello.md")}
+        old_manifest = {"posts/hello/index.md": _entry("posts/hello/index.md")}
 
         with patch("backend.services.sync_service.now_utc") as mock_now:
             from datetime import UTC, datetime
 
             mock_now.return_value = datetime(2026, 2, 18, 12, 0, 0, tzinfo=UTC)
             normalize_post_frontmatter(
-                uploaded_files=["posts/hello.md"],
+                uploaded_files=["posts/hello/index.md"],
                 old_manifest=old_manifest,
                 content_dir=content_dir,
             )
 
-        post = _read_post(content_dir, "posts/hello.md")
+        post = _read_post(content_dir, "posts/hello/index.md")
         assert post["title"] == "Edited Title"
         assert not post.content.lstrip().startswith("# ")
 
@@ -429,7 +429,7 @@ class TestNormalizeTitleBackfill:
         (content_dir / "posts").mkdir(parents=True)
         _write_post(
             content_dir,
-            "posts/hello.md",
+            "posts/hello/index.md",
             "---\ntitle: ''\n---\n# Real Title\n\nContent.\n",
         )
 
@@ -438,12 +438,12 @@ class TestNormalizeTitleBackfill:
 
             mock_now.return_value = datetime(2026, 2, 18, 12, 0, 0, tzinfo=UTC)
             normalize_post_frontmatter(
-                uploaded_files=["posts/hello.md"],
+                uploaded_files=["posts/hello/index.md"],
                 old_manifest={},
                 content_dir=content_dir,
             )
 
-        post = _read_post(content_dir, "posts/hello.md")
+        post = _read_post(content_dir, "posts/hello/index.md")
         assert post["title"] == "Real Title"
         assert not post.content.lstrip().startswith("# ")
 
@@ -489,7 +489,7 @@ class TestNormalizeSkipNonPosts:
         (content_dir / "posts").mkdir(parents=True)
 
         warnings = normalize_post_frontmatter(
-            uploaded_files=["posts/missing.md"],
+            uploaded_files=["posts/missing/index.md"],
             old_manifest={},
             content_dir=content_dir,
         )

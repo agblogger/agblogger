@@ -247,10 +247,12 @@ class TestScanContentFiles:
     def test_excludes_dot_files_in_subdirectories(self, tmp_path: Path) -> None:
         sub = tmp_path / "posts"
         sub.mkdir()
-        (sub / "post.md").write_text("hello")
+        post_dir = sub / "post"
+        post_dir.mkdir()
+        (post_dir / "index.md").write_text("hello")
         (sub / ".hidden").write_text("secret")
         entries = scan_content_files(tmp_path)
-        assert "posts/post.md" in entries
+        assert "posts/post/index.md" in entries
         assert "posts/.hidden" not in entries
 
 

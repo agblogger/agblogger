@@ -20,6 +20,7 @@ from backend.filesystem.toml_manager import (
     parse_labels_config,
     parse_site_config,
 )
+from backend.utils.slug import is_directory_post_path
 
 logger = logging.getLogger(__name__)
 
@@ -34,11 +35,15 @@ def hash_content(content: str | bytes) -> str:
 
 
 def discover_posts(content_dir: Path) -> list[Path]:
-    """Recursively discover all markdown files under content/posts/."""
+    """Recursively discover canonical directory-backed post files."""
     posts_dir = content_dir / "posts"
     if not posts_dir.exists():
         return []
-    return sorted(posts_dir.rglob("*.md"))
+    return sorted(
+        path
+        for path in posts_dir.rglob("index.md")
+        if is_directory_post_path(str(path.relative_to(content_dir)))
+    )
 
 
 @dataclass
@@ -137,6 +142,9 @@ class ContentManager:
 
     def read_post(self, rel_path: str) -> PostData | None:
         """Read a single post by relative path."""
+        if not is_directory_post_path(rel_path):
+            logger.warning("Rejected unsupported post path %s", rel_path)
+            return None
         full_path = self._validate_path(rel_path)
         if not full_path.exists() or not full_path.is_file():
             return None
@@ -175,6 +183,8 @@ class ContentManager:
         """
         from backend.filesystem.frontmatter import serialize_post
 
+        if not is_directory_post_path(rel_path):
+            raise ValueError(f"Unsupported post path: {rel_path}")
         full_path = self._validate_path(rel_path)
         try:
             full_path.parent.mkdir(parents=True, exist_ok=True)
@@ -195,12 +205,16 @@ class ContentManager:
         """
         import shutil
 
+        if not is_directory_post_path(rel_path):
+            logger.warning("Rejected delete for unsupported post path %s", rel_path)
+            return False
+
         full_path = self._validate_path(rel_path)
         if not full_path.exists():
             return False
 
         try:
-            if delete_assets and full_path.name == "index.md":
+            if delete_assets:
                 # Use the non-resolved path so we can detect if the directory
                 # itself is a symlink (resolve() in _validate_path follows symlinks).
                 raw_post_dir: Path = (self.content_dir / rel_path).parent

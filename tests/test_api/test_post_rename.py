@@ -256,46 +256,6 @@ class TestPostRename:
         assert "Accessible content." in resp.text
 
     @pytest.mark.asyncio
-    async def test_no_rename_for_flat_file_posts(
-        self, client: AsyncClient, app_settings: Settings
-    ) -> None:
-        """Flat file posts (not ending in /index.md) should not be renamed."""
-        # Create a flat file post directly on disk
-        posts_dir = app_settings.content_dir / "posts"
-        flat_post = posts_dir / "flat-post.md"
-        flat_post.write_text(
-            "---\ntitle: Flat Post\ncreated_at: 2026-02-02 22:21:29+00\n"
-            "author: admin\nlabels: []\n---\nContent.\n"
-        )
-
-        # Rebuild cache so the post is indexed
-        from backend.database import create_engine
-        from backend.filesystem.content_manager import ContentManager
-        from backend.services.cache_service import rebuild_cache
-
-        engine, session_factory = create_engine(app_settings)
-        cm = ContentManager(content_dir=app_settings.content_dir)
-        await rebuild_cache(session_factory, cm)
-        await engine.dispose()
-
-        token = await _login(client)
-
-        # Update the flat post with a new title - it should NOT rename
-        resp = await client.put(
-            "/api/posts/posts/flat-post.md",
-            json={
-                "title": "Renamed Flat Post",
-                "body": "Content.\n",
-                "labels": [],
-                "is_draft": False,
-            },
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        assert resp.status_code == 200
-        # File path should remain unchanged for flat files
-        assert resp.json()["file_path"] == "posts/flat-post.md"
-
-    @pytest.mark.asyncio
     async def test_rename_collision_appends_suffix(
         self, client: AsyncClient, app_settings: Settings
     ) -> None:

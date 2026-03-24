@@ -36,7 +36,9 @@ def _get_session_factory(client: AsyncClient) -> async_sessionmaker[Any]:
 def app_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
     """Create settings for test app."""
     posts_dir = tmp_content_dir / "posts"
-    (posts_dir / "hello.md").write_text(
+    hello_post = posts_dir / "hello"
+    hello_post.mkdir()
+    (hello_post / "index.md").write_text(
         "---\ncreated_at: 2026-02-02 22:21:29.975359+00\n"
         "author: admin\nlabels: ['#swe']\n---\n# Hello World\n\nTest content.\n"
     )
@@ -92,7 +94,7 @@ class TestCrossPostHistoryCorruptStatus:
                     "INSERT INTO cross_posts "
                     "(user_id, post_path, platform, platform_id, "
                     "status, posted_at, error, created_at) "
-                    "VALUES (1, 'posts/hello.md', 'bluesky', NULL, "
+                    "VALUES (1, 'posts/hello/index.md', 'bluesky', NULL, "
                     "'unknown_status', NULL, NULL, "
                     "'2026-01-01T00:00:00+00:00')"
                 )
@@ -100,7 +102,7 @@ class TestCrossPostHistoryCorruptStatus:
             await session.commit()
 
         resp = await client.get(
-            "/api/crosspost/history/posts/hello.md",
+            "/api/crosspost/history/posts/hello/index.md",
             headers=headers,
         )
         assert resp.status_code == 200

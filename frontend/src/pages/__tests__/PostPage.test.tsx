@@ -59,7 +59,7 @@ const mockFetchPostForEdit = vi.mocked(fetchPostForEdit)
 
 const postDetail: PostDetail = {
   id: 1,
-  file_path: 'posts/hello.md',
+  file_path: 'posts/hello/index.md',
   title: 'Hello World',
   author: 'Admin',
   created_at: '2026-02-01 12:00:00+00:00',
@@ -242,7 +242,7 @@ describe('PostPage', () => {
     await userEvent.click(screen.getByTestId('confirm-delete'))
 
     await waitFor(() => {
-      expect(mockDeletePost).toHaveBeenCalledWith('posts/hello.md', true)
+      expect(mockDeletePost).toHaveBeenCalledWith('posts/hello/index.md', true)
     })
     expect(navigatedTo).toBe('/')
   })

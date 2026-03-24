@@ -204,7 +204,8 @@ class TestSyncDeletionOSError:
         (content_dir / "labels.toml").write_text("[labels]\n")
 
         # Create a file that sync will try to delete
-        target = content_dir / "posts" / "doomed.md"
+        target = content_dir / "posts" / "doomed" / "index.md"
+        target.parent.mkdir()
         target.write_text("---\ntitle: Doomed\n---\nContent.\n")
 
         cm = ContentManager(content_dir=content_dir)
@@ -218,12 +219,12 @@ class TestSyncDeletionOSError:
         mock_session_factory = MagicMock()
         mock_user = MagicMock(id=1, username="admin", display_name="Admin")
 
-        metadata = json.dumps({"deleted_files": ["posts/doomed.md"]})
+        metadata = json.dumps({"deleted_files": ["posts/doomed/index.md"]})
 
         original_unlink = _Path.unlink
 
         def _failing_unlink(self: _Path, missing_ok: bool = False) -> None:
-            if self.name == "doomed.md":
+            if self.name == "index.md":
                 raise OSError("permission denied")
             original_unlink(self, missing_ok=missing_ok)
 

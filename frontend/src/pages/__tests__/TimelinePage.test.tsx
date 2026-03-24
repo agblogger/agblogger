@@ -49,7 +49,7 @@ const postsResponse: PostListResponse = {
   posts: [
     {
       id: 1,
-      file_path: 'posts/hello.md',
+      file_path: 'posts/hello/index.md',
       title: 'Hello World',
       author: 'Admin',
       created_at: '2026-02-01 12:00:00+00:00',
@@ -60,7 +60,7 @@ const postsResponse: PostListResponse = {
     },
     {
       id: 2,
-      file_path: 'posts/second.md',
+      file_path: 'posts/second/index.md',
       title: 'Second Post',
       author: 'Admin',
       created_at: '2026-02-02 12:00:00+00:00',
@@ -199,7 +199,7 @@ describe('TimelinePage', () => {
     const withDraft: PostListResponse = {
       posts: [
         {
-          id: 1, file_path: 'posts/hello.md', title: 'Hello World',
+          id: 1, file_path: 'posts/hello/index.md', title: 'Hello World',
           author: 'Admin', created_at: '2026-02-01 12:00:00+00:00',
           modified_at: '2026-02-01 12:00:00+00:00', is_draft: false,
           rendered_excerpt: '<p>First post</p>', labels: [],
@@ -312,7 +312,7 @@ describe('TimelinePage', () => {
     setMockUser({ id: 1, username: 'admin', email: 'a@t.com', display_name: null, is_admin: true })
     mockFetchPosts.mockResolvedValue(postsResponse)
     mockUploadPost.mockResolvedValue({
-      id: 3, file_path: 'posts/uploaded.md', title: 'Uploaded',
+      id: 3, file_path: 'posts/uploaded/index.md', title: 'Uploaded',
       author: 'Admin', created_at: '2026-02-22', modified_at: '2026-02-22',
       is_draft: false, rendered_excerpt: '', rendered_html: '', content: '', labels: [],
     })
@@ -383,7 +383,7 @@ describe('TimelinePage', () => {
         mockHttpError(422, JSON.stringify({ detail: 'no_title' })),
       )
       .mockResolvedValueOnce({
-        id: 3, file_path: 'posts/titled.md', title: 'My Title',
+        id: 3, file_path: 'posts/titled/index.md', title: 'My Title',
         author: 'Admin', created_at: '2026-02-22', modified_at: '2026-02-22',
         is_draft: false, rendered_excerpt: '', rendered_html: '', content: '', labels: [],
       })

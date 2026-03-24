@@ -86,7 +86,7 @@ function renderEditor(path = '/editor/new') {
 }
 
 const editResponse: PostEditResponse = {
-  file_path: 'posts/existing.md',
+  file_path: 'posts/existing/index.md',
   title: 'Existing Post',
   body: 'Content here.',
   labels: ['swe'],
@@ -139,12 +139,12 @@ describe('EditorPage', () => {
 
   it('loads existing post data', async () => {
     mockFetchPostForEdit.mockResolvedValue(editResponse)
-    renderEditor('/editor/posts/existing.md')
+    renderEditor('/editor/posts/existing/index.md')
 
     await waitFor(() => {
       expect(screen.getByText('Admin')).toBeInTheDocument()
     })
-    expect(mockFetchPostForEdit).toHaveBeenCalledWith('posts/existing.md')
+    expect(mockFetchPostForEdit).toHaveBeenCalledWith('posts/existing/index.md')
   })
 
   it('uses cross-post wording for save-time distribution when accounts are connected', async () => {
@@ -207,7 +207,7 @@ describe('EditorPage', () => {
   it('shows 404 error page without editor form', async () => {
     // MockHTTPError has our test-friendly 1-arg constructor but TS sees the real type
     mockFetchPostForEdit.mockRejectedValue(mockHttpError(404))
-    renderEditor('/editor/posts/missing.md')
+    renderEditor('/editor/posts/missing/index.md')
 
     await waitFor(() => {
       expect(screen.getByText('404')).toBeInTheDocument()
@@ -223,7 +223,7 @@ describe('EditorPage', () => {
     mockFetchPostForEdit.mockRejectedValue(
       mockHttpError(401),
     )
-    renderEditor('/editor/posts/protected.md')
+    renderEditor('/editor/posts/protected/index.md')
 
     await waitFor(() => {
       expect(screen.getByText('Session expired. Please log in again.')).toBeInTheDocument()
@@ -233,7 +233,7 @@ describe('EditorPage', () => {
 
   it('shows generic error page without editor form', async () => {
     mockFetchPostForEdit.mockRejectedValue(new Error('Network error'))
-    renderEditor('/editor/posts/broken.md')
+    renderEditor('/editor/posts/broken/index.md')
 
     await waitFor(() => {
       expect(screen.getByText('Error')).toBeInTheDocument()
@@ -330,7 +330,7 @@ describe('EditorPage', () => {
 
   it('loads title for existing post', async () => {
     mockFetchPostForEdit.mockResolvedValue(editResponse)
-    renderEditor('/editor/posts/existing.md')
+    renderEditor('/editor/posts/existing/index.md')
     await waitFor(() => {
       expect(screen.getByLabelText(/Title/)).toHaveValue('Existing Post')
     })
@@ -397,14 +397,14 @@ describe('EditorPage', () => {
     const mockUpdatePost = vi.mocked(updatePost)
     mockFetchPostForEdit.mockResolvedValue(editResponse)
     const updatedPost: PostDetail = {
-      id: 1, file_path: 'posts/existing.md',
+      id: 1, file_path: 'posts/existing/index.md',
       title: 'Existing Post', author: 'Admin', created_at: '2026-02-01 12:00:00+00:00',
       modified_at: '2026-02-22 12:00:00+00:00', is_draft: false,
       rendered_excerpt: '', rendered_html: '<p>Content</p>', content: 'Content', labels: ['swe'],
     }
     mockUpdatePost.mockResolvedValue(updatedPost)
     const user = userEvent.setup()
-    renderEditor('/editor/posts/existing.md')
+    renderEditor('/editor/posts/existing/index.md')
 
     await waitFor(() => {
       expect(screen.getByLabelText(/Title/)).toHaveValue('Existing Post')
@@ -413,7 +413,7 @@ describe('EditorPage', () => {
     await user.click(screen.getByRole('button', { name: /save/i }))
 
     await waitFor(() => {
-      expect(mockUpdatePost).toHaveBeenCalledWith('posts/existing.md', {
+      expect(mockUpdatePost).toHaveBeenCalledWith('posts/existing/index.md', {
         title: 'Existing Post',
         body: 'Content here.',
         labels: ['swe'],
@@ -580,7 +580,7 @@ describe('EditorPage', () => {
 
   it('shows created and modified dates for existing post', async () => {
     mockFetchPostForEdit.mockResolvedValue(editResponse)
-    renderEditor('/editor/posts/existing.md')
+    renderEditor('/editor/posts/existing/index.md')
 
     await waitFor(() => {
       expect(screen.getByText(/Created/)).toBeInTheDocument()
@@ -598,14 +598,14 @@ describe('EditorPage', () => {
     }
     mockFetchPostForEdit.mockResolvedValue(draftEditResponse)
     const publishedPost: PostDetail = {
-      id: 1, file_path: 'posts/existing.md',
+      id: 1, file_path: 'posts/existing/index.md',
       title: 'Existing Post', author: 'Admin', created_at: '2026-03-15 09:00:00+00:00',
       modified_at: '2026-03-15 09:00:00+00:00', is_draft: false,
       rendered_excerpt: '', rendered_html: '<p>Content</p>', content: 'Content', labels: ['swe'],
     }
     mockUpdatePost.mockResolvedValue(publishedPost)
     const user = userEvent.setup()
-    renderEditor('/editor/posts/existing.md')
+    renderEditor('/editor/posts/existing/index.md')
 
     await waitFor(() => {
       expect(screen.getByText(/Created.*Feb 1/)).toBeInTheDocument()
@@ -625,14 +625,14 @@ describe('EditorPage', () => {
     const mockUpdatePost = vi.mocked(updatePost)
     mockFetchPostForEdit.mockResolvedValue(editResponse)
     const updatedPost: PostDetail = {
-      id: 1, file_path: 'posts/existing.md',
+      id: 1, file_path: 'posts/existing/index.md',
       title: 'Existing Post', author: 'Admin', created_at: '2026-02-01 12:00:00+00:00',
       modified_at: '2026-02-22 09:00:00+00:00', is_draft: false,
       rendered_excerpt: '', rendered_html: '<p>Content</p>', content: 'Content', labels: ['swe'],
     }
     mockUpdatePost.mockResolvedValue(updatedPost)
     const user = userEvent.setup()
-    renderEditor('/editor/posts/existing.md')
+    renderEditor('/editor/posts/existing/index.md')
 
     await waitFor(() => {
       expect(screen.getByText(/Modified.*Feb 1/)).toBeInTheDocument()
@@ -676,7 +676,7 @@ describe('EditorPage', () => {
     mockPost.mockReturnValue({ json: () => Promise.resolve({ html: '<p>preview</p>' }) } as ReturnType<typeof mockApi.post>)
     mockFetchPostForEdit.mockResolvedValue(editResponse)
 
-    renderEditor('/editor/posts/existing.md')
+    renderEditor('/editor/posts/existing/index.md')
 
     await waitFor(() => {
       expect(screen.getByLabelText(/Title/)).toHaveValue('Existing Post')
@@ -688,7 +688,7 @@ describe('EditorPage', () => {
       const previewCall = calls.find(([url]) => url === 'render/preview')
       expect(previewCall).toBeDefined()
       const payload = (previewCall![1] as { json: { file_path?: string } }).json
-      expect(payload.file_path).toBe('posts/existing.md')
+      expect(payload.file_path).toBe('posts/existing/index.md')
     })
   })
 
@@ -806,7 +806,7 @@ describe('EditorPage', () => {
 
   it('shows View Post button for existing post', async () => {
     mockFetchPostForEdit.mockResolvedValue(editResponse)
-    renderEditor('/editor/posts/existing.md')
+    renderEditor('/editor/posts/existing/index.md')
     await waitFor(() => {
       expect(screen.getByLabelText(/Title/)).toHaveValue('Existing Post')
     })
@@ -821,17 +821,6 @@ describe('EditorPage', () => {
     })
     // FileStrip header should show "Files" (empty assets from mock)
     expect(screen.getByText('Files')).toBeInTheDocument()
-  })
-
-  it('hides FileStrip for legacy flat-file posts', async () => {
-    mockFetchPostForEdit.mockResolvedValue(editResponse)
-    renderEditor('/editor/posts/existing.md')
-
-    await waitFor(() => {
-      expect(screen.getByLabelText(/Title/)).toHaveValue('Existing Post')
-    })
-
-    expect(screen.queryByText('Files')).not.toBeInTheDocument()
   })
 
   it('shows save-first message for new post FileStrip', async () => {
@@ -1081,19 +1070,6 @@ describe('EditorPage', () => {
     const imageBtn = screen.getByLabelText(/^Image/)
     expect(imageBtn).toBeDisabled()
     expect(imageBtn).toHaveAttribute('title', 'Save post first to add images')
-  })
-
-  it('image button shows "Only directory-backed posts support images" tooltip for flat-file post', async () => {
-    mockFetchPostForEdit.mockResolvedValue(editResponse)
-    renderEditor('/editor/posts/existing.md')
-
-    await waitFor(() => {
-      expect(screen.getByLabelText(/Title/)).toHaveValue('Existing Post')
-    })
-
-    const imageBtn = screen.getByLabelText(/^Image/)
-    expect(imageBtn).toBeDisabled()
-    expect(imageBtn).toHaveAttribute('title', 'Only directory-backed posts support images')
   })
 
   it('image button is enabled for directory-backed saved posts', async () => {

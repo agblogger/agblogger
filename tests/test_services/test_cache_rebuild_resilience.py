@@ -74,7 +74,8 @@ class TestDuplicateImplicitLabel:
 
 def _write_post(content_dir: Path, slug: str, title: str, body: str) -> None:
     """Write a minimal markdown post to the content directory."""
-    post_path = content_dir / "posts" / f"{slug}.md"
+    post_path = content_dir / "posts" / slug / "index.md"
+    post_path.parent.mkdir(parents=True, exist_ok=True)
     post_path.write_text(
         f"---\ntitle: {title}\ncreated_at: 2026-02-02 12:00:00+00\n---\n{body}\n",
         encoding="utf-8",

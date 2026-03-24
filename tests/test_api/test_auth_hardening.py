@@ -21,7 +21,9 @@ if TYPE_CHECKING:
 def app_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
     """Create hardened auth settings for tests."""
     posts_dir = tmp_content_dir / "posts"
-    (posts_dir / "hello.md").write_text("# Hello\n")
+    hello_post = posts_dir / "hello"
+    hello_post.mkdir()
+    (hello_post / "index.md").write_text("# Hello\n")
     (tmp_content_dir / "labels.toml").write_text("[labels]\n")
 
     db_path = tmp_path / "test.db"

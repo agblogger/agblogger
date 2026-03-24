@@ -37,6 +37,7 @@ from backend.services.sync_service import (
     scan_content_files,
     update_server_manifest,
 )
+from backend.utils.slug import is_directory_post_path
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -310,7 +311,17 @@ async def _sync_commit_inner(
             continue
 
         # Merge conflict detection: attempt smart merge for markdown posts and labels.toml.
-        is_post_md = target_path.startswith("posts/") and target_path.endswith(".md")
+        if (
+            target_path.startswith("posts/")
+            and target_path.endswith(".md")
+            and not is_directory_post_path(target_path)
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="Posts must be stored as posts/<slug>/index.md",
+            )
+
+        is_post_md = is_directory_post_path(target_path)
         is_labels_toml = target_path == "labels.toml"
 
         if server_content is not None and server_content != client_text and is_labels_toml:

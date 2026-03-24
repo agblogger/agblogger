@@ -78,31 +78,35 @@ class TestReadPostErrorHandling:
     def test_invalid_yaml_returns_none(self, tmp_path: Path) -> None:
         posts_dir = tmp_path / "posts"
         posts_dir.mkdir()
-        bad_post = posts_dir / "bad.md"
+        post_dir = posts_dir / "bad"
+        post_dir.mkdir()
+        bad_post = post_dir / "index.md"
         bad_post.write_text("---\ntitle: [\n---\nbody")
         (tmp_path / "index.toml").write_text('[site]\ntitle = "Test"')
         (tmp_path / "labels.toml").write_text("[labels]")
         cm = ContentManager(content_dir=tmp_path)
-        result = cm.read_post("posts/bad.md")
+        result = cm.read_post("posts/bad/index.md")
         assert result is None
 
     def test_binary_file_returns_none(self, tmp_path: Path) -> None:
         posts_dir = tmp_path / "posts"
-        posts_dir.mkdir()
-        bad_post = posts_dir / "binary.md"
+        post_dir = posts_dir / "binary"
+        post_dir.mkdir(parents=True)
+        bad_post = post_dir / "index.md"
         bad_post.write_bytes(b"\x80\x81\x82\x83")
         (tmp_path / "index.toml").write_text('[site]\ntitle = "Test"')
         (tmp_path / "labels.toml").write_text("[labels]")
         cm = ContentManager(content_dir=tmp_path)
-        result = cm.read_post("posts/binary.md")
+        result = cm.read_post("posts/binary/index.md")
         assert result is None
 
     def test_oserror_logs_at_error_level(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ) -> None:
         posts_dir = tmp_path / "posts"
-        posts_dir.mkdir()
-        good_post = posts_dir / "good.md"
+        post_dir = posts_dir / "good"
+        post_dir.mkdir(parents=True)
+        good_post = post_dir / "index.md"
         good_post.write_text("---\ntitle: Test\n---\nbody")
         (tmp_path / "index.toml").write_text('[site]\ntitle = "Test"')
         (tmp_path / "labels.toml").write_text("[labels]")
@@ -112,7 +116,7 @@ class TestReadPostErrorHandling:
             patch.object(Path, "read_text", side_effect=PermissionError("denied")),
             caplog.at_level(logging.ERROR, logger="backend.filesystem.content_manager"),
         ):
-            result = cm.read_post("posts/good.md")
+            result = cm.read_post("posts/good/index.md")
 
         assert result is None
         assert any(r.levelno == logging.ERROR for r in caplog.records)
@@ -186,13 +190,13 @@ class TestSyncYamlError:
     """H6: yaml.YAMLError caught in normalize_post_frontmatter."""
 
     def test_malformed_yaml_skipped(self, tmp_path: Path) -> None:
-        post = tmp_path / "posts" / "bad.md"
+        post = tmp_path / "posts" / "bad" / "index.md"
         post.parent.mkdir(parents=True)
         post.write_text("---\ntitle: [\n---\nbody")
         from backend.services.sync_service import normalize_post_frontmatter
 
         warnings = normalize_post_frontmatter(
-            uploaded_files=["posts/bad.md"],
+            uploaded_files=["posts/bad/index.md"],
             old_manifest={},
             content_dir=tmp_path,
         )
@@ -293,7 +297,7 @@ class TestSyncTimestampNarrowing:
         """AttributeError is not caught by narrowed exception handler."""
         from backend.services.sync_service import normalize_post_frontmatter
 
-        post = tmp_path / "posts" / "test.md"
+        post = tmp_path / "posts" / "test" / "index.md"
         post.parent.mkdir(parents=True)
         # Valid YAML but with a value that will cause AttributeError in the timestamp path
         post.write_text("---\ntitle: Test\ncreated_at: valid\n---\nbody")
@@ -301,7 +305,7 @@ class TestSyncTimestampNarrowing:
         # The function should handle standard parse errors (ValueError)
         # but not swallow programming bugs (AttributeError)
         warnings = normalize_post_frontmatter(
-            uploaded_files=["posts/test.md"],
+            uploaded_files=["posts/test/index.md"],
             old_manifest={},
             content_dir=tmp_path,
         )
@@ -426,7 +430,7 @@ class TestOversizedPostSkipped:
         (tmp_path / "index.toml").write_text('[site]\ntitle = "Test"')
         (tmp_path / "labels.toml").write_text("[labels]")
         cm = ContentManager(content_dir=tmp_path)
-        result = cm.read_post("posts/big.md")
+        result = cm.read_post("posts/big/index.md")
         assert result is None
 
 
@@ -452,7 +456,7 @@ class TestNullByteSkipped:
         (tmp_path / "index.toml").write_text('[site]\ntitle = "Test"')
         (tmp_path / "labels.toml").write_text("[labels]")
         cm = ContentManager(content_dir=tmp_path)
-        result = cm.read_post("posts/null.md")
+        result = cm.read_post("posts/null/index.md")
         assert result is None
 
 
@@ -565,7 +569,7 @@ class TestTypedExceptions:
     def test_post_not_found_error_is_value_error(self) -> None:
         from backend.exceptions import PostNotFoundError
 
-        exc = PostNotFoundError("Post not found: posts/hello.md")
+        exc = PostNotFoundError("Post not found: posts/hello/index.md")
         assert isinstance(exc, ValueError)
 
     def test_builtin_page_error_is_value_error(self) -> None:
@@ -606,7 +610,7 @@ class TestCrosspostRaisesPostNotFoundError:
             await crosspost(
                 session=mock_session,
                 content_manager=cm,
-                post_path="posts/nonexistent.md",
+                post_path="posts/nonexistent/index.md",
                 platforms=["bluesky"],
                 actor=mock_user,
                 site_url="http://localhost",
@@ -626,7 +630,9 @@ class TestCrosspostRaisesPostNotFoundError:
         (tmp_path / "labels.toml").write_text("[labels]")
         posts_dir = tmp_path / "posts"
         posts_dir.mkdir(exist_ok=True)
-        (posts_dir / "draft.md").write_text(
+        draft_post = posts_dir / "draft"
+        draft_post.mkdir()
+        (draft_post / "index.md").write_text(
             "---\ntitle: Draft\ndraft: true\nauthor: OtherUser\n"
             "created_at: 2026-02-02 22:21:29+00\n---\nDraft content.\n"
         )
@@ -642,7 +648,7 @@ class TestCrosspostRaisesPostNotFoundError:
             await crosspost(
                 session=mock_session,
                 content_manager=cm,
-                post_path="posts/draft.md",
+                post_path="posts/draft/index.md",
                 platforms=["bluesky"],
                 actor=mock_user,
                 site_url="http://localhost",
@@ -663,7 +669,9 @@ class TestCrosspostErrorMessageLeakage:
         (tmp_path / "labels.toml").write_text("[labels]")
         posts_dir = tmp_path / "posts"
         posts_dir.mkdir(exist_ok=True)
-        (posts_dir / "hello.md").write_text(
+        hello_post = posts_dir / "hello"
+        hello_post.mkdir()
+        (hello_post / "index.md").write_text(
             "---\ntitle: Hello\nauthor: admin\n"
             "created_at: 2026-02-02 22:21:29+00\nlabels: []\n---\nHello world.\n"
         )
@@ -710,7 +718,7 @@ class TestCrosspostErrorMessageLeakage:
             results = await crosspost(
                 session=mock_session,
                 content_manager=cm,
-                post_path="posts/hello.md",
+                post_path="posts/hello/index.md",
                 platforms=["bluesky"],
                 actor=mock_user,
                 site_url="http://localhost",

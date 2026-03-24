@@ -45,6 +45,10 @@ class TestExtractTitle:
         title = extract_title("No heading", "2026-02-02-my-post.md")
         assert title == "My Post"
 
+    def test_directory_backed_post_uses_parent_directory_name(self) -> None:
+        title = extract_title("No heading", "posts/2026-02-02-my-post/index.md")
+        assert title == "My Post"
+
     def test_untitled(self) -> None:
         assert extract_title("No heading here") == "Untitled"
 
@@ -129,7 +133,7 @@ labels: ["#swe", "#ai"]
 
 Content here.
 """
-        post = parse_post(content, file_path="posts/test.md")
+        post = parse_post(content, file_path="posts/test/index.md")
         assert post.title == "My Post"
         assert post.created_at.year == 2026
         assert "swe" in post.labels
@@ -150,7 +154,7 @@ Not published yet.
 
     def test_no_frontmatter(self) -> None:
         content = "# Just a title\n\nSome content."
-        post = parse_post(content, file_path="posts/simple.md")
+        post = parse_post(content, file_path="posts/simple/index.md")
         assert post.title == "Just a title"
         assert post.labels == []
 
@@ -190,8 +194,9 @@ class TestContentManager:
         assert posts == []
 
     def test_scan_with_posts(self, tmp_content_dir: Path) -> None:
-        posts_dir = tmp_content_dir / "posts"
-        (posts_dir / "test.md").write_text("---\ncreated_at: 2026-01-01\n---\n# Test\n\nContent.\n")
+        post_dir = tmp_content_dir / "posts" / "test"
+        post_dir.mkdir(parents=True)
+        (post_dir / "index.md").write_text("---\ncreated_at: 2026-01-01\n---\n# Test\n\nContent.\n")
         cm = ContentManager(content_dir=tmp_content_dir)
         posts = cm.scan_posts()
         assert len(posts) == 1
@@ -199,10 +204,12 @@ class TestContentManager:
 
     def test_discover_posts(self, tmp_content_dir: Path) -> None:
         posts_dir = tmp_content_dir / "posts"
-        (posts_dir / "a.md").write_text("# A")
-        sub = posts_dir / "sub"
-        sub.mkdir()
-        (sub / "b.md").write_text("# B")
+        a_dir = posts_dir / "a"
+        a_dir.mkdir(parents=True)
+        (a_dir / "index.md").write_text("# A")
+        sub = posts_dir / "sub" / "b"
+        sub.mkdir(parents=True)
+        (sub / "index.md").write_text("# B")
         found = discover_posts(tmp_content_dir)
         assert len(found) == 2
 
@@ -210,18 +217,18 @@ class TestContentManager:
         cm = ContentManager(content_dir=tmp_content_dir)
         post = parse_post(
             "---\ncreated_at: 2026-01-01\n---\n# Written\n\nBody.\n",
-            file_path="posts/written.md",
+            file_path="posts/written/index.md",
         )
-        cm.write_post("posts/written.md", post)
-        read_back = cm.read_post("posts/written.md")
+        cm.write_post("posts/written/index.md", post)
+        read_back = cm.read_post("posts/written/index.md")
         assert read_back is not None
         assert read_back.title == "Written"
 
     def test_subdirectory_post_has_no_implicit_labels(self, tmp_content_dir: Path) -> None:
         """Posts in subdirectories should only have their front matter labels."""
-        sub = tmp_content_dir / "posts" / "cooking"
-        sub.mkdir()
-        (sub / "recipe.md").write_text(
+        sub = tmp_content_dir / "posts" / "cooking" / "recipe"
+        sub.mkdir(parents=True)
+        (sub / "index.md").write_text(
             "---\ncreated_at: 2026-01-01\nlabels: ['#swe']\n---\n# Recipe\n\nContent.\n"
         )
         cm = ContentManager(content_dir=tmp_content_dir)
@@ -230,11 +237,12 @@ class TestContentManager:
         assert posts[0].labels == ["swe"]
 
     def test_delete_post(self, tmp_content_dir: Path) -> None:
-        posts_dir = tmp_content_dir / "posts"
-        (posts_dir / "to-delete.md").write_text("# Delete me")
+        post_dir = tmp_content_dir / "posts" / "to-delete"
+        post_dir.mkdir(parents=True)
+        (post_dir / "index.md").write_text("# Delete me")
         cm = ContentManager(content_dir=tmp_content_dir)
-        assert cm.delete_post("posts/to-delete.md") is True
-        assert cm.delete_post("posts/nonexistent.md") is False
+        assert cm.delete_post("posts/to-delete/index.md") is True
+        assert cm.delete_post("posts/nonexistent/index.md") is False
 
 
 class TestPlainExcerptRegexSafety:
@@ -251,7 +259,7 @@ class TestPlainExcerptRegexSafety:
         adversarial = "* " * 5000
         now = datetime(2026, 1, 1, tzinfo=UTC)
         post_data = PostData(
-            file_path="posts/test.md",
+            file_path="posts/test/index.md",
             title="Test",
             author="admin",
             created_at=now,

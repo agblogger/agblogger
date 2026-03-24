@@ -80,7 +80,7 @@ class TestCrosspostDecryptFallback:
         results = await crosspost(
             session=session,
             content_manager=mock_cm,
-            post_path="posts/test.md",
+            post_path="posts/test/index.md",
             platforms=["bluesky"],
             actor=MagicMock(id=1, username="tester", display_name="Tester", is_admin=False),
             site_url="https://example.com",
@@ -116,7 +116,7 @@ class TestCrosspostDecryptFallback:
         results = await crosspost(
             session=session,
             content_manager=mock_cm,
-            post_path="posts/test.md",
+            post_path="posts/test/index.md",
             platforms=["bluesky"],
             actor=MagicMock(id=1, username="tester", display_name="Tester", is_admin=False),
             site_url="https://example.com",
@@ -183,7 +183,7 @@ class TestCrosspostTokenRefreshPersistence:
         results = await crosspost(
             session=session,
             content_manager=mock_cm,
-            post_path="posts/test.md",
+            post_path="posts/test/index.md",
             platforms=["bluesky"],
             actor=MagicMock(id=1, username="tester", display_name="Tester", is_admin=False),
             site_url="https://example.com",

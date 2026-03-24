@@ -157,24 +157,24 @@ class TestHasPendingChanges:
 
 class TestFormatPlanSummary:
     def test_upload(self) -> None:
-        result = format_plan_summary(_plan(to_upload=["posts/new.md"]))
-        assert "  + posts/new.md (upload)" in result
+        result = format_plan_summary(_plan(to_upload=["posts/new/index.md"]))
+        assert "  + posts/new/index.md (upload)" in result
 
     def test_download(self) -> None:
-        result = format_plan_summary(_plan(to_download=["posts/remote.md"]))
-        assert "  < posts/remote.md (download)" in result
+        result = format_plan_summary(_plan(to_download=["posts/remote/index.md"]))
+        assert "  < posts/remote/index.md (download)" in result
 
     def test_local_delete(self) -> None:
-        result = format_plan_summary(_plan(to_delete_local=["posts/old.md"]))
-        assert "  - posts/old.md (delete local)" in result
+        result = format_plan_summary(_plan(to_delete_local=["posts/old/index.md"]))
+        assert "  - posts/old/index.md (delete local)" in result
 
     def test_remote_delete(self) -> None:
-        result = format_plan_summary(_plan(to_delete_remote=["posts/gone.md"]))
-        assert "  - posts/gone.md (delete remote)" in result
+        result = format_plan_summary(_plan(to_delete_remote=["posts/gone/index.md"]))
+        assert "  - posts/gone/index.md (delete remote)" in result
 
     def test_conflict(self) -> None:
-        result = format_plan_summary(_plan(conflicts=[{"file_path": "posts/c.md"}]))
-        assert "  ! posts/c.md (conflict)" in result
+        result = format_plan_summary(_plan(conflicts=[{"file_path": "posts/c/index.md"}]))
+        assert "  ! posts/c/index.md (conflict)" in result
 
     def test_empty_plan(self) -> None:
         assert format_plan_summary(_plan()) == ""
@@ -223,9 +223,9 @@ class TestConfirmSync:
 
     def test_prints_plan_summary(self, capsys: pytest.CaptureFixture[str]) -> None:
         with patch("builtins.input", return_value="n"):
-            confirm_sync(_plan(to_upload=["posts/new.md"]))
+            confirm_sync(_plan(to_upload=["posts/new/index.md"]))
         captured = capsys.readouterr()
-        assert "posts/new.md" in captured.out
+        assert "posts/new/index.md" in captured.out
 
 
 # ── Sync confirmation integration ───────────────────────────────────
@@ -602,7 +602,7 @@ class TestStatusFormattingRegression:
         mock_client = MagicMock()
         mock_client.__enter__ = MagicMock(return_value=mock_client)
         mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client.status.return_value = _plan(to_delete_remote=["posts/gone.md"])
+        mock_client.status.return_value = _plan(to_delete_remote=["posts/gone/index.md"])
 
         with patch("cli.sync_client.SyncClient", return_value=mock_client):
             from cli.sync_client import main

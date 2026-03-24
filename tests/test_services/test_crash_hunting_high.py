@@ -29,8 +29,12 @@ class TestScanPostsKeyErrorTypeError:
         """scan_posts should catch KeyError from parse_post and skip the bad post."""
         posts_dir = tmp_path / "posts"
         posts_dir.mkdir()
-        (posts_dir / "bad.md").write_text("---\ncreated_at: 2025-01-01\n---\n# Bad")
-        (posts_dir / "good.md").write_text("---\ncreated_at: 2025-01-01\n---\n# Good Post")
+        bad_post = posts_dir / "bad"
+        bad_post.mkdir()
+        (bad_post / "index.md").write_text("---\ncreated_at: 2025-01-01\n---\n# Bad")
+        good_post = posts_dir / "good"
+        good_post.mkdir()
+        (good_post / "index.md").write_text("---\ncreated_at: 2025-01-01\n---\n# Good Post")
         (tmp_path / "index.toml").write_text('[site]\ntitle = "Test"\n')
         (tmp_path / "labels.toml").write_text("")
 
@@ -60,8 +64,12 @@ class TestScanPostsKeyErrorTypeError:
         """scan_posts should catch TypeError from parse_post and skip the bad post."""
         posts_dir = tmp_path / "posts"
         posts_dir.mkdir()
-        (posts_dir / "bad.md").write_text("---\ncreated_at: 2025-01-01\n---\n# Bad")
-        (posts_dir / "good.md").write_text("---\ncreated_at: 2025-01-01\n---\n# Good Post")
+        bad_post = posts_dir / "bad"
+        bad_post.mkdir()
+        (bad_post / "index.md").write_text("---\ncreated_at: 2025-01-01\n---\n# Bad")
+        good_post = posts_dir / "good"
+        good_post.mkdir()
+        (good_post / "index.md").write_text("---\ncreated_at: 2025-01-01\n---\n# Good Post")
         (tmp_path / "index.toml").write_text('[site]\ntitle = "Test"\n')
         (tmp_path / "labels.toml").write_text("")
 
@@ -91,7 +99,9 @@ class TestScanPostsKeyErrorTypeError:
         """read_post should catch KeyError from parse_post and return None."""
         posts_dir = tmp_path / "posts"
         posts_dir.mkdir()
-        (posts_dir / "bad.md").write_text("---\ncreated_at: 2025-01-01\n---\n# Bad")
+        bad_post = posts_dir / "bad"
+        bad_post.mkdir()
+        (bad_post / "index.md").write_text("---\ncreated_at: 2025-01-01\n---\n# Bad")
         (tmp_path / "index.toml").write_text('[site]\ntitle = "Test"\n')
         (tmp_path / "labels.toml").write_text("")
 
@@ -101,7 +111,7 @@ class TestScanPostsKeyErrorTypeError:
             "backend.filesystem.content_manager.parse_post",
             side_effect=KeyError("missing_key"),
         ):
-            result = cm.read_post("posts/bad.md")
+            result = cm.read_post("posts/bad/index.md")
 
         assert result is None
 
@@ -109,7 +119,9 @@ class TestScanPostsKeyErrorTypeError:
         """read_post should catch TypeError from parse_post and return None."""
         posts_dir = tmp_path / "posts"
         posts_dir.mkdir()
-        (posts_dir / "bad.md").write_text("---\ncreated_at: 2025-01-01\n---\n# Bad")
+        bad_post = posts_dir / "bad"
+        bad_post.mkdir()
+        (bad_post / "index.md").write_text("---\ncreated_at: 2025-01-01\n---\n# Bad")
         (tmp_path / "index.toml").write_text('[site]\ntitle = "Test"\n')
         (tmp_path / "labels.toml").write_text("")
 
@@ -119,7 +131,7 @@ class TestScanPostsKeyErrorTypeError:
             "backend.filesystem.content_manager.parse_post",
             side_effect=TypeError("unexpected type"),
         ):
-            result = cm.read_post("posts/bad.md")
+            result = cm.read_post("posts/bad/index.md")
 
         assert result is None
 

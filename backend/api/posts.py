@@ -84,7 +84,7 @@ def _get_post_asset_directory(file_path: str, content_manager: ContentManager) -
     """Return the asset directory for a directory-backed post."""
     post_file = content_manager.content_dir / file_path
     if post_file.name != "index.md":
-        msg = "Asset management requires a directory-style post ending in /index.md"
+        msg = "Asset management requires a canonical post path ending in /index.md"
         raise HTTPException(status_code=400, detail=msg)
     return post_file.parent
 
@@ -886,45 +886,40 @@ async def update_post_endpoint(
         old_dir: FilePath | None = None
         new_dir: FilePath | None = None
 
-        if file_path.endswith("/index.md"):
-            new_slug = generate_post_slug(title)
-            old_dir_name = FilePath(file_path).parent.name
-            date_prefix_match = re.match(r"^(\d{4}-\d{2}-\d{2})-(.+)$", old_dir_name)
-            if date_prefix_match:
-                date_prefix = date_prefix_match.group(1)
-                old_slug = date_prefix_match.group(2)
-                if new_slug != old_slug:
-                    old_dir = content_manager.content_dir / FilePath(file_path).parent
-                    posts_parent = old_dir.parent
-                    new_dir_name = f"{date_prefix}-{new_slug}"
-                    new_dir = posts_parent / new_dir_name
+        new_slug = generate_post_slug(title)
+        old_dir_name = FilePath(file_path).parent.name
+        date_prefix_match = re.match(r"^(\d{4}-\d{2}-\d{2})-(.+)$", old_dir_name)
+        if date_prefix_match:
+            date_prefix = date_prefix_match.group(1)
+            old_slug = date_prefix_match.group(2)
+            if new_slug != old_slug:
+                old_dir = content_manager.content_dir / FilePath(file_path).parent
+                posts_parent = old_dir.parent
+                new_dir_name = f"{date_prefix}-{new_slug}"
+                new_dir = posts_parent / new_dir_name
 
-                    # Handle collision: append -2, -3, etc.
-                    if new_dir.exists():
-                        counter = 2
-                        while counter <= 1000:
-                            candidate = posts_parent / f"{new_dir_name}-{counter}"
-                            if not candidate.exists():
-                                new_dir = candidate
-                                break
-                            counter += 1
-                        else:
-                            raise HTTPException(
-                                status_code=500,
-                                detail="Too many directory name collisions",
-                            )
+                # Handle collision: append -2, -3, etc.
+                if new_dir.exists():
+                    counter = 2
+                    while counter <= 1000:
+                        candidate = posts_parent / f"{new_dir_name}-{counter}"
+                        if not candidate.exists():
+                            new_dir = candidate
+                            break
+                        counter += 1
+                    else:
+                        raise HTTPException(
+                            status_code=500,
+                            detail="Too many directory name collisions",
+                        )
 
-                    new_file_path = str(
-                        (new_dir / "index.md").relative_to(content_manager.content_dir)
-                    )
+                new_file_path = str((new_dir / "index.md").relative_to(content_manager.content_dir))
 
-                    # Rewrite URLs with new path (reuse already-rendered HTML)
-                    new_rendered_excerpt = rewrite_relative_urls(
-                        raw_rendered_excerpt, new_file_path
-                    )
-                    new_rendered_html = rewrite_relative_urls(raw_rendered_html, new_file_path)
+                # Rewrite URLs with new path (reuse already-rendered HTML)
+                new_rendered_excerpt = rewrite_relative_urls(raw_rendered_excerpt, new_file_path)
+                new_rendered_html = rewrite_relative_urls(raw_rendered_html, new_file_path)
 
-                    needs_rename = True
+                needs_rename = True
 
         previous_title = existing.title
         previous_content = existing_post_data.content if existing_post_data else ""
@@ -1044,7 +1039,7 @@ async def delete_post_endpoint(
         existing_post_data = content_manager.read_post(file_path)
         old_content = existing_post_data.content if existing_post_data else ""
 
-        delete_draft_directory_assets = existing.is_draft and file_path.endswith("/index.md")
+        delete_draft_directory_assets = existing.is_draft
         should_delete_assets = delete_assets or delete_draft_directory_assets
 
         # Delete DB records first and commit, so the database is consistent

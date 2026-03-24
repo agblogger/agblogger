@@ -30,12 +30,16 @@ def draft_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
     """Create settings for draft visibility tests."""
     # Add a published post by Admin
     posts_dir = tmp_content_dir / "posts"
-    (posts_dir / "published.md").write_text(
+    published_dir = posts_dir / "published"
+    published_dir.mkdir()
+    (published_dir / "index.md").write_text(
         "---\ntitle: Published Post\ncreated_at: 2026-02-02 22:21:29+00\n"
         "author: admin\nlabels: []\n---\nPublished content.\n"
     )
     # Add a draft post by Admin
-    (posts_dir / "admin-draft.md").write_text(
+    admin_draft_dir = posts_dir / "admin-draft"
+    admin_draft_dir.mkdir()
+    (admin_draft_dir / "index.md").write_text(
         "---\ntitle: Admin Draft\ncreated_at: 2026-02-02 22:21:29+00\n"
         "author: admin\nlabels: []\ndraft: true\n---\nDraft content.\n"
     )
@@ -145,7 +149,7 @@ class TestDraftDetailVisibility:
     @pytest.mark.asyncio
     async def test_draft_get_returns_404_for_unauthenticated(self, client: AsyncClient) -> None:
         """Unauthenticated users get 404 for draft posts."""
-        resp = await client.get("/api/posts/posts/admin-draft.md")
+        resp = await client.get("/api/posts/posts/admin-draft/index.md")
         assert resp.status_code == 404
 
     @pytest.mark.asyncio
@@ -153,7 +157,7 @@ class TestDraftDetailVisibility:
         """A different authenticated user gets 404 for another user's draft."""
         token = await _register_and_login(client, "other2", "other2@test.com", "password1234")
         resp = await client.get(
-            "/api/posts/posts/admin-draft.md",
+            "/api/posts/posts/admin-draft/index.md",
             headers=_auth_headers(token),
         )
         assert resp.status_code == 404
@@ -163,7 +167,7 @@ class TestDraftDetailVisibility:
         """The author can access their own draft."""
         token = await _login(client, "admin", "admin123")
         resp = await client.get(
-            "/api/posts/posts/admin-draft.md",
+            "/api/posts/posts/admin-draft/index.md",
             headers=_auth_headers(token),
         )
         assert resp.status_code == 200
@@ -178,7 +182,7 @@ class TestDraftEditVisibility:
         """A non-admin authenticated user is forbidden from using draft edit endpoint."""
         token = await _register_and_login(client, "other3", "other3@test.com", "password1234")
         resp = await client.get(
-            "/api/posts/posts/admin-draft.md/edit",
+            "/api/posts/posts/admin-draft/index.md/edit",
             headers=_auth_headers(token),
         )
         assert resp.status_code == 403
@@ -188,7 +192,7 @@ class TestDraftEditVisibility:
         """The author can access their own draft for editing."""
         token = await _login(client, "admin", "admin123")
         resp = await client.get(
-            "/api/posts/posts/admin-draft.md/edit",
+            "/api/posts/posts/admin-draft/index.md/edit",
             headers=_auth_headers(token),
         )
         assert resp.status_code == 200

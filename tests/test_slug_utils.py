@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from backend.utils.slug import file_path_to_slug, resolve_slug_candidates
 
 
@@ -11,20 +13,23 @@ class TestFilePathToSlug:
     def test_directory_backed_post(self) -> None:
         assert file_path_to_slug("posts/my-post/index.md") == "my-post"
 
-    def test_flat_file_post(self) -> None:
-        assert file_path_to_slug("posts/hello.md") == "hello.md"
+    def test_rejects_legacy_flat_file_post(self) -> None:
+        with pytest.raises(ValueError, match="Unsupported post path"):
+            file_path_to_slug("posts/hello.md")
 
     def test_bare_slug_is_idempotent(self) -> None:
         assert file_path_to_slug("my-post") == "my-post"
 
-    def test_posts_prefix_with_trailing_slash(self) -> None:
-        assert file_path_to_slug("posts/my-post/") == "my-post"
+    def test_rejects_directory_without_index_file(self) -> None:
+        with pytest.raises(ValueError, match="Unsupported post path"):
+            file_path_to_slug("posts/my-post/")
 
     def test_slug_with_hyphens(self) -> None:
         assert file_path_to_slug("posts/my-long-post-title/index.md") == "my-long-post-title"
 
-    def test_flat_file_with_hyphens(self) -> None:
-        assert file_path_to_slug("posts/another-post.md") == "another-post.md"
+    def test_rejects_flat_file_with_hyphens(self) -> None:
+        with pytest.raises(ValueError, match="Unsupported post path"):
+            file_path_to_slug("posts/another-post.md")
 
     def test_bare_slug_with_hyphens_is_idempotent(self) -> None:
         assert file_path_to_slug("some-bare-slug") == "some-bare-slug"
@@ -58,12 +63,9 @@ class TestFilePathToSlugRegressions:
         post_url = f"{site_url.rstrip('/')}/post/{slug}"
         assert post_url == "https://example.com/post/my-first-post"
 
-    def test_crosspost_url_with_flat_file_post_preserves_md_suffix(self) -> None:
-        site_url = "https://example.com"
-        post_path = "posts/hello.md"
-        slug = file_path_to_slug(post_path)
-        post_url = f"{site_url.rstrip('/')}/post/{slug}"
-        assert post_url == "https://example.com/post/hello.md"
+    def test_legacy_flat_file_crosspost_url_is_rejected(self) -> None:
+        with pytest.raises(ValueError, match="Unsupported post path"):
+            file_path_to_slug("posts/hello.md")
 
 
 class TestResolveSlugCandidates:

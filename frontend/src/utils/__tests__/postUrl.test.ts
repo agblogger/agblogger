@@ -7,10 +7,6 @@ describe('filePathToSlug', () => {
     expect(filePathToSlug('posts/2026-03-23-my-post/index.md')).toBe('2026-03-23-my-post')
   })
 
-  it('strips posts/ prefix and .md suffix from flat-file post', () => {
-    expect(filePathToSlug('posts/hello.md')).toBe('hello')
-  })
-
   it('returns bare slug unchanged (idempotent)', () => {
     expect(filePathToSlug('my-post')).toBe('my-post')
   })
@@ -35,10 +31,6 @@ describe('filePathToSlug', () => {
 describe('postUrl', () => {
   it('produces correct URL for directory-backed post', () => {
     expect(postUrl('posts/my-post/index.md')).toBe('/post/my-post')
-  })
-
-  it('produces correct URL for flat-file post', () => {
-    expect(postUrl('posts/hello.md')).toBe('/post/hello')
   })
 
   it('produces correct URL for bare slug', () => {

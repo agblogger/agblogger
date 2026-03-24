@@ -120,7 +120,7 @@ title: My Front Matter Title
 
 Body content without a heading.
 """
-        post = parse_post(content, file_path="posts/test.md")
+        post = parse_post(content, file_path="posts/test/index.md")
         assert post.title == "My Front Matter Title"
 
     def test_title_fallback_to_heading_when_not_in_frontmatter(self) -> None:
@@ -133,7 +133,7 @@ modified_at: 2026-02-02 22:21:35.000000+00
 
 Body content.
 """
-        post = parse_post(content, file_path="posts/test.md")
+        post = parse_post(content, file_path="posts/test/index.md")
         assert post.title == "Heading Title"
         assert "# Heading Title" not in post.content
 
@@ -147,7 +147,7 @@ title: "   "
 
 Body.
 """
-        post = parse_post(content, file_path="posts/test.md")
+        post = parse_post(content, file_path="posts/test/index.md")
         assert post.title == "Heading Title"
         assert "# Heading Title" not in post.content
 
@@ -160,7 +160,7 @@ title: 42
 
 Body.
 """
-        post = parse_post(content, file_path="posts/test.md")
+        post = parse_post(content, file_path="posts/test/index.md")
         assert post.title == "42"
 
     def test_title_from_frontmatter_takes_precedence_over_heading(self) -> None:
@@ -174,7 +174,7 @@ title: Front Matter Title
 
 Body content.
 """
-        post = parse_post(content, file_path="posts/test.md")
+        post = parse_post(content, file_path="posts/test/index.md")
         assert post.title == "Front Matter Title"
         # Heading is not stripped because it doesn't match the front matter title
         assert "# Heading Title" in post.content
@@ -277,10 +277,10 @@ class TestSerializePost:
             author="Admin",
             labels=["swe", "ai"],
             is_draft=True,
-            file_path="posts/roundtrip.md",
+            file_path="posts/roundtrip/index.md",
         )
         serialized = serialize_post(original)
-        reparsed = parse_post(serialized, file_path="posts/roundtrip.md")
+        reparsed = parse_post(serialized, file_path="posts/roundtrip/index.md")
         assert reparsed.title == "Round Trip"
         assert reparsed.labels == ["swe", "ai"]
         assert reparsed.is_draft is True

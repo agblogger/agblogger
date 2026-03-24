@@ -21,6 +21,7 @@ from sqlalchemy import delete, select
 from backend.filesystem.frontmatter import RECOGNIZED_FIELDS, extract_title, strip_leading_heading
 from backend.models.sync import SyncManifest
 from backend.services.datetime_service import format_datetime, format_iso, now_utc, parse_datetime
+from backend.utils.slug import is_directory_post_path
 
 logger = logging.getLogger(__name__)
 
@@ -100,7 +101,13 @@ def is_sync_managed_path(file_path: str) -> bool:
         return True
     if len(parts) == 1 and normalized.endswith(".md"):
         return True
-    return normalized.startswith(_SYNC_ALLOWED_PREFIXES)
+    if normalized.startswith("assets/"):
+        return True
+    if normalized.startswith("posts/"):
+        if normalized.endswith(".md"):
+            return is_directory_post_path(normalized)
+        return True
+    return False
 
 
 def hash_file(file_path: Path) -> str:
@@ -619,7 +626,7 @@ def normalize_post_frontmatter(
 
     for file_path in uploaded_files:
         # Skip non-post files
-        if not file_path.startswith("posts/") or not file_path.endswith(".md"):
+        if not is_directory_post_path(file_path):
             continue
 
         full_path = (content_dir / file_path).resolve()

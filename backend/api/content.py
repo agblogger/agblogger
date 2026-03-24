@@ -16,6 +16,7 @@ from backend.api.deps import get_current_user, get_session, get_settings
 from backend.config import Settings
 from backend.models.post import PostCache
 from backend.models.user import User
+from backend.utils.slug import is_directory_post_path
 
 router = APIRouter(prefix="/api/content", tags=["content"])
 
@@ -90,8 +91,7 @@ async def _check_draft_access(
 
     # Extract the directory component: "posts/<dir>/file" -> "posts/<dir>/"
     parts = file_path.split("/")
-    if len(parts) < 3:
-        # Flat post file under posts/, e.g. "posts/hello.md".
+    if is_directory_post_path(file_path):
         stmt = select(PostCache).where(PostCache.file_path == file_path).limit(1)
     else:
         dir_prefix = "/".join(parts[:2]) + "/"
@@ -135,6 +135,16 @@ async def serve_content_file(
     """
     resolved = _validate_path(file_path, settings.content_dir)
     resolved_relative_path = resolved.relative_to(settings.content_dir.resolve()).as_posix()
+
+    if (
+        resolved_relative_path.startswith("posts/")
+        and resolved_relative_path.endswith(".md")
+        and not is_directory_post_path(resolved_relative_path)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="File not found",
+        )
 
     if not resolved.is_file():
         raise HTTPException(

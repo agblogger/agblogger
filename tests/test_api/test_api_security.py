@@ -20,7 +20,9 @@ if TYPE_CHECKING:
 def app_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
     """Create settings for test app."""
     posts_dir = tmp_content_dir / "posts"
-    (posts_dir / "hello.md").write_text(
+    hello_post = posts_dir / "hello"
+    hello_post.mkdir()
+    (hello_post / "index.md").write_text(
         "---\ncreated_at: 2026-02-02 22:21:29.975359+00\n"
         "author: admin\nlabels: ['#swe']\n---\n# Hello World\n\nTest content.\n"
     )
@@ -94,7 +96,7 @@ class TestCrosspostHistoryAuth:
 
     @pytest.mark.asyncio
     async def test_history_requires_auth(self, client: AsyncClient) -> None:
-        resp = await client.get("/api/crosspost/history/posts/hello.md")
+        resp = await client.get("/api/crosspost/history/posts/hello/index.md")
         assert resp.status_code == 401
 
     @pytest.mark.asyncio
@@ -106,7 +108,7 @@ class TestCrosspostHistoryAuth:
         token = login_resp.json()["access_token"]
 
         resp = await client.get(
-            "/api/crosspost/history/posts/hello.md",
+            "/api/crosspost/history/posts/hello/index.md",
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 200

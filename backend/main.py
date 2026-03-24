@@ -818,8 +818,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 logger.warning("index.html not found at %s", index_path)
                 return HTMLResponse("<html><body>Not found</body></html>", status_code=404)
 
-        # Look up the post by exact file path or canonical directory-backed slug.
-        from backend.utils.slug import resolve_slug_candidates
+        # Look up the post by exact canonical file path or canonical slug.
+        from backend.utils.slug import is_directory_post_path, resolve_slug_candidates
 
         slug = file_path
         post = None
@@ -827,8 +827,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             session_factory = request.app.state.session_factory
             async with session_factory() as session:
                 candidates: tuple[str, ...]
-                if file_path.startswith("posts/") and file_path.endswith(".md"):
+                if is_directory_post_path(file_path):
                     candidates = (file_path,)
+                elif file_path.startswith("posts/"):
+                    candidates = ()
                 else:
                     candidates = resolve_slug_candidates(slug)
 
