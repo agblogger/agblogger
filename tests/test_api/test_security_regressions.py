@@ -1209,3 +1209,31 @@ class TestProductionStartupValidation:
         with pytest.raises(InternalServerError):
             async with create_test_client(settings):
                 pass
+
+
+class TestPostRoutePathTraversal:
+    """The /post/ SPA route must not serve content for path traversal attempts."""
+
+    @pytest.mark.asyncio
+    async def test_traversal_in_post_route_returns_404(self, client: AsyncClient) -> None:
+        """GET /post/../../etc/passwd must return 404, not 200."""
+        resp = await client.get("/post/../../etc/passwd", follow_redirects=False)
+        assert resp.status_code in {404, 301, 302, 307, 308}
+        # If it redirects, ensure it does not redirect to a real resource
+        if resp.status_code in {301, 302, 307, 308}:
+            location = resp.headers.get("location", "")
+            assert "passwd" not in location
+
+
+class TestContentApiRejectsFlatMdPaths:
+    """The content API must reject flat .md paths that are not directory-backed posts."""
+
+    @pytest.mark.asyncio
+    async def test_flat_md_path_returns_404(self, client: AsyncClient) -> None:
+        """GET /api/content/posts/hello.md returns 404 even if such a file existed on disk.
+
+        The guard in backend/api/content.py rejects posts/<name>.md paths that
+        are not directory-backed (i.e., not posts/<dir>/index.md).
+        """
+        resp = await client.get("/api/content/posts/hello.md")
+        assert resp.status_code == 404

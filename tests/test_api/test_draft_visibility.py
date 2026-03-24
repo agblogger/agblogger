@@ -43,6 +43,7 @@ def draft_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
         "---\ntitle: Admin Draft\ncreated_at: 2026-02-02 22:21:29+00\n"
         "author: admin\nlabels: []\ndraft: true\n---\nDraft content.\n"
     )
+    (admin_draft_dir / "photo.png").write_bytes(b"fake-draft-asset")
     # Add a draft post directory with an image asset
     draft_dir = posts_dir / "draft-with-asset"
     draft_dir.mkdir()
@@ -403,3 +404,15 @@ class TestRenamedDraftRedirectVisibility:
         assert redirect_resp.status_code == 301
         assert redirect_resp.headers["location"] == f"/api/posts/{new_path}"
         assert redirect_resp.headers["cache-control"] == "private, no-store"
+
+
+class TestDraftAssetAccess:
+    """Assets inside a draft post directory must be gated to the post's author."""
+
+    @pytest.mark.asyncio
+    async def test_draft_asset_returns_404_for_unauthenticated_user(
+        self, client: AsyncClient
+    ) -> None:
+        """An unauthenticated user cannot access an asset inside a draft post directory."""
+        resp = await client.get("/api/content/posts/admin-draft/photo.png")
+        assert resp.status_code == 404

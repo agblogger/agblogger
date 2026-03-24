@@ -220,6 +220,10 @@ class TestIsSyncManagedPath:
         assert is_sync_managed_path("data.json") is False
         assert is_sync_managed_path("config.toml") is False
 
+    def test_rejects_flat_file_posts(self) -> None:
+        """Flat-file posts cannot be synced; only directory-backed posts are allowed."""
+        assert is_sync_managed_path("posts/hello.md") is False
+
 
 class TestScanContentFiles:
     def test_allows_nested_assets_inside_post_directories(self, tmp_path: Path) -> None:

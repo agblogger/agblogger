@@ -413,7 +413,9 @@ class TestOversizedPostSkipped:
     def test_scan_posts_skips_oversized_file(self, tmp_path: Path) -> None:
         posts_dir = tmp_path / "posts"
         posts_dir.mkdir()
-        big_post = posts_dir / "big.md"
+        big_dir = posts_dir / "big"
+        big_dir.mkdir()
+        big_post = big_dir / "index.md"
         # Write just over 10MB
         big_post.write_text("---\ntitle: Big\n---\n" + "x" * (10 * 1024 * 1024 + 1))
         (tmp_path / "index.toml").write_text('[site]\ntitle = "Test"')
@@ -425,7 +427,9 @@ class TestOversizedPostSkipped:
     def test_read_post_skips_oversized_file(self, tmp_path: Path) -> None:
         posts_dir = tmp_path / "posts"
         posts_dir.mkdir()
-        big_post = posts_dir / "big.md"
+        big_dir = posts_dir / "big"
+        big_dir.mkdir()
+        big_post = big_dir / "index.md"
         big_post.write_text("---\ntitle: Big\n---\n" + "x" * (10 * 1024 * 1024 + 1))
         (tmp_path / "index.toml").write_text('[site]\ntitle = "Test"')
         (tmp_path / "labels.toml").write_text("[labels]")
@@ -440,7 +444,9 @@ class TestNullByteSkipped:
     def test_scan_posts_skips_null_byte_file(self, tmp_path: Path) -> None:
         posts_dir = tmp_path / "posts"
         posts_dir.mkdir()
-        bad_post = posts_dir / "null.md"
+        null_dir = posts_dir / "null"
+        null_dir.mkdir()
+        bad_post = null_dir / "index.md"
         bad_post.write_text("---\ntitle: Null\n---\nbody\x00content")
         (tmp_path / "index.toml").write_text('[site]\ntitle = "Test"')
         (tmp_path / "labels.toml").write_text("[labels]")
@@ -451,7 +457,9 @@ class TestNullByteSkipped:
     def test_read_post_skips_null_byte_file(self, tmp_path: Path) -> None:
         posts_dir = tmp_path / "posts"
         posts_dir.mkdir()
-        bad_post = posts_dir / "null.md"
+        null_dir = posts_dir / "null"
+        null_dir.mkdir()
+        bad_post = null_dir / "index.md"
         bad_post.write_text("---\ntitle: Null\n---\nbody\x00content")
         (tmp_path / "index.toml").write_text('[site]\ntitle = "Test"')
         (tmp_path / "labels.toml").write_text("[labels]")

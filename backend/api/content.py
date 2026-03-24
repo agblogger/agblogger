@@ -89,7 +89,9 @@ async def _check_draft_access(
     if not file_path.startswith("posts/"):
         return
 
-    # Extract the directory component: "posts/<dir>/file" -> "posts/<dir>/"
+    # For the canonical post path itself (posts/<slug>/index.md), do an exact
+    # file_path lookup. For co-located assets (posts/<slug>/photo.png), use a
+    # directory prefix lookup to find the owning post.
     parts = file_path.split("/")
     if is_directory_post_path(file_path):
         stmt = select(PostCache).where(PostCache.file_path == file_path).limit(1)

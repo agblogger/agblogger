@@ -16,6 +16,9 @@ plus additional security fixes:
 12. Test for sync_status git failure degradation
 13. Sync error responses should not leak internal file paths
 14. Sync status should be 'ok' when commit succeeds but HEAD read fails
+
+Additional unit tests:
+- TestLooksLikePostAssetPath: unit tests for _looks_like_post_asset_path heuristic
 """
 
 from __future__ import annotations
@@ -31,6 +34,7 @@ import pytest
 from sqlalchemy.exc import OperationalError
 
 from backend.config import Settings
+from backend.main import _looks_like_post_asset_path
 from tests.conftest import create_test_client
 
 if TYPE_CHECKING:
@@ -38,6 +42,53 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from httpx import AsyncClient
+
+
+# ── Issue 3 (unit): _looks_like_post_asset_path heuristic ──
+
+
+class TestLooksLikePostAssetPath:
+    """Unit tests for the _looks_like_post_asset_path extension-based heuristic."""
+
+    def test_extensionless_slug_returns_false(self) -> None:
+        assert _looks_like_post_asset_path("my-post") is False
+
+    def test_extensionless_slug_some_slug_returns_false(self) -> None:
+        assert _looks_like_post_asset_path("some-slug") is False
+
+    def test_md_extension_returns_false(self) -> None:
+        assert _looks_like_post_asset_path("something.md") is False
+
+    def test_index_md_leaf_returns_false(self) -> None:
+        assert _looks_like_post_asset_path("index.md") is False
+
+    def test_png_extension_returns_true(self) -> None:
+        assert _looks_like_post_asset_path("photo.png") is True
+
+    def test_jpg_extension_returns_true(self) -> None:
+        assert _looks_like_post_asset_path("image.jpg") is True
+
+    def test_css_extension_returns_true(self) -> None:
+        assert _looks_like_post_asset_path("styles.css") is True
+
+    def test_js_extension_returns_true(self) -> None:
+        assert _looks_like_post_asset_path("bundle.js") is True
+
+    def test_empty_string_returns_false(self) -> None:
+        assert _looks_like_post_asset_path("") is False
+
+    def test_nested_path_with_asset_extension_returns_true(self) -> None:
+        assert _looks_like_post_asset_path("my-post/photo.png") is True
+
+    def test_nested_path_without_extension_returns_false(self) -> None:
+        assert _looks_like_post_asset_path("my-post/assets") is False
+
+    def test_nested_path_with_md_extension_returns_false(self) -> None:
+        assert _looks_like_post_asset_path("my-post/index.md") is False
+
+    def test_trailing_slash_treated_as_extensionless(self) -> None:
+        # A trailing slash means the leaf becomes empty after rstrip, so False
+        assert _looks_like_post_asset_path("my-post/") is False
 
 
 # ── Fixtures ──

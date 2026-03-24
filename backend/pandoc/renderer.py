@@ -403,7 +403,9 @@ def rewrite_relative_urls(html: str, file_path: str) -> str:
         HTML with relative URLs resolved to absolute paths.
     """
     base_dir = posixpath.dirname(file_path)
-    is_directory_backed_post = file_path.startswith("posts/") and file_path.endswith("/index.md")
+    from backend.utils.slug import is_directory_post_path
+
+    is_directory_backed_post = is_directory_post_path(file_path)
 
     def _replace(match: re.Match[str]) -> str:
         attr = match.group(1)
