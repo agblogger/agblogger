@@ -29,9 +29,9 @@ All checks are fail-fast and CI-blocking.
 - `ruff format --check backend/ cli/ tests/`
   - Purpose: format compliance gate.
   - Scope: backend, CLI, tests.
-- `pip-audit --progress-spinner off`
-  - Purpose: known-vulnerability scan of Python dependencies.
-  - Scope: installed dependency set.
+- `uv export --format requirements.txt --no-dev --no-emit-project --frozen ...` then `uv run pip-audit --progress-spinner off --requirement ...`
+  - Purpose: known-vulnerability scan of the locked Python runtime dependency set that ships with the application.
+  - Scope: `uv.lock` exported without dev dependencies and without the editable local project entry, so dev-only tools do not affect the backend production audit.
 
 ## Frontend (`check-frontend-static`)
 

@@ -42,7 +42,7 @@ When deployed behind a TLS-terminating reverse proxy (e.g. Caddy), the `_ProxyHe
 
 Security verification is spread across multiple layers:
 
-- static analysis and dependency auditing
+- static analysis and dependency auditing of the shipped runtime dependency set
 - focused regression tests for security-sensitive behavior
 - deployment-style dynamic scanning outside the normal development server path
 

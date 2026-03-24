@@ -36,5 +36,5 @@ Where the codebase has deterministic, high-invariant logic, tests favor property
 - `tests/test_api/` covers HTTP-level backend behavior.
 - `tests/test_services/`, `tests/test_rendering/`, `tests/test_labels/`, and `tests/test_sync/` cover core backend subsystems.
 - `frontend/src/**/__tests__/` and `frontend/src/**/*.test.ts*` cover the SPA.
-- `tests/test_cli/` covers operational tooling.
+- `tests/test_cli/` covers operational tooling, including quality-gate helper CLIs such as the locked runtime dependency audit.
 - `justfile` defines the repository-level validation gates.
