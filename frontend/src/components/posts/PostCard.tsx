@@ -4,6 +4,7 @@ import type { PostSummary } from '@/api/client'
 import LabelChip from '@/components/labels/LabelChip'
 import { useRenderedHtml } from '@/hooks/useKatex'
 import { formatRelativeDate } from '@/utils/date'
+import { postUrl } from '@/utils/postUrl'
 
 interface PostCardProps {
   post: PostSummary
@@ -11,7 +12,7 @@ interface PostCardProps {
 }
 
 function PostCardInner({ post, index = 0 }: PostCardProps) {
-  const postUrl = `/post/${post.file_path}`
+  const postHref = postUrl(post.file_path)
   const staggerClass = `stagger-${Math.min(index + 1, 8)}`
   const sanitizedExcerpt = useRenderedHtml(post.rendered_excerpt)
 
@@ -21,7 +22,7 @@ function PostCardInner({ post, index = 0 }: PostCardProps) {
     <article
       className={`group relative opacity-0 animate-slide-up ${staggerClass} py-6 -mx-4 px-4 rounded-xl border-l-2 border-l-transparent transition-all duration-200 hover:bg-paper-warm/60 hover:shadow-lg hover:border-l-accent hover:z-10`}
     >
-      <Link to={postUrl} className="absolute inset-0" aria-label={post.title} />
+      <Link to={postHref} className="absolute inset-0" aria-label={post.title} />
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
           <h2 className="font-display text-xl text-ink group-hover:text-accent transition-colors leading-snug">

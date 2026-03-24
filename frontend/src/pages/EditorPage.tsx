@@ -13,6 +13,7 @@ import { extractErrorDetail, parseErrorDetail } from '@/api/parseError'
 import api from '@/api/client'
 import { useCodeBlockEnhance } from '@/hooks/useCodeBlockEnhance'
 import { useFileUpload } from '@/components/editor/useFileUpload'
+import { postUrl } from '@/utils/postUrl'
 import { buildEditorDraftStorageKey, useEditorAutoSave } from '@/hooks/useEditorAutoSave'
 import type { DraftData } from '@/hooks/useEditorAutoSave'
 import { useRenderedHtml } from '@/hooks/useKatex'
@@ -337,7 +338,7 @@ export default function EditorPage() {
               onClick={() => {
                 if (isDirty && !window.confirm('You have unsaved changes. Leave without saving?'))
                   return
-                void navigate(`/post/${effectiveFilePath}`)
+                void navigate(postUrl(effectiveFilePath))
               }}
               className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium
                        text-muted border border-border rounded-lg

@@ -60,7 +60,7 @@ describe('SearchPage', () => {
     })
     expect(screen.getByText('React Guide')).toBeInTheDocument()
     const links = screen.getAllByRole('link')
-    expect(links.some((l) => l.getAttribute('href') === '/post/posts/hello.md')).toBe(true)
+    expect(links.some((l) => l.getAttribute('href') === '/post/hello')).toBe(true)
   })
 
   it('shows no results message', async () => {

@@ -15,7 +15,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError, OperationalError
@@ -771,9 +771,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
         return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
-    # OG tag route — must be registered before the StaticFiles catch-all
-    @app.get("/post/{file_path:path}", response_class=HTMLResponse, include_in_schema=False)
-    async def post_with_og_tags(file_path: str, request: Request) -> HTMLResponse:
+    # Post route — serves OG-enriched SPA HTML for post views, and redirects
+    # asset requests to the content API.  Must be registered before the
+    # StaticFiles catch-all.
+    @app.get("/post/{file_path:path}", include_in_schema=False, response_model=None)
+    async def post_route(file_path: str, request: Request) -> HTMLResponse | RedirectResponse:
+        # Asset request: /post/<slug>/<sub-path> → redirect to content API
+        if "/" in file_path:
+            return RedirectResponse(
+                url=f"/api/content/posts/{file_path}",
+                status_code=301,
+            )
+
+        # Post view: /post/<slug> → serve SPA HTML with OG tags
         from backend.models.post import PostCache
         from backend.services.datetime_service import format_iso
         from backend.services.opengraph_service import inject_og_tags, strip_html_tags
@@ -791,15 +801,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 logger.warning("index.html not found at %s", index_path)
                 return HTMLResponse("<html><body>Not found</body></html>", status_code=404)
 
-        # Look up the post in the cache
+        # Look up the post by slug — try directory-backed and flat-file layouts
+        slug = file_path
+        post = None
         try:
             session_factory = request.app.state.session_factory
             async with session_factory() as session:
-                stmt = select(PostCache).where(PostCache.file_path == file_path)
-                result = await session.execute(stmt)
-                post = result.scalar_one_or_none()
+                for candidate in (
+                    f"posts/{slug}/index.md",
+                    f"posts/{slug}.md",
+                ):
+                    stmt = select(PostCache).where(PostCache.file_path == candidate)
+                    result = await session.execute(stmt)
+                    post = result.scalar_one_or_none()
+                    if post is not None:
+                        break
         except Exception:
-            logger.exception("DB error looking up post for OG tags: %s", file_path)
+            logger.exception("DB error looking up post for OG tags: %s", slug)
             return HTMLResponse(base_html)
 
         if post is None or post.is_draft:

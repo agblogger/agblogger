@@ -17,9 +17,8 @@ import { useCodeBlockEnhance } from '@/hooks/useCodeBlockEnhance'
 import TableOfContents from '@/components/posts/TableOfContents'
 import type { PostDetail } from '@/api/client'
 import { formatDate } from '@/utils/date'
-
 export default function PostPage() {
-  const { '*': filePath } = useParams()
+  const { '*': slug } = useParams()
   const navigate = useNavigate()
   const [post, setPost] = useState<PostDetail | null>(null)
   const [loading, setLoading] = useState(true)
@@ -35,11 +34,11 @@ export default function PostPage() {
   useCodeBlockEnhance(contentRef, renderedHtml)
 
   async function handleDelete() {
-    if (filePath === undefined) return
+    if (!post) return
     setDeleting(true)
     setDeleteError(null)
     try {
-      await deletePost(filePath, true)
+      await deletePost(post.file_path, true)
       void navigate('/', { replace: true })
     } catch (err) {
       if (err instanceof HTTPError && err.response.status === 401) {
@@ -54,12 +53,12 @@ export default function PostPage() {
   }
 
   async function handlePublish() {
-    if (filePath === undefined) return
+    if (!post) return
     setPublishing(true)
     setPublishError(null)
     try {
-      const editData = await fetchPostForEdit(filePath)
-      const updated = await updatePost(filePath, {
+      const editData = await fetchPostForEdit(post.file_path)
+      const updated = await updatePost(post.file_path, {
         title: editData.title,
         body: editData.body,
         labels: editData.labels,
@@ -84,12 +83,12 @@ export default function PostPage() {
   }
 
   useEffect(() => {
-    if (filePath === undefined) return
+    if (slug === undefined || slug === '') return
     void (async () => {
       setLoading(true)
       setLoadError(null)
       try {
-        const p = await fetchPost(filePath)
+        const p = await fetchPost(slug)
         setPost(p)
       } catch (err) {
         if (err instanceof HTTPError && err.response.status === 404) {
@@ -103,7 +102,7 @@ export default function PostPage() {
         setLoading(false)
       }
     })()
-  }, [filePath])
+  }, [slug])
 
   if (loading) {
     return (
@@ -206,7 +205,7 @@ export default function PostPage() {
             <ShareButton
               title={post.title}
               author={post.author}
-              url={`${window.location.origin}/post/${filePath}`}
+              url={`${window.location.origin}/post/${slug}`}
               disabled={post.is_draft}
             />
           </div>
@@ -252,12 +251,12 @@ export default function PostPage() {
       <ShareBar
         title={post.title}
         author={post.author}
-        url={`${window.location.origin}/post/${filePath}`}
+        url={`${window.location.origin}/post/${slug}`}
         disabled={post.is_draft}
       />
 
-      {user?.is_admin === true && filePath !== undefined && filePath !== '' && (
-        <CrossPostSection filePath={filePath} post={post} />
+      {user?.is_admin === true && post.file_path !== '' && (
+        <CrossPostSection filePath={post.file_path} post={post} />
       )}
 
       <footer className="mt-16 pt-8 border-t border-border">

@@ -8,6 +8,7 @@ import { fetchPosts, uploadPost, type PostListParams } from '@/api/posts'
 import { HTTPError } from '@/api/client'
 import type { PostListResponse } from '@/api/client'
 import { useAuthStore } from '@/stores/authStore'
+import { postUrl } from '@/utils/postUrl'
 
 export default function TimelinePage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -102,7 +103,7 @@ export default function TimelinePage() {
     setUploadError(null)
     try {
       const result = await uploadPost(fileArray)
-      void navigate(`/post/${result.file_path}`)
+      void navigate(postUrl(result.file_path))
     } catch (err) {
       if (err instanceof HTTPError) {
         if (err.response.status === 422) {
@@ -136,7 +137,7 @@ export default function TimelinePage() {
     try {
       const result = await uploadPost(titlePrompt.files, promptTitle.trim())
       setTitlePrompt(null)
-      void navigate(`/post/${result.file_path}`)
+      void navigate(postUrl(result.file_path))
     } catch {
       setUploadError('Failed to upload post.')
       setTitlePrompt(null)

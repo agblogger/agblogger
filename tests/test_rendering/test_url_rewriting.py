@@ -9,16 +9,16 @@ class TestRewriteRelativeUrls:
     """Tests for rewrite_relative_urls()."""
 
     def test_rewrite_img_src_relative(self) -> None:
-        """Relative img src is rewritten to absolute /api/content/ path."""
+        """Relative img src is rewritten to absolute /post/<slug>/ path."""
         html = '<img src="photo.png">'
         result = rewrite_relative_urls(html, "posts/2026-02-20-my-post/index.md")
-        assert result == '<img src="/api/content/posts/2026-02-20-my-post/photo.png">'
+        assert result == '<img src="/post/2026-02-20-my-post/photo.png">'
 
     def test_rewrite_img_src_dot_slash_prefix(self) -> None:
         """Relative img src with ./ prefix is rewritten correctly."""
         html = '<img src="./photo.png">'
         result = rewrite_relative_urls(html, "posts/2026-02-20-my-post/index.md")
-        assert result == '<img src="/api/content/posts/2026-02-20-my-post/photo.png">'
+        assert result == '<img src="/post/2026-02-20-my-post/photo.png">'
 
     def test_skip_absolute_url_https(self) -> None:
         """Absolute https:// URLs are left unchanged."""
@@ -66,13 +66,13 @@ class TestRewriteRelativeUrls:
         """Relative href in anchor is rewritten to absolute path."""
         html = '<a href="doc.pdf">'
         result = rewrite_relative_urls(html, "posts/2026-02-20-my-post/index.md")
-        assert result == '<a href="/api/content/posts/2026-02-20-my-post/doc.pdf">'
+        assert result == '<a href="/post/2026-02-20-my-post/doc.pdf">'
 
     def test_flat_post_path(self) -> None:
         """For flat post path (posts/hello.md), base dir is posts/."""
         html = '<img src="photo.png">'
         result = rewrite_relative_urls(html, "posts/hello.md")
-        assert result == '<img src="/api/content/posts/photo.png">'
+        assert result == '<img src="/post/photo.png">'
 
     def test_multiple_attributes(self) -> None:
         """Multiple src/href attributes in the same HTML are all rewritten."""
@@ -83,8 +83,8 @@ class TestRewriteRelativeUrls:
         )
         result = rewrite_relative_urls(html, "posts/2026-02-20-my-post/index.md")
         assert result == (
-            '<img src="/api/content/posts/2026-02-20-my-post/photo.png"> '
-            '<a href="/api/content/posts/2026-02-20-my-post/doc.pdf">link</a> '
+            '<img src="/post/2026-02-20-my-post/photo.png"> '
+            '<a href="/post/2026-02-20-my-post/doc.pdf">link</a> '
             '<img src="https://cdn.example.com/img.jpg">'
         )
 
@@ -92,13 +92,13 @@ class TestRewriteRelativeUrls:
         """Relative path referencing a subdirectory resolves correctly."""
         html = '<img src="images/photo.png">'
         result = rewrite_relative_urls(html, "posts/2026-02-20-my-post/index.md")
-        assert result == '<img src="/api/content/posts/2026-02-20-my-post/images/photo.png">'
+        assert result == '<img src="/post/2026-02-20-my-post/images/photo.png">'
 
     def test_parent_directory_relative_path(self) -> None:
         """Relative path with ../ resolves correctly via normpath."""
         html = '<img src="../shared/photo.png">'
         result = rewrite_relative_urls(html, "posts/2026-02-20-my-post/index.md")
-        assert result == '<img src="/api/content/posts/shared/photo.png">'
+        assert result == '<img src="/post/shared/photo.png">'
 
     def test_deep_traversal_left_unchanged(self) -> None:
         """Deep ../ traversal that escapes content root is left unchanged."""
@@ -115,13 +115,13 @@ class TestRewriteRelativeUrls:
         """Single-quoted img src is rewritten correctly."""
         html = "<img src='photo.png'>"
         result = rewrite_relative_urls(html, "posts/2026-02-20-my-post/index.md")
-        assert result == "<img src='/api/content/posts/2026-02-20-my-post/photo.png'>"
+        assert result == "<img src='/post/2026-02-20-my-post/photo.png'>"
 
     def test_rewrite_single_quoted_href(self) -> None:
         """Single-quoted href is rewritten correctly."""
         html = "<a href='doc.pdf'>"
         result = rewrite_relative_urls(html, "posts/2026-02-20-my-post/index.md")
-        assert result == "<a href='/api/content/posts/2026-02-20-my-post/doc.pdf'>"
+        assert result == "<a href='/post/2026-02-20-my-post/doc.pdf'>"
 
     def test_skip_single_quoted_absolute(self) -> None:
         """Single-quoted absolute URLs are left unchanged."""

@@ -331,7 +331,7 @@ describe('TimelinePage', () => {
     })
 
     await waitFor(() => {
-      expect(mockNavigate).toHaveBeenCalledWith('/post/posts/uploaded.md')
+      expect(mockNavigate).toHaveBeenCalledWith('/post/uploaded')
     })
   })
 

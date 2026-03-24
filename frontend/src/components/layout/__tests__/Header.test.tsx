@@ -363,7 +363,7 @@ describe('Header', () => {
       await waitFor(() => {
         expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
       })
-      expect(screen.getByTestId('location-display')).toHaveTextContent('/post/posts/hello.md')
+      expect(screen.getByTestId('location-display')).toHaveTextContent('/post/hello')
     })
 
     it('Enter with no highlight goes to search page', async () => {
@@ -395,7 +395,7 @@ describe('Header', () => {
       expect(options[0]).toHaveAttribute('aria-selected', 'true')
 
       await userEvent.keyboard('{Enter}')
-      expect(screen.getByTestId('location-display')).toHaveTextContent('/post/posts/hello.md')
+      expect(screen.getByTestId('location-display')).toHaveTextContent('/post/hello')
     })
 
     it('arrow down past last result wraps to no selection', async () => {

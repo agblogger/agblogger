@@ -8,6 +8,7 @@ import { useFilterPanelStore } from '@/stores/filterPanelStore'
 import { searchPosts } from '@/api/posts'
 import type { SearchResult } from '@/api/client'
 import SearchDropdown from '@/components/search/SearchDropdown'
+import { postUrl } from '@/utils/postUrl'
 
 export default function Header() {
   const location = useLocation()
@@ -188,7 +189,7 @@ export default function Header() {
                         e.preventDefault()
                         const result = dropdownResults[highlightIndex]
                         if (result) {
-                          void navigate(`/post/${result.file_path}`)
+                          void navigate(postUrl(result.file_path))
                           closeSearch()
                         }
                       }
@@ -233,7 +234,7 @@ export default function Header() {
                     error={dropdownError}
                     loading={searchLoading}
                     onSelect={(filePath) => {
-                      void navigate(`/post/${filePath}`)
+                      void navigate(postUrl(filePath))
                       closeSearch()
                     }}
                     onFooterClick={() => {

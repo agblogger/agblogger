@@ -5,6 +5,7 @@ import { searchPosts } from '@/api/posts'
 import type { SearchResult } from '@/api/client'
 import { useRenderedHtml } from '@/hooks/useKatex'
 import { formatRelativeDate } from '@/utils/date'
+import { postUrl } from '@/utils/postUrl'
 
 export default function SearchPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -125,7 +126,7 @@ const SearchResultItem = memo(function SearchResultItem({ result, index }: { res
 
   return (
     <Link
-      to={`/post/${result.file_path}`}
+      to={postUrl(result.file_path)}
       className={`block py-4 px-4 -mx-4 rounded-xl hover:bg-paper-warm/60 transition-colors
                 opacity-0 animate-slide-up stagger-${Math.min(index + 1, 8)}`}
     >

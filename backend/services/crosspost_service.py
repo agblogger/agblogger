@@ -149,7 +149,7 @@ async def crosspost(
         slug = slug.removeprefix("posts/")
     if slug.endswith(".md"):
         slug = slug.removesuffix(".md")
-    post_url = f"{site_url.rstrip('/')}/posts/{slug}"
+    post_url = f"{site_url.rstrip('/')}/post/{slug}"
 
     excerpt = content_manager.get_plain_excerpt(post_data)
     content = CrossPostContent(

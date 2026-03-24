@@ -128,9 +128,13 @@ class TestUrlRewritingProperties:
             assert rewritten == html
             return
 
-        expected = f"<a {attr}={quote}/api/content/{resolved}{quote}>"
+        if resolved.startswith("posts/"):
+            short = resolved.removeprefix("posts/")
+            expected = f"<a {attr}={quote}/post/{short}{quote}>"
+        else:
+            expected = f"<a {attr}={quote}/api/content/{resolved}{quote}>"
         assert rewritten == expected
-        assert "/api/content/.." not in rewritten
+        assert "/.." not in rewritten
 
     @PROPERTY_SETTINGS
     @given(

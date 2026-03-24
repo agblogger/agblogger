@@ -98,7 +98,7 @@ vi.mock('react-router-dom', async () => {
   }
 })
 
-function renderPostPage(path = '/post/posts/hello.md') {
+function renderPostPage(path = '/post/hello') {
   return render(
     <MemoryRouter initialEntries={[path]}>
       <Routes>
@@ -212,7 +212,7 @@ describe('PostPage', () => {
   it('shows unified single-button confirmation dialog for directory-backed post', async () => {
     mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null, is_admin: true }
     mockFetchPost.mockResolvedValue(draftPost)
-    renderPostPage('/post/posts/2026-03-08-draft/index.md')
+    renderPostPage('/post/2026-03-08-draft')
 
     await waitFor(() => {
       expect(screen.getByText('My Draft')).toBeInTheDocument()
@@ -380,7 +380,7 @@ describe('PostPage', () => {
   it('shows draft badge and publish button for draft post when authenticated', async () => {
     mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null, is_admin: true }
     mockFetchPost.mockResolvedValue(draftPost)
-    renderPostPage('/post/posts/2026-03-08-draft/index.md')
+    renderPostPage('/post/2026-03-08-draft')
 
     await waitFor(() => {
       expect(screen.getByText('My Draft')).toBeInTheDocument()
@@ -410,7 +410,7 @@ describe('PostPage', () => {
 
   it('does not show draft badge or publish button for unauthenticated user', async () => {
     mockFetchPost.mockResolvedValue(draftPost)
-    renderPostPage('/post/posts/2026-03-08-draft/index.md')
+    renderPostPage('/post/2026-03-08-draft')
 
     await waitFor(() => {
       expect(screen.getByText('My Draft')).toBeInTheDocument()
@@ -433,7 +433,7 @@ describe('PostPage', () => {
     })
     const publishedPost = { ...draftPost, is_draft: false }
     mockUpdatePost.mockResolvedValue(publishedPost)
-    renderPostPage('/post/posts/2026-03-08-draft/index.md')
+    renderPostPage('/post/2026-03-08-draft')
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /publish/i })).toBeInTheDocument()
@@ -453,7 +453,7 @@ describe('PostPage', () => {
     mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null, is_admin: true }
     mockFetchPost.mockResolvedValue(draftPost)
     mockFetchPostForEdit.mockRejectedValue(new Error('Network error'))
-    renderPostPage('/post/posts/2026-03-08-draft/index.md')
+    renderPostPage('/post/2026-03-08-draft')
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /publish/i })).toBeInTheDocument()
@@ -473,7 +473,7 @@ describe('PostPage', () => {
     mockFetchPostForEdit.mockImplementation(
       () => new Promise(() => {}),
     )
-    renderPostPage('/post/posts/2026-03-08-draft/index.md')
+    renderPostPage('/post/2026-03-08-draft')
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /publish/i })).toBeInTheDocument()
@@ -500,7 +500,7 @@ describe('PostPage', () => {
     mockUpdatePost.mockRejectedValue(
       mockHttpError(409, JSON.stringify({ detail: 'Post was modified by another user' })),
     )
-    renderPostPage('/post/posts/2026-03-08-draft/index.md')
+    renderPostPage('/post/2026-03-08-draft')
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /publish/i })).toBeInTheDocument()
@@ -530,7 +530,7 @@ describe('PostPage', () => {
     mockUpdatePost.mockRejectedValue(
       mockHttpError(500, JSON.stringify({ detail: 'Internal server error' })),
     )
-    renderPostPage('/post/posts/2026-03-08-draft/index.md')
+    renderPostPage('/post/2026-03-08-draft')
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /publish/i })).toBeInTheDocument()
@@ -549,7 +549,7 @@ describe('PostPage', () => {
     mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null, is_admin: true }
     mockFetchPost.mockResolvedValue(draftPost)
     mockFetchPostForEdit.mockRejectedValue(new Error('Network error'))
-    renderPostPage('/post/posts/2026-03-08-draft/index.md')
+    renderPostPage('/post/2026-03-08-draft')
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /publish/i })).toBeInTheDocument()

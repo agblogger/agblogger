@@ -1,14 +1,7 @@
+import { filePathToSlug } from '@/utils/postUrl'
+
 export function buildPostUrl(postPath: string): string {
-  let slug = postPath
-  if (slug.startsWith('posts/')) {
-    slug = slug.slice(6)
-  }
-  if (slug.endsWith('/index.md')) {
-    slug = slug.slice(0, -9)
-  } else if (slug.endsWith('.md')) {
-    slug = slug.slice(0, -3)
-  }
-  return `${window.location.origin}/post/${slug}`
+  return `${window.location.origin}/post/${filePathToSlug(postPath)}`
 }
 
 export function buildDefaultText(

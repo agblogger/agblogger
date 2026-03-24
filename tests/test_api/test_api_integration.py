@@ -595,7 +595,7 @@ class TestRender:
         )
         assert resp.status_code == 200
         data = resp.json()
-        assert "/api/content/posts/2026-02-20-my-post/photo.png" in data["html"]
+        assert "/post/2026-02-20-my-post/photo.png" in data["html"]
 
     @pytest.mark.asyncio
     async def test_render_preview_without_file_path_keeps_relative(

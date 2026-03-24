@@ -36,7 +36,7 @@ describe('PostCard', () => {
   it('renders title as link', () => {
     renderCard(makePost())
     const link = screen.getByRole('link')
-    expect(link).toHaveAttribute('href', '/post/posts/test.md')
+    expect(link).toHaveAttribute('href', '/post/test')
     expect(screen.getByText('Test Post')).toBeInTheDocument()
   })
 

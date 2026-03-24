@@ -416,6 +416,11 @@ def rewrite_relative_urls(html: str, file_path: str) -> str:
         # Don't produce URLs that escape the content root
         if resolved.startswith(".."):
             return match.group(0)
+
+        # Post assets get clean /post/<slug>/<file> URLs
+        if resolved.startswith("posts/"):
+            short = resolved.removeprefix("posts/")
+            return f"{attr}={quote}/post/{short}{quote}"
         return f"{attr}={quote}/api/content/{resolved}{quote}"
 
     return re.sub(r"""(src|href)=(["'])([^"']*)\2""", _replace, html)

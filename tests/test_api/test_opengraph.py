@@ -62,33 +62,33 @@ class TestPostOgTagsPublished:
     """OG tags are injected for published posts."""
 
     async def test_og_title_present(self, client: AsyncClient) -> None:
-        resp = await client.get("/post/posts/hello.md")
+        resp = await client.get("/post/hello")
         assert resp.status_code == 200
         assert 'og:title" content="Hello World"' in resp.text
 
     async def test_og_description_present(self, client: AsyncClient) -> None:
-        resp = await client.get("/post/posts/hello.md")
+        resp = await client.get("/post/hello")
         assert 'og:description"' in resp.text
 
     async def test_twitter_card_present(self, client: AsyncClient) -> None:
-        resp = await client.get("/post/posts/hello.md")
+        resp = await client.get("/post/hello")
         assert 'twitter:card" content="summary"' in resp.text
 
     async def test_html_title_updated(self, client: AsyncClient) -> None:
-        resp = await client.get("/post/posts/hello.md")
+        resp = await client.get("/post/hello")
         assert "<title>Hello World</title>" in resp.text
 
     async def test_og_type_article(self, client: AsyncClient) -> None:
-        resp = await client.get("/post/posts/hello.md")
+        resp = await client.get("/post/hello")
         assert 'og:type" content="article"' in resp.text
 
     async def test_og_url_present(self, client: AsyncClient) -> None:
-        resp = await client.get("/post/posts/hello.md")
+        resp = await client.get("/post/hello")
         assert 'og:url"' in resp.text
-        assert "/post/posts/hello.md" in resp.text
+        assert "/post/hello" in resp.text
 
     async def test_content_type_is_html(self, client: AsyncClient) -> None:
-        resp = await client.get("/post/posts/hello.md")
+        resp = await client.get("/post/hello")
         assert resp.status_code == 200
         assert "text/html" in resp.headers["content-type"]
 
@@ -97,7 +97,7 @@ class TestPostOgTagsMissing:
     """No OG tags for missing posts."""
 
     async def test_missing_post_returns_plain_html(self, client: AsyncClient) -> None:
-        resp = await client.get("/post/posts/nonexistent.md")
+        resp = await client.get("/post/nonexistent")
         assert resp.status_code == 200
         assert "og:title" not in resp.text
         assert "<title>AgBlogger</title>" in resp.text
@@ -107,7 +107,7 @@ class TestPostOgTagsDraft:
     """No OG tags leaked for draft posts."""
 
     async def test_draft_post_returns_plain_html(self, client: AsyncClient) -> None:
-        resp = await client.get("/post/posts/my-draft.md")
+        resp = await client.get("/post/my-draft")
         assert resp.status_code == 200
         assert "og:title" not in resp.text
         assert "Secret Draft" not in resp.text

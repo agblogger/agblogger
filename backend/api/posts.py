@@ -677,11 +677,27 @@ async def get_post_endpoint(
     user: Annotated[User | None, Depends(get_current_user)],
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
 ) -> PostDetail | RedirectResponse:
-    """Get a single post by file path."""
+    """Get a single post by file path or slug.
+
+    Accepts a full file_path (``posts/slug/index.md``) **or** a bare slug
+    (``slug``).  When a bare slug is given the endpoint tries the two canonical
+    layouts — directory-backed (``posts/<slug>/index.md``) and flat
+    (``posts/<slug>.md``) — before falling through to symlink resolution.
+    """
     draft_owner_username = user.username if user else None
     post = await get_post(session, file_path, draft_owner_username=draft_owner_username)
     if post is not None:
         return post
+
+    # Slug-based resolution: try canonical file layouts when a bare slug is given
+    if not file_path.startswith("posts/"):
+        for candidate in (
+            f"posts/{file_path}/index.md",
+            f"posts/{file_path}.md",
+        ):
+            post = await get_post(session, candidate, draft_owner_username=draft_owner_username)
+            if post is not None:
+                return post
 
     # Check if the path resolves through a symlink to a renamed post
     resolved = _resolve_symlink_redirect(file_path, content_manager)
