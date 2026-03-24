@@ -789,7 +789,7 @@ def build_setup_script_content(config: DeployConfig) -> str:
         [
             "# ── Health check ─────────────────────────────────────────────────────",
             'echo "Waiting for services to become healthy..."',
-            "TIMEOUT=180",
+            "TIMEOUT=120",
             "INTERVAL=5",
             "ELAPSED=0",
             "while [ $ELAPSED -lt $TIMEOUT ]; do",
@@ -892,7 +892,7 @@ def _agblogger_healthcheck_section(*, include_network: bool = False) -> str:
         '      test: ["CMD-SHELL", "wget -qO/dev/null http://127.0.0.1:8000/api/health"]\n'
         "      interval: 10s\n"
         "      timeout: 5s\n"
-        "      start_period: 120s\n"
+        "      start_period: 60s\n"
         "      retries: 3\n"
     )
     if include_network:
