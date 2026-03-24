@@ -26,11 +26,9 @@ Database schema migrations run programmatically during application startup, befo
 
 The repository includes deployment tooling for local and remote deployments. These workflows differ in how they deliver the image and configuration, but they converge on the same runtime architecture.
 
-Remote deployment bundles generate configuration files with a `.generated` suffix (`.env.production.generated`, compose files, Caddyfile). The bundle's `setup.sh` script is the deployment orchestrator — it handles file placement, image loading/pulling, external Caddy bootstrapping, old-stack teardown on mode switches, container startup, and health checking.
+Remote deployment bundles include a `setup.sh` deployment orchestrator script. The script handles file placement, image loading/pulling, external Caddy bootstrapping, old-stack teardown on mode switches, container startup, and health checking. The script is idempotent — safe to run on both fresh installs and upgrades.
 
-On first install, `setup.sh` moves `.env.production.generated` into place as `.env.production`. On upgrades, the existing `.env.production` is preserved (it contains `SECRET_KEY` used for JWT signing and social account credential encryption — changing it causes permanent data loss of encrypted OAuth tokens). The `.env.production.generated` file is left in place as a reference for new configuration variables. Config files (compose, Caddyfile) are always overwritten, with the previous version backed up to `.bak`.
-
-The upgrade workflow is: regenerate the bundle locally, copy all files to the server, run `bash setup.sh`. The script is idempotent — safe to run on both fresh installs and upgrades.
+The upgrade workflow is: regenerate the bundle locally, copy all files to the server, run `bash setup.sh`.
 
 ## Caddy Reverse Proxy Modes
 
@@ -40,9 +38,7 @@ The deployment helper supports three Caddy configurations:
 - **External**: AgBlogger joins a shared Caddy instance that lives in a separate compose stack at a configurable host directory (default `/opt/caddy`). Each service drops a site snippet into the shared `sites/` directory. Local deploys resolve the live shared-network subnet into `TRUSTED_PROXY_IPS`, and remote bundles do the same during `setup.sh` using the first configured shared-network subnet before the app starts. Suitable for multi-service servers with distinct subdomains.
 - **None**: no Caddy; AgBlogger is exposed directly. Suitable when another reverse proxy is already in place.
 
-Switching between Caddy modes is handled automatically by `setup.sh`. A `.last-teardown` marker records the compose flags used for the current deployment; on the next run, if the flags differ (mode switch), `setup.sh` tears down the old stack using the `.bak` compose files before starting the new one.
-
-The external Caddy mode uses `docker exec caddy caddy reload` to apply configuration changes without restarting the container.
+Switching between Caddy modes is handled automatically by `setup.sh`.
 
 ## Verification Path
 
