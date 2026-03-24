@@ -68,7 +68,7 @@ Admin endpoints (require `require_admin`):
 
 Public endpoint:
 
-- `GET /api/analytics/views/{slug}` — view count for a single post. Returns data only when `analytics_show_views_on_posts` is enabled; returns `null` when disabled. Must not reveal the existence of draft or unpublished posts — returns the same response for non-existent and draft slugs.
+- `GET /api/analytics/views/{file_path:path}` — view count for a single post. Accepts the same path formats as the post endpoint (bare slug or full file path) for consistency. Returns data only when `analytics_show_views_on_posts` is enabled; returns `null` when disabled. Must not reveal the existence of draft or unpublished posts — returns the same response for non-existent and draft slugs.
 
 ### Hit Recording Integration
 
@@ -89,7 +89,7 @@ In the existing post and page API handlers, after serving a successful response,
 
 - Requests from authenticated users — if the request carries a valid session cookie, the hit is not recorded. This distinguishes admin/editor browsing from public readers on the same endpoints.
 - Search, label browsing, timeline
-- Bot requests (common crawlers filtered by User-Agent)
+- Bot requests (detected via `crawlerdetect` library)
 
 ### Admin Settings (Durable Database Table)
 
