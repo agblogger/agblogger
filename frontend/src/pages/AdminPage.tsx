@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { Settings } from 'lucide-react'
 
@@ -14,11 +14,14 @@ import AccountSection from '@/components/admin/AccountSection'
 import SocialAccountsPanel from '@/components/crosspost/SocialAccountsPanel'
 import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
 
+const AnalyticsPanel = lazy(() => import('@/components/admin/AnalyticsPanel'))
+
 const ADMIN_TABS = [
   { key: 'settings', label: 'Settings' },
   { key: 'pages', label: 'Pages' },
   { key: 'account', label: 'Account' },
   { key: 'social', label: 'Social' },
+  { key: 'analytics', label: 'Analytics' },
 ] as const
 
 type AdminTabKey = (typeof ADMIN_TABS)[number]['key']
@@ -53,7 +56,8 @@ export default function AdminPage() {
   const [pagesSaving, setPagesSaving] = useState(false)
   const [accountSaving, setAccountSaving] = useState(false)
   const [socialBusy, setSocialBusy] = useState(false)
-  const busy = siteSaving || pagesSaving || accountSaving || socialBusy
+  const [analyticsBusy, setAnalyticsBusy] = useState(false)
+  const busy = siteSaving || pagesSaving || accountSaving || socialBusy || analyticsBusy
 
   // === Dirty tracking from sections ===
   const [siteDirty, setSiteDirty] = useState(false)
@@ -174,6 +178,11 @@ export default function AdminPage() {
       )}
       {activeTab === 'social' && (
         <SocialAccountsPanel busy={busy} onBusyChange={setSocialBusy} />
+      )}
+      {activeTab === 'analytics' && (
+        <Suspense fallback={<LoadingSpinner />}>
+          <AnalyticsPanel busy={busy} onBusyChange={setAnalyticsBusy} />
+        </Suspense>
       )}
     </div>
   )

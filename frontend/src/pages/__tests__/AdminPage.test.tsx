@@ -43,6 +43,10 @@ vi.mock('@/components/crosspost/SocialAccountsPanel', () => ({
   default: () => <div data-testid="social-accounts-panel">Social Accounts</div>,
 }))
 
+vi.mock('@/components/admin/AnalyticsPanel', () => ({
+  default: () => <div data-testid="analytics-panel">Analytics</div>,
+}))
+
 const mockUpdateProfile = vi.fn()
 
 vi.mock('@/api/auth', () => ({
@@ -1191,6 +1195,30 @@ describe('AdminPage', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('social-accounts-panel')).toBeInTheDocument()
+    })
+  })
+
+  it('renders analytics tab', async () => {
+    setupLoadSuccess()
+    const user = userEvent.setup()
+    renderAdmin()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Analytics' })).toBeInTheDocument()
+    })
+    await switchToTab(user, 'Analytics')
+
+    await waitFor(() => {
+      expect(screen.getByTestId('analytics-panel')).toBeInTheDocument()
+    })
+  })
+
+  it('opens the analytics tab directly from the tab query parameter', async () => {
+    setupLoadSuccess()
+    renderAdmin('/admin?tab=analytics')
+
+    await waitFor(() => {
+      expect(screen.getByTestId('analytics-panel')).toBeInTheDocument()
     })
   })
 
