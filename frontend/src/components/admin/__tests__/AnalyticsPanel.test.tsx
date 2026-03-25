@@ -403,4 +403,25 @@ describe('AnalyticsPanel', () => {
     })
     expect(screen.getByText('—')).toBeInTheDocument()
   })
+
+  it('renders top pages table sorted by views descending', async () => {
+    mockFetchPathHits.mockResolvedValue({
+      paths: [
+        { path_id: 3, path: '/posts/low', views: 50, unique: 20 },
+        { path_id: 1, path: '/posts/high', views: 900, unique: 400 },
+        { path_id: 2, path: '/posts/mid', views: 300, unique: 150 },
+      ],
+    })
+    renderPanel()
+    await waitFor(() => {
+      expect(screen.getByText('Top pages')).toBeInTheDocument()
+    })
+
+    const rows = screen.getAllByRole('button', { name: /View referrers for/ })
+    expect(rows).toHaveLength(3)
+    // Rows should appear sorted: high (900), mid (300), low (50)
+    expect(rows[0]).toHaveAttribute('aria-label', 'View referrers for /posts/high')
+    expect(rows[1]).toHaveAttribute('aria-label', 'View referrers for /posts/mid')
+    expect(rows[2]).toHaveAttribute('aria-label', 'View referrers for /posts/low')
+  })
 })

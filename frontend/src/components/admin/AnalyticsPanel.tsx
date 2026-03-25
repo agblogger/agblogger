@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BarChart2, Loader2 } from 'lucide-react'
 import {
   BarChart,
@@ -84,7 +84,6 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
   })
   const [totalViews, setTotalViews] = useState(0)
   const [totalUnique, setTotalUnique] = useState(0)
-  const [topPage, setTopPage] = useState<string>('—')
   const [paths, setPaths] = useState<PathHit[]>([])
   const [selectedPath, setSelectedPath] = useState<{ path: string; path_id: number } | null>(null)
   const [referrers, setReferrers] = useState<ReferrerEntry[]>([])
@@ -95,6 +94,9 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
 
+  const sortedPaths = useMemo(() => [...paths].sort((a, b) => b.views - a.views), [paths])
+  const topPage = sortedPaths.length > 0 && sortedPaths[0] ? sortedPaths[0].path : '—'
+
   const localBusy = saving
   const onBusyChangeRef = useRef(onBusyChange)
   onBusyChangeRef.current = onBusyChange
@@ -102,14 +104,6 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
   useEffect(() => {
     onBusyChangeRef.current(localBusy)
   }, [localBusy])
-
-  const initialLoadRef = useRef(false)
-  useEffect(() => {
-    if (!initialLoadRef.current) {
-      initialLoadRef.current = true
-      void loadDashboard(dateRange)
-    }
-  })
 
   async function loadDashboard(range: DateRange) {
     setLoading(true)
@@ -129,13 +123,6 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
       setPaths(pathsData.paths)
       setBrowsers(browsersData.entries)
       setOperatingSystems(osData.entries)
-      // Top page: the path with the most views
-      if (pathsData.paths.length > 0) {
-        const sorted = [...pathsData.paths].sort((a, b) => b.views - a.views)
-        if (sorted[0]) setTopPage(sorted[0].path)
-      } else {
-        setTopPage('—')
-      }
     } catch (err) {
       if (err instanceof Error && 'response' in err) {
         const resp = (err as { response: { status: number } }).response
@@ -149,6 +136,12 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
       setLoading(false)
     }
   }
+
+  const loadDashboardCb = useCallback(loadDashboard, [])
+
+  useEffect(() => {
+    void loadDashboardCb('7d')
+  }, [loadDashboardCb])
 
   async function handleRangeChange(range: DateRange) {
     setDateRange(range)
@@ -281,7 +274,7 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
                     </tr>
                   </thead>
                   <tbody>
-                    {[...paths].sort((a, b) => b.views - a.views).map((p) => (
+                    {sortedPaths.map((p) => (
                       <tr
                         key={p.path}
                         role="button"
