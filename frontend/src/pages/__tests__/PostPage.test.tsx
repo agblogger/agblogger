@@ -1,6 +1,6 @@
 import type React from 'react'
 
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -592,8 +592,8 @@ describe('PostPage', () => {
     await waitFor(() => {
       expect(screen.getByText('Hello World')).toBeInTheDocument()
     })
-    // Wait a tick for the view count fetch to resolve
-    await new Promise(resolve => setTimeout(resolve, 50))
+    // Flush microtask queue so the fire-and-forget promise resolves
+    await act(async () => {})
     expect(screen.queryByText(/views$/)).not.toBeInTheDocument()
   })
 
@@ -605,7 +605,8 @@ describe('PostPage', () => {
     await waitFor(() => {
       expect(screen.getByText('Hello World')).toBeInTheDocument()
     })
-    await new Promise(resolve => setTimeout(resolve, 50))
+    // Flush microtask queue so the fire-and-forget promise resolves
+    await act(async () => {})
     expect(screen.queryByText(/views$/)).not.toBeInTheDocument()
   })
 

@@ -86,14 +86,20 @@ export default function PostPage() {
 
   useEffect(() => {
     if (slug === undefined || slug === '') return
+    let cancelled = false
     void (async () => {
       setLoading(true)
       setLoadError(null)
+      setViewCount(null)
       try {
         const p = await fetchPost(slug)
+        if (cancelled) return
         setPost(p)
-        fetchViewCount(slug).then((res) => setViewCount(res.views)).catch(() => {})
+        fetchViewCount(slug)
+          .then((res) => { if (!cancelled) setViewCount(res.views) })
+          .catch(() => {})
       } catch (err) {
+        if (cancelled) return
         if (err instanceof HTTPError && err.response.status === 404) {
           setLoadError('Post not found')
         } else if (err instanceof HTTPError && err.response.status === 401) {
@@ -102,9 +108,10 @@ export default function PostPage() {
           setLoadError('Failed to load post. Please try again later.')
         }
       } finally {
-        setLoading(false)
+        if (!cancelled) setLoading(false)
       }
     })()
+    return () => { cancelled = true }
   }, [slug])
 
   if (loading) {
@@ -199,7 +206,7 @@ export default function PostPage() {
 
             {viewCount !== null && (
               <div className="flex items-center gap-1.5">
-                <Eye size={14} />
+                <Eye size={14} aria-hidden="true" />
                 <span>{viewCount.toLocaleString()} views</span>
               </div>
             )}
