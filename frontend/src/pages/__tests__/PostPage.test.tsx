@@ -16,6 +16,12 @@ vi.mock('@/api/posts', () => ({
   fetchPostForEdit: vi.fn(),
 }))
 
+const mockFetchViewCount = vi.fn()
+
+vi.mock('@/api/analytics', () => ({
+  fetchViewCount: (...args: unknown[]) => mockFetchViewCount(...args) as unknown,
+}))
+
 vi.mock('@/api/client', async () => {
   const { MockHTTPError } = await import('@/test/MockHTTPError')
   return {
@@ -116,6 +122,8 @@ describe('PostPage', () => {
     mockDeletePost.mockReset()
     mockUpdatePost.mockReset()
     mockFetchPostForEdit.mockReset()
+    mockFetchViewCount.mockReset()
+    mockFetchViewCount.mockResolvedValue({ views: null })
   })
 
   it('renders table of contents component', async () => {
@@ -561,6 +569,44 @@ describe('PostPage', () => {
       // AlertBanner with className="mt-3" should add mt-3 to the wrapper div
       expect(errorEl.closest('div')).toHaveClass('mt-3')
     })
+  })
+
+  it('displays view count when analytics returns a count', async () => {
+    mockFetchViewCount.mockResolvedValue({ views: 1234 })
+    mockFetchPost.mockResolvedValue(postDetail)
+    renderPostPage()
+
+    await waitFor(() => {
+      expect(screen.getByText('Hello World')).toBeInTheDocument()
+    })
+    await waitFor(() => {
+      expect(screen.getByText('1,234 views')).toBeInTheDocument()
+    })
+  })
+
+  it('does not display view count when analytics returns null', async () => {
+    mockFetchViewCount.mockResolvedValue({ views: null })
+    mockFetchPost.mockResolvedValue(postDetail)
+    renderPostPage()
+
+    await waitFor(() => {
+      expect(screen.getByText('Hello World')).toBeInTheDocument()
+    })
+    // Wait a tick for the view count fetch to resolve
+    await new Promise(resolve => setTimeout(resolve, 50))
+    expect(screen.queryByText(/views$/)).not.toBeInTheDocument()
+  })
+
+  it('does not display view count when analytics fetch fails', async () => {
+    mockFetchViewCount.mockRejectedValue(new Error('unavailable'))
+    mockFetchPost.mockResolvedValue(postDetail)
+    renderPostPage()
+
+    await waitFor(() => {
+      expect(screen.getByText('Hello World')).toBeInTheDocument()
+    })
+    await new Promise(resolve => setTimeout(resolve, 50))
+    expect(screen.queryByText(/views$/)).not.toBeInTheDocument()
   })
 
   it('delete error is rendered via AlertBanner with mb-6 spacing class', async () => {

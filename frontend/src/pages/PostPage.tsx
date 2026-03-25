@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { Calendar, User, PenLine, Trash2 } from 'lucide-react'
+import { Calendar, User, PenLine, Trash2, Eye } from 'lucide-react'
 import { fetchPost, deletePost, fetchPostForEdit, updatePost } from '@/api/posts'
+import { fetchViewCount } from '@/api/analytics'
 import AlertBanner from '@/components/AlertBanner'
 import BackLink from '@/components/BackLink'
 import { useAuthStore } from '@/stores/authStore'
@@ -21,6 +22,7 @@ export default function PostPage() {
   const { '*': slug } = useParams()
   const navigate = useNavigate()
   const [post, setPost] = useState<PostDetail | null>(null)
+  const [viewCount, setViewCount] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
@@ -90,6 +92,7 @@ export default function PostPage() {
       try {
         const p = await fetchPost(slug)
         setPost(p)
+        fetchViewCount(slug).then((res) => setViewCount(res.views)).catch(() => {})
       } catch (err) {
         if (err instanceof HTTPError && err.response.status === 404) {
           setLoadError('Post not found')
@@ -191,6 +194,13 @@ export default function PostPage() {
               <div className="flex items-center gap-1.5">
                 <User size={14} />
                 <span>{post.author}</span>
+              </div>
+            )}
+
+            {viewCount !== null && (
+              <div className="flex items-center gap-1.5">
+                <Eye size={14} />
+                <span>{viewCount.toLocaleString()} views</span>
               </div>
             )}
 
