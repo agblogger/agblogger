@@ -5496,3 +5496,30 @@ def test_all_compose_builders_include_goatcounter_shared_volume() -> None:
     for name, content in builders_and_contents:
         # The volume should appear in both the agblogger service (shared token) and volumes section
         assert content.count("goatcounter-data") >= 2, f"{name} missing goatcounter-data"
+
+
+def test_build_external_caddy_compose_includes_goatcounter_on_caddy_network() -> None:
+    content = build_external_caddy_compose_content()
+    assert "goatcounter:" in content
+    assert "goatcounter/goatcounter:latest" in content
+    # GoatCounter must be on the same network as agblogger
+    assert EXTERNAL_CADDY_NETWORK_NAME in content
+
+
+def test_build_image_external_caddy_compose_includes_goatcounter_on_caddy_network() -> None:
+    content = build_image_external_caddy_compose_content()
+    assert "goatcounter:" in content
+    assert EXTERNAL_CADDY_NETWORK_NAME in content
+
+
+def test_write_bundle_files_includes_goatcounter_entrypoint(tmp_path: Path) -> None:
+    """Deployment bundle includes the GoatCounter entrypoint script."""
+    config = _make_config(
+        deployment_mode=DEPLOY_MODE_TARBALL,
+        image_ref="ghcr.io/example/agblogger:v1.0",
+    )
+    bundle_dir = tmp_path / "bundle"
+    write_bundle_files(config, bundle_dir)
+    entrypoint = bundle_dir / "goatcounter" / "entrypoint.sh"
+    assert entrypoint.exists()
+    assert entrypoint.stat().st_mode & 0o111 != 0

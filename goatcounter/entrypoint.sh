@@ -1,5 +1,5 @@
 #!/bin/sh
-set -e
+set -eu
 
 GOATCOUNTER_DB="/data/goatcounter/goatcounter.db"
 TOKEN_FILE="/data/goatcounter/token"
@@ -24,6 +24,7 @@ if [ ! -f "$TOKEN_FILE" ]; then
         -perm 2)
 
     echo "$TOKEN" > "$TOKEN_FILE"
+    chmod 600 "$TOKEN_FILE"
     echo "GoatCounter provisioned. Token written to $TOKEN_FILE"
 fi
 

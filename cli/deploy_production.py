@@ -933,7 +933,9 @@ def _caddy_service_section(*, caddy_public: bool = False) -> str:
     )
 
 
-def _goatcounter_service_section(*, include_network: bool = False) -> str:
+def _goatcounter_service_section(
+    *, include_network: bool = False, network_name: str | None = None
+) -> str:
     """Return the GoatCounter sidecar service YAML block."""
     block = (
         "  goatcounter:\n"
@@ -954,6 +956,8 @@ def _goatcounter_service_section(*, include_network: bool = False) -> str:
     )
     if include_network:
         block += f"    networks:\n      default:\n        ipv4_address: {GOATCOUNTER_STATIC_IP}\n"
+    elif network_name is not None:
+        block += f"    networks:\n      - {network_name}\n"
     return block
 
 
@@ -1081,7 +1085,7 @@ def build_external_caddy_compose_content() -> str:
         + _agblogger_healthcheck_section()
         + "    networks:\n"
         f"      - {EXTERNAL_CADDY_NETWORK_NAME}\n"
-        "\n" + _goatcounter_service_section() + "\n"
+        "\n" + _goatcounter_service_section(network_name=EXTERNAL_CADDY_NETWORK_NAME) + "\n"
         "volumes:\n"
         "  agblogger-db:\n"
         "  goatcounter-data:\n"
@@ -1106,7 +1110,7 @@ def build_image_external_caddy_compose_content() -> str:
         + _agblogger_healthcheck_section()
         + "    networks:\n"
         f"      - {EXTERNAL_CADDY_NETWORK_NAME}\n"
-        "\n" + _goatcounter_service_section() + "\n"
+        "\n" + _goatcounter_service_section(network_name=EXTERNAL_CADDY_NETWORK_NAME) + "\n"
         "volumes:\n"
         "  agblogger-db:\n"
         "  goatcounter-data:\n"
