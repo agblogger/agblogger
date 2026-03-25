@@ -32,8 +32,8 @@ function getDateRange(range: DateRange): { start: string; end: string } {
   const days = range === '7d' ? 7 : range === '30d' ? 30 : 90
   start.setDate(start.getDate() - days)
   return {
-    start: start.toISOString().split('T')[0]!,
-    end: end.toISOString().split('T')[0]!,
+    start: start.toISOString().slice(0, 10),
+    end: end.toISOString().slice(0, 10),
   }
 }
 
@@ -130,8 +130,8 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
       setOperatingSystems(osData.entries)
       // Top page: the path with the most views
       if (pathsData.paths.length > 0) {
-        const top = [...pathsData.paths].sort((a, b) => b.views - a.views)[0]!
-        setTopPage(top.path)
+        const sorted = [...pathsData.paths].sort((a, b) => b.views - a.views)
+        if (sorted[0]) setTopPage(sorted[0].path)
       } else {
         setTopPage('—')
       }
