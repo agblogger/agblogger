@@ -1,173 +1,146 @@
-# PR Review: GoatCounter Analytics Integration
+# PR Review: GoatCounter Analytics + SWR Migration
 
 **Date:** 2026-03-25
 **Branch:** `feat/goatcounter-analytics`
-**Scope:** ~3300 lines across 38 files
-**Review agents:** code-reviewer, pr-test-analyzer, silent-failure-hunter, type-design-analyzer, comment-analyzer
+**Scope:** ~7149 lines across 87 files
+**Review agents:** code-reviewer, silent-failure-hunter, pr-test-analyzer, type-design-analyzer, comment-analyzer
 
 ---
 
-## Critical Issues (4)
+## Critical Issues (3)
 
-### 1. Background `_do_hit` tasks have no exception handling around session factory
+### 1. Bare `except Exception` blocks suppress programming bugs
 
-**Files:** `backend/api/posts.py:754`, `backend/api/pages.py:60`
+**Files:** `backend/services/analytics_service.py:203`, `backend/services/analytics_service.py:228`
 
-The `_do_hit()` coroutine has no try/except around `session_factory()`. If creating a session raises (pool exhausted, DB locked), the exception escapes the task entirely -- producing unstructured "Task exception was never retrieved" warnings. Violates CLAUDE.md reliability guidelines.
+Both `record_hit` and `_stats_request` wrap their entire bodies in `except Exception`, catching and suppressing `TypeError`, `AttributeError`, `KeyError`, and other programming bugs alongside expected `httpx` errors. Infrastructure failures (DB pool exhaustion in `record_hit`) are logged as mere warnings. A `TypeError` from malformed GoatCounter JSON is silently treated as "analytics unavailable."
 
-**Fix:** Wrap entire `_do_hit` body in try/except that logs via the module logger.
+**Fix:** Narrow catches to `httpx.HTTPError` (and `httpx.InvalidURL` in `_stats_request`). Let programming bugs propagate to global error handlers. Use `logger.error` for database-related exceptions in `record_hit`.
 
-### 2. `record_hit` never checks HTTP response status from GoatCounter
+### 2. Public `/views/{file_path:path}` has no input sanitization
 
-**File:** `backend/services/analytics_service.py:183-197`
+**File:** `backend/api/analytics.py:120-131`
 
-The POST to GoatCounter's `/api/v0/count` never calls `response.raise_for_status()`. If the token is invalid (401), every hit is silently discarded -- admin sees "0 views" with no indication the token is broken. Contrast with `_stats_request()` which correctly calls `raise_for_status()`.
+The `file_path` parameter is an unauthenticated catch-all path parameter with no validation. It is concatenated into a GoatCounter API query parameter (`filter`) via `fetch_view_count`. An attacker can send arbitrary strings (long strings, unicode, GoatCounter filter syntax) forwarded verbatim.
 
-**Fix:** Add `response.raise_for_status()` after the POST.
+**Fix:** Add character allowlist + length limit:
+```python
+_SAFE_PATH_PATTERN = re.compile(r"^[a-zA-Z0-9/_-]{1,200}$")
+```
+Return `ViewCountResponse(views=None)` for non-matching paths.
 
-### 3. `_load_token` only catches `FileNotFoundError`, not other `OSError` subclasses
+### 3. `httpx.AsyncClient` created with `timeout=None`
 
-**File:** `backend/services/analytics_service.py:64-85`
+**File:** `backend/services/analytics_service.py:52`
 
-`PermissionError`, `IsADirectoryError`, `UnicodeDecodeError` all go unhandled with no specific diagnostic message. A misconfigured deployment silently disables analytics with vague warnings.
+The shared client has no default timeout. While individual calls pass explicit timeouts, if a future caller forgets, requests can hang indefinitely. Per CLAUDE.md: "Set timeouts for subprocess calls and handle failure paths."
 
-**Fix:** Catch `OSError` broadly with a specific log message about the token file.
-
-### 4. GoatCounter entrypoint `-perm 2` comment may be wrong
-
-**File:** `goatcounter/entrypoint.sh:20`
-
-Comment says permission level 2 = "read+write". GoatCounter's `-perm` uses a bitmask where 2 = record hits only, 3 = read+write. If this is wrong, stats proxy endpoints silently get 403s (swallowed by `except Exception`), and the admin dashboard shows all zeros.
-
-**Action:** Verify the correct permission level. If both read and write are needed, use `-perm 3`.
+**Fix:** Set a default: `httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=5.0))`
 
 ---
 
-## Important Issues (7)
+## Important Issues (8)
 
-### 5. Stats proxy returns zeros instead of signaling unavailability -- frontend "unavailable" UI is dead code
+### 4. Duplicated `_background_tasks` pattern
 
-**Files:** `backend/services/analytics_service.py:228-317`, `frontend/src/components/admin/AnalyticsPanel.tsx:138`
+**Files:** `backend/api/posts.py:67-69,754-769` and `backend/api/pages.py:28-29,60-75`
 
-When GoatCounter is down, endpoints return 200 with zero data. The frontend `unavailable` state can never be reached since the backend never errors. Admin sees "0 views" and thinks nobody is visiting.
+Identical fire-and-forget task code (module-level set, inner `_do_hit()` coroutine, `asyncio.create_task`, add/discard callbacks) duplicated across both files. Violates CLAUDE.md: "Avoid code duplication."
 
-**Fix:** Return 503 or add an `available` flag when GoatCounter is unreachable.
+**Fix:** Extract a shared helper into `analytics_service.py` or a new `backend/api/_analytics_helpers.py`.
 
-### 6. No input validation on `start`/`end` date parameters
+### 5. `handleToggle` in AnalyticsPanel doesn't differentiate error types
 
-**File:** `backend/api/analytics.py:75-114`
+**File:** `frontend/src/components/admin/AnalyticsPanel.tsx:96`
 
-Raw strings forwarded to GoatCounter without format validation. Should use `Query(pattern=r"^\d{4}-\d{2}-\d{2}$")`.
+Bare `catch` shows "Failed to update setting" for all errors. A 401 (session expired) shows the same message as a 503. Rest of codebase consistently distinguishes 401 to show "Session expired. Please log in again."
 
-### 7. Empty `.catch(() => {})` on view count fetch
+**Fix:** Check for `HTTPError` with status 401 and display session-expired message.
 
-**File:** `frontend/src/pages/PostPage.tsx:98-100`
+### 6. GoatCounter entrypoint partial provisioning gap
 
-Violates CLAUDE.md "empty catch blocks are never acceptable." At minimum log to `console.warn`.
+**File:** `goatcounter/entrypoint.sh:13-20`
 
-### 8. `handlePathClick` silently clears referrers on error
+Script checks for DB file existence but not site creation. If DB file exists from a previous failed partial provisioning but site was not created, `create-site` is skipped and `create-apitoken` fails. No diagnostic logging before each provisioning step.
 
-**File:** `frontend/src/components/admin/AnalyticsPanel.tsx:164-175`
+**Fix:** Add echo statements before each step. Consider checking that the site exists (not just the DB file) before skipping `create-site`.
 
-Network errors are indistinguishable from "no referrer data." Should show error feedback.
+### 7. `PathHit.path_id` lacks `ge=1` constraint
 
-### 9. Singleton `AnalyticsSettings` not enforced at DB level
+**File:** `backend/schemas/analytics.py:46`
 
-**File:** `backend/models/analytics.py`
+The service layer uses `entry.get("id", 0)` as a fallback, producing `path_id=0` -- a meaningless ID that would be sent to GoatCounter in `fetch_path_referrers(0)`. A `ge=1` constraint would catch this early.
 
-Nothing prevents multiple rows. `autoincrement=True` undermines singleton intent. Concurrent first-use could create duplicate rows (check-then-act race condition).
+### 8. `DateRange` type duplicated across two files
 
-**Fix:** Add `CheckConstraint("id = 1")`, remove `autoincrement=True`.
+**Files:** `frontend/src/hooks/useAnalyticsDashboard.ts:25` and `frontend/src/components/admin/AnalyticsPanel.tsx:22`
 
-### 10. `_load_token` behavior is untested
+Same `type DateRange = '7d' | '30d' | '90d'` defined in both files. If one is updated and the other is not, the compiler may not catch it depending on value flow.
 
-**File:** `backend/services/analytics_service.py:54-85`
+**Fix:** Export from hook, import in component.
 
-All tests mock `_load_token`. No test covers: cached token, empty file, `FileNotFoundError`, warning deduplication. Regression risk.
+### 9. Missing unit test for `_stats_request` token-None path
 
-### 11. `_stats_request` error handling untested
+**File:** `backend/services/analytics_service.py:217`
 
-**File:** `backend/services/analytics_service.py:205-225`
+`_stats_request` returns `None` when `_load_token()` returns `None`. No direct unit test covers this path. If the token check were accidentally removed, all stats proxy endpoints would attempt unauthenticated HTTP requests.
 
-No test verifies that HTTP errors, timeouts, or invalid JSON are caught and return `None`. This is the function responsible for the "server may never crash" guarantee.
+### 10. Missing unit test for `AnalyticsSettingsUpdate` empty-body validator
 
----
+**File:** `backend/schemas/analytics.py:23-27`
 
-## Medium Issues (6)
+The `check_at_least_one_field` model validator is only tested via API integration test (`test_analytics_api.py:531`). No direct `pytest.raises(ValidationError)` test at the schema level.
 
-### 12. Auth errors shown as "analytics unavailable"
+### 11. Missing test for `request.client = None` in hit recording
 
-**File:** `AnalyticsPanel.tsx:138`
+**Files:** `backend/api/posts.py:751` and `backend/api/pages.py:57`
 
-A 401 session expiry triggers the same "analytics unavailable" message as a network timeout. Misleading for the admin.
-
-### 13. Missing `ge=0` constraints on count fields
-
-**File:** `backend/schemas/analytics.py`
-
-All count/stat fields lack non-negativity constraints, unlike `PostListResponse.total` and `AssetResponse.size` elsewhere in the codebase.
-
-### 14. `BreakdownCategory` should be a `Literal` type
-
-`category` is `str` in schemas and frontend, but constrained by runtime `frozenset` in the API. A `Literal` union would make valid values self-documenting and eliminate the runtime check.
-
-### 15. Entrypoint boot loop risk
-
-**File:** `goatcounter/entrypoint.sh:13-28`
-
-If `create-apitoken` fails after `create-site` succeeds, restart creates a loop since the site already exists. Guard with `if [ ! -f "$GOATCOUNTER_DB" ]` or check for existing site.
-
-### 16. Shared HTTP client connect timeout too low for stats
-
-**File:** `backend/services/analytics_service.py:46-51`
-
-Client created with 2s hit timeout; stats requests override to 5s but connect timeout stays at 2s.
-
-### 17. `record_hit` with `_load_token` returning `None` is untested
-
-No test verifies graceful skip when token is unavailable (cold start scenario).
+Both endpoints guard against `request.client` being `None` with a conditional fallback to `"unknown"`. No test verifies this path. If the guard were simplified to `request.client.host`, the server would crash on proxied requests where `client` is `None`.
 
 ---
 
-## Suggestions
+## Suggestions (10)
 
-### Comments and documentation
+### Code
 
-- Fix `fetch_breakdown` docstring: "browser, OS, country" should use actual category names ("browsers, systems, locations").
-- `record_hit` docstring "Fire-and-forget" is a caller concern -- reword to describe the function's own behavior.
-- Add comment on `GOATCOUNTER_URL` linking it to docker-compose service name.
-- Remove redundant inline comments in `record_hit` (keep only the "skip authenticated users" one which explains *why*).
-- Architecture docs: "when the backend serves a post" should be "when a reader fetches a post through the API."
-- Frontend docs: "since it pulls in the Recharts charting library" -- make library name non-load-bearing: "since it pulls in a charting library (currently Recharts)."
+1. **`Partial<AnalyticsSettings>` in `updateAnalyticsSettings`** (`frontend/src/api/analytics.ts:16-19`) -- call site always sends both fields; the `Partial` type is misleading. Use `AnalyticsSettings` directly.
 
-### Type design
+2. **`Promise.all` in dashboard hook** (`frontend/src/hooks/useAnalyticsDashboard.ts:43-49`) -- partial failure indistinguishable from total failure. Consider `Promise.allSettled` or separate settings fetch from stats fetches.
 
-- Add `Field(ge=0)` to all count/stat fields in Pydantic schemas (`ViewCountResponse.views`, `TotalStatsResponse.total_views`, `TotalStatsResponse.total_unique`, `PathHit.views`, `PathHit.unique`, `ReferrerEntry.count`, `BreakdownEntry.count`).
-- Add `Field(ge=0, le=100)` to `BreakdownEntry.percent`.
-- Add a model validator to `AnalyticsSettingsUpdate` to reject empty payloads where both fields are `None`.
-- Define a `BreakdownCategory` string literal union on the frontend for `fetchBreakdown`'s `category` parameter.
+3. **`_stats_request` log message lacks query parameters** (`analytics_service.py:229`) -- include `params` for easier debugging of date-range-specific failures.
 
-### Test coverage
+4. **Settings upsert not atomic** (`analytics_service.py:129-137`) -- SELECT+INSERT without locking; concurrent first-writes could race. CheckConstraint prevents corruption but IntegrityError is unhandled.
 
-- Add test for `record_hit` when `_load_token()` returns `None` -- verify `post` is never called.
-- Add direct tests for `_load_token`: cached token, empty file, `FileNotFoundError`, warning deduplication.
-- Add tests for `_stats_request`: HTTP 500, network timeout, invalid JSON -- all should return `None`.
-- Add test for `_fire_post_hit` with non-canonical `file_path` that triggers `ValueError` from `file_path_to_slug`.
-- Add test for `close_analytics_client` function path.
-- Add test for AnalyticsPanel "Close" button on referrer drill-down.
-- Add test for `busy` prop disabling controls in AnalyticsPanel.
+### Types
+
+5. **`AnalyticsDashboardData` discards `BreakdownResponse.category`** (`useAnalyticsDashboard.ts:17-23`) -- loses the discriminant identifying which breakdown category entries belong to.
+
+6. **`PathHit.path` has no `min_length` constraint** (`schemas/analytics.py:47`) -- unlike similar string fields elsewhere in the schema layer.
+
+### Comments & Docs
+
+7. **SWR spec/plan reference `useSWRFetch.ts`** (`docs/specs/2026-03-25-swr-migration-design.md:33-44`, `docs/plans/2026-03-25-swr-migration.md:19,162,190-205`) -- file was never created. Remove stale references.
+
+8. **`frontend.md` State Model section** (lines 13-19) still credits Zustand for server-backed state; SWR now manages most of it. Update to reflect SWR hooks own data-fetching/caching, Zustand handles session/config/UI state.
+
+9. **Plan file checkboxes all unchecked** (`docs/plans/2026-03-25-swr-migration.md`) despite tasks being complete. Either check them off or add "Status: Complete" header.
+
+### Tests
+
+10. **`useAnalyticsDashboard` hook missing error state test** (`useAnalyticsDashboard.test.ts`) -- no test for when `Promise.all` rejects. Only tested at UI level in `AnalyticsPanel.test.tsx`.
 
 ---
 
 ## Strengths
 
-- Clean separation between API layer and analytics service.
-- Proper admin authorization on all admin endpoints with thorough auth gate tests (401/403).
-- Bot/crawler filtering with CrawlerDetect.
-- Fire-and-forget background tasks with GC prevention via `_background_tasks` set.
-- Graceful degradation design (analytics is a soft dependency).
-- Good frontend test coverage for loading/error/empty states.
-- Deployment tests verify compose file builders include GoatCounter.
-- Information disclosure prevention on view count endpoint.
-- Progressive logging in `_load_token` (warning on first miss, debug on subsequent).
-- Strong cross-boundary type alignment -- every field name, type, and nullability matches between backend Pydantic schemas and frontend TypeScript interfaces.
+- **Security coverage is thorough** -- all admin endpoints tested for 401/403; public view count avoids information disclosure about post existence
+- **Bot/crawler filtering** well-tested with real Googlebot user-agent strings
+- **Fire-and-forget hit recording** correctly uses `asyncio.create_task` so analytics never blocks request handling
+- **Graceful degradation** -- analytics is a soft dependency; backend and frontend handle unavailability cleanly
+- **SWR migration is clean and consistent** -- all hooks follow the same pattern with proper loading/error/success test coverage
+- **AnalyticsPanel has excellent test coverage** (439 lines) covering loading, error (including 401 vs generic), toggles, referrer drill-down, empty states, sorted tables
+- **Singleton model properly enforced** at DB level with `CheckConstraint("id = 1")` + dedicated test
+- **Architecture docs accurately reflect implementation** -- backend.md, deployment.md, frontend.md all verified correct
+- **Strong cross-boundary type alignment** -- every field name, type, and nullability matches between backend Pydantic schemas and frontend TypeScript interfaces
+- **Progressive logging** in `_load_token` (warning on first miss, debug on subsequent)
+- **Deploy tests** verify compose builders include GoatCounter with correct volumes, networks, and executable entrypoint
