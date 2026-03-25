@@ -7,7 +7,7 @@ import LoadingSpinner from '@/components/LoadingSpinner'
 import BackLink from '@/components/BackLink'
 import { HTTPError } from '@/api/client'
 import type { AdminSiteSettings, AdminPageConfig } from '@/api/client'
-import { fetchAdminSiteSettings, fetchAdminPages } from '@/api/admin'
+import { useAdminSiteSettings, useAdminPages } from '@/hooks/useAdminData'
 import SiteSettingsSection from '@/components/admin/SiteSettingsSection'
 import PagesSection from '@/components/admin/PagesSection'
 import AccountSection from '@/components/admin/AccountSection'
@@ -27,6 +27,8 @@ const ADMIN_TABS = [
 type AdminTabKey = (typeof ADMIN_TABS)[number]['key']
 const VALID_TAB_KEYS: Set<AdminTabKey> = new Set(ADMIN_TABS.map((t) => t.key))
 
+const EMPTY_SITE_SETTINGS: AdminSiteSettings = { title: '', description: '', timezone: '' }
+
 export default function AdminPage() {
   const location = useLocation()
   const { isReady } = useRequireAuth({ requireAdmin: true })
@@ -36,20 +38,27 @@ export default function AdminPage() {
       ? (tabParam as AdminTabKey)
       : 'settings'
 
-  // === Loading state ===
-  const [loading, setLoading] = useState(true)
-  const [loadError, setLoadError] = useState<string | null>(null)
+  // === SWR data (only fetch when auth is ready) ===
+  const { data: siteSettingsData, error: siteError, isLoading: siteLoading } = useAdminSiteSettings(isReady)
+  const { data: pagesData, error: pagesError, isLoading: pagesLoading } = useAdminPages(isReady)
+  const loading = siteLoading || pagesLoading
+  const firstError = siteError ?? pagesError
+  const loadError = firstError !== undefined
+    ? firstError instanceof HTTPError && firstError.response.status === 401
+      ? 'Session expired. Please log in again.'
+      : 'Failed to load admin data. Please try again later.'
+    : null
 
   // === Tab navigation ===
   const [activeTab, setActiveTab] = useState<AdminTabKey>(initialTab)
 
-  // === Initial data ===
-  const [siteSettings, setSiteSettings] = useState<AdminSiteSettings>({
-    title: '',
-    description: '',
-    timezone: '',
-  })
-  const [pages, setPages] = useState<AdminPageConfig[]>([])
+  // === Mutable local overrides (null = use SWR data, non-null = user has made local changes) ===
+  const [siteSettingsOverride, setSiteSettingsOverride] = useState<AdminSiteSettings | null>(null)
+  const [pagesOverride, setPagesOverride] = useState<AdminPageConfig[] | null>(null)
+
+  // Derive effective values: prefer local override, fall back to SWR data
+  const siteSettings = siteSettingsOverride ?? siteSettingsData ?? EMPTY_SITE_SETTINGS
+  const pages = pagesOverride ?? pagesData?.pages ?? []
 
   // === Busy tracking from sections ===
   const [siteSaving, setSiteSaving] = useState(false)
@@ -66,31 +75,6 @@ export default function AdminPage() {
   const anyDirty = siteDirty || pagesDirty || accountDirty
 
   useUnsavedChanges(anyDirty)
-
-  // === Load data ===
-  useEffect(() => {
-    if (!isReady) return
-    void (async () => {
-      setLoading(true)
-      setLoadError(null)
-      try {
-        const [settings, pagesResp] = await Promise.all([
-          fetchAdminSiteSettings(),
-          fetchAdminPages(),
-        ])
-        setSiteSettings(settings)
-        setPages(pagesResp.pages)
-      } catch (err: unknown) {
-        if (err instanceof HTTPError && err.response.status === 401) {
-          setLoadError('Session expired. Please log in again.')
-        } else {
-          setLoadError('Failed to load admin data. Please try again later.')
-        }
-      } finally {
-        setLoading(false)
-      }
-    })()
-  }, [isReady])
 
   useEffect(() => {
     setActiveTab(initialTab)
@@ -160,7 +144,7 @@ export default function AdminPage() {
           initialSettings={siteSettings}
           busy={busy}
           onSaving={setSiteSaving}
-          onSavedSettings={setSiteSettings}
+          onSavedSettings={(s) => { setSiteSettingsOverride(s) }}
           onDirtyChange={setSiteDirty}
         />
       )}
@@ -169,7 +153,7 @@ export default function AdminPage() {
           initialPages={pages}
           busy={busy}
           onSaving={setPagesSaving}
-          onPagesChange={setPages}
+          onPagesChange={(p) => { setPagesOverride(p) }}
           onDirtyChange={setPagesDirty}
         />
       )}
