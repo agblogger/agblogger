@@ -40,6 +40,7 @@ _STATS_TIMEOUT = 5.0
 _crawler_detect = CrawlerDetect()
 _http_client: httpx.AsyncClient | None = None
 _goatcounter_token: str | None = None
+_token_warning_issued: bool = False
 
 
 def _get_http_client() -> httpx.AsyncClient:
@@ -57,7 +58,7 @@ def _load_token() -> str | None:
     yet.  Logs a warning on the first miss and subsequent misses at DEBUG
     level.
     """
-    global _goatcounter_token
+    global _goatcounter_token, _token_warning_issued
     if _goatcounter_token is not None:
         return _goatcounter_token
     try:
@@ -69,10 +70,17 @@ def _load_token() -> str | None:
         logger.warning("GoatCounter token file is empty: %s", GOATCOUNTER_AUTH_FILE)
         return None
     except FileNotFoundError:
-        logger.warning(
-            "GoatCounter token not yet available at %s — analytics disabled until token appears",
-            GOATCOUNTER_AUTH_FILE,
-        )
+        if not _token_warning_issued:
+            _token_warning_issued = True
+            logger.warning(
+                "GoatCounter token not yet available at %s — analytics disabled until token appears",
+                GOATCOUNTER_AUTH_FILE,
+            )
+        else:
+            logger.debug(
+                "GoatCounter token still not available at %s",
+                GOATCOUNTER_AUTH_FILE,
+            )
         return None
 
 
@@ -100,8 +108,8 @@ async def get_analytics_settings(session: AsyncSession) -> AnalyticsSettingsResp
 async def update_analytics_settings(
     session: AsyncSession,
     *,
-    analytics_enabled: bool | None,
-    show_views_on_posts: bool | None,
+    analytics_enabled: bool | None = None,
+    show_views_on_posts: bool | None = None,
 ) -> AnalyticsSettingsResponse:
     """Create or update analytics settings, applying only the provided fields.
 

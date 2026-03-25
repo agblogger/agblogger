@@ -127,7 +127,7 @@ async def test_record_hit_skips_when_disabled(
     """No hit is sent when analytics_enabled is False."""
     from backend.services.analytics_service import update_analytics_settings
 
-    await update_analytics_settings(session, analytics_enabled=False, show_views_on_posts=None)
+    await update_analytics_settings(session, analytics_enabled=False)
 
     with (
         patch(
