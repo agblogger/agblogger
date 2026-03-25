@@ -61,6 +61,16 @@ The database uses two separate declarative bases to distinguish durable state fr
 
 This separation means adding a column to a durable table requires an Alembic migration, while cache table schema changes take effect automatically on the next restart.
 
+## Analytics Integration
+
+The backend integrates with a GoatCounter sidecar container for server-side page view analytics. The analytics service (`backend/services/analytics_service.py`) has three responsibilities:
+
+- **Hit recording**: when the backend serves a post or page to a reader, it fires an async hit to GoatCounter's internal API. Hits are fire-and-forget — network failures are logged but never affect the reader's response. Authenticated users and detected bots are excluded.
+- **Stats proxy**: admin dashboard data (total views, per-path hits, referrers, browser/OS breakdowns) is proxied from GoatCounter's stats API through admin-only backend endpoints.
+- **Settings management**: analytics-enabled and show-views-on-posts toggles are stored in a durable `analytics_settings` table (Alembic-managed).
+
+GoatCounter is treated as a soft dependency — the backend starts and serves content normally when GoatCounter is unavailable. The API token is loaded lazily from a shared Docker volume (`/data/goatcounter/token`).
+
 ## API Surface
 
 The API is organized around a small set of concerns:
@@ -70,6 +80,7 @@ The API is organized around a small set of concerns:
 - labels and site configuration
 - preview and rendering
 - sync and cross-posting
+- analytics (admin dashboard stats + public view counts)
 - health and operational endpoints
 
 Public read paths are broad for published content, while mutations are concentrated behind authorization boundaries.
@@ -90,7 +101,7 @@ The goal is to preserve content, preserve service availability where possible, a
 - `backend/main.py` is the main runtime entry point.
 - `backend/api/` contains the HTTP-facing modules grouped by feature area.
 - `backend/services/` contains the orchestration and business-logic layer.
-- `backend/models/` contains SQLAlchemy ORM models for both durable tables (users, tokens, social accounts, cross-posts) and cache tables (posts, labels, sync manifest).
+- `backend/models/` contains SQLAlchemy ORM models for both durable tables (users, tokens, social accounts, cross-posts, analytics settings) and cache tables (posts, labels, sync manifest).
 - `backend/schemas/` contains Pydantic request/response schemas that define the API contracts.
 - `backend/filesystem/` contains the canonical content model.
 - `backend/pandoc/server.py` manages the long-lived Pandoc server process used by the application.

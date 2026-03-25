@@ -33,6 +33,14 @@ Frontend post navigation and editor workflows assume the backend canonical post 
 
 The frontend does not own markdown rendering. It receives rendered HTML from the backend and then adds browser-only enhancements such as navigation affordances, math hydration, and interaction helpers.
 
+## Analytics
+
+The admin panel includes an Analytics tab that displays page view statistics from the backend's GoatCounter proxy. The dashboard component (`frontend/src/components/admin/AnalyticsPanel.tsx`) is lazy-loaded to keep the main bundle small since it pulls in the Recharts charting library.
+
+The dashboard shows summary cards (total views, unique visitors, top page), a top pages table with referrer drill-down, and browser/OS breakdown bar charts. Date range selection (7d/30d/90d) and settings toggles (analytics enabled, show views on posts) are included.
+
+When the admin enables "show views on posts", individual post pages display a view count in the metadata bar, fetched from the public analytics API endpoint.
+
 ## Code Entry Points
 
 - `frontend/src/App.tsx` defines the router, shared layout, and application bootstrapping.
@@ -44,3 +52,4 @@ The frontend does not own markdown rendering. It receives rendered HTML from the
 - `frontend/src/components/share/` contains the social sharing bar and platform-specific sharing components used by the post view.
 - `frontend/src/components/labels/` contains shared label form components (names editor, parents selector) used by both the label creation and label settings pages.
 - `frontend/src/utils/postUrl.ts` provides centralized slug extraction and URL generation for post navigation, used by 6+ pages/components.
+- `frontend/src/api/analytics.ts` contains the analytics API client functions for the admin dashboard and public view counts.

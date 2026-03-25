@@ -12,7 +12,14 @@ This matches the project's self-hosted deployment model.
 
 ## Runtime Topology
 
-The preferred production topology places a reverse proxy in front of the application. A direct-exposure mode also exists for simpler environments, but the architectural shape stays the same: durable content storage, durable database storage, and one application runtime.
+The preferred production topology places a reverse proxy in front of the application, with a GoatCounter analytics sidecar on the internal network:
+
+- one application container serving the API and SPA
+- a GoatCounter container for page view analytics (internal network only, no public exposure)
+- an optional reverse proxy in front for TLS termination and public ingress
+- persistent volumes for content, database state, and GoatCounter data (including the shared API token)
+
+GoatCounter is a soft dependency — the application starts and serves content normally when GoatCounter is unavailable. The GoatCounter container provisions itself on first boot via a custom entrypoint script (`goatcounter/entrypoint.sh`) that creates the site, generates an API token, and writes it to a shared volume.
 
 ## Packaging
 
@@ -47,7 +54,8 @@ The project also supports a packaged local deployment profile for deployment-sty
 ## Code Entry Points
 
 - `Dockerfile` defines the production image.
-- `docker-compose.yml` defines the standard container topology.
+- `docker-compose.yml` defines the standard container topology (application, Caddy, GoatCounter).
+- `goatcounter/entrypoint.sh` is the GoatCounter container's first-boot provisioning and startup script.
 - `cli/deploy_production.py` contains the deployment helper, configuration generation, and `setup.sh` script generation workflow.
 - `cli/release.py` contains release workflow tooling.
 - `tests/test_cli/test_deploy_production.py` covers the deployment helper behavior.
