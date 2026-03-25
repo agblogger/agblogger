@@ -261,6 +261,46 @@ describe('AnalyticsPanel', () => {
     })
   })
 
+  it('preserves persisted settings when stats are unavailable', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    mockFetchAnalyticsSettings.mockResolvedValue({
+      analytics_enabled: true,
+      show_views_on_posts: true,
+    })
+    mockFetchTotalStats.mockRejectedValue(new Error('GoatCounter down'))
+    mockFetchPathHits.mockRejectedValue(new Error('GoatCounter down'))
+    mockFetchBreakdown.mockRejectedValue(new Error('GoatCounter down'))
+    mockUpdateAnalyticsSettings.mockResolvedValue({
+      analytics_enabled: false,
+      show_views_on_posts: true,
+    })
+    const user = userEvent.setup()
+
+    renderPanel()
+
+    await waitFor(() => {
+      expect(screen.getByText('Analytics unavailable')).toBeInTheDocument()
+    })
+
+    expect(screen.getByRole('switch', { name: /analytics enabled/i })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    )
+    expect(screen.getByRole('switch', { name: /show views on posts/i })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    )
+
+    await user.click(screen.getByRole('switch', { name: /analytics enabled/i }))
+
+    await waitFor(() => {
+      expect(mockUpdateAnalyticsSettings).toHaveBeenCalledWith({
+        analytics_enabled: false,
+        show_views_on_posts: true,
+      })
+    })
+  })
+
   it('shows "Analytics unavailable" when all fetches fail', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     mockFetchAnalyticsSettings.mockRejectedValue(new Error('GoatCounter down'))

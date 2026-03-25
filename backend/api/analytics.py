@@ -7,9 +7,11 @@ import re
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.deps import get_session, require_admin
+from backend.models.post import PostCache
 from backend.models.user import User
 from backend.schemas.analytics import (
     AnalyticsSettingsResponse,
@@ -30,6 +32,7 @@ from backend.services.analytics_service import (
     get_analytics_settings,
     update_analytics_settings,
 )
+from backend.utils.slug import file_path_to_slug, is_directory_post_path, resolve_slug_candidates
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +40,42 @@ admin_router = APIRouter(prefix="/api/admin/analytics", tags=["analytics-admin"]
 public_router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 
 _SAFE_PATH_PATTERN = re.compile(r"^[a-zA-Z0-9/_.-]{1,200}$")
+
+
+async def _resolve_public_post_slug(session: AsyncSession, file_path: str) -> str | None:
+    """Resolve *file_path* to a published post slug or return None.
+
+    Accepts either a bare slug (``hello``) or the canonical directory-backed
+    file path (``posts/hello/index.md``). Draft, deleted, and otherwise
+    non-public posts intentionally resolve to ``None`` so the public views
+    endpoint stays non-enumerating.
+    """
+    normalized_path = file_path.strip().strip("/")
+    if normalized_path == "":
+        return None
+
+    candidates: tuple[str, ...]
+    if is_directory_post_path(normalized_path):
+        candidates = (normalized_path,)
+    elif normalized_path.startswith("posts/"):
+        candidates = ()
+    else:
+        candidates = resolve_slug_candidates(normalized_path)
+
+    for candidate in candidates:
+        result = await session.execute(
+            select(PostCache.file_path)
+            .where(
+                PostCache.file_path == candidate,
+                PostCache.is_draft.is_(False),
+            )
+            .limit(1)
+        )
+        resolved_file_path = result.scalar_one_or_none()
+        if resolved_file_path is not None:
+            return file_path_to_slug(resolved_file_path)
+
+    return None
 
 
 # ── Admin endpoints ────────────────────────────────────────────────────────────
@@ -127,10 +166,16 @@ async def get_view_count(
 ) -> ViewCountResponse:
     """Get public view count for a post.
 
-    Returns the same response for non-existent or draft posts to avoid
-    information disclosure about post existence.
+    Returns the same response for non-existent, deleted, or draft posts to
+    avoid information disclosure about post existence.
     """
-    if not _SAFE_PATH_PATTERN.match(file_path):
+    normalized_path = file_path.strip().strip("/")
+    if not _SAFE_PATH_PATTERN.match(normalized_path):
         return ViewCountResponse(views=None)
-    views = await fetch_view_count(session, f"/post/{file_path}")
+
+    post_slug = await _resolve_public_post_slug(session, normalized_path)
+    if post_slug is None:
+        return ViewCountResponse(views=None)
+
+    views = await fetch_view_count(session, f"/post/{post_slug}")
     return ViewCountResponse(views=views)

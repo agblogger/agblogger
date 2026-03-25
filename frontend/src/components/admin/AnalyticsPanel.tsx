@@ -62,14 +62,24 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
 
-  const { data, error: dashboardError, isLoading: loading, mutate: dashboardMutate } = useAnalyticsDashboard(dateRange)
+  const {
+    data,
+    settings: persistedSettings,
+    error: dashboardError,
+    isLoading: loading,
+    mutate: dashboardMutate,
+  } = useAnalyticsDashboard(dateRange)
   const { data: referrerData, error: referrerError, isLoading: referrersLoading } = usePathReferrers(selectedPath?.path_id ?? null)
 
   const is401 = dashboardError instanceof HTTPError && dashboardError.response.status === 401
   const unavailable = dashboardError !== undefined && !is401
   const sessionExpiredError = is401 ? 'Session expired. Please log in again.' : null
 
-  const settings: AnalyticsSettings = data?.settings ?? { analytics_enabled: false, show_views_on_posts: false }
+  const settings: AnalyticsSettings = persistedSettings ?? {
+    analytics_enabled: false,
+    show_views_on_posts: false,
+  }
+  const settingsLoaded = persistedSettings !== undefined
   const sortedPaths = useMemo(
     () => [...(data?.paths.paths ?? [])].sort((a, b) => b.views - a.views),
     [data],
@@ -134,14 +144,14 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
             id="analytics-enabled"
             label="Analytics enabled"
             checked={settings.analytics_enabled}
-            disabled={allBusy || loading}
+            disabled={allBusy || loading || !settingsLoaded}
             onChange={(value) => void handleToggle('analytics_enabled', value)}
           />
           <ToggleSwitch
             id="show-views-on-posts"
             label="Show views on posts"
             checked={settings.show_views_on_posts}
-            disabled={allBusy || loading}
+            disabled={allBusy || loading || !settingsLoaded}
             onChange={(value) => void handleToggle('show_views_on_posts', value)}
           />
         </div>

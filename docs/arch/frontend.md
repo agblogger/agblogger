@@ -51,7 +51,9 @@ The admin panel includes an Analytics tab that displays page view statistics fro
 
 The dashboard shows summary cards (total views, unique visitors, top page), a top pages table with referrer drill-down, and browser/OS breakdown bar charts. Date range selection (7d/30d/90d) and settings toggles (analytics enabled, show views on posts) are included.
 
-When the admin enables "show views on posts", individual post pages display a view count in the metadata bar, fetched from the public analytics API endpoint.
+The analytics settings fetch is intentionally decoupled from the GoatCounter stats fetches so the admin can still inspect and change persisted settings while the stats sidecar is unavailable. The unavailable state in the panel reflects stats fetch failure, not loss of the saved toggle state.
+
+When the admin enables "show views on posts", individual post pages display a view count in the metadata bar, fetched from the public analytics API endpoint. The post page derives that lookup key from the canonical `post.file_path`, so short `/post/<slug>` URLs and accepted file-path forms such as `/post/posts/<slug>/index.md` resolve to the same GoatCounter path and show the same count.
 
 ## Code Entry Points
 

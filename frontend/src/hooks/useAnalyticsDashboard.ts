@@ -24,6 +24,13 @@ export interface AnalyticsDashboardData {
 
 export type DateRange = '7d' | '30d' | '90d'
 
+interface AnalyticsDashboardStatsData {
+  stats: TotalStatsResponse
+  paths: PathHitsResponse
+  browsers: BreakdownResponse
+  operatingSystems: BreakdownResponse
+}
+
 function getDateRange(range: DateRange): { start: string; end: string } {
   const end = new Date()
   const start = new Date()
@@ -37,10 +44,15 @@ function getDateRange(range: DateRange): { start: string; end: string } {
 
 export function useAnalyticsDashboard(range: DateRange) {
   const { start, end } = getDateRange(range)
-  return useSWR<AnalyticsDashboardData, Error>(
+
+  const settingsResult = useSWR<AnalyticsSettings, Error>(
+    ['analytics-dashboard-settings'],
+    fetchAnalyticsSettings,
+  )
+
+  const dashboardResult = useSWR<AnalyticsDashboardStatsData, Error>(
     ['analytics-dashboard', start, end],
     async () => {
-      const settings = await fetchAnalyticsSettings()
       const [stats, paths, browsersData, osData] = await Promise.all([
         fetchTotalStats(start, end),
         fetchPathHits(start, end),
@@ -48,7 +60,6 @@ export function useAnalyticsDashboard(range: DateRange) {
         fetchBreakdown('systems', start, end),
       ])
       return {
-        settings,
         stats,
         paths,
         browsers: browsersData,
@@ -56,6 +67,34 @@ export function useAnalyticsDashboard(range: DateRange) {
       }
     },
   )
+
+  const data =
+    settingsResult.data !== undefined && dashboardResult.data !== undefined
+      ? {
+          settings: settingsResult.data,
+          ...dashboardResult.data,
+        }
+      : undefined
+
+  return {
+    data,
+    settings: settingsResult.data,
+    error: settingsResult.error ?? dashboardResult.error,
+    isLoading: settingsResult.isLoading || dashboardResult.isLoading,
+    mutate: async () => {
+      const [settings, stats] = await Promise.all([
+        settingsResult.mutate(),
+        dashboardResult.mutate(),
+      ])
+      if (settings === undefined || stats === undefined) {
+        return undefined
+      }
+      return {
+        settings,
+        ...stats,
+      }
+    },
+  }
 }
 
 export function usePathReferrers(pathId: number | null) {

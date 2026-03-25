@@ -120,6 +120,24 @@ describe('useAnalyticsDashboard', () => {
     expect(result.current.error?.message).toBe('GoatCounter down')
   })
 
+  it('preserves settings when stats fetches fail', async () => {
+    mockFetchAnalyticsSettings.mockResolvedValue(analyticsSettings)
+    mockFetchTotalStats.mockRejectedValue(new Error('GoatCounter down'))
+    mockFetchPathHits.mockRejectedValue(new Error('GoatCounter down'))
+    mockFetchBreakdown.mockRejectedValue(new Error('GoatCounter down'))
+
+    const { result } = renderHook(() => useAnalyticsDashboard('7d'), {
+      wrapper: SWRTestWrapper,
+    })
+
+    await waitFor(() => {
+      expect(result.current.error).toBeDefined()
+    })
+
+    expect(result.current.settings).toEqual(analyticsSettings)
+    expect(result.current.error?.message).toBe('GoatCounter down')
+  })
+
   it('calls fetchBreakdown twice — once for browsers and once for systems', async () => {
     mockFetchAnalyticsSettings.mockResolvedValue(analyticsSettings)
     mockFetchTotalStats.mockResolvedValue(totalStats)

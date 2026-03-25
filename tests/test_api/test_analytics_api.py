@@ -15,6 +15,7 @@ from backend.schemas.analytics import (
     PathHit,
     TotalStatsResponse,
 )
+from backend.utils.slug import file_path_to_slug
 from tests.conftest import create_test_client
 
 if TYPE_CHECKING:
@@ -70,6 +71,39 @@ async def _register_and_login(client: AsyncClient, username: str, password: str)
     )
     assert resp2.status_code == 200
     return resp2.json()["access_token"]
+
+
+async def _enable_post_views(client: AsyncClient, headers: dict[str, str]) -> None:
+    """Enable public post view counts."""
+    resp = await client.put(
+        "/api/admin/analytics/settings",
+        json={"show_views_on_posts": True},
+        headers=headers,
+    )
+    assert resp.status_code == 200
+
+
+async def _create_published_post(
+    client: AsyncClient,
+    headers: dict[str, str],
+    *,
+    title: str = "Analytics public post",
+    body: str = "Body text\n",
+) -> tuple[str, str]:
+    """Create a published post and return (file_path, slug)."""
+    create_resp = await client.post(
+        "/api/posts",
+        json={
+            "title": title,
+            "body": body,
+            "is_draft": False,
+            "labels": [],
+        },
+        headers=headers,
+    )
+    assert create_resp.status_code == 201
+    file_path = create_resp.json()["file_path"]
+    return file_path, file_path_to_slug(file_path)
 
 
 class TestAnalyticsAdminAuth:
@@ -286,21 +320,18 @@ class TestPublicViewCount:
     @pytest.mark.asyncio
     async def test_view_count_returns_count_when_enabled(self, client: AsyncClient) -> None:
         token = await _get_admin_token(client)
-        # Enable show_views_on_posts
-        await client.put(
-            "/api/admin/analytics/settings",
-            json={"show_views_on_posts": True},
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        headers = {"Authorization": f"Bearer {token}"}
+        await _enable_post_views(client, headers)
+        _, slug = await _create_published_post(client, headers, title="Analytics visible post")
         # Mock GoatCounter response
         mock_data: dict[str, list[dict[str, object]]] = {
-            "hits": [{"path": "/post/my-post", "count": 42, "count_unique": 30}]
+            "hits": [{"path": f"/post/{slug}", "count": 42, "count_unique": 30}]
         }
         with patch(
             "backend.services.analytics_service._stats_request",
             new=AsyncMock(return_value=mock_data),
         ):
-            resp = await client.get("/api/analytics/views/my-post")
+            resp = await client.get(f"/api/analytics/views/{slug}")
         assert resp.status_code == 200
         data = resp.json()
         assert data["views"] == 42
@@ -310,19 +341,16 @@ class TestPublicViewCount:
         self, client: AsyncClient
     ) -> None:
         token = await _get_admin_token(client)
-        # Enable show_views_on_posts
-        await client.put(
-            "/api/admin/analytics/settings",
-            json={"show_views_on_posts": True},
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        # Path not in GoatCounter response
+        headers = {"Authorization": f"Bearer {token}"}
+        await _enable_post_views(client, headers)
+        _, slug = await _create_published_post(client, headers, title="Analytics zero post")
+        # Published post exists, but GoatCounter has no hit row for it.
         mock_data: dict[str, list[dict[str, object]]] = {"hits": []}
         with patch(
             "backend.services.analytics_service._stats_request",
             new=AsyncMock(return_value=mock_data),
         ):
-            resp = await client.get("/api/analytics/views/unknown-post")
+            resp = await client.get(f"/api/analytics/views/{slug}")
         assert resp.status_code == 200
         data = resp.json()
         assert data["views"] == 0
@@ -332,6 +360,78 @@ class TestPublicViewCount:
         # No auth header — should succeed (public endpoint)
         resp = await client.get("/api/analytics/views/any-post")
         assert resp.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_view_count_returns_null_for_post_drafted_after_publication(
+        self, client: AsyncClient
+    ) -> None:
+        token = await _get_admin_token(client)
+        headers = {"Authorization": f"Bearer {token}"}
+        body = {
+            "title": "Public analytics regression",
+            "body": "Body text\n",
+            "is_draft": False,
+            "labels": [],
+        }
+
+        await _enable_post_views(client, headers)
+        create_resp = await client.post("/api/posts", json=body, headers=headers)
+        assert create_resp.status_code == 201
+        file_path = create_resp.json()["file_path"]
+        slug = file_path_to_slug(file_path)
+
+        draft_resp = await client.put(
+            f"/api/posts/{file_path}",
+            json={**body, "is_draft": True},
+            headers=headers,
+        )
+        assert draft_resp.status_code == 200
+
+        with patch(
+            "backend.services.analytics_service._stats_request",
+            new=AsyncMock(
+                return_value={"hits": [{"path": f"/post/{slug}", "count": 42, "count_unique": 30}]}
+            ),
+        ) as mock_req:
+            resp = await client.get(f"/api/analytics/views/{slug}")
+
+        assert resp.status_code == 200
+        assert resp.json()["views"] is None
+        mock_req.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_view_count_returns_null_for_deleted_post_with_historical_hits(
+        self, client: AsyncClient
+    ) -> None:
+        token = await _get_admin_token(client)
+        headers = {"Authorization": f"Bearer {token}"}
+        body = {
+            "title": "Delete analytics regression",
+            "body": "Body text\n",
+            "is_draft": False,
+            "labels": [],
+        }
+
+        await _enable_post_views(client, headers)
+        create_resp = await client.post("/api/posts", json=body, headers=headers)
+        assert create_resp.status_code == 201
+        file_path = create_resp.json()["file_path"]
+        slug = file_path_to_slug(file_path)
+
+        delete_resp = await client.delete(f"/api/posts/{file_path}", headers=headers)
+        assert delete_resp.status_code == 204
+
+        with patch(
+            "backend.services.analytics_service._stats_request",
+            new=AsyncMock(
+                return_value={"hits": [{"path": f"/post/{slug}", "count": 42, "count_unique": 30}]}
+            ),
+        ) as mock_req:
+            resp = await client.get(f"/api/analytics/views/{slug}")
+
+        assert resp.status_code == 200
+        assert resp.json()["views"] is None
+        mock_req.assert_not_called()
 
 
 class TestStatsServiceUnavailable:
@@ -594,24 +694,27 @@ class TestPublicViewCountPathSanitization:
     async def _enable_views(self, client: AsyncClient) -> None:
         """Enable show_views_on_posts so valid paths reach GoatCounter."""
         token = await _get_admin_token(client)
-        await client.put(
-            "/api/admin/analytics/settings",
-            json={"show_views_on_posts": True},
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        await _enable_post_views(client, {"Authorization": f"Bearer {token}"})
+
+    async def _create_post(self, client: AsyncClient, *, title: str) -> tuple[str, str]:
+        """Create a published post and return (file_path, slug)."""
+        token = await _get_admin_token(client)
+        headers = {"Authorization": f"Bearer {token}"}
+        return await _create_published_post(client, headers, title=title)
 
     @pytest.mark.asyncio
     async def test_normal_path_reaches_service(self, client: AsyncClient) -> None:
         """A safe path should be forwarded to GoatCounter."""
         await self._enable_views(client)
+        _, slug = await self._create_post(client, title="Analytics safe path")
         mock_data: dict[str, list[dict[str, object]]] = {
-            "hits": [{"path": "/post/my-post", "count": 5, "count_unique": 3}]
+            "hits": [{"path": f"/post/{slug}", "count": 5, "count_unique": 3}]
         }
         with patch(
             "backend.services.analytics_service._stats_request",
             new=AsyncMock(return_value=mock_data),
         ) as mock_req:
-            resp = await client.get("/api/analytics/views/my-post")
+            resp = await client.get(f"/api/analytics/views/{slug}")
         assert resp.status_code == 200
         assert resp.json()["views"] == 5
         mock_req.assert_called_once()
@@ -619,13 +722,15 @@ class TestPublicViewCountPathSanitization:
     @pytest.mark.asyncio
     async def test_path_with_slashes_reaches_service(self, client: AsyncClient) -> None:
         await self._enable_views(client)
+        file_path, _ = await self._create_post(client, title="Analytics canonical path")
         mock_data: dict[str, list[dict[str, object]]] = {"hits": []}
         with patch(
             "backend.services.analytics_service._stats_request",
             new=AsyncMock(return_value=mock_data),
         ) as mock_req:
-            resp = await client.get("/api/analytics/views/some/nested/path")
+            resp = await client.get(f"/api/analytics/views/{file_path}")
         assert resp.status_code == 200
+        assert resp.json()["views"] == 0
         mock_req.assert_called_once()
 
     @pytest.mark.asyncio

@@ -587,6 +587,19 @@ describe('PostPage', () => {
     })
   })
 
+  it('normalizes file-path routes before fetching view count', async () => {
+    mockFetchPost.mockResolvedValue(postDetail)
+    renderPostPage('/post/posts/hello/index.md')
+
+    await waitFor(() => {
+      expect(screen.getByText('Hello World')).toBeInTheDocument()
+    })
+    await waitFor(() => {
+      expect(mockFetchViewCount).toHaveBeenCalledTimes(1)
+      expect(mockFetchViewCount).toHaveBeenCalledWith('hello')
+    })
+  })
+
   it('does not display view count when analytics returns null', async () => {
     mockFetchViewCount.mockResolvedValue({ views: null })
     mockFetchPost.mockResolvedValue(postDetail)

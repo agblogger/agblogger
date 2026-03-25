@@ -69,6 +69,8 @@ The backend integrates with a GoatCounter sidecar container for server-side page
 - **Stats proxy**: admin dashboard data (total views, per-path hits, referrers, browser/OS breakdowns) is proxied from GoatCounter's stats API through admin-only backend endpoints.
 - **Settings management**: analytics-enabled and show-views-on-posts toggles are stored in a durable `analytics_settings` table (Alembic-managed).
 
+Public post view counts are only exposed when the requested slug or canonical post path still resolves to a published post in `posts_cache`. The public analytics endpoint normalizes canonical file paths like `posts/hello/index.md` back to the short `/post/hello` GoatCounter path before looking up hits, and it returns the same `views: null` response for draft, deleted, or non-existent posts to avoid leaking hidden content state.
+
 GoatCounter is treated as a soft dependency — the backend starts and serves content normally when GoatCounter is unavailable. The API token is loaded lazily from a shared Docker volume (`/data/goatcounter/token`).
 
 ## API Surface

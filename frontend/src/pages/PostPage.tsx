@@ -17,11 +17,13 @@ import { useCodeBlockEnhance } from '@/hooks/useCodeBlockEnhance'
 import TableOfContents from '@/components/posts/TableOfContents'
 import { usePost, useViewCount } from '@/hooks/usePost'
 import { formatDate } from '@/utils/date'
+import { filePathToSlug } from '@/utils/postUrl'
 export default function PostPage() {
   const { '*': slug } = useParams()
   const navigate = useNavigate()
   const { data: post, error: postError, isLoading: loading, mutate: mutatePost } = usePost(slug ?? null)
-  const { data: viewData } = useViewCount(slug ?? null)
+  const postSlug = post !== undefined ? filePathToSlug(post.file_path) : null
+  const { data: viewData } = useViewCount(postSlug)
   const viewCount = viewData?.views ?? null
   const loadError = postError !== undefined
     ? postError instanceof HTTPError && postError.response.status === 404
@@ -130,6 +132,8 @@ export default function PostPage() {
   }
 
   const dateStr = formatDate(post.created_at, 'MMMM d, yyyy')
+  const canonicalPostSlug = filePathToSlug(post.file_path)
+  const canonicalPostUrl = `${window.location.origin}/post/${canonicalPostSlug}`
 
   return (
     <article className="animate-fade-in xl:flex xl:gap-8">
@@ -197,7 +201,7 @@ export default function PostPage() {
             <ShareButton
               title={post.title}
               author={post.author}
-              url={`${window.location.origin}/post/${slug}`}
+              url={canonicalPostUrl}
               disabled={post.is_draft}
             />
           </div>
