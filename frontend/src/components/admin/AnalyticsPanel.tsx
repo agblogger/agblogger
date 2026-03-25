@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { BarChart2, Loader2 } from 'lucide-react'
 import {
-  AreaChart,
-  Area,
   BarChart,
   Bar,
   XAxis,
@@ -39,17 +37,6 @@ function getDateRange(range: DateRange): { start: string; end: string } {
   }
 }
 
-interface DailyView {
-  date: string
-  views: number
-}
-
-function buildDailyViewsFromPaths(paths: PathHit[]): DailyView[] {
-  // Aggregate views per path into a single total (used as proxy for chart data)
-  const total = paths.reduce((sum, p) => sum + p.views, 0)
-  return [{ date: 'Total', views: total }]
-}
-
 function ToggleSwitch({
   id,
   label,
@@ -64,12 +51,13 @@ function ToggleSwitch({
   onChange: (value: boolean) => void
 }) {
   return (
-    <label htmlFor={id} className="flex items-center gap-2 cursor-pointer select-none">
-      <span className="text-sm text-ink">{label}</span>
+    <div className="flex items-center gap-2 cursor-pointer select-none">
+      <span className="text-sm text-ink" id={`${id}-label`}>{label}</span>
       <button
         id={id}
         role="switch"
         aria-checked={checked}
+        aria-labelledby={`${id}-label`}
         disabled={disabled}
         onClick={() => onChange(!checked)}
         className={`relative inline-flex w-10 h-5 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-accent/40 disabled:opacity-50 disabled:cursor-not-allowed ${
@@ -82,7 +70,7 @@ function ToggleSwitch({
           }`}
         />
       </button>
-    </label>
+    </div>
   )
 }
 
@@ -96,7 +84,7 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
   })
   const [totalViews, setTotalViews] = useState(0)
   const [totalUnique, setTotalUnique] = useState(0)
-  const [topPageToday, setTopPageToday] = useState<string>('—')
+  const [topPage, setTopPage] = useState<string>('—')
   const [paths, setPaths] = useState<PathHit[]>([])
   const [selectedPath, setSelectedPath] = useState<{ path: string; path_id: number } | null>(null)
   const [referrers, setReferrers] = useState<ReferrerEntry[]>([])
@@ -104,6 +92,7 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
   const [browsers, setBrowsers] = useState<BreakdownEntry[]>([])
   const [operatingSystems, setOperatingSystems] = useState<BreakdownEntry[]>([])
   const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   const localBusy = saving
   const onBusyChangeRef = useRef(onBusyChange)
@@ -113,10 +102,13 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
     onBusyChangeRef.current(localBusy)
   }, [localBusy])
 
+  const initialLoadRef = useRef(false)
   useEffect(() => {
-    void loadDashboard(dateRange)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    if (!initialLoadRef.current) {
+      initialLoadRef.current = true
+      void loadDashboard(dateRange)
+    }
+  })
 
   async function loadDashboard(range: DateRange) {
     setLoading(true)
@@ -139,9 +131,9 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
       // Top page: the path with the most views
       if (pathsData.paths.length > 0) {
         const top = [...pathsData.paths].sort((a, b) => b.views - a.views)[0]
-        setTopPageToday(top.path)
+        setTopPage(top.path)
       } else {
-        setTopPageToday('—')
+        setTopPage('—')
       }
     } catch {
       setUnavailable(true)
@@ -158,9 +150,12 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
 
   async function handleToggle(field: keyof AnalyticsSettings, value: boolean) {
     setSaving(true)
+    setSaveError(null)
     try {
       const updated = await updateAnalyticsSettings({ ...settings, [field]: value })
       setSettings(updated)
+    } catch {
+      setSaveError('Failed to update setting. Please try again.')
     } finally {
       setSaving(false)
     }
@@ -180,8 +175,6 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
   }
 
   const allBusy = busy || localBusy
-
-  const chartData: DailyView[] = buildDailyViewsFromPaths(paths)
 
   return (
     <div className="space-y-6">
@@ -225,6 +218,10 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
         </div>
       </div>
 
+      {saveError !== null && (
+        <p className="text-sm text-red-600 dark:text-red-400">{saveError}</p>
+      )}
+
       {/* Content area */}
       {loading ? (
         <div className="flex items-center justify-center py-16" aria-label="Loading" role="status">
@@ -251,30 +248,11 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
               <p className="text-2xl font-semibold text-ink">{totalUnique.toLocaleString()}</p>
             </div>
             <div className="bg-surface border border-border rounded-lg px-5 py-4">
-              <p className="text-xs text-muted uppercase tracking-wide mb-1">Top Page Today</p>
-              <p className="text-sm font-medium text-ink truncate" title={topPageToday}>
-                {topPageToday}
+              <p className="text-xs text-muted uppercase tracking-wide mb-1">Top Page</p>
+              <p className="text-sm font-medium text-ink truncate" title={topPage}>
+                {topPage}
               </p>
             </div>
-          </div>
-
-          {/* Views over time chart */}
-          <div className="bg-surface border border-border rounded-lg p-5">
-            <h3 className="text-sm font-medium text-ink mb-4">Views over time</h3>
-            <ResponsiveContainer width="100%" height={200}>
-              <AreaChart data={chartData}>
-                <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 11 }} />
-                <Tooltip />
-                <Area
-                  type="monotone"
-                  dataKey="views"
-                  stroke="var(--color-accent, #6366f1)"
-                  fill="var(--color-accent, #6366f1)"
-                  fillOpacity={0.15}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
           </div>
 
           {/* Top pages table */}
@@ -293,11 +271,19 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
                     </tr>
                   </thead>
                   <tbody>
-                    {paths.map((p, idx) => (
+                    {[...paths].sort((a, b) => b.views - a.views).map((p, idx) => (
                       <tr
                         key={p.path}
-                        className="border-b border-border last:border-0 hover:bg-base cursor-pointer transition-colors"
+                        role="button"
+                        tabIndex={0}
+                        className="border-b border-border last:border-0 hover:bg-base cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-accent/40"
                         onClick={() => void handlePathClick(p, idx)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            void handlePathClick(p, idx)
+                          }
+                        }}
                         aria-label={`View referrers for ${p.path}`}
                       >
                         <td className="py-2 pr-4 text-ink font-mono text-xs">{p.path}</td>
@@ -321,13 +307,18 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
                 </h3>
                 <button
                   onClick={() => setSelectedPath(null)}
+                  aria-label="Close referrers panel"
                   className="text-xs text-muted hover:text-ink transition-colors"
                 >
                   Close
                 </button>
               </div>
               {referrersLoading ? (
-                <div className="flex items-center justify-center py-6">
+                <div
+                  className="flex items-center justify-center py-6"
+                  role="status"
+                  aria-label="Loading"
+                >
                   <Loader2 size={16} className="text-accent animate-spin" />
                 </div>
               ) : referrers.length === 0 ? (

@@ -107,8 +107,8 @@ describe('AnalyticsPanel', () => {
     expect(screen.getByText('1,234')).toBeInTheDocument()
     expect(screen.getByText('567')).toBeInTheDocument()
     expect(screen.getByText('Unique Visitors')).toBeInTheDocument()
-    expect(screen.getByText('Top Page Today')).toBeInTheDocument()
-    // /posts/hello appears in "Top Page Today" card AND in table — just check at least one
+    expect(screen.getByText('Top Page')).toBeInTheDocument()
+    // /posts/hello appears in "Top Page" card AND in table — just check at least one
     expect(screen.getAllByText('/posts/hello').length).toBeGreaterThan(0)
   })
 
@@ -215,6 +215,22 @@ describe('AnalyticsPanel', () => {
     })
   })
 
+  it('shows error message when toggle save fails', async () => {
+    mockUpdateAnalyticsSettings.mockRejectedValue(new Error('Network error'))
+    const user = userEvent.setup()
+    renderPanel()
+    await waitFor(() => {
+      expect(screen.getByText('Total Views')).toBeInTheDocument()
+    })
+
+    const analyticsSwitch = screen.getByRole('switch', { name: /analytics enabled/i })
+    await user.click(analyticsSwitch)
+
+    await waitFor(() => {
+      expect(screen.getByText(/failed to update setting/i)).toBeInTheDocument()
+    })
+  })
+
   it('shows "Analytics unavailable" when all fetches fail', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     mockFetchAnalyticsSettings.mockRejectedValue(new Error('GoatCounter down'))
@@ -255,7 +271,7 @@ describe('AnalyticsPanel', () => {
       expect(screen.getAllByText('/posts/hello').length).toBeGreaterThan(0)
     })
 
-    await user.click(screen.getByRole('row', { name: 'View referrers for /posts/hello' }))
+    await user.click(screen.getByRole('button', { name: 'View referrers for /posts/hello' }))
 
     await waitFor(() => {
       expect(screen.getByText('https://hn.algolia.com')).toBeInTheDocument()
@@ -272,7 +288,23 @@ describe('AnalyticsPanel', () => {
       expect(screen.getAllByText('/posts/hello').length).toBeGreaterThan(0)
     })
 
-    await user.click(screen.getByRole('row', { name: 'View referrers for /posts/hello' }))
+    await user.click(screen.getByRole('button', { name: 'View referrers for /posts/hello' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('No referrer data for this page.')).toBeInTheDocument()
+    })
+  })
+
+  it('remains usable when referrer fetch fails', async () => {
+    mockFetchPathReferrers.mockRejectedValue(new Error('Network error'))
+    const user = userEvent.setup()
+    renderPanel()
+    await waitFor(() => {
+      expect(screen.getAllByText('/posts/hello').length).toBeGreaterThan(0)
+    })
+
+    // Click a row — should show the referrer panel with no data message (not crash)
+    await user.click(screen.getByRole('button', { name: 'View referrers for /posts/hello' }))
 
     await waitFor(() => {
       expect(screen.getByText('No referrer data for this page.')).toBeInTheDocument()
@@ -287,13 +319,6 @@ describe('AnalyticsPanel', () => {
     expect(screen.getByText('Operating Systems')).toBeInTheDocument()
   })
 
-  it('renders "Views over time" chart section', async () => {
-    renderPanel()
-    await waitFor(() => {
-      expect(screen.getByText('Views over time')).toBeInTheDocument()
-    })
-  })
-
   it('shows empty message when no path data', async () => {
     mockFetchPathHits.mockResolvedValue({ paths: [] })
     renderPanel()
@@ -306,7 +331,7 @@ describe('AnalyticsPanel', () => {
     mockFetchPathHits.mockResolvedValue({ paths: [] })
     renderPanel()
     await waitFor(() => {
-      expect(screen.getByText('Top Page Today')).toBeInTheDocument()
+      expect(screen.getByText('Top Page')).toBeInTheDocument()
     })
     expect(screen.getByText('—')).toBeInTheDocument()
   })
