@@ -23,6 +23,18 @@ Zustand stores coordinate those concerns, but the browser is not treated as the 
 
 The frontend talks to the backend through a shared HTTP client shaped around the backend’s cookie-based browser session model. Browser authentication stays cookie-first, CSRF protection is attached to unsafe requests, and session renewal is handled through the API boundary rather than by storing durable bearer credentials in app state.
 
+## Data Fetching
+
+Read-only data fetching uses SWR hooks in `frontend/src/hooks/`. A global `SWRConfig` in the `Layout` component (`App.tsx`) provides the default fetcher backed by the ky API client. Each resource has a dedicated hook (e.g., `useLabels`, `usePost`, `useSocialAccounts`) that encapsulates the SWR key, fetcher, and return types.
+
+Shared hooks like `useLabels()` (used by 5 components) and `useSocialAccounts()` (used by 3 components) provide automatic request deduplication — multiple components calling the same hook share a single network request and cache entry. SWR also provides caching across navigation and automatic revalidation on window focus.
+
+Write operations (create, update, delete) use direct API calls from `frontend/src/api/`. After a mutation, components call `mutate()` from the relevant SWR hook to trigger revalidation.
+
+Components with debounced search (Header, SearchPage) and paginated/filtered fetches (TimelinePage) continue to use manual `useEffect`+`useState` patterns, as do mutation-only components.
+
+Tests use `<SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>` for cache isolation between test cases.
+
 ## Editing Architecture
 
 The editor is built around structured post authoring instead of raw filesystem manipulation. Metadata editing, markdown editing, preview, and asset management are presented as one workflow over a canonical post unit. Preview rendering is delegated to the backend so the editor and published site use the same rendering and sanitization pipeline.
@@ -47,7 +59,7 @@ When the admin enables "show views on posts", individual post pages display a vi
 - `frontend/src/pages/` contains the main public browsing, authentication, editing and administration entry points.
 - `frontend/src/stores/` contains the small set of shared Zustand stores for auth, site config, theme, and UI coordination.
 - `frontend/src/api/` contains the HTTP client and API-facing modules that connect the SPA to the backend.
-- `frontend/src/hooks/` contains client-side enhancements layered on top of backend-rendered content and editor workflows.
+- `frontend/src/hooks/` contains SWR data-fetching hooks (e.g., `useLabels`, `usePost`, `useSocialAccounts`) and client-side enhancements layered on top of backend-rendered content and editor workflows.
 - `frontend/src/components/search/` contains the live search dropdown components used by the header for as-you-type search previews.
 - `frontend/src/components/share/` contains the social sharing bar and platform-specific sharing components used by the post view.
 - `frontend/src/components/labels/` contains shared label form components (names editor, parents selector) used by both the label creation and label settings pages.
