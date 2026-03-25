@@ -31,6 +31,8 @@ dependencies = [
     "pydantic-settings>=2.7",
     # Date/time
     "pendulum>=3.0",
+    # Bot/crawler detection (for analytics hit recording)
+    "crawlerdetect>=0.3",
     # HTTP client (for cross-posting, sync client)
     "httpx>=0.28",
     "httpcore>=1.0,<2",
