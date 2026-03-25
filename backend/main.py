@@ -23,6 +23,8 @@ from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from backend.api.admin import router as admin_router
+from backend.api.analytics import admin_router as analytics_admin_router
+from backend.api.analytics import public_router as analytics_public_router
 from backend.api.auth import router as auth_router
 from backend.api.content import router as content_router
 from backend.api.crosspost import router as crosspost_router
@@ -505,6 +507,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.include_router(health_router)
     app.include_router(admin_router)
+    app.include_router(analytics_admin_router)
+    app.include_router(analytics_public_router)
     app.include_router(auth_router)
     app.include_router(content_router)
     app.include_router(posts_router)
