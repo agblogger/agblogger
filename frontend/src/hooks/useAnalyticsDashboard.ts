@@ -37,7 +37,7 @@ function getDateRange(range: DateRange): { start: string; end: string } {
 
 export function useAnalyticsDashboard(range: DateRange) {
   const { start, end } = getDateRange(range)
-  return useSWR<AnalyticsDashboardData, unknown>(
+  return useSWR<AnalyticsDashboardData, Error>(
     ['analytics-dashboard', start, end],
     async () => {
       const [settings, stats, paths, browsersData, osData] = await Promise.all([
@@ -59,7 +59,7 @@ export function useAnalyticsDashboard(range: DateRange) {
 }
 
 export function usePathReferrers(pathId: number | null) {
-  return useSWR<PathReferrersResponse, unknown>(
+  return useSWR<PathReferrersResponse, Error>(
     pathId !== null ? ['pathReferrers', pathId] : null,
     ([, id]: [string, number]) => fetchPathReferrers(id),
   )
