@@ -32,8 +32,8 @@ function getDateRange(range: DateRange): { start: string; end: string } {
   const days = range === '7d' ? 7 : range === '30d' ? 30 : 90
   start.setDate(start.getDate() - days)
   return {
-    start: start.toISOString().split('T')[0],
-    end: end.toISOString().split('T')[0],
+    start: start.toISOString().split('T')[0]!,
+    end: end.toISOString().split('T')[0]!,
   }
 }
 
@@ -130,7 +130,7 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
       setOperatingSystems(osData.entries)
       // Top page: the path with the most views
       if (pathsData.paths.length > 0) {
-        const top = [...pathsData.paths].sort((a, b) => b.views - a.views)[0]
+        const top = [...pathsData.paths].sort((a, b) => b.views - a.views)[0]!
         setTopPage(top.path)
       } else {
         setTopPage('—')
@@ -370,7 +370,7 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
                       tick={{ fontSize: 10 }}
                       width={70}
                     />
-                    <Tooltip formatter={(v: number) => [`${v}%`, 'Share']} />
+                    <Tooltip formatter={(v) => [`${v as number}%`, 'Share']} />
                     <Bar
                       dataKey="percent"
                       fill="var(--color-accent, #6366f1)"
@@ -400,7 +400,7 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
                       tick={{ fontSize: 10 }}
                       width={70}
                     />
-                    <Tooltip formatter={(v: number) => [`${v}%`, 'Share']} />
+                    <Tooltip formatter={(v) => [`${v as number}%`, 'Share']} />
                     <Bar
                       dataKey="percent"
                       fill="var(--color-accent, #6366f1)"
