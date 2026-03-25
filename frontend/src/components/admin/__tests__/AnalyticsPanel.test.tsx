@@ -245,6 +245,22 @@ describe('AnalyticsPanel', () => {
     })
   })
 
+  it('shows session expired message on 401 during handleToggle', async () => {
+    mockUpdateAnalyticsSettings.mockRejectedValue(new MockHTTPError(401))
+    const user = userEvent.setup()
+    renderPanel()
+    await waitFor(() => {
+      expect(screen.getByText('Total Views')).toBeInTheDocument()
+    })
+
+    const analyticsSwitch = screen.getByRole('switch', { name: /analytics enabled/i })
+    await user.click(analyticsSwitch)
+
+    await waitFor(() => {
+      expect(screen.getByText('Session expired. Please log in again.')).toBeInTheDocument()
+    })
+  })
+
   it('shows "Analytics unavailable" when all fetches fail', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     mockFetchAnalyticsSettings.mockRejectedValue(new Error('GoatCounter down'))

@@ -28,21 +28,6 @@ Wrap the application tree in `App.tsx` with `<SWRConfig>` providing the default 
 </SWRConfig>
 ```
 
-### Default fetcher helper
-
-Create `frontend/src/hooks/useSWRFetch.ts`:
-
-```tsx
-import useSWR from 'swr'
-import type { SWRConfiguration } from 'swr'
-
-export function useSWRFetch<T>(key: string | null, options?: SWRConfiguration<T>) {
-  return useSWR<T>(key, options)
-}
-```
-
-This is a thin typed wrapper that relies on the global fetcher from `SWRConfig`. Components needing search params or complex fetchers (e.g., `Promise.all`) use `useSWR` directly with a custom fetcher.
-
 ### SWR key convention
 
 Keys are ky-relative URL paths (the same strings passed to `api.get()`). The global fetcher passes the key directly to `api.get(url).json()`. Examples:

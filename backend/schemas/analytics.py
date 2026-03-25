@@ -43,8 +43,8 @@ class TotalStatsResponse(BaseModel):
 class PathHit(BaseModel):
     """Hit counts for a single path."""
 
-    path_id: int
-    path: str
+    path_id: int = Field(ge=1)
+    path: str = Field(min_length=1)
     views: int = Field(ge=0)
     unique: int = Field(ge=0)
 

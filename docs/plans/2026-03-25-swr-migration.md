@@ -1,5 +1,7 @@
 # SWR Migration Implementation Plan
 
+**Status: Complete**
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace manual useEffect+useState data-fetching patterns with SWR across the frontend, and fix two AnalyticsPanel review findings.
@@ -16,7 +18,6 @@
 
 ### New files
 
-- `frontend/src/hooks/useSWRFetch.ts` — typed wrapper around `useSWR` using the global fetcher
 - `frontend/src/hooks/useLabels.ts` — shared hook for label list
 - `frontend/src/hooks/useSocialAccounts.ts` — shared hook for social accounts
 - `frontend/src/hooks/usePost.ts` — post detail + view count
@@ -159,7 +160,6 @@ git commit -m "fix: memoize sorted paths and fix initial load effect in Analytic
 **Files:**
 - Modify: `frontend/package.json`
 - Modify: `frontend/src/App.tsx`
-- Create: `frontend/src/hooks/useSWRFetch.ts`
 - Create: `frontend/src/test/swrWrapper.tsx`
 
 - [ ] **Step 1: Install SWR**
@@ -187,25 +187,7 @@ export function SWRTestWrapper({ children }: { children: ReactNode }) {
 
 `dedupingInterval: 0` ensures tests don't get stale cached results between test cases.
 
-- [ ] **Step 3: Create useSWRFetch helper**
-
-Create `frontend/src/hooks/useSWRFetch.ts`:
-
-```tsx
-import useSWR from 'swr'
-import type { SWRConfiguration } from 'swr'
-
-/**
- * Typed wrapper around useSWR that uses the global fetcher from SWRConfig.
- * Keys are ky-relative URL paths (e.g., 'labels', 'posts/my-slug').
- * Pass null as key to suppress fetching.
- */
-export function useSWRFetch<T>(key: string | null, options?: SWRConfiguration<T>) {
-  return useSWR<T>(key, options)
-}
-```
-
-- [ ] **Step 4: Add SWRConfig provider to App.tsx**
+- [ ] **Step 3: Add SWRConfig provider to App.tsx**
 
 In `frontend/src/App.tsx`, add imports and wrap the `Layout` component's return JSX (inside the `Layout` function, around the existing content):
 
@@ -237,7 +219,7 @@ Ensure no regressions from adding SWRConfig.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add frontend/package.json frontend/package-lock.json frontend/src/App.tsx frontend/src/hooks/useSWRFetch.ts frontend/src/test/swrWrapper.tsx
+git add frontend/package.json frontend/package-lock.json frontend/src/App.tsx frontend/src/test/swrWrapper.tsx
 git commit -m "feat: install SWR and add global config provider"
 ```
 

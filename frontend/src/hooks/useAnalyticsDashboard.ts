@@ -10,7 +10,7 @@ import type {
   AnalyticsSettings,
   TotalStatsResponse,
   PathHitsResponse,
-  BreakdownEntry,
+  BreakdownResponse,
   PathReferrersResponse,
 } from '@/api/client'
 
@@ -18,11 +18,11 @@ export interface AnalyticsDashboardData {
   settings: AnalyticsSettings
   stats: TotalStatsResponse
   paths: PathHitsResponse
-  browsers: BreakdownEntry[]
-  operatingSystems: BreakdownEntry[]
+  browsers: BreakdownResponse
+  operatingSystems: BreakdownResponse
 }
 
-type DateRange = '7d' | '30d' | '90d'
+export type DateRange = '7d' | '30d' | '90d'
 
 function getDateRange(range: DateRange): { start: string; end: string } {
   const end = new Date()
@@ -40,8 +40,8 @@ export function useAnalyticsDashboard(range: DateRange) {
   return useSWR<AnalyticsDashboardData, Error>(
     ['analytics-dashboard', start, end],
     async () => {
-      const [settings, stats, paths, browsersData, osData] = await Promise.all([
-        fetchAnalyticsSettings(),
+      const settings = await fetchAnalyticsSettings()
+      const [stats, paths, browsersData, osData] = await Promise.all([
         fetchTotalStats(start, end),
         fetchPathHits(start, end),
         fetchBreakdown('browsers', start, end),
@@ -51,8 +51,8 @@ export function useAnalyticsDashboard(range: DateRange) {
         settings,
         stats,
         paths,
-        browsers: browsersData.entries,
-        operatingSystems: osData.entries,
+        browsers: browsersData,
+        operatingSystems: osData,
       }
     },
   )

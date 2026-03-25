@@ -94,6 +94,63 @@ async def test_fetch_path_hits_returns_correct_data(session: AsyncSession) -> No
     assert result.paths[1].views == 17
 
 
+async def test_fetch_path_hits_skips_entries_with_missing_id(session: AsyncSession) -> None:
+    """Issue 7: entries without an id field should be skipped."""
+    fake_response = {
+        "hits": [
+            {"id": 1, "path": "/post/hello", "count": 42, "count_unique": 30},
+            {"path": "/post/no-id", "count": 5, "count_unique": 3},  # no id
+        ]
+    }
+    with patch(
+        "backend.services.analytics_service._stats_request",
+        new_callable=AsyncMock,
+        return_value=fake_response,
+    ):
+        result = await fetch_path_hits()
+
+    assert len(result.paths) == 1
+    assert result.paths[0].path_id == 1
+
+
+async def test_fetch_path_hits_skips_entries_with_zero_id(session: AsyncSession) -> None:
+    """Issue 7: entries with id=0 should be skipped."""
+    fake_response = {
+        "hits": [
+            {"id": 0, "path": "/post/zero", "count": 10, "count_unique": 5},
+            {"id": 2, "path": "/post/valid", "count": 7, "count_unique": 4},
+        ]
+    }
+    with patch(
+        "backend.services.analytics_service._stats_request",
+        new_callable=AsyncMock,
+        return_value=fake_response,
+    ):
+        result = await fetch_path_hits()
+
+    assert len(result.paths) == 1
+    assert result.paths[0].path_id == 2
+
+
+async def test_fetch_path_hits_skips_entries_with_empty_path(session: AsyncSession) -> None:
+    """Suggestion 6: entries with empty path should be skipped."""
+    fake_response = {
+        "hits": [
+            {"id": 1, "path": "", "count": 10, "count_unique": 5},
+            {"id": 2, "path": "/post/valid", "count": 7, "count_unique": 4},
+        ]
+    }
+    with patch(
+        "backend.services.analytics_service._stats_request",
+        new_callable=AsyncMock,
+        return_value=fake_response,
+    ):
+        result = await fetch_path_hits()
+
+    assert len(result.paths) == 1
+    assert result.paths[0].path_id == 2
+
+
 async def test_fetch_path_hits_returns_none_when_unavailable_legacy(
     session: AsyncSession,
 ) -> None:

@@ -64,7 +64,7 @@ class TestPostHitRecording:
         import asyncio
 
         with patch(
-            "backend.api.posts.record_hit",
+            "backend.services.analytics_service.record_hit",
             new=AsyncMock(),
         ) as mock_record:
             resp = await client.get("/api/posts/hello")
@@ -82,7 +82,7 @@ class TestPostHitRecording:
 
         token = await _get_admin_token(client)
         with patch(
-            "backend.api.posts.record_hit",
+            "backend.services.analytics_service.record_hit",
             new=AsyncMock(),
         ) as mock_record:
             resp = await client.get(
@@ -102,7 +102,7 @@ class TestPostHitRecording:
         import asyncio
 
         with patch(
-            "backend.api.posts.record_hit",
+            "backend.services.analytics_service.record_hit",
             new=AsyncMock(),
         ) as mock_record:
             resp = await client.get("/api/posts/posts/hello/index.md")
@@ -117,7 +117,7 @@ class TestPostHitRecording:
         import asyncio
 
         with patch(
-            "backend.api.posts.record_hit",
+            "backend.services.analytics_service.record_hit",
             new=AsyncMock(),
         ) as mock_record:
             resp = await client.get("/api/posts/does-not-exist")
@@ -134,7 +134,7 @@ class TestPageHitRecording:
         import asyncio
 
         with patch(
-            "backend.api.pages.record_hit",
+            "backend.services.analytics_service.record_hit",
             new=AsyncMock(),
         ) as mock_record:
             resp = await client.get("/api/pages/timeline")
@@ -153,7 +153,7 @@ class TestPageHitRecording:
 
         token = await _get_admin_token(client)
         with patch(
-            "backend.api.pages.record_hit",
+            "backend.services.analytics_service.record_hit",
             new=AsyncMock(),
         ) as mock_record:
             resp = await client.get(
@@ -171,7 +171,7 @@ class TestPageHitRecording:
         import asyncio
 
         with patch(
-            "backend.api.pages.record_hit",
+            "backend.services.analytics_service.record_hit",
             new=AsyncMock(),
         ) as mock_record:
             resp = await client.get("/api/pages/does-not-exist")
@@ -202,7 +202,7 @@ class TestPostHitSessionFactoryFailure:
         mock_request.client.host = "127.0.0.1"
         mock_request.headers = {"user-agent": "test-agent"}
 
-        with caplog.at_level(logging.WARNING, logger="backend.api.posts"):
+        with caplog.at_level(logging.WARNING, logger="backend.services.analytics_service"):
             _fire_post_hit(mock_request, failing_factory, "posts/hello/index.md", None)
             # Allow background task to run and complete
             await asyncio.sleep(0.01)
@@ -224,9 +224,9 @@ class TestPageHitSessionFactoryFailure:
         # Use record_hit raising to trigger exception inside the _do_hit body,
         # which exercises the same try/except block as a session_factory failure.
         with (
-            caplog.at_level(logging.WARNING, logger="backend.api.pages"),
+            caplog.at_level(logging.WARNING, logger="backend.services.analytics_service"),
             patch(
-                "backend.api.pages.record_hit",
+                "backend.services.analytics_service.record_hit",
                 new=AsyncMock(side_effect=RuntimeError("pool exhausted")),
             ),
         ):
@@ -235,6 +235,68 @@ class TestPageHitSessionFactoryFailure:
             await asyncio.sleep(0.01)
 
         assert any("Background analytics hit failed" in record.message for record in caplog.records)
+
+
+class TestPostHitRequestClientNone:
+    """Issue 11: Verify _fire_post_hit handles request.client = None gracefully."""
+
+    @pytest.mark.asyncio
+    async def test_fire_post_hit_with_request_client_none(self) -> None:
+        """When request.client is None, client_ip should be 'unknown'."""
+        import asyncio
+        from unittest.mock import MagicMock
+
+        from backend.api.posts import _fire_post_hit
+
+        mock_request = MagicMock()
+        mock_request.client = None
+        mock_request.headers = {"user-agent": "test-agent"}
+
+        with patch(
+            "backend.services.analytics_service.record_hit",
+            new=AsyncMock(),
+        ) as mock_record:
+            mock_session = AsyncMock()
+            mock_session_factory = MagicMock()
+            mock_session_factory.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session_factory.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            _fire_post_hit(mock_request, mock_session_factory, "posts/hello/index.md", None)
+            await asyncio.sleep(0.01)
+
+        mock_record.assert_called_once()
+        assert mock_record.call_args.kwargs["client_ip"] == "unknown"
+
+
+class TestPageHitRequestClientNone:
+    """Issue 11: Verify fire_background_hit handles request.client = None gracefully."""
+
+    @pytest.mark.asyncio
+    async def test_fire_background_hit_with_request_client_none(self) -> None:
+        """When request.client is None, fire_background_hit passes 'unknown' as IP."""
+        import asyncio
+        from unittest.mock import MagicMock
+
+        from backend.services.analytics_service import fire_background_hit
+
+        mock_request = MagicMock()
+        mock_request.client = None
+        mock_request.headers = {"user-agent": "test-agent"}
+
+        with patch(
+            "backend.services.analytics_service.record_hit",
+            new=AsyncMock(),
+        ) as mock_record:
+            mock_session = AsyncMock()
+            mock_session_factory = MagicMock()
+            mock_session_factory.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session_factory.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            fire_background_hit(mock_request, mock_session_factory, "/page/timeline", None)
+            await asyncio.sleep(0.01)
+
+        mock_record.assert_called_once()
+        assert mock_record.call_args.kwargs["client_ip"] == "unknown"
 
 
 class TestFirePostHitNonCanonicalPath:
@@ -255,6 +317,6 @@ class TestFirePostHitNonCanonicalPath:
 
         # A path starting with "posts/" but not matching "posts/<slug>/index.md"
         # causes file_path_to_slug to raise ValueError (e.g. flat .md file)
-        with patch("backend.api.posts.asyncio.create_task") as mock_create_task:
+        with patch("backend.api.posts.fire_background_hit") as mock_fire:
             _fire_post_hit(mock_request, mock_session_factory, "posts/my-post.md", None)
-            mock_create_task.assert_not_called()
+            mock_fire.assert_not_called()

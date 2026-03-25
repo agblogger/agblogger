@@ -156,7 +156,9 @@ async def test_record_hit_network_error_is_silent(
 ) -> None:
     """A network error during hit recording is silently absorbed — no exception raised."""
     failing_client = MagicMock()
-    failing_client.post = AsyncMock(side_effect=Exception("connection refused"))
+    failing_client.post = AsyncMock(
+        side_effect=httpx.ConnectError("connection refused", request=MagicMock())
+    )
 
     with (
         patch(

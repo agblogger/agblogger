@@ -48,7 +48,7 @@ from backend.schemas.post import (
     PostSave,
     SearchResult,
 )
-from backend.services.analytics_service import record_hit
+from backend.services.analytics_service import fire_background_hit
 from backend.services.datetime_service import format_iso, now_utc
 from backend.services.git_service import GitService
 from backend.services.label_service import ensure_label_cache_entry
@@ -63,9 +63,6 @@ from backend.services.slug_service import generate_post_path, generate_post_slug
 from backend.utils.slug import file_path_to_slug, resolve_slug_candidates
 
 logger = logging.getLogger(__name__)
-
-# Strong references to fire-and-forget analytics tasks, preventing GC before completion.
-_background_tasks: set[asyncio.Task[None]] = set()
 
 
 async def _empty_string() -> str:
@@ -739,34 +736,20 @@ def _fire_post_hit(
 ) -> None:
     """Fire a background analytics hit for a post view.
 
-    Extracts the slug from the canonical file path and schedules a fire-and-forget
-    hit recording task via asyncio.create_task. Uses an independent session so the
-    background task is not affected by the request session being closed on handler return.
+    Extracts the slug from the canonical file path and delegates to the shared
+    fire_background_hit helper for task scheduling and error handling.
     """
     try:
         slug = file_path_to_slug(post_file_path)
     except ValueError:
         # Non-canonical path: skip hit recording
         return
-    client_ip = request.client.host if request.client and request.client.host else "unknown"
-    user_agent = request.headers.get("user-agent", "")
-
-    async def _do_hit() -> None:
-        try:
-            async with session_factory() as session:
-                await record_hit(
-                    session=session,
-                    path=f"/post/{slug}",
-                    client_ip=client_ip,
-                    user_agent=user_agent,
-                    user=user,
-                )
-        except Exception:
-            logger.warning("Background analytics hit failed for /post/%s", slug, exc_info=True)
-
-    task = asyncio.create_task(_do_hit())
-    _background_tasks.add(task)
-    task.add_done_callback(_background_tasks.discard)
+    fire_background_hit(
+        request=request,
+        session_factory=session_factory,
+        path=f"/post/{slug}",
+        user=user,
+    )
 
 
 @router.post("", response_model=PostDetail, status_code=201)

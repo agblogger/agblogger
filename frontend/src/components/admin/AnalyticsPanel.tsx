@@ -12,14 +12,12 @@ import {
 import { updateAnalyticsSettings } from '@/api/analytics'
 import { HTTPError } from '@/api/client'
 import type { AnalyticsSettings } from '@/api/client'
-import { useAnalyticsDashboard, usePathReferrers } from '@/hooks/useAnalyticsDashboard'
+import { useAnalyticsDashboard, usePathReferrers, type DateRange } from '@/hooks/useAnalyticsDashboard'
 
 interface AnalyticsPanelProps {
   busy: boolean
   onBusyChange: (busy: boolean) => void
 }
-
-type DateRange = '7d' | '30d' | '90d'
 
 function ToggleSwitch({
   id,
@@ -77,8 +75,8 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
     [data],
   )
   const topPage = sortedPaths.length > 0 && sortedPaths[0] ? sortedPaths[0].path : '—'
-  const browsers = data?.browsers ?? []
-  const operatingSystems = data?.operatingSystems ?? []
+  const browsers = data?.browsers.entries ?? []
+  const operatingSystems = data?.operatingSystems.entries ?? []
   const referrers = referrerData?.referrers ?? []
   const referrerErrorMsg = referrerError !== undefined ? 'Failed to load referrers. Please try again.' : null
 
@@ -93,8 +91,12 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
     try {
       await updateAnalyticsSettings({ ...settings, [field]: value })
       void dashboardMutate()
-    } catch {
-      setSaveError('Failed to update setting. Please try again.')
+    } catch (err) {
+      if (err instanceof HTTPError && err.response.status === 401) {
+        setSaveError('Session expired. Please log in again.')
+      } else {
+        setSaveError('Failed to update setting. Please try again.')
+      }
     } finally {
       setSaving(false)
     }

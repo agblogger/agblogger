@@ -14,10 +14,10 @@ Admin-only management routes are also guarded client-side before rendering workf
 
 Frontend state is deliberately small and split into two categories:
 
-- **server-backed state** such as the current user and site configuration
-- **client UI state** such as theme selection and shared panel behavior
+- **server-backed state** such as the current user, site configuration, and resource data — managed by SWR hooks (`frontend/src/hooks/`) for automatic caching, deduplication, and revalidation
+- **client UI state** such as theme selection and shared panel behavior — managed by Zustand stores
 
-Zustand stores coordinate those concerns, but the browser is not treated as the long-term source of truth for content or identity.
+SWR owns server data fetching and caching; Zustand coordinates session, config, and UI-only concerns. The browser is not treated as the long-term source of truth for content or identity.
 
 ## API Integration
 

@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING, Any, cast
 
 import httpx
 from crawlerdetect import CrawlerDetect
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from backend.models.analytics import AnalyticsSettings
 from backend.schemas.analytics import (
@@ -23,7 +25,8 @@ from backend.schemas.analytics import (
 )
 
 if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncSession
+    from fastapi import Request
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
     from backend.models.user import User
 
@@ -36,6 +39,8 @@ GOATCOUNTER_URL = "http://goatcounter:8080"
 GOATCOUNTER_AUTH_FILE = "/data/goatcounter/token"
 _HIT_TIMEOUT = 2.0
 _STATS_TIMEOUT = 5.0
+_HIT_ERRORS = (httpx.HTTPError, OSError)
+_STATS_ERRORS = (httpx.HTTPError, httpx.InvalidURL, ValueError)
 
 # ── Module-level singletons ────────────────────────────────────────────────────
 
@@ -44,12 +49,15 @@ _http_client: httpx.AsyncClient | None = None
 _goatcounter_token: str | None = None
 _token_warning_issued: bool = False
 
+# Strong references to fire-and-forget analytics tasks, preventing GC before completion.
+_background_tasks: set[asyncio.Task[None]] = set()
+
 
 def _get_http_client() -> httpx.AsyncClient:
     """Return the shared AsyncClient, creating it lazily on first call."""
     global _http_client
     if _http_client is None:
-        _http_client = httpx.AsyncClient(timeout=httpx.Timeout(None))
+        _http_client = httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=5.0))
     return _http_client
 
 
@@ -125,6 +133,10 @@ async def update_analytics_settings(
 
     On first call, creates the singleton settings row. On subsequent calls,
     updates only the fields that are not None, leaving other fields unchanged.
+
+    Handles the race condition where a concurrent request inserts the singleton
+    row between our SELECT and INSERT by catching IntegrityError and retrying
+    with an UPDATE on the existing row.
     """
     result = await session.execute(select(AnalyticsSettings).limit(1))
     row = result.scalar_one_or_none()
@@ -135,6 +147,16 @@ async def update_analytics_settings(
             show_views_on_posts=False if show_views_on_posts is None else show_views_on_posts,
         )
         session.add(row)
+        try:
+            await session.flush()
+        except IntegrityError:
+            await session.rollback()
+            result = await session.execute(select(AnalyticsSettings).limit(1))
+            row = result.scalar_one()
+            if analytics_enabled is not None:
+                row.analytics_enabled = analytics_enabled
+            if show_views_on_posts is not None:
+                row.show_views_on_posts = show_views_on_posts
     else:
         if analytics_enabled is not None:
             row.analytics_enabled = analytics_enabled
@@ -160,7 +182,11 @@ async def record_hit(
     user_agent: str,
     user: User | None,
 ) -> None:
-    """Record a page view hit to GoatCounter. Any failure is logged but never propagated.
+    """Record a page view hit to GoatCounter.
+
+    Network and HTTP errors are logged but never propagated; programming bugs
+    (TypeError, AttributeError, etc.) are allowed to propagate so they remain
+    visible in the caller's error handling.
 
     Skips recording when:
     - The request carries a valid authenticated user session.
@@ -168,22 +194,22 @@ async def record_hit(
     - Analytics are disabled in settings.
     - The GoatCounter token is not yet available.
     """
+    # Skip authenticated users — admin/editor browsing should not inflate counts.
+    if user is not None:
+        return
+
+    if _crawler_detect.is_crawler(user_agent):
+        return
+
+    settings = await get_analytics_settings(session)
+    if not settings.analytics_enabled:
+        return
+
+    token = _load_token()
+    if token is None:
+        return
+
     try:
-        # Skip authenticated users — admin/editor browsing should not inflate counts.
-        if user is not None:
-            return
-
-        if _crawler_detect.is_crawler(user_agent):
-            return
-
-        settings = await get_analytics_settings(session)
-        if not settings.analytics_enabled:
-            return
-
-        token = _load_token()
-        if token is None:
-            return
-
         client = _get_http_client()
         response = await client.post(
             f"{GOATCOUNTER_URL}/api/v0/count",
@@ -200,7 +226,7 @@ async def record_hit(
             timeout=_HIT_TIMEOUT,
         )
         response.raise_for_status()
-    except Exception:
+    except _HIT_ERRORS:
         logger.warning("Failed to record analytics hit for path %r", path, exc_info=True)
 
 
@@ -211,11 +237,15 @@ async def _stats_request(
     endpoint: str,
     params: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
-    """Authenticated GET to GoatCounter; returns parsed JSON or None on any error."""
+    """Authenticated GET to GoatCounter; returns parsed JSON or None on expected errors.
+
+    Network/HTTP errors and JSON decode errors are caught and logged.
+    Programming bugs (TypeError, AttributeError, etc.) propagate to the caller.
+    """
+    token = _load_token()
+    if token is None:
+        return None
     try:
-        token = _load_token()
-        if token is None:
-            return None
         client = _get_http_client()
         response = await client.get(
             f"{GOATCOUNTER_URL}{endpoint}",
@@ -225,9 +255,50 @@ async def _stats_request(
         )
         response.raise_for_status()
         return cast("dict[str, Any]", response.json())
-    except Exception:
-        logger.warning("GoatCounter stats request to %r failed", endpoint, exc_info=True)
+    except _STATS_ERRORS:
+        logger.warning(
+            "GoatCounter stats request to %r (params=%r) failed",
+            endpoint,
+            params,
+            exc_info=True,
+        )
         return None
+
+
+# ── Background hit helper ─────────────────────────────────────────────────────
+
+
+def fire_background_hit(
+    request: Request,
+    session_factory: async_sessionmaker[AsyncSession],
+    path: str,
+    user: User | None,
+) -> None:
+    """Schedule a fire-and-forget analytics hit recording task.
+
+    Extracts client IP and user agent from the request, then creates an asyncio
+    task that opens an independent database session and calls record_hit. Any
+    failure in the background task is logged but never propagated.
+    """
+    client_ip = request.client.host if request.client and request.client.host else "unknown"
+    user_agent = request.headers.get("user-agent", "")
+
+    async def _do_hit() -> None:
+        try:
+            async with session_factory() as session:
+                await record_hit(
+                    session=session,
+                    path=path,
+                    client_ip=client_ip,
+                    user_agent=user_agent,
+                    user=user,
+                )
+        except Exception:
+            logger.warning("Background analytics hit failed for %r", path, exc_info=True)
+
+    task = asyncio.create_task(_do_hit())
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
 
 
 async def fetch_total_stats(
@@ -264,15 +335,22 @@ async def fetch_path_hits(
     data = await _stats_request("/api/v0/stats/hits", params or None)
     if data is None:
         return None
-    paths = [
-        PathHit(
-            path_id=entry.get("id", 0),
-            path=entry.get("path", ""),
-            views=entry.get("count", 0),
-            unique=entry.get("count_unique", 0),
+    paths: list[PathHit] = []
+    for entry in data.get("hits", []):
+        path_id = entry.get("id")
+        if not path_id or path_id < 1:
+            continue
+        path = entry.get("path", "")
+        if not path:
+            continue
+        paths.append(
+            PathHit(
+                path_id=path_id,
+                path=path,
+                views=entry.get("count", 0),
+                unique=entry.get("count_unique", 0),
+            )
         )
-        for entry in data.get("hits", [])
-    ]
     return PathHitsResponse(paths=paths)
 
 

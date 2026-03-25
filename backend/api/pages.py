@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import re
 from typing import Annotated
@@ -15,7 +14,7 @@ from backend.filesystem.content_manager import ContentManager
 from backend.models.user import User
 from backend.pandoc.renderer import RenderError
 from backend.schemas.page import PageResponse, SiteConfigResponse
-from backend.services.analytics_service import record_hit
+from backend.services.analytics_service import fire_background_hit
 from backend.services.page_service import get_page, get_site_config
 
 logger = logging.getLogger(__name__)
@@ -23,9 +22,6 @@ logger = logging.getLogger(__name__)
 _PAGE_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
 
 router = APIRouter(prefix="/api/pages", tags=["pages"])
-
-# Strong references to fire-and-forget analytics tasks, preventing GC before completion.
-_background_tasks: set[asyncio.Task[None]] = set()
 
 
 @router.get("", response_model=SiteConfigResponse)
@@ -54,23 +50,10 @@ async def get_page_endpoint(
         raise HTTPException(status_code=502, detail="Markdown rendering failed") from exc
     if page is None:
         raise HTTPException(status_code=404, detail="Page not found")
-    client_ip = request.client.host if request.client and request.client.host else "unknown"
-    user_agent = request.headers.get("user-agent", "")
-
-    async def _do_hit() -> None:
-        try:
-            async with session_factory() as session:
-                await record_hit(
-                    session=session,
-                    path=f"/page/{page_id}",
-                    client_ip=client_ip,
-                    user_agent=user_agent,
-                    user=user,
-                )
-        except Exception:
-            logger.warning("Background analytics hit failed for /page/%s", page_id, exc_info=True)
-
-    task = asyncio.create_task(_do_hit())
-    _background_tasks.add(task)
-    task.add_done_callback(_background_tasks.discard)
+    fire_background_hit(
+        request=request,
+        session_factory=session_factory,
+        path=f"/page/{page_id}",
+        user=user,
+    )
     return page

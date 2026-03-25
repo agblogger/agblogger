@@ -9,7 +9,12 @@ import pytest
 from pydantic import ValidationError
 
 from backend.config import Settings
-from backend.schemas.analytics import BreakdownEntry, TotalStatsResponse
+from backend.schemas.analytics import (
+    AnalyticsSettingsUpdate,
+    BreakdownEntry,
+    PathHit,
+    TotalStatsResponse,
+)
 from tests.conftest import create_test_client
 
 if TYPE_CHECKING:
@@ -536,3 +541,145 @@ class TestAnalyticsSettingsUpdateValidator:
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 422
+
+
+class TestAnalyticsSettingsUpdateSchemaLevel:
+    """Issue 10: Direct schema-level tests for AnalyticsSettingsUpdate validator."""
+
+    def test_empty_body_raises_validation_error(self) -> None:
+        with pytest.raises(ValidationError):
+            AnalyticsSettingsUpdate()
+
+    def test_with_one_field_succeeds(self) -> None:
+        obj = AnalyticsSettingsUpdate(analytics_enabled=True)
+        assert obj.analytics_enabled is True
+        assert obj.show_views_on_posts is None
+
+    def test_with_both_fields_succeeds(self) -> None:
+        obj = AnalyticsSettingsUpdate(analytics_enabled=True, show_views_on_posts=False)
+        assert obj.analytics_enabled is True
+        assert obj.show_views_on_posts is False
+
+
+class TestPathHitSchemaValidation:
+    """Issue 7 + Suggestion 6: PathHit field constraints."""
+
+    def test_path_id_zero_raises_validation_error(self) -> None:
+        """path_id=0 is meaningless and should be rejected."""
+        with pytest.raises(ValidationError):
+            PathHit(path_id=0, path="/test", views=1, unique=1)
+
+    def test_path_id_negative_raises_validation_error(self) -> None:
+        with pytest.raises(ValidationError):
+            PathHit(path_id=-1, path="/test", views=1, unique=1)
+
+    def test_path_id_one_succeeds(self) -> None:
+        hit = PathHit(path_id=1, path="/test", views=1, unique=1)
+        assert hit.path_id == 1
+
+    def test_empty_path_raises_validation_error(self) -> None:
+        """Empty path string should be rejected."""
+        with pytest.raises(ValidationError):
+            PathHit(path_id=1, path="", views=1, unique=1)
+
+
+class TestPublicViewCountPathSanitization:
+    """Issue 2: Input sanitization for public /views/{file_path:path} endpoint.
+
+    These tests enable show_views_on_posts and mock GoatCounter so that valid
+    paths reach the service call while invalid paths are rejected early by the
+    sanitization check (returning views=None without hitting GoatCounter).
+    """
+
+    async def _enable_views(self, client: AsyncClient) -> None:
+        """Enable show_views_on_posts so valid paths reach GoatCounter."""
+        token = await _get_admin_token(client)
+        await client.put(
+            "/api/admin/analytics/settings",
+            json={"show_views_on_posts": True},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    @pytest.mark.asyncio
+    async def test_normal_path_reaches_service(self, client: AsyncClient) -> None:
+        """A safe path should be forwarded to GoatCounter."""
+        await self._enable_views(client)
+        mock_data: dict[str, list[dict[str, object]]] = {
+            "hits": [{"path": "/post/my-post", "count": 5, "count_unique": 3}]
+        }
+        with patch(
+            "backend.services.analytics_service._stats_request",
+            new=AsyncMock(return_value=mock_data),
+        ) as mock_req:
+            resp = await client.get("/api/analytics/views/my-post")
+        assert resp.status_code == 200
+        assert resp.json()["views"] == 5
+        mock_req.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_path_with_slashes_reaches_service(self, client: AsyncClient) -> None:
+        await self._enable_views(client)
+        mock_data: dict[str, list[dict[str, object]]] = {"hits": []}
+        with patch(
+            "backend.services.analytics_service._stats_request",
+            new=AsyncMock(return_value=mock_data),
+        ) as mock_req:
+            resp = await client.get("/api/analytics/views/some/nested/path")
+        assert resp.status_code == 200
+        mock_req.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_very_long_path_rejected_before_service(self, client: AsyncClient) -> None:
+        """Paths longer than 200 characters should be rejected without calling GoatCounter."""
+        await self._enable_views(client)
+        long_path = "a" * 201
+        with patch(
+            "backend.services.analytics_service._stats_request",
+            new=AsyncMock(return_value={"hits": []}),
+        ) as mock_req:
+            resp = await client.get(f"/api/analytics/views/{long_path}")
+        assert resp.status_code == 200
+        assert resp.json()["views"] is None
+        mock_req.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_unicode_path_rejected_before_service(self, client: AsyncClient) -> None:
+        """Paths with unicode characters should be rejected."""
+        await self._enable_views(client)
+        with patch(
+            "backend.services.analytics_service._stats_request",
+            new=AsyncMock(return_value={"hits": []}),
+        ) as mock_req:
+            resp = await client.get("/api/analytics/views/post-\u00e9\u00e8\u00ea")
+        assert resp.status_code == 200
+        assert resp.json()["views"] is None
+        mock_req.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_special_characters_rejected_before_service(self, client: AsyncClient) -> None:
+        """Paths with HTML/shell special characters should be rejected."""
+        await self._enable_views(client)
+        for char in ["<", ">", "&", ";", '"', "'"]:
+            with patch(
+                "backend.services.analytics_service._stats_request",
+                new=AsyncMock(return_value={"hits": []}),
+            ) as mock_req:
+                resp = await client.get(f"/api/analytics/views/post{char}evil")
+            assert resp.status_code == 200, f"Failed for char={char!r}"
+            assert resp.json()["views"] is None, f"Expected views=None for char={char!r}"
+            mock_req.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_empty_path_rejected(self, client: AsyncClient) -> None:
+        """Empty file_path should return views=None."""
+        await self._enable_views(client)
+        with patch(
+            "backend.services.analytics_service._stats_request",
+            new=AsyncMock(return_value={"hits": []}),
+        ) as mock_req:
+            resp = await client.get("/api/analytics/views/")
+        # FastAPI may return 200 with empty path or 307 redirect;
+        # if it gets to our handler, views should be None
+        if resp.status_code == 200:
+            assert resp.json()["views"] is None
+            mock_req.assert_not_called()

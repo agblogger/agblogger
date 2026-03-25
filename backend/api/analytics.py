@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -34,6 +35,8 @@ logger = logging.getLogger(__name__)
 
 admin_router = APIRouter(prefix="/api/admin/analytics", tags=["analytics-admin"])
 public_router = APIRouter(prefix="/api/analytics", tags=["analytics"])
+
+_SAFE_PATH_PATTERN = re.compile(r"^[a-zA-Z0-9/_.-]{1,200}$")
 
 
 # ── Admin endpoints ────────────────────────────────────────────────────────────
@@ -127,5 +130,7 @@ async def get_view_count(
     Returns the same response for non-existent or draft posts to avoid
     information disclosure about post existence.
     """
+    if not _SAFE_PATH_PATTERN.match(file_path):
+        return ViewCountResponse(views=None)
     views = await fetch_view_count(session, f"/post/{file_path}")
     return ViewCountResponse(views=views)

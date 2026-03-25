@@ -6,20 +6,18 @@ TOKEN_FILE="/data/goatcounter/token"
 
 # First-boot provisioning
 if [ ! -f "$TOKEN_FILE" ]; then
-    echo "First boot: creating GoatCounter site and API token..."
     mkdir -p /data/goatcounter
 
-    # Create site only if the database does not already exist
-    if [ ! -f "$GOATCOUNTER_DB" ]; then
-        goatcounter db create-site \
-            -createdb \
-            -db "sqlite+$GOATCOUNTER_DB" \
-            -vhost stats.internal \
-            -user.email admin@localhost \
-            -user.password "$(head -c 32 /dev/urandom | base64)"
-    fi
+    echo "Provisioning GoatCounter: creating site..."
+    goatcounter db create-site \
+        -createdb \
+        -db "sqlite+$GOATCOUNTER_DB" \
+        -vhost stats.internal \
+        -user.email admin@localhost \
+        -user.password "$(head -c 32 /dev/urandom | base64)" \
+        2>&1 || echo "Site creation skipped (may already exist)"
 
-    # Create API token (permission bitmask: 1=read + 2=count = 3)
+    echo "Provisioning GoatCounter: creating API token..."
     TOKEN=$(goatcounter db create-apitoken \
         -db "sqlite+$GOATCOUNTER_DB" \
         -site-id 1 \
@@ -35,7 +33,7 @@ if [ ! -f "$TOKEN_FILE" ]; then
     echo "GoatCounter provisioned. Token written to $TOKEN_FILE"
 fi
 
-# Start GoatCounter server
+echo "Starting GoatCounter server..."
 exec goatcounter serve \
     -db "sqlite+$GOATCOUNTER_DB" \
     -listen ":8080" \

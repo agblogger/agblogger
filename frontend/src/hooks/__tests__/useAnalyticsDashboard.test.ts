@@ -93,9 +93,31 @@ describe('useAnalyticsDashboard', () => {
       settings: analyticsSettings,
       stats: totalStats,
       paths: pathHits,
-      browsers: browsersData.entries,
-      operatingSystems: osData.entries,
+      browsers: browsersData,
+      operatingSystems: osData,
     })
+  })
+
+  it('returns error when a fetch call rejects', async () => {
+    mockFetchAnalyticsSettings.mockResolvedValue(analyticsSettings)
+    mockFetchTotalStats.mockRejectedValue(new Error('GoatCounter down'))
+    mockFetchPathHits.mockResolvedValue(pathHits)
+    mockFetchBreakdown.mockImplementation((category: string) => {
+      if (category === 'browsers') return Promise.resolve(browsersData)
+      if (category === 'systems') return Promise.resolve(osData)
+      return Promise.reject(new Error(`Unexpected category: ${category}`))
+    })
+
+    const { result } = renderHook(() => useAnalyticsDashboard('7d'), {
+      wrapper: SWRTestWrapper,
+    })
+
+    await waitFor(() => {
+      expect(result.current.error).toBeDefined()
+    })
+
+    expect(result.current.data).toBeUndefined()
+    expect(result.current.error?.message).toBe('GoatCounter down')
   })
 
   it('calls fetchBreakdown twice — once for browsers and once for systems', async () => {

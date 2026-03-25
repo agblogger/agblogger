@@ -14,7 +14,7 @@ export async function fetchAnalyticsSettings(): Promise<AnalyticsSettings> {
 }
 
 export async function updateAnalyticsSettings(
-  settings: Partial<AnalyticsSettings>,
+  settings: AnalyticsSettings,
 ): Promise<AnalyticsSettings> {
   return api.put('admin/analytics/settings', { json: settings }).json<AnalyticsSettings>()
 }
