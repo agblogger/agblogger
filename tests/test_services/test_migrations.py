@@ -20,6 +20,7 @@ class TestAlembicMigration:
         "invite_codes",
         "social_accounts",
         "cross_posts",
+        "analytics_settings",
     }
 
     CACHE_TABLES: ClassVar[set[str]] = {
@@ -211,6 +212,7 @@ class TestTablePartitionInvariants:
             "invite_codes",
             "social_accounts",
             "cross_posts",
+            "analytics_settings",
         }
         assert set(DurableBase.metadata.tables.keys()) == expected
 
