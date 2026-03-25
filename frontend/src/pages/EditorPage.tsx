@@ -5,11 +5,10 @@ import { format, parseISO } from 'date-fns'
 import { formatDate } from '@/utils/date'
 
 import { fetchPostForEdit, createPost, updatePost } from '@/api/posts'
-import { fetchSocialAccounts } from '@/api/crosspost'
-import type { SocialAccount } from '@/api/crosspost'
 import AlertBanner from '@/components/AlertBanner'
 import { HTTPError } from '@/api/client'
-import { extractErrorDetail, parseErrorDetail } from '@/api/parseError'
+import { parseErrorDetail } from '@/api/parseError'
+import { useSocialAccounts } from '@/hooks/useSocialAccounts'
 import api from '@/api/client'
 import { useCodeBlockEnhance } from '@/hooks/useCodeBlockEnhance'
 import { useFileUpload } from '@/components/editor/useFileUpload'
@@ -55,8 +54,8 @@ export default function EditorPage() {
   const previewRequestRef = useRef(0)
   const previewRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const [accounts, setAccounts] = useState<SocialAccount[]>([])
-  const [socialAccountsError, setSocialAccountsError] = useState<string | null>(null)
+  const { data: accounts = [], error: socialAccountsErr } = useSocialAccounts()
+  const socialAccountsError = socialAccountsErr ? 'Failed to load connected social accounts. Please try again.' : null
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([])
   const [showCrossPostDialog, setShowCrossPostDialog] = useState(false)
   const [mobileTab, setMobileTab] = useState<'edit' | 'preview'>('edit')
@@ -122,22 +121,6 @@ export default function EditorPage() {
   }, [filePath, isNew])
 
   const author = isNew ? (user?.display_name ?? user?.username ?? null) : loadedAuthor
-
-  useEffect(() => {
-    if (user) {
-      fetchSocialAccounts()
-        .then((socialAccounts) => {
-          setAccounts(socialAccounts)
-          setSocialAccountsError(null)
-        })
-        .catch(async (err: unknown) => {
-          setAccounts([])
-          setSocialAccountsError(
-            await extractErrorDetail(err, 'Failed to load connected social accounts. Please try again.'),
-          )
-        })
-    }
-  }, [user])
 
   useEffect(() => {
     if (body.length === 0) return

@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import { Share2, Trash2, Plus, Loader2 } from 'lucide-react'
 
 import {
-  fetchSocialAccounts,
   deleteSocialAccount,
   authorizeBluesky,
   authorizeMastodon,
@@ -15,6 +14,7 @@ import type { SocialAccount, FacebookPage } from '@/api/crosspost'
 import { extractErrorDetail } from '@/api/parseError'
 import PlatformIcon from '@/components/crosspost/PlatformIcon'
 import { formatDate } from '@/utils/date'
+import { useSocialAccounts } from '@/hooks/useSocialAccounts'
 
 interface SocialAccountsPanelProps {
   busy: boolean
@@ -34,8 +34,8 @@ function getPlatformDisplayName(platform: string): string {
   return (PLATFORM_DISPLAY_NAMES as Record<string, string>)[platform] ?? platform
 }
 
-function sortSocialAccounts(accounts: SocialAccount[]): SocialAccount[] {
-  return [...accounts].sort((left, right) =>
+function sortSocialAccounts(accts: SocialAccount[]): SocialAccount[] {
+  return [...accts].sort((left, right) =>
     getPlatformDisplayName(left.platform).localeCompare(
       getPlatformDisplayName(right.platform),
       undefined,
@@ -45,8 +45,9 @@ function sortSocialAccounts(accounts: SocialAccount[]): SocialAccount[] {
 }
 
 export default function SocialAccountsPanel({ busy, onBusyChange }: SocialAccountsPanelProps) {
-  const [accounts, setAccounts] = useState<SocialAccount[]>([])
-  const [loading, setLoading] = useState(true)
+  const { data: rawAccounts = [], error: loadErr, isLoading: loading, mutate: mutateAccounts } = useSocialAccounts()
+  const accounts = sortSocialAccounts(rawAccounts)
+
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
 
@@ -76,8 +77,12 @@ export default function SocialAccountsPanel({ busy, onBusyChange }: SocialAccoun
   }, [localBusy])
 
   useEffect(() => {
-    void loadAccounts()
-  }, [])
+    if (loadErr === undefined || loadErr === null) {
+      setError(null)
+      return
+    }
+    void extractErrorDetail(loadErr, 'Failed to load social accounts.').then(setError)
+  }, [loadErr])
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -99,19 +104,6 @@ export default function SocialAccountsPanel({ busy, onBusyChange }: SocialAccoun
       })()
     }
   }, [])
-
-  async function loadAccounts() {
-    setLoading(true)
-    setError(null)
-    try {
-      const data = await fetchSocialAccounts()
-      setAccounts(sortSocialAccounts(data))
-    } catch (err) {
-      setError(await extractErrorDetail(err, 'Failed to load social accounts.'))
-    } finally {
-      setLoading(false)
-    }
-  }
 
   async function handleConnectBluesky() {
     const trimmed = handle.trim()
@@ -187,7 +179,7 @@ export default function SocialAccountsPanel({ busy, onBusyChange }: SocialAccoun
       setFacebookPageState(null)
       setFacebookPages([])
       setSuccess(`Connected Facebook Page: ${result.account_name}`)
-      await loadAccounts()
+      await mutateAccounts()
     } catch (err) {
       setError(
         await extractErrorDetail(err, 'Failed to connect Facebook Page. Please try again.'),
@@ -203,7 +195,10 @@ export default function SocialAccountsPanel({ busy, onBusyChange }: SocialAccoun
     setSuccess(null)
     try {
       await deleteSocialAccount(accountId)
-      setAccounts((prev) => prev.filter((a) => a.id !== accountId))
+      await mutateAccounts(
+        (current) => (current ?? []).filter((a) => a.id !== accountId),
+        { revalidate: true },
+      )
       setDeleteConfirmId(null)
       setSuccess('Account disconnected.')
     } catch (err) {

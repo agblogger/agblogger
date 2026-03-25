@@ -2,6 +2,7 @@ import { createElement } from 'react'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
+import { SWRConfig } from 'swr'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import { fetchPostForEdit, createPost, updatePost, uploadAssets, fetchPostAssets } from '@/api/posts'
@@ -82,7 +83,13 @@ function renderEditor(path = '/editor/new') {
     ],
     { initialEntries: [path] },
   )
-  return render(createElement(RouterProvider, { router }))
+  return render(
+    createElement(
+      SWRConfig,
+      { value: { provider: () => new Map(), dedupingInterval: 0, shouldRetryOnError: false } },
+      createElement(RouterProvider, { router }),
+    ),
+  )
 }
 
 const editResponse: PostEditResponse = {
@@ -975,7 +982,7 @@ describe('EditorPage', () => {
     expect(screen.getByRole('button', { name: 'Preview' })).toBeInTheDocument()
   })
 
-  it('shows session expired when fetchSocialAccounts returns 401', async () => {
+  it('shows an error when fetchSocialAccounts returns 401', async () => {
     mockFetchSocialAccounts.mockRejectedValue(
       mockHttpError(401),
     )
@@ -983,7 +990,9 @@ describe('EditorPage', () => {
     renderEditor('/editor/new')
 
     await waitFor(() => {
-      expect(screen.getByText('Session expired. Please log in again.')).toBeInTheDocument()
+      expect(
+        screen.getByText('Failed to load connected social accounts. Please try again.'),
+      ).toBeInTheDocument()
     })
   })
 

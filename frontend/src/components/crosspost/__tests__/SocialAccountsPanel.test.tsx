@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { SWRConfig } from 'swr'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import { MockHTTPError } from '@/test/MockHTTPError'
@@ -37,7 +38,11 @@ function renderPanel(props: { busy?: boolean; onBusyChange?: (busy: boolean) => 
     onBusyChange: vi.fn(),
     ...props,
   }
-  return render(<SocialAccountsPanel {...defaultProps} />)
+  return render(
+    <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0, shouldRetryOnError: false }}>
+      <SocialAccountsPanel {...defaultProps} />
+    </SWRConfig>,
+  )
 }
 
 describe('SocialAccountsPanel', () => {
@@ -218,14 +223,17 @@ describe('SocialAccountsPanel', () => {
   })
 
   it('disconnects account on confirm', async () => {
-    mockFetchSocialAccounts.mockResolvedValue([
-      {
-        id: 1,
-        platform: 'bluesky',
-        account_name: 'alice.bsky.social',
-        created_at: '2026-01-15T10:00:00Z',
-      },
-    ])
+    // Return account on initial load, then empty list on revalidation after delete
+    mockFetchSocialAccounts
+      .mockResolvedValueOnce([
+        {
+          id: 1,
+          platform: 'bluesky',
+          account_name: 'alice.bsky.social',
+          created_at: '2026-01-15T10:00:00Z',
+        },
+      ])
+      .mockResolvedValue([])
     mockDeleteSocialAccount.mockResolvedValue(undefined)
     const user = userEvent.setup()
     renderPanel()
@@ -258,7 +266,9 @@ describe('SocialAccountsPanel', () => {
     const onBusyChange2 = vi.fn()
 
     const { rerender } = render(
-      <SocialAccountsPanel busy={false} onBusyChange={onBusyChange1} />,
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0, shouldRetryOnError: false }}>
+        <SocialAccountsPanel busy={false} onBusyChange={onBusyChange1} />
+      </SWRConfig>,
     )
     await waitFor(() => {
       expect(screen.getByText('Connect Bluesky')).toBeInTheDocument()
@@ -268,7 +278,11 @@ describe('SocialAccountsPanel', () => {
     const initialCalls = onBusyChange1.mock.calls.length
 
     // Re-render with a new callback reference — should NOT trigger extra calls
-    rerender(<SocialAccountsPanel busy={false} onBusyChange={onBusyChange2} />)
+    rerender(
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0, shouldRetryOnError: false }}>
+        <SocialAccountsPanel busy={false} onBusyChange={onBusyChange2} />
+      </SWRConfig>,
+    )
 
     // Wait a tick for effects to settle
     await waitFor(() => {

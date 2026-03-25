@@ -1,13 +1,14 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Share2 } from 'lucide-react'
 
-import { fetchCrossPostHistory, fetchSocialAccounts } from '@/api/crosspost'
-import type { CrossPostResult, SocialAccount } from '@/api/crosspost'
+import type { SocialAccount } from '@/api/crosspost'
 import type { PostDetail } from '@/api/client'
 import { extractErrorDetail } from '@/api/parseError'
 import CrossPostDialog from '@/components/crosspost/CrossPostDialog'
 import CrossPostHistory from '@/components/crosspost/CrossPostHistory'
+import { useSocialAccounts } from '@/hooks/useSocialAccounts'
+import { useCrossPostHistory } from '@/hooks/useCrossPostHistory'
 
 interface CrossPostSectionProps {
   filePath: string
@@ -15,55 +16,47 @@ interface CrossPostSectionProps {
 }
 
 export default function CrossPostSection({ filePath, post }: CrossPostSectionProps) {
-  const [historyItems, setHistoryItems] = useState<CrossPostResult[]>([])
-  const [historyLoading, setHistoryLoading] = useState(true)
   const [historyError, setHistoryError] = useState<string | null>(null)
-  const [accounts, setAccounts] = useState<SocialAccount[]>([])
-  const [accountsLoading, setAccountsLoading] = useState(true)
   const [accountsError, setAccountsError] = useState<string | null>(null)
   const [showDialog, setShowDialog] = useState(false)
 
-  const loadHistory = useCallback(async () => {
-    setHistoryLoading(true)
-    setHistoryError(null)
-    try {
-      const history = await fetchCrossPostHistory(filePath)
-      setHistoryItems(history.items)
-    } catch (err) {
-      setHistoryError(
-        await extractErrorDetail(err, 'Failed to load cross-post history. Please try again.'),
-      )
-    } finally {
-      setHistoryLoading(false)
-    }
-  }, [filePath])
+  const {
+    data: historyData,
+    error: historyErr,
+    isLoading: historyLoading,
+    mutate: mutateHistory,
+  } = useCrossPostHistory(post.is_draft ? null : filePath)
+
+  const {
+    data: accountsData = [],
+    error: accountsErr,
+    isLoading: accountsLoading,
+  } = useSocialAccounts()
+
+  const historyItems = historyData?.items ?? []
+  const accounts: SocialAccount[] = accountsData
 
   useEffect(() => {
-    if (post.is_draft) {
-      setHistoryLoading(false)
-      setAccountsLoading(false)
+    if (historyErr === undefined || historyErr === null) {
       setHistoryError(null)
-      setAccountsError(null)
-      setHistoryItems([])
-      setAccounts([])
       return
     }
-    void loadHistory()
-    void (async () => {
-      setAccountsLoading(true)
+    void extractErrorDetail(
+      historyErr,
+      'Failed to load cross-post history. Please try again.',
+    ).then(setHistoryError)
+  }, [historyErr])
+
+  useEffect(() => {
+    if (accountsErr === undefined || accountsErr === null) {
       setAccountsError(null)
-      try {
-        const accts = await fetchSocialAccounts()
-        setAccounts(accts)
-      } catch (err) {
-        setAccountsError(
-          await extractErrorDetail(err, 'Failed to load connected social accounts. Please try again.'),
-        )
-      } finally {
-        setAccountsLoading(false)
-      }
-    })()
-  }, [loadHistory, post.is_draft])
+      return
+    }
+    void extractErrorDetail(
+      accountsErr,
+      'Failed to load connected social accounts. Please try again.',
+    ).then(setAccountsError)
+  }, [accountsErr])
 
   if (post.is_draft) {
     return (
@@ -78,7 +71,7 @@ export default function CrossPostSection({ filePath, post }: CrossPostSectionPro
 
   function handleDialogClose() {
     setShowDialog(false)
-    void loadHistory()
+    void mutateHistory()
   }
 
   return (

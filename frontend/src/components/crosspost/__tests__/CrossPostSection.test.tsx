@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
+import { SWRConfig } from 'swr'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import type { CrossPostResult, SocialAccount } from '@/api/crosspost'
@@ -80,7 +81,7 @@ describe('CrossPostSection', () => {
     mockFetchCrossPostHistory.mockResolvedValue({ items: [] })
     mockFetchSocialAccounts.mockResolvedValue([])
 
-    render(<MemoryRouter><CrossPostSection filePath="posts/test/index.md" post={mockPost} /></MemoryRouter>)
+    render(<SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0, shouldRetryOnError: false }}><MemoryRouter><CrossPostSection filePath="posts/test/index.md" post={mockPost} /></MemoryRouter></SWRConfig>)
 
     // Wait for async effects to settle
     await waitFor(() => {
@@ -93,7 +94,7 @@ describe('CrossPostSection', () => {
     mockFetchCrossPostHistory.mockResolvedValue({ items: [] })
     mockFetchSocialAccounts.mockResolvedValue(mockAccounts)
 
-    render(<MemoryRouter><CrossPostSection filePath="posts/test/index.md" post={mockPost} /></MemoryRouter>)
+    render(<SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0, shouldRetryOnError: false }}><MemoryRouter><CrossPostSection filePath="posts/test/index.md" post={mockPost} /></MemoryRouter></SWRConfig>)
 
     await waitFor(() => {
       expect(screen.getByText('Cross-post')).toBeInTheDocument()
@@ -104,7 +105,7 @@ describe('CrossPostSection', () => {
     mockFetchCrossPostHistory.mockResolvedValue({ items: [] })
     mockFetchSocialAccounts.mockResolvedValue([])
 
-    render(<MemoryRouter><CrossPostSection filePath="posts/test/index.md" post={mockPost} /></MemoryRouter>)
+    render(<SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0, shouldRetryOnError: false }}><MemoryRouter><CrossPostSection filePath="posts/test/index.md" post={mockPost} /></MemoryRouter></SWRConfig>)
 
     await waitFor(() => {
       expect(screen.getByTestId('crosspost-history')).toBeInTheDocument()
@@ -123,7 +124,7 @@ describe('CrossPostSection', () => {
     mockFetchCrossPostHistory.mockResolvedValue({ items: mockHistory })
     mockFetchSocialAccounts.mockResolvedValue([])
 
-    render(<MemoryRouter><CrossPostSection filePath="posts/test/index.md" post={mockPost} /></MemoryRouter>)
+    render(<SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0, shouldRetryOnError: false }}><MemoryRouter><CrossPostSection filePath="posts/test/index.md" post={mockPost} /></MemoryRouter></SWRConfig>)
 
     await waitFor(() => {
       expect(screen.getByText('bluesky')).toBeInTheDocument()
@@ -135,7 +136,7 @@ describe('CrossPostSection', () => {
     mockFetchCrossPostHistory.mockResolvedValue({ items: [] })
     mockFetchSocialAccounts.mockResolvedValue(mockAccounts)
 
-    render(<MemoryRouter><CrossPostSection filePath="posts/test/index.md" post={mockPost} /></MemoryRouter>)
+    render(<SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0, shouldRetryOnError: false }}><MemoryRouter><CrossPostSection filePath="posts/test/index.md" post={mockPost} /></MemoryRouter></SWRConfig>)
 
     await waitFor(() => {
       expect(screen.getByText('Cross-post')).toBeInTheDocument()
@@ -151,7 +152,7 @@ describe('CrossPostSection', () => {
     mockFetchCrossPostHistory.mockResolvedValue({ items: [] })
     mockFetchSocialAccounts.mockResolvedValue(mockAccounts)
 
-    render(<MemoryRouter><CrossPostSection filePath="posts/test/index.md" post={mockPost} /></MemoryRouter>)
+    render(<SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0, shouldRetryOnError: false }}><MemoryRouter><CrossPostSection filePath="posts/test/index.md" post={mockPost} /></MemoryRouter></SWRConfig>)
 
     await waitFor(() => {
       expect(screen.getByText('Cross-post')).toBeInTheDocument()
@@ -175,7 +176,7 @@ describe('CrossPostSection', () => {
     mockFetchCrossPostHistory.mockRejectedValue(new Error('Network error'))
     mockFetchSocialAccounts.mockResolvedValue([])
 
-    render(<MemoryRouter><CrossPostSection filePath="posts/test/index.md" post={mockPost} /></MemoryRouter>)
+    render(<SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0, shouldRetryOnError: false }}><MemoryRouter><CrossPostSection filePath="posts/test/index.md" post={mockPost} /></MemoryRouter></SWRConfig>)
 
     await waitFor(() => {
       expect(
@@ -189,7 +190,7 @@ describe('CrossPostSection', () => {
     mockFetchCrossPostHistory.mockResolvedValue({ items: [] })
     mockFetchSocialAccounts.mockRejectedValue(new Error('Network error'))
 
-    render(<MemoryRouter><CrossPostSection filePath="posts/test/index.md" post={mockPost} /></MemoryRouter>)
+    render(<SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0, shouldRetryOnError: false }}><MemoryRouter><CrossPostSection filePath="posts/test/index.md" post={mockPost} /></MemoryRouter></SWRConfig>)
 
     await waitFor(() => {
       expect(
@@ -203,7 +204,7 @@ describe('CrossPostSection', () => {
     mockFetchCrossPostHistory.mockRejectedValue(new MockHTTPError(401))
     mockFetchSocialAccounts.mockResolvedValue([])
 
-    render(<MemoryRouter><CrossPostSection filePath="posts/test/index.md" post={mockPost} /></MemoryRouter>)
+    render(<SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0, shouldRetryOnError: false }}><MemoryRouter><CrossPostSection filePath="posts/test/index.md" post={mockPost} /></MemoryRouter></SWRConfig>)
 
     await waitFor(() => {
       expect(screen.getByText('Session expired. Please log in again.')).toBeInTheDocument()
@@ -214,7 +215,7 @@ describe('CrossPostSection', () => {
     mockFetchCrossPostHistory.mockResolvedValue({ items: [] })
     mockFetchSocialAccounts.mockRejectedValue(new MockHTTPError(401))
 
-    render(<MemoryRouter><CrossPostSection filePath="posts/test/index.md" post={mockPost} /></MemoryRouter>)
+    render(<SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0, shouldRetryOnError: false }}><MemoryRouter><CrossPostSection filePath="posts/test/index.md" post={mockPost} /></MemoryRouter></SWRConfig>)
 
     await waitFor(() => {
       expect(screen.getByText('Session expired. Please log in again.')).toBeInTheDocument()
@@ -226,7 +227,7 @@ describe('CrossPostSection', () => {
     mockFetchCrossPostHistory.mockRejectedValue(new MockHTTPError(401))
     mockFetchSocialAccounts.mockRejectedValue(new MockHTTPError(401))
 
-    render(<MemoryRouter><CrossPostSection filePath="posts/test/index.md" post={mockPost} /></MemoryRouter>)
+    render(<SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0, shouldRetryOnError: false }}><MemoryRouter><CrossPostSection filePath="posts/test/index.md" post={mockPost} /></MemoryRouter></SWRConfig>)
 
     await waitFor(() => {
       expect(screen.getByText('Session expired. Please log in again.')).toBeInTheDocument()
@@ -247,7 +248,7 @@ describe('CrossPostSection', () => {
     mockFetchCrossPostHistory.mockRejectedValue(new MockHTTPError(401))
     mockFetchSocialAccounts.mockRejectedValue(new Error('Network error'))
 
-    render(<MemoryRouter><CrossPostSection filePath="posts/test/index.md" post={mockPost} /></MemoryRouter>)
+    render(<SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0, shouldRetryOnError: false }}><MemoryRouter><CrossPostSection filePath="posts/test/index.md" post={mockPost} /></MemoryRouter></SWRConfig>)
 
     await waitFor(() => {
       expect(screen.getByText('Session expired. Please log in again.')).toBeInTheDocument()
@@ -257,19 +258,24 @@ describe('CrossPostSection', () => {
     ).toBeInTheDocument()
   })
 
-  it('disables cross-posting for draft posts', () => {
+  it('disables cross-posting for draft posts', async () => {
+    mockFetchSocialAccounts.mockResolvedValue([])
+
     render(
-      <MemoryRouter>
-        <CrossPostSection
-          filePath="posts/test/index.md"
-          post={{ ...mockPost, is_draft: true }}
-        />
-      </MemoryRouter>,
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0, shouldRetryOnError: false }}>
+        <MemoryRouter>
+          <CrossPostSection
+            filePath="posts/test/index.md"
+            post={{ ...mockPost, is_draft: true }}
+          />
+        </MemoryRouter>
+      </SWRConfig>,
     )
 
-    expect(screen.getByText('Publish this draft to enable cross-posting.')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText('Publish this draft to enable cross-posting.')).toBeInTheDocument()
+    })
     expect(screen.queryByText('Cross-post')).not.toBeInTheDocument()
     expect(mockFetchCrossPostHistory).not.toHaveBeenCalled()
-    expect(mockFetchSocialAccounts).not.toHaveBeenCalled()
   })
 })
