@@ -275,3 +275,48 @@ export interface AdminPageConfig {
 export interface AdminPagesResponse {
   pages: AdminPageConfig[]
 }
+
+export interface AnalyticsSettings {
+  analytics_enabled: boolean
+  show_views_on_posts: boolean
+}
+
+export interface PathHit {
+  path: string
+  views: number
+  unique: number
+}
+
+export interface PathHitsResponse {
+  paths: PathHit[]
+}
+
+export interface TotalStatsResponse {
+  total_views: number
+  total_unique: number
+}
+
+export interface ReferrerEntry {
+  referrer: string
+  count: number
+}
+
+export interface PathReferrersResponse {
+  path_id: number
+  referrers: ReferrerEntry[]
+}
+
+export interface BreakdownEntry {
+  name: string
+  count: number
+  percent: number
+}
+
+export interface BreakdownResponse {
+  category: string
+  entries: BreakdownEntry[]
+}
+
+export interface ViewCountResponse {
+  views: number | null
+}
