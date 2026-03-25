@@ -16,7 +16,7 @@ import { usePost, useViewCount } from '../usePost'
 import type { PostDetail, ViewCountResponse } from '@/api/client'
 
 const postDetail: PostDetail = {
-  slug: 'my-post',
+  id: 1,
   title: 'My Post',
   file_path: 'my-post/index.md',
   author: 'admin',
