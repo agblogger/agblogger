@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 from fastapi.responses import RedirectResponse
 from sqlalchemy import delete, select, text
 from sqlalchemy.exc import IntegrityError, OperationalError
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from backend.api.deps import (
     AsyncWriteLock,
@@ -24,6 +24,7 @@ from backend.api.deps import (
     get_current_user,
     get_git_service,
     get_session,
+    get_session_factory,
     require_admin,
     set_git_warning,
 )
@@ -680,6 +681,7 @@ async def get_post_endpoint(
     file_path: str,
     request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
+    session_factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
     user: Annotated[User | None, Depends(get_current_user)],
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
 ) -> PostDetail | RedirectResponse:
@@ -693,7 +695,7 @@ async def get_post_endpoint(
     draft_owner_username = user.username if user else None
     post = await get_post(session, file_path, draft_owner_username=draft_owner_username)
     if post is not None:
-        _fire_post_hit(request, session, post.file_path, user)
+        _fire_post_hit(request, session_factory, post.file_path, user)
         return post
 
     # Slug-based resolution: try canonical file layouts when a bare slug is given
@@ -701,7 +703,7 @@ async def get_post_endpoint(
         for candidate in resolve_slug_candidates(file_path):
             post = await get_post(session, candidate, draft_owner_username=draft_owner_username)
             if post is not None:
-                _fire_post_hit(request, session, post.file_path, user)
+                _fire_post_hit(request, session_factory, post.file_path, user)
                 return post
 
     # Check if the path resolves through a symlink to a renamed post
@@ -731,14 +733,15 @@ async def get_post_endpoint(
 
 def _fire_post_hit(
     request: Request,
-    session: AsyncSession,
+    session_factory: async_sessionmaker[AsyncSession],
     post_file_path: str,
     user: User | None,
 ) -> None:
     """Fire a background analytics hit for a post view.
 
     Extracts the slug from the canonical file path and schedules a fire-and-forget
-    hit recording task via asyncio.create_task.
+    hit recording task via asyncio.create_task. Uses an independent session so the
+    background task is not affected by the request session being closed on handler return.
     """
     try:
         slug = file_path_to_slug(post_file_path)
@@ -747,15 +750,18 @@ def _fire_post_hit(
         return
     client_ip = request.client.host if request.client and request.client.host else "unknown"
     user_agent = request.headers.get("user-agent", "")
-    task = asyncio.create_task(
-        record_hit(
-            session=session,
-            path=f"/post/{slug}",
-            client_ip=client_ip,
-            user_agent=user_agent,
-            user=user,
-        )
-    )
+
+    async def _do_hit() -> None:
+        async with session_factory() as session:
+            await record_hit(
+                session=session,
+                path=f"/post/{slug}",
+                client_ip=client_ip,
+                user_agent=user_agent,
+                user=user,
+            )
+
+    task = asyncio.create_task(_do_hit())
     _background_tasks.add(task)
     task.add_done_callback(_background_tasks.discard)
 

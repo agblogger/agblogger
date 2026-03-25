@@ -8,9 +8,9 @@ import re
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from backend.api.deps import get_content_manager, get_current_user, get_session
+from backend.api.deps import get_content_manager, get_current_user, get_session_factory
 from backend.filesystem.content_manager import ContentManager
 from backend.models.user import User
 from backend.pandoc.renderer import RenderError
@@ -40,7 +40,7 @@ async def site_config(
 async def get_page_endpoint(
     page_id: str,
     request: Request,
-    session: Annotated[AsyncSession, Depends(get_session)],
+    session_factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
     user: Annotated[User | None, Depends(get_current_user)],
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
 ) -> PageResponse:
@@ -56,15 +56,18 @@ async def get_page_endpoint(
         raise HTTPException(status_code=404, detail="Page not found")
     client_ip = request.client.host if request.client and request.client.host else "unknown"
     user_agent = request.headers.get("user-agent", "")
-    task = asyncio.create_task(
-        record_hit(
-            session=session,
-            path=f"/page/{page_id}",
-            client_ip=client_ip,
-            user_agent=user_agent,
-            user=user,
-        )
-    )
+
+    async def _do_hit() -> None:
+        async with session_factory() as session:
+            await record_hit(
+                session=session,
+                path=f"/page/{page_id}",
+                client_ip=client_ip,
+                user_agent=user_agent,
+                user=user,
+            )
+
+    task = asyncio.create_task(_do_hit())
     _background_tasks.add(task)
     task.add_done_callback(_background_tasks.discard)
     return page

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import httpx
 from crawlerdetect import CrawlerDetect
@@ -47,7 +47,7 @@ def _get_http_client() -> httpx.AsyncClient:
     """Return the shared AsyncClient, creating it lazily on first call."""
     global _http_client
     if _http_client is None:
-        _http_client = httpx.AsyncClient()
+        _http_client = httpx.AsyncClient(timeout=_HIT_TIMEOUT)
     return _http_client
 
 
@@ -205,7 +205,7 @@ async def record_hit(
 async def _stats_request(
     endpoint: str,
     params: dict[str, Any] | None = None,
-) -> Any | None:
+) -> dict[str, Any] | None:
     """Authenticated GET to GoatCounter; returns parsed JSON or None on any error."""
     try:
         token = _load_token()
@@ -219,7 +219,7 @@ async def _stats_request(
             timeout=_STATS_TIMEOUT,
         )
         response.raise_for_status()
-        return response.json()
+        return cast("dict[str, Any]", response.json())
     except Exception:
         logger.warning("GoatCounter stats request to %r failed", endpoint, exc_info=True)
         return None
