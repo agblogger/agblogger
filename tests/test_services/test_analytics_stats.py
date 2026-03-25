@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 from backend.models.base import DurableBase
 from backend.services.analytics_service import (
+    _stats_request,
     fetch_breakdown,
     fetch_path_hits,
     fetch_path_referrers,
@@ -49,8 +51,10 @@ async def test_fetch_total_stats_returns_correct_data(session: AsyncSession) -> 
     assert result.total_unique == 85
 
 
-async def test_fetch_total_stats_returns_zeros_when_unavailable(session: AsyncSession) -> None:
-    """fetch_total_stats returns zero counts when GoatCounter is unavailable."""
+async def test_fetch_total_stats_returns_none_when_unavailable_legacy(
+    session: AsyncSession,
+) -> None:
+    """fetch_total_stats returns None when GoatCounter is unavailable."""
     with patch(
         "backend.services.analytics_service._stats_request",
         new_callable=AsyncMock,
@@ -58,8 +62,7 @@ async def test_fetch_total_stats_returns_zeros_when_unavailable(session: AsyncSe
     ):
         result = await fetch_total_stats()
 
-    assert result.total_views == 0
-    assert result.total_unique == 0
+    assert result is None
 
 
 # ── fetch_path_hits ────────────────────────────────────────────────────────────
@@ -91,8 +94,10 @@ async def test_fetch_path_hits_returns_correct_data(session: AsyncSession) -> No
     assert result.paths[1].views == 17
 
 
-async def test_fetch_path_hits_returns_empty_when_unavailable(session: AsyncSession) -> None:
-    """fetch_path_hits returns empty paths list when GoatCounter is unavailable."""
+async def test_fetch_path_hits_returns_none_when_unavailable_legacy(
+    session: AsyncSession,
+) -> None:
+    """fetch_path_hits returns None when GoatCounter is unavailable."""
     with patch(
         "backend.services.analytics_service._stats_request",
         new_callable=AsyncMock,
@@ -100,7 +105,7 @@ async def test_fetch_path_hits_returns_empty_when_unavailable(session: AsyncSess
     ):
         result = await fetch_path_hits()
 
-    assert result.paths == []
+    assert result is None
 
 
 # ── fetch_path_referrers ───────────────────────────────────────────────────────
@@ -129,10 +134,10 @@ async def test_fetch_path_referrers_returns_correct_data(session: AsyncSession) 
     assert result.referrers[1].referrer == "Direct"
 
 
-async def test_fetch_path_referrers_returns_empty_when_unavailable(
+async def test_fetch_path_referrers_returns_none_when_unavailable_legacy(
     session: AsyncSession,
 ) -> None:
-    """fetch_path_referrers returns empty referrers list when GoatCounter is unavailable."""
+    """fetch_path_referrers returns None when GoatCounter is unavailable."""
     with patch(
         "backend.services.analytics_service._stats_request",
         new_callable=AsyncMock,
@@ -140,8 +145,7 @@ async def test_fetch_path_referrers_returns_empty_when_unavailable(
     ):
         result = await fetch_path_referrers(path_id=7)
 
-    assert result.path_id == 7
-    assert result.referrers == []
+    assert result is None
 
 
 # ── fetch_breakdown ────────────────────────────────────────────────────────────
@@ -171,8 +175,10 @@ async def test_fetch_breakdown_returns_correct_data(session: AsyncSession) -> No
     assert result.entries[1].name == "Firefox"
 
 
-async def test_fetch_breakdown_returns_empty_when_unavailable(session: AsyncSession) -> None:
-    """fetch_breakdown returns empty entries when GoatCounter is unavailable."""
+async def test_fetch_breakdown_returns_none_when_unavailable_legacy(
+    session: AsyncSession,
+) -> None:
+    """fetch_breakdown returns None when GoatCounter is unavailable."""
     with patch(
         "backend.services.analytics_service._stats_request",
         new_callable=AsyncMock,
@@ -180,8 +186,7 @@ async def test_fetch_breakdown_returns_empty_when_unavailable(session: AsyncSess
     ):
         result = await fetch_breakdown("browsers")
 
-    assert result.category == "browsers"
-    assert result.entries == []
+    assert result is None
 
 
 # ── fetch_view_count ───────────────────────────────────────────────────────────
@@ -262,3 +267,128 @@ async def test_fetch_view_count_returns_zero_for_unknown_path(session: AsyncSess
         count = await fetch_view_count(session, "/post/hello")
 
     assert count == 0
+
+
+# ── fetch_* returns None when GoatCounter is down (Issue 5) ───────────────────
+
+
+async def test_fetch_total_stats_returns_none_when_unavailable() -> None:
+    """fetch_total_stats returns None when _stats_request returns None."""
+    with patch(
+        "backend.services.analytics_service._stats_request",
+        new_callable=AsyncMock,
+        return_value=None,
+    ):
+        result = await fetch_total_stats()
+
+    assert result is None
+
+
+async def test_fetch_path_hits_returns_none_when_unavailable() -> None:
+    """fetch_path_hits returns None when _stats_request returns None."""
+    with patch(
+        "backend.services.analytics_service._stats_request",
+        new_callable=AsyncMock,
+        return_value=None,
+    ):
+        result = await fetch_path_hits()
+
+    assert result is None
+
+
+async def test_fetch_path_referrers_returns_none_when_unavailable() -> None:
+    """fetch_path_referrers returns None when _stats_request returns None."""
+    with patch(
+        "backend.services.analytics_service._stats_request",
+        new_callable=AsyncMock,
+        return_value=None,
+    ):
+        result = await fetch_path_referrers(path_id=7)
+
+    assert result is None
+
+
+async def test_fetch_breakdown_returns_none_when_unavailable() -> None:
+    """fetch_breakdown returns None when _stats_request returns None."""
+    with patch(
+        "backend.services.analytics_service._stats_request",
+        new_callable=AsyncMock,
+        return_value=None,
+    ):
+        result = await fetch_breakdown("browsers")
+
+    assert result is None
+
+
+# ── _stats_request error handling (Test 11) ───────────────────────────────────
+
+
+async def test_stats_request_returns_none_on_http_500() -> None:
+    """_stats_request returns None when GoatCounter responds with HTTP 500."""
+    mock_response = MagicMock()
+    mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+        "500 Internal Server Error",
+        request=MagicMock(),
+        response=MagicMock(status_code=500),
+    )
+    mock_client = MagicMock()
+    mock_client.get = AsyncMock(return_value=mock_response)
+
+    with (
+        patch(
+            "backend.services.analytics_service._get_http_client",
+            return_value=mock_client,
+        ),
+        patch(
+            "backend.services.analytics_service._load_token",
+            return_value="test-token",
+        ),
+    ):
+        result = await _stats_request("/api/v0/stats/total")
+
+    assert result is None
+
+
+async def test_stats_request_returns_none_on_timeout() -> None:
+    """_stats_request returns None on network timeout."""
+    mock_client = MagicMock()
+    mock_client.get = AsyncMock(
+        side_effect=httpx.TimeoutException("timed out", request=MagicMock())
+    )
+
+    with (
+        patch(
+            "backend.services.analytics_service._get_http_client",
+            return_value=mock_client,
+        ),
+        patch(
+            "backend.services.analytics_service._load_token",
+            return_value="test-token",
+        ),
+    ):
+        result = await _stats_request("/api/v0/stats/total")
+
+    assert result is None
+
+
+async def test_stats_request_returns_none_on_invalid_json() -> None:
+    """_stats_request returns None when the response body is not valid JSON."""
+    mock_response = MagicMock()
+    mock_response.raise_for_status.return_value = None
+    mock_response.json.side_effect = ValueError("invalid JSON")
+    mock_client = MagicMock()
+    mock_client.get = AsyncMock(return_value=mock_response)
+
+    with (
+        patch(
+            "backend.services.analytics_service._get_http_client",
+            return_value=mock_client,
+        ),
+        patch(
+            "backend.services.analytics_service._load_token",
+            return_value="test-token",
+        ),
+    ):
+        result = await _stats_request("/api/v0/stats/total")
+
+    assert result is None

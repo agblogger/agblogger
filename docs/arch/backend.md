@@ -65,7 +65,7 @@ This separation means adding a column to a durable table requires an Alembic mig
 
 The backend integrates with a GoatCounter sidecar container for server-side page view analytics. The analytics service (`backend/services/analytics_service.py`) has three responsibilities:
 
-- **Hit recording**: when the backend serves a post or page to a reader, it fires an async hit to GoatCounter's internal API. Hits are fire-and-forget — network failures are logged but never affect the reader's response. Authenticated users and detected bots are excluded.
+- **Hit recording**: when a reader fetches a post or page through the API, it fires an async hit to GoatCounter's internal API. Hits are fire-and-forget — network failures are logged but never affect the reader's response. Authenticated users and detected bots are excluded.
 - **Stats proxy**: admin dashboard data (total views, per-path hits, referrers, browser/OS breakdowns) is proxied from GoatCounter's stats API through admin-only backend endpoints.
 - **Settings management**: analytics-enabled and show-views-on-posts toggles are stored in a durable `analytics_settings` table (Alembic-managed).
 

@@ -35,7 +35,7 @@ The frontend does not own markdown rendering. It receives rendered HTML from the
 
 ## Analytics
 
-The admin panel includes an Analytics tab that displays page view statistics from the backend's GoatCounter proxy. The dashboard component (`frontend/src/components/admin/AnalyticsPanel.tsx`) is lazy-loaded to keep the main bundle small since it pulls in the Recharts charting library.
+The admin panel includes an Analytics tab that displays page view statistics from the backend's GoatCounter proxy. The dashboard component (`frontend/src/components/admin/AnalyticsPanel.tsx`) is lazy-loaded to keep the main bundle small since it pulls in a charting library (currently Recharts).
 
 The dashboard shows summary cards (total views, unique visitors, top page), a top pages table with referrer drill-down, and browser/OS breakdown bar charts. Date range selection (7d/30d/90d) and settings toggles (analytics enabled, show views on posts) are included.
 

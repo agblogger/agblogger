@@ -313,8 +313,10 @@ export interface BreakdownEntry {
   percent: number
 }
 
+export type BreakdownCategory = 'browsers' | 'systems' | 'languages' | 'locations' | 'sizes' | 'campaigns'
+
 export interface BreakdownResponse {
-  category: string
+  category: BreakdownCategory
   entries: BreakdownEntry[]
 }
 

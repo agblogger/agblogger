@@ -12,6 +12,7 @@ from sqlalchemy import select
 from backend.models.analytics import AnalyticsSettings
 from backend.schemas.analytics import (
     AnalyticsSettingsResponse,
+    BreakdownCategory,
     BreakdownEntry,
     BreakdownResponse,
     PathHit,
@@ -30,6 +31,7 @@ logger = logging.getLogger(__name__)
 
 # ── GoatCounter connection constants ───────────────────────────────────────────
 
+# Internal Docker network address; matches the goatcounter service in docker-compose.yml
 GOATCOUNTER_URL = "http://goatcounter:8080"
 GOATCOUNTER_AUTH_FILE = "/data/goatcounter/token"
 _HIT_TIMEOUT = 2.0
@@ -47,7 +49,7 @@ def _get_http_client() -> httpx.AsyncClient:
     """Return the shared AsyncClient, creating it lazily on first call."""
     global _http_client
     if _http_client is None:
-        _http_client = httpx.AsyncClient(timeout=_HIT_TIMEOUT)
+        _http_client = httpx.AsyncClient(timeout=httpx.Timeout(None))
     return _http_client
 
 
@@ -82,6 +84,13 @@ def _load_token() -> str | None:
                 "GoatCounter token still not available at %s",
                 GOATCOUNTER_AUTH_FILE,
             )
+        return None
+    except OSError as exc:
+        logger.error(
+            "Cannot read GoatCounter token file %s: %s",
+            GOATCOUNTER_AUTH_FILE,
+            exc,
+        )
         return None
 
 
@@ -151,37 +160,32 @@ async def record_hit(
     user_agent: str,
     user: User | None,
 ) -> None:
-    """Fire-and-forget hit recording to GoatCounter.
+    """Record a page view hit to GoatCounter. Any failure is logged but never propagated.
 
     Skips recording when:
     - The request carries a valid authenticated user session.
     - The User-Agent is identified as a bot/crawler.
     - Analytics are disabled in settings.
     - The GoatCounter token is not yet available.
-
-    Any failure is logged at WARNING level and never propagated to the caller.
     """
     try:
         # Skip authenticated users — admin/editor browsing should not inflate counts.
         if user is not None:
             return
 
-        # Skip crawlers and bots.
         if _crawler_detect.is_crawler(user_agent):
             return
 
-        # Skip if analytics disabled.
         settings = await get_analytics_settings(session)
         if not settings.analytics_enabled:
             return
 
-        # Skip if token not available yet.
         token = _load_token()
         if token is None:
             return
 
         client = _get_http_client()
-        await client.post(
+        response = await client.post(
             f"{GOATCOUNTER_URL}/api/v0/count",
             json={
                 "hits": [
@@ -195,6 +199,7 @@ async def record_hit(
             headers={"Authorization": f"Bearer {token}"},
             timeout=_HIT_TIMEOUT,
         )
+        response.raise_for_status()
     except Exception:
         logger.warning("Failed to record analytics hit for path %r", path, exc_info=True)
 
@@ -228,8 +233,8 @@ async def _stats_request(
 async def fetch_total_stats(
     start: str | None = None,
     end: str | None = None,
-) -> TotalStatsResponse:
-    """Proxy GoatCounter total stats; returns zero counts when unavailable."""
+) -> TotalStatsResponse | None:
+    """Proxy GoatCounter total stats; returns None when unavailable."""
     params: dict[str, Any] = {}
     if start is not None:
         params["start"] = start
@@ -238,7 +243,7 @@ async def fetch_total_stats(
 
     data = await _stats_request("/api/v0/stats/total", params or None)
     if data is None:
-        return TotalStatsResponse(total_views=0, total_unique=0)
+        return None
     return TotalStatsResponse(
         total_views=data.get("total", 0),
         total_unique=data.get("total_unique", 0),
@@ -248,8 +253,8 @@ async def fetch_total_stats(
 async def fetch_path_hits(
     start: str | None = None,
     end: str | None = None,
-) -> PathHitsResponse:
-    """Proxy GoatCounter per-path hit counts; returns empty list when unavailable."""
+) -> PathHitsResponse | None:
+    """Proxy GoatCounter per-path hit counts; returns None when unavailable."""
     params: dict[str, Any] = {}
     if start is not None:
         params["start"] = start
@@ -258,7 +263,7 @@ async def fetch_path_hits(
 
     data = await _stats_request("/api/v0/stats/hits", params or None)
     if data is None:
-        return PathHitsResponse()
+        return None
     paths = [
         PathHit(
             path_id=entry.get("id", 0),
@@ -273,11 +278,11 @@ async def fetch_path_hits(
 
 async def fetch_path_referrers(
     path_id: int,
-) -> PathReferrersResponse:
-    """Proxy GoatCounter referrer breakdown for a path; returns empty list when unavailable."""
+) -> PathReferrersResponse | None:
+    """Proxy GoatCounter referrer breakdown for a path; returns None when unavailable."""
     data = await _stats_request(f"/api/v0/stats/hits/{path_id}/referrers")
     if data is None:
-        return PathReferrersResponse(path_id=path_id)
+        return None
     referrers = [
         ReferrerEntry(
             referrer=entry.get("name", ""),
@@ -289,13 +294,13 @@ async def fetch_path_referrers(
 
 
 async def fetch_breakdown(
-    category: str,
+    category: BreakdownCategory,
     start: str | None = None,
     end: str | None = None,
-) -> BreakdownResponse:
-    """Proxy GoatCounter category breakdown (browser, OS, country, etc.).
+) -> BreakdownResponse | None:
+    """Proxy GoatCounter category breakdown (browsers, systems, locations, etc.).
 
-    Returns empty entries list when GoatCounter is unavailable.
+    Returns None when GoatCounter is unavailable.
     """
     params: dict[str, Any] = {}
     if start is not None:
@@ -305,7 +310,7 @@ async def fetch_breakdown(
 
     data = await _stats_request(f"/api/v0/stats/{category}", params or None)
     if data is None:
-        return BreakdownResponse(category=category)
+        return None
     entries = [
         BreakdownEntry(
             name=entry.get("name", ""),

@@ -9,19 +9,26 @@ if [ ! -f "$TOKEN_FILE" ]; then
     echo "First boot: creating GoatCounter site and API token..."
     mkdir -p /data/goatcounter
 
-    # Create site with database
-    goatcounter db create-site \
-        -createdb \
-        -db "sqlite+$GOATCOUNTER_DB" \
-        -vhost stats.internal \
-        -user.email admin@localhost \
-        -user.password "$(head -c 32 /dev/urandom | base64)"
+    # Create site only if the database does not already exist
+    if [ ! -f "$GOATCOUNTER_DB" ]; then
+        goatcounter db create-site \
+            -createdb \
+            -db "sqlite+$GOATCOUNTER_DB" \
+            -vhost stats.internal \
+            -user.email admin@localhost \
+            -user.password "$(head -c 32 /dev/urandom | base64)"
+    fi
 
-    # Create API token (permission level 2 = read+write)
+    # Create API token (permission bitmask: 1=read + 2=count = 3)
     TOKEN=$(goatcounter db create-apitoken \
         -db "sqlite+$GOATCOUNTER_DB" \
         -site-id 1 \
-        -perm 2)
+        -perm 3)
+
+    if [ -z "$TOKEN" ]; then
+        echo "ERROR: Failed to create GoatCounter API token" >&2
+        exit 1
+    fi
 
     echo "$TOKEN" > "$TOKEN_FILE"
     chmod 600 "$TOKEN_FILE"

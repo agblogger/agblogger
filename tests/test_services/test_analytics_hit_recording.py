@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 from backend.models.base import DurableBase
@@ -175,3 +176,67 @@ async def test_record_hit_network_error_is_silent(
             user_agent="Mozilla/5.0",
             user=None,
         )
+
+
+async def test_record_hit_401_logs_warning(
+    session: AsyncSession,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A 401 response from GoatCounter is logged as a warning, not silently discarded."""
+    mock_response = MagicMock()
+    mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+        "401 Unauthorized",
+        request=MagicMock(),
+        response=MagicMock(status_code=401),
+    )
+    mock_client = MagicMock()
+    mock_client.post = AsyncMock(return_value=mock_response)
+
+    with (
+        patch(
+            "backend.services.analytics_service._get_http_client",
+            return_value=mock_client,
+        ),
+        patch(
+            "backend.services.analytics_service._load_token",
+            return_value="invalid-token",
+        ),
+        caplog.at_level("WARNING", logger="backend.services.analytics_service"),
+    ):
+        await record_hit(
+            session=session,
+            path="/post/hello-world",
+            client_ip="1.2.3.4",
+            user_agent="Mozilla/5.0",
+            user=None,
+        )
+
+    assert any("Failed to record analytics hit" in r.message for r in caplog.records)
+
+
+async def test_record_hit_no_http_call_when_token_none(
+    session: AsyncSession,
+) -> None:
+    """When _load_token returns None, the HTTP client is never called."""
+    mock_client = MagicMock()
+    mock_client.post = AsyncMock()
+
+    with (
+        patch(
+            "backend.services.analytics_service._get_http_client",
+            return_value=mock_client,
+        ),
+        patch(
+            "backend.services.analytics_service._load_token",
+            return_value=None,
+        ),
+    ):
+        await record_hit(
+            session=session,
+            path="/post/hello-world",
+            client_ip="1.2.3.4",
+            user_agent="Mozilla/5.0",
+            user=None,
+        )
+
+    mock_client.post.assert_not_called()

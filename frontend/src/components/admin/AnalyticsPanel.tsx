@@ -89,6 +89,7 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
   const [selectedPath, setSelectedPath] = useState<{ path: string; path_id: number } | null>(null)
   const [referrers, setReferrers] = useState<ReferrerEntry[]>([])
   const [referrersLoading, setReferrersLoading] = useState(false)
+  const [referrerError, setReferrerError] = useState<string | null>(null)
   const [browsers, setBrowsers] = useState<BreakdownEntry[]>([])
   const [operatingSystems, setOperatingSystems] = useState<BreakdownEntry[]>([])
   const [saving, setSaving] = useState(false)
@@ -135,7 +136,14 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
       } else {
         setTopPage('—')
       }
-    } catch {
+    } catch (err) {
+      if (err instanceof Error && 'response' in err) {
+        const resp = (err as { response: { status: number } }).response
+        if (resp.status === 401) {
+          setSaveError('Session expired. Please log in again.')
+          return
+        }
+      }
       setUnavailable(true)
     } finally {
       setLoading(false)
@@ -164,11 +172,13 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
   async function handlePathClick(path: PathHit, pathId: number) {
     setSelectedPath({ path: path.path, path_id: pathId })
     setReferrersLoading(true)
+    setReferrerError(null)
     try {
       const data = await fetchPathReferrers(pathId)
       setReferrers(data.referrers)
     } catch {
       setReferrers([])
+      setReferrerError('Failed to load referrers. Please try again.')
     } finally {
       setReferrersLoading(false)
     }
@@ -321,6 +331,8 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
                 >
                   <Loader2 size={16} className="text-accent animate-spin" />
                 </div>
+              ) : referrerError !== null ? (
+                <p className="text-sm text-red-600 dark:text-red-400">{referrerError}</p>
               ) : referrers.length === 0 ? (
                 <p className="text-muted text-sm">No referrer data for this page.</p>
               ) : (

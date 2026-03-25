@@ -5,6 +5,7 @@ import type {
   PathHitsResponse,
   PathReferrersResponse,
   BreakdownResponse,
+  BreakdownCategory,
   ViewCountResponse,
 } from './client'
 
@@ -35,7 +36,7 @@ export async function fetchPathReferrers(pathId: number): Promise<PathReferrersR
 }
 
 export async function fetchBreakdown(
-  category: string,
+  category: BreakdownCategory,
   start: string,
   end: string,
 ): Promise<BreakdownResponse> {

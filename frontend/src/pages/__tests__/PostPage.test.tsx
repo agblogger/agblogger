@@ -598,6 +598,7 @@ describe('PostPage', () => {
   })
 
   it('does not display view count when analytics fetch fails', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
     mockFetchViewCount.mockRejectedValue(new Error('unavailable'))
     mockFetchPost.mockResolvedValue(postDetail)
     renderPostPage()
@@ -608,6 +609,24 @@ describe('PostPage', () => {
     // Flush microtask queue so the fire-and-forget promise resolves
     await act(async () => {})
     expect(screen.queryByText(/views$/)).not.toBeInTheDocument()
+  })
+
+  it('warns via console.warn when view count fetch fails', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const fetchError = new Error('network error')
+    mockFetchViewCount.mockRejectedValue(fetchError)
+    mockFetchPost.mockResolvedValue(postDetail)
+    renderPostPage()
+
+    await waitFor(() => {
+      expect(screen.getByText('Hello World')).toBeInTheDocument()
+    })
+    // Flush microtask queue so the fire-and-forget promise resolves
+    await act(async () => {})
+    expect(warnSpy).toHaveBeenCalledWith('Failed to fetch view count:', fetchError)
+    // Component should still render without crashing
+    expect(screen.getByText('Hello World')).toBeInTheDocument()
+    warnSpy.mockRestore()
   })
 
   it('delete error is rendered via AlertBanner with mb-6 spacing class', async () => {

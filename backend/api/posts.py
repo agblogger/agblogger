@@ -752,14 +752,17 @@ def _fire_post_hit(
     user_agent = request.headers.get("user-agent", "")
 
     async def _do_hit() -> None:
-        async with session_factory() as session:
-            await record_hit(
-                session=session,
-                path=f"/post/{slug}",
-                client_ip=client_ip,
-                user_agent=user_agent,
-                user=user,
-            )
+        try:
+            async with session_factory() as session:
+                await record_hit(
+                    session=session,
+                    path=f"/post/{slug}",
+                    client_ip=client_ip,
+                    user_agent=user_agent,
+                    user=user,
+                )
+        except Exception:
+            logger.warning("Background analytics hit failed for /post/%s", slug, exc_info=True)
 
     task = asyncio.create_task(_do_hit())
     _background_tasks.add(task)

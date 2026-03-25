@@ -97,7 +97,7 @@ export default function PostPage() {
         setPost(p)
         fetchViewCount(slug)
           .then((res) => { if (!ctrl.cancelled) setViewCount(res.views) })
-          .catch(() => {})
+          .catch((err: unknown) => { console.warn('Failed to fetch view count:', err) })
       } catch (err) {
         if (ctrl.cancelled) return
         if (err instanceof HTTPError && err.response.status === 404) {

@@ -178,3 +178,83 @@ class TestPageHitRecording:
             assert resp.status_code == 404
             await asyncio.sleep(0)
         mock_record.assert_not_called()
+
+
+class TestPostHitSessionFactoryFailure:
+    """Verify that session_factory failure in _do_hit does not crash the server."""
+
+    @pytest.mark.asyncio
+    async def test_session_factory_raises_logs_warning_and_does_not_propagate(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """_do_hit exception is caught and logged; the background task does not propagate it."""
+        import asyncio
+        import logging
+        from unittest.mock import MagicMock
+
+        from backend.api.posts import _fire_post_hit
+
+        # session_factory() raises RuntimeError to simulate pool exhaustion
+        failing_factory = MagicMock(side_effect=RuntimeError("pool exhausted"))
+
+        mock_request = MagicMock()
+        mock_request.client = MagicMock()
+        mock_request.client.host = "127.0.0.1"
+        mock_request.headers = {"user-agent": "test-agent"}
+
+        with caplog.at_level(logging.WARNING, logger="backend.api.posts"):
+            _fire_post_hit(mock_request, failing_factory, "posts/hello/index.md", None)
+            # Allow background task to run and complete
+            await asyncio.sleep(0.01)
+
+        assert any("Background analytics hit failed" in record.message for record in caplog.records)
+
+
+class TestPageHitSessionFactoryFailure:
+    """Verify that session_factory failure in _do_hit does not crash the server."""
+
+    @pytest.mark.asyncio
+    async def test_session_factory_raises_logs_warning_and_does_not_propagate(
+        self, client: AsyncClient, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """_do_hit exception is caught and logged; the background task does not propagate it."""
+        import asyncio
+        import logging
+
+        # Use record_hit raising to trigger exception inside the _do_hit body,
+        # which exercises the same try/except block as a session_factory failure.
+        with (
+            caplog.at_level(logging.WARNING, logger="backend.api.pages"),
+            patch(
+                "backend.api.pages.record_hit",
+                new=AsyncMock(side_effect=RuntimeError("pool exhausted")),
+            ),
+        ):
+            resp = await client.get("/api/pages/timeline")
+            assert resp.status_code == 200
+            await asyncio.sleep(0.01)
+
+        assert any("Background analytics hit failed" in record.message for record in caplog.records)
+
+
+class TestFirePostHitNonCanonicalPath:
+    """Verify _fire_post_hit skips task creation for non-canonical file paths."""
+
+    @pytest.mark.asyncio
+    async def test_non_canonical_file_path_skips_hit(self) -> None:
+        from unittest.mock import MagicMock
+
+        from backend.api.posts import _fire_post_hit
+
+        mock_request = MagicMock()
+        mock_request.client = MagicMock()
+        mock_request.client.host = "127.0.0.1"
+        mock_request.headers = {"user-agent": "test-agent"}
+
+        mock_session_factory = MagicMock()
+
+        # A path starting with "posts/" but not matching "posts/<slug>/index.md"
+        # causes file_path_to_slug to raise ValueError (e.g. flat .md file)
+        with patch("backend.api.posts.asyncio.create_task") as mock_create_task:
+            _fire_post_hit(mock_request, mock_session_factory, "posts/my-post.md", None)
+            mock_create_task.assert_not_called()

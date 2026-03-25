@@ -303,12 +303,80 @@ describe('AnalyticsPanel', () => {
       expect(screen.getAllByText('/posts/hello').length).toBeGreaterThan(0)
     })
 
-    // Click a row — should show the referrer panel with no data message (not crash)
+    // Click a row — should show the referrer panel with an error message (not crash)
     await user.click(screen.getByRole('button', { name: 'View referrers for /posts/hello' }))
 
     await waitFor(() => {
-      expect(screen.getByText('No referrer data for this page.')).toBeInTheDocument()
+      expect(screen.getByText('Failed to load referrers. Please try again.')).toBeInTheDocument()
     })
+  })
+
+  it('shows error message when referrer fetch fails', async () => {
+    mockFetchPathReferrers.mockRejectedValue(new Error('Network error'))
+    const user = userEvent.setup()
+    renderPanel()
+    await waitFor(() => {
+      expect(screen.getAllByText('/posts/hello').length).toBeGreaterThan(0)
+    })
+
+    await user.click(screen.getByRole('button', { name: 'View referrers for /posts/hello' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Failed to load referrers. Please try again.')).toBeInTheDocument()
+    })
+  })
+
+  it('shows session expired message on 401 during loadDashboard', async () => {
+    const authError = Object.assign(new Error('Unauthorized'), {
+      response: { status: 401 },
+    })
+    mockFetchAnalyticsSettings.mockRejectedValue(authError)
+    mockFetchTotalStats.mockRejectedValue(authError)
+    mockFetchPathHits.mockRejectedValue(authError)
+    mockFetchBreakdown.mockRejectedValue(authError)
+    renderPanel()
+
+    await waitFor(() => {
+      expect(screen.getByText('Session expired. Please log in again.')).toBeInTheDocument()
+    })
+    expect(screen.queryByText('Analytics unavailable')).not.toBeInTheDocument()
+  })
+
+  it('closes referrer panel when Close button is clicked', async () => {
+    mockFetchPathReferrers.mockResolvedValue({
+      path_id: 1,
+      referrers: [{ referrer: 'https://example.com', count: 5 }],
+    })
+    const user = userEvent.setup()
+    renderPanel()
+    await waitFor(() => {
+      expect(screen.getAllByText('/posts/hello').length).toBeGreaterThan(0)
+    })
+
+    await user.click(screen.getByRole('button', { name: 'View referrers for /posts/hello' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('https://example.com')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Close referrers panel' }))
+
+    expect(screen.queryByText('https://example.com')).not.toBeInTheDocument()
+    // Referrers panel should be gone
+    expect(screen.queryByText('Referrers for')).not.toBeInTheDocument()
+  })
+
+  it('disables date range buttons and toggle switches when busy={true}', async () => {
+    renderPanel({ busy: true })
+    await waitFor(() => {
+      expect(screen.getByText('Total Views')).toBeInTheDocument()
+    })
+
+    expect(screen.getByRole('button', { name: 'Last 7 days' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Last 30 days' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Last 90 days' })).toBeDisabled()
+    expect(screen.getByRole('switch', { name: /analytics enabled/i })).toBeDisabled()
+    expect(screen.getByRole('switch', { name: /show views on posts/i })).toBeDisabled()
   })
 
   it('renders browser and OS section headings', async () => {

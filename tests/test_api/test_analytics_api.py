@@ -6,8 +6,10 @@ from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from pydantic import ValidationError
 
 from backend.config import Settings
+from backend.schemas.analytics import BreakdownEntry, TotalStatsResponse
 from tests.conftest import create_test_client
 
 if TYPE_CHECKING:
@@ -197,51 +199,41 @@ class TestAnalyticsStatsProxy:
     """Tests for admin stats proxy endpoints (mocked GoatCounter)."""
 
     @pytest.mark.asyncio
-    async def test_total_stats_returns_zeros_when_unavailable(self, client: AsyncClient) -> None:
+    async def test_total_stats_returns_503_when_unavailable(self, client: AsyncClient) -> None:
         token = await _get_admin_token(client)
+        # GoatCounter is not running in tests; service returns None → 503
         resp = await client.get(
             "/api/admin/analytics/stats/total",
             headers={"Authorization": f"Bearer {token}"},
         )
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["total_views"] == 0
-        assert data["total_unique"] == 0
+        assert resp.status_code == 503
 
     @pytest.mark.asyncio
-    async def test_path_hits_returns_empty_when_unavailable(self, client: AsyncClient) -> None:
+    async def test_path_hits_returns_503_when_unavailable(self, client: AsyncClient) -> None:
         token = await _get_admin_token(client)
         resp = await client.get(
             "/api/admin/analytics/stats/hits",
             headers={"Authorization": f"Bearer {token}"},
         )
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["paths"] == []
+        assert resp.status_code == 503
 
     @pytest.mark.asyncio
-    async def test_path_referrers_returns_empty_when_unavailable(self, client: AsyncClient) -> None:
+    async def test_path_referrers_returns_503_when_unavailable(self, client: AsyncClient) -> None:
         token = await _get_admin_token(client)
         resp = await client.get(
             "/api/admin/analytics/stats/hits/42",
             headers={"Authorization": f"Bearer {token}"},
         )
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["path_id"] == 42
-        assert data["referrers"] == []
+        assert resp.status_code == 503
 
     @pytest.mark.asyncio
-    async def test_breakdown_returns_empty_when_unavailable(self, client: AsyncClient) -> None:
+    async def test_breakdown_returns_503_when_unavailable(self, client: AsyncClient) -> None:
         token = await _get_admin_token(client)
         resp = await client.get(
             "/api/admin/analytics/stats/browsers",
             headers={"Authorization": f"Bearer {token}"},
         )
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["category"] == "browsers"
-        assert data["entries"] == []
+        assert resp.status_code == 503
 
     @pytest.mark.asyncio
     async def test_breakdown_rejects_invalid_category(self, client: AsyncClient) -> None:
@@ -250,8 +242,8 @@ class TestAnalyticsStatsProxy:
             "/api/admin/analytics/stats/invalid_category",
             headers={"Authorization": f"Bearer {token}"},
         )
-        assert resp.status_code == 400
-        assert "Unknown analytics category" in resp.json()["detail"]
+        # Literal type validation returns 422
+        assert resp.status_code == 422
 
     @pytest.mark.asyncio
     async def test_total_stats_accepts_date_params(self, client: AsyncClient) -> None:
@@ -261,7 +253,8 @@ class TestAnalyticsStatsProxy:
             params={"start": "2024-01-01", "end": "2024-12-31"},
             headers={"Authorization": f"Bearer {token}"},
         )
-        assert resp.status_code == 200
+        # 503 because GoatCounter not running in tests, but not 422
+        assert resp.status_code in {200, 503}
 
 
 class TestPublicViewCount:
@@ -334,3 +327,212 @@ class TestPublicViewCount:
         # No auth header — should succeed (public endpoint)
         resp = await client.get("/api/analytics/views/any-post")
         assert resp.status_code == 200
+
+
+class TestStatsServiceUnavailable:
+    """Tests for 503 when stats service functions return None."""
+
+    @pytest.mark.asyncio
+    async def test_total_stats_returns_503_when_service_none(self, client: AsyncClient) -> None:
+        token = await _get_admin_token(client)
+        with patch(
+            "backend.api.analytics.fetch_total_stats",
+            new=AsyncMock(return_value=None),
+        ):
+            resp = await client.get(
+                "/api/admin/analytics/stats/total",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert resp.status_code == 503
+        assert resp.json()["detail"] == "Analytics service unavailable"
+
+    @pytest.mark.asyncio
+    async def test_path_hits_returns_503_when_service_none(self, client: AsyncClient) -> None:
+        token = await _get_admin_token(client)
+        with patch(
+            "backend.api.analytics.fetch_path_hits",
+            new=AsyncMock(return_value=None),
+        ):
+            resp = await client.get(
+                "/api/admin/analytics/stats/hits",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert resp.status_code == 503
+        assert resp.json()["detail"] == "Analytics service unavailable"
+
+    @pytest.mark.asyncio
+    async def test_path_referrers_returns_503_when_service_none(self, client: AsyncClient) -> None:
+        token = await _get_admin_token(client)
+        with patch(
+            "backend.api.analytics.fetch_path_referrers",
+            new=AsyncMock(return_value=None),
+        ):
+            resp = await client.get(
+                "/api/admin/analytics/stats/hits/7",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert resp.status_code == 503
+        assert resp.json()["detail"] == "Analytics service unavailable"
+
+    @pytest.mark.asyncio
+    async def test_breakdown_returns_503_when_service_none(self, client: AsyncClient) -> None:
+        token = await _get_admin_token(client)
+        with patch(
+            "backend.api.analytics.fetch_breakdown",
+            new=AsyncMock(return_value=None),
+        ):
+            resp = await client.get(
+                "/api/admin/analytics/stats/browsers",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert resp.status_code == 503
+        assert resp.json()["detail"] == "Analytics service unavailable"
+
+
+class TestDateParameterValidation:
+    """Tests for date parameter regex validation."""
+
+    @pytest.mark.asyncio
+    async def test_total_stats_rejects_invalid_start_date(self, client: AsyncClient) -> None:
+        token = await _get_admin_token(client)
+        resp = await client.get(
+            "/api/admin/analytics/stats/total",
+            params={"start": "invalid"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_total_stats_rejects_invalid_end_date(self, client: AsyncClient) -> None:
+        token = await _get_admin_token(client)
+        resp = await client.get(
+            "/api/admin/analytics/stats/total",
+            params={"end": "not-a-date"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_total_stats_accepts_valid_date_format(self, client: AsyncClient) -> None:
+        token = await _get_admin_token(client)
+        resp = await client.get(
+            "/api/admin/analytics/stats/total",
+            params={"start": "2024-01-01"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        # 200 or 503 (GoatCounter not running), but not 422
+        assert resp.status_code in {200, 503}
+
+    @pytest.mark.asyncio
+    async def test_total_stats_accepts_out_of_range_date_format(self, client: AsyncClient) -> None:
+        """Regex only checks format, not calendar validity."""
+        token = await _get_admin_token(client)
+        resp = await client.get(
+            "/api/admin/analytics/stats/total",
+            params={"start": "2024-13-45"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        # Pattern matches — not 422
+        assert resp.status_code in {200, 503}
+
+    @pytest.mark.asyncio
+    async def test_path_hits_rejects_invalid_date(self, client: AsyncClient) -> None:
+        token = await _get_admin_token(client)
+        resp = await client.get(
+            "/api/admin/analytics/stats/hits",
+            params={"start": "01-01-2024"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_breakdown_rejects_invalid_date(self, client: AsyncClient) -> None:
+        token = await _get_admin_token(client)
+        resp = await client.get(
+            "/api/admin/analytics/stats/browsers",
+            params={"start": "2024/01/01"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 422
+
+
+class TestSchemaValidation:
+    """Tests for Pydantic ge=0 constraints on count fields."""
+
+    def test_total_stats_rejects_negative_total_views(self) -> None:
+        with pytest.raises(ValidationError):
+            TotalStatsResponse(total_views=-1, total_unique=0)
+
+    def test_total_stats_rejects_negative_total_unique(self) -> None:
+        with pytest.raises(ValidationError):
+            TotalStatsResponse(total_views=0, total_unique=-1)
+
+    def test_total_stats_accepts_zero(self) -> None:
+        resp = TotalStatsResponse(total_views=0, total_unique=0)
+        assert resp.total_views == 0
+        assert resp.total_unique == 0
+
+    def test_breakdown_entry_rejects_negative_count(self) -> None:
+        with pytest.raises(ValidationError):
+            BreakdownEntry(name="Chrome", count=-1, percent=50.0)
+
+    def test_breakdown_entry_rejects_percent_over_100(self) -> None:
+        with pytest.raises(ValidationError):
+            BreakdownEntry(name="Chrome", count=0, percent=101.0)
+
+    def test_breakdown_entry_rejects_negative_percent(self) -> None:
+        with pytest.raises(ValidationError):
+            BreakdownEntry(name="Chrome", count=0, percent=-1.0)
+
+    def test_breakdown_entry_accepts_valid(self) -> None:
+        entry = BreakdownEntry(name="Chrome", count=10, percent=50.0)
+        assert entry.count == 10
+        assert entry.percent == 50.0
+
+
+class TestBreakdownCategoryLiteral:
+    """Tests for Literal type validation on breakdown category path parameter."""
+
+    @pytest.mark.asyncio
+    async def test_breakdown_rejects_invalid_category_returns_422(
+        self, client: AsyncClient
+    ) -> None:
+        token = await _get_admin_token(client)
+        resp = await client.get(
+            "/api/admin/analytics/stats/invalid_category",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        # With Literal type validation, FastAPI returns 422
+        assert resp.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_breakdown_accepts_all_valid_categories(self, client: AsyncClient) -> None:
+        token = await _get_admin_token(client)
+        valid_categories = ["browsers", "systems", "languages", "locations", "sizes", "campaigns"]
+        for category in valid_categories:
+            with patch(
+                "backend.api.analytics.fetch_breakdown",
+                new=AsyncMock(return_value=None),
+            ):
+                resp = await client.get(
+                    f"/api/admin/analytics/stats/{category}",
+                    headers={"Authorization": f"Bearer {token}"},
+                )
+            # 503 because we mocked None — but not 422/400
+            assert resp.status_code == 503, (
+                f"Expected 503 for category={category}, got {resp.status_code}"
+            )
+
+
+class TestAnalyticsSettingsUpdateValidator:
+    """Tests for the empty-payload model validator on AnalyticsSettingsUpdate."""
+
+    @pytest.mark.asyncio
+    async def test_put_settings_empty_payload_returns_422(self, client: AsyncClient) -> None:
+        token = await _get_admin_token(client)
+        resp = await client.put(
+            "/api/admin/analytics/settings",
+            json={},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 422
