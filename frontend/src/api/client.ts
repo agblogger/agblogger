@@ -282,6 +282,7 @@ export interface AnalyticsSettings {
 }
 
 export interface PathHit {
+  path_id: number
   path: string
   views: number
   unique: number

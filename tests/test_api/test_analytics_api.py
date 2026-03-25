@@ -117,7 +117,7 @@ class TestAnalyticsAdminAuth:
 
     @pytest.mark.asyncio
     async def test_get_breakdown_unauthenticated(self, client: AsyncClient) -> None:
-        resp = await client.get("/api/admin/analytics/stats/browser")
+        resp = await client.get("/api/admin/analytics/stats/browsers")
         assert resp.status_code == 401
 
 
@@ -235,13 +235,23 @@ class TestAnalyticsStatsProxy:
     async def test_breakdown_returns_empty_when_unavailable(self, client: AsyncClient) -> None:
         token = await _get_admin_token(client)
         resp = await client.get(
-            "/api/admin/analytics/stats/browser",
+            "/api/admin/analytics/stats/browsers",
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 200
         data = resp.json()
-        assert data["category"] == "browser"
+        assert data["category"] == "browsers"
         assert data["entries"] == []
+
+    @pytest.mark.asyncio
+    async def test_breakdown_rejects_invalid_category(self, client: AsyncClient) -> None:
+        token = await _get_admin_token(client)
+        resp = await client.get(
+            "/api/admin/analytics/stats/invalid_category",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 400
+        assert "Unknown analytics category" in resp.json()["detail"]
 
     @pytest.mark.asyncio
     async def test_total_stats_accepts_date_params(self, client: AsyncClient) -> None:

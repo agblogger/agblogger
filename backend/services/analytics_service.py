@@ -226,7 +226,6 @@ async def _stats_request(
 
 
 async def fetch_total_stats(
-    session: AsyncSession,
     start: str | None = None,
     end: str | None = None,
 ) -> TotalStatsResponse:
@@ -247,7 +246,6 @@ async def fetch_total_stats(
 
 
 async def fetch_path_hits(
-    session: AsyncSession,
     start: str | None = None,
     end: str | None = None,
 ) -> PathHitsResponse:
@@ -263,6 +261,7 @@ async def fetch_path_hits(
         return PathHitsResponse()
     paths = [
         PathHit(
+            path_id=entry.get("id", 0),
             path=entry.get("path", ""),
             views=entry.get("count", 0),
             unique=entry.get("count_unique", 0),
@@ -273,7 +272,6 @@ async def fetch_path_hits(
 
 
 async def fetch_path_referrers(
-    session: AsyncSession,
     path_id: int,
 ) -> PathReferrersResponse:
     """Proxy GoatCounter referrer breakdown for a path; returns empty list when unavailable."""
@@ -291,7 +289,6 @@ async def fetch_path_referrers(
 
 
 async def fetch_breakdown(
-    session: AsyncSession,
     category: str,
     start: str | None = None,
     end: str | None = None,
@@ -342,3 +339,11 @@ async def fetch_view_count(
         if entry.get("path") == path:
             return int(entry.get("count", 0))
     return 0
+
+
+async def close_analytics_client() -> None:
+    """Close the shared httpx client, releasing connections."""
+    global _http_client
+    if _http_client is not None:
+        await _http_client.aclose()
+        _http_client = None

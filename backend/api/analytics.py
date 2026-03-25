@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.deps import get_session, require_admin
@@ -30,6 +30,17 @@ from backend.services.analytics_service import (
 )
 
 logger = logging.getLogger(__name__)
+
+_ALLOWED_BREAKDOWN_CATEGORIES = frozenset(
+    {
+        "browsers",
+        "systems",
+        "languages",
+        "locations",
+        "sizes",
+        "campaigns",
+    }
+)
 
 admin_router = APIRouter(prefix="/api/admin/analytics", tags=["analytics-admin"])
 public_router = APIRouter(prefix="/api/analytics", tags=["analytics"])
@@ -63,46 +74,44 @@ async def update_settings(
 
 @admin_router.get("/stats/total", response_model=TotalStatsResponse)
 async def get_total_stats(
-    session: Annotated[AsyncSession, Depends(get_session)],
     _user: Annotated[User, Depends(require_admin)],
     start: str | None = Query(default=None),
     end: str | None = Query(default=None),
 ) -> TotalStatsResponse:
     """Get total aggregated stats from GoatCounter."""
-    return await fetch_total_stats(session, start, end)
+    return await fetch_total_stats(start, end)
 
 
 @admin_router.get("/stats/hits", response_model=PathHitsResponse)
 async def get_path_hits(
-    session: Annotated[AsyncSession, Depends(get_session)],
     _user: Annotated[User, Depends(require_admin)],
     start: str | None = Query(default=None),
     end: str | None = Query(default=None),
 ) -> PathHitsResponse:
     """Get per-path hit counts from GoatCounter."""
-    return await fetch_path_hits(session, start, end)
+    return await fetch_path_hits(start, end)
 
 
 @admin_router.get("/stats/hits/{path_id}", response_model=PathReferrersResponse)
 async def get_path_referrers(
     path_id: int,
-    session: Annotated[AsyncSession, Depends(get_session)],
     _user: Annotated[User, Depends(require_admin)],
 ) -> PathReferrersResponse:
     """Get referrer breakdown for a specific path ID."""
-    return await fetch_path_referrers(session, path_id)
+    return await fetch_path_referrers(path_id)
 
 
 @admin_router.get("/stats/{category}", response_model=BreakdownResponse)
 async def get_breakdown(
     category: str,
-    session: Annotated[AsyncSession, Depends(get_session)],
     _user: Annotated[User, Depends(require_admin)],
     start: str | None = Query(default=None),
     end: str | None = Query(default=None),
 ) -> BreakdownResponse:
     """Get category breakdown stats (browser, OS, country, etc.) from GoatCounter."""
-    return await fetch_breakdown(session, category, start, end)
+    if category not in _ALLOWED_BREAKDOWN_CATEGORIES:
+        raise HTTPException(status_code=400, detail=f"Unknown analytics category: {category}")
+    return await fetch_breakdown(category, start, end)
 
 
 # ── Public endpoints ───────────────────────────────────────────────────────────

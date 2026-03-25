@@ -35,8 +35,8 @@ const DEFAULT_STATS = { total_views: 1234, total_unique: 567 }
 
 const DEFAULT_PATHS = {
   paths: [
-    { path: '/posts/hello', views: 800, unique: 300 },
-    { path: '/posts/world', views: 434, unique: 267 },
+    { path_id: 1, path: '/posts/hello', views: 800, unique: 300 },
+    { path_id: 2, path: '/posts/world', views: 434, unique: 267 },
   ],
 }
 
@@ -259,7 +259,7 @@ describe('AnalyticsPanel', () => {
 
   it('clicking a page row shows referrer drill-down', async () => {
     mockFetchPathReferrers.mockResolvedValue({
-      path_id: 0,
+      path_id: 1,
       referrers: [
         { referrer: 'https://hn.algolia.com', count: 42 },
         { referrer: 'direct', count: 18 },
@@ -281,7 +281,7 @@ describe('AnalyticsPanel', () => {
   })
 
   it('shows "No referrer data" when referrers list is empty', async () => {
-    mockFetchPathReferrers.mockResolvedValue({ path_id: 0, referrers: [] })
+    mockFetchPathReferrers.mockResolvedValue({ path_id: 1, referrers: [] })
     const user = userEvent.setup()
     renderPanel()
     await waitFor(() => {

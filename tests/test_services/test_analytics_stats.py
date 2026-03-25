@@ -43,7 +43,7 @@ async def test_fetch_total_stats_returns_correct_data(session: AsyncSession) -> 
         new_callable=AsyncMock,
         return_value=fake_response,
     ):
-        result = await fetch_total_stats(session, start="2025-01-01", end="2025-01-31")
+        result = await fetch_total_stats(start="2025-01-01", end="2025-01-31")
 
     assert result.total_views == 120
     assert result.total_unique == 85
@@ -56,7 +56,7 @@ async def test_fetch_total_stats_returns_zeros_when_unavailable(session: AsyncSe
         new_callable=AsyncMock,
         return_value=None,
     ):
-        result = await fetch_total_stats(session)
+        result = await fetch_total_stats()
 
     assert result.total_views == 0
     assert result.total_unique == 0
@@ -69,8 +69,8 @@ async def test_fetch_path_hits_returns_correct_data(session: AsyncSession) -> No
     """fetch_path_hits maps GoatCounter hits to PathHitsResponse."""
     fake_response = {
         "hits": [
-            {"path": "/post/hello", "count": 42, "count_unique": 30},
-            {"path": "/post/world", "count": 17, "count_unique": 12},
+            {"id": 1, "path": "/post/hello", "count": 42, "count_unique": 30},
+            {"id": 2, "path": "/post/world", "count": 17, "count_unique": 12},
         ]
     }
 
@@ -79,12 +79,14 @@ async def test_fetch_path_hits_returns_correct_data(session: AsyncSession) -> No
         new_callable=AsyncMock,
         return_value=fake_response,
     ):
-        result = await fetch_path_hits(session, start="2025-01-01", end="2025-01-31")
+        result = await fetch_path_hits(start="2025-01-01", end="2025-01-31")
 
     assert len(result.paths) == 2
+    assert result.paths[0].path_id == 1
     assert result.paths[0].path == "/post/hello"
     assert result.paths[0].views == 42
     assert result.paths[0].unique == 30
+    assert result.paths[1].path_id == 2
     assert result.paths[1].path == "/post/world"
     assert result.paths[1].views == 17
 
@@ -96,7 +98,7 @@ async def test_fetch_path_hits_returns_empty_when_unavailable(session: AsyncSess
         new_callable=AsyncMock,
         return_value=None,
     ):
-        result = await fetch_path_hits(session)
+        result = await fetch_path_hits()
 
     assert result.paths == []
 
@@ -118,7 +120,7 @@ async def test_fetch_path_referrers_returns_correct_data(session: AsyncSession) 
         new_callable=AsyncMock,
         return_value=fake_response,
     ):
-        result = await fetch_path_referrers(session, path_id=42)
+        result = await fetch_path_referrers(path_id=42)
 
     assert result.path_id == 42
     assert len(result.referrers) == 2
@@ -136,7 +138,7 @@ async def test_fetch_path_referrers_returns_empty_when_unavailable(
         new_callable=AsyncMock,
         return_value=None,
     ):
-        result = await fetch_path_referrers(session, path_id=7)
+        result = await fetch_path_referrers(path_id=7)
 
     assert result.path_id == 7
     assert result.referrers == []
@@ -159,7 +161,7 @@ async def test_fetch_breakdown_returns_correct_data(session: AsyncSession) -> No
         new_callable=AsyncMock,
         return_value=fake_response,
     ):
-        result = await fetch_breakdown(session, "browsers", start="2025-01-01")
+        result = await fetch_breakdown("browsers", start="2025-01-01")
 
     assert result.category == "browsers"
     assert len(result.entries) == 2
@@ -176,7 +178,7 @@ async def test_fetch_breakdown_returns_empty_when_unavailable(session: AsyncSess
         new_callable=AsyncMock,
         return_value=None,
     ):
-        result = await fetch_breakdown(session, "browsers")
+        result = await fetch_breakdown("browsers")
 
     assert result.category == "browsers"
     assert result.entries == []

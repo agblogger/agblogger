@@ -161,11 +161,11 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
     }
   }
 
-  async function handlePathClick(path: PathHit, index: number) {
-    setSelectedPath({ path: path.path, path_id: index })
+  async function handlePathClick(path: PathHit, pathId: number) {
+    setSelectedPath({ path: path.path, path_id: pathId })
     setReferrersLoading(true)
     try {
-      const data = await fetchPathReferrers(index)
+      const data = await fetchPathReferrers(pathId)
       setReferrers(data.referrers)
     } catch {
       setReferrers([])
@@ -271,17 +271,17 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
                     </tr>
                   </thead>
                   <tbody>
-                    {[...paths].sort((a, b) => b.views - a.views).map((p, idx) => (
+                    {[...paths].sort((a, b) => b.views - a.views).map((p) => (
                       <tr
                         key={p.path}
                         role="button"
                         tabIndex={0}
                         className="border-b border-border last:border-0 hover:bg-base cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-accent/40"
-                        onClick={() => void handlePathClick(p, idx)}
+                        onClick={() => void handlePathClick(p, p.path_id)}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' || e.key === ' ') {
                             e.preventDefault()
-                            void handlePathClick(p, idx)
+                            void handlePathClick(p, p.path_id)
                           }
                         }}
                         aria-label={`View referrers for ${p.path}`}

@@ -266,6 +266,20 @@ async def create_test_client(settings: Settings) -> AsyncGenerator[AsyncClient]:
         await engine.dispose()
 
 
+@pytest.fixture(autouse=True)
+def _reset_analytics_globals():
+    """Reset analytics service module-level state between tests."""
+    import backend.services.analytics_service as svc
+
+    svc._goatcounter_token = None
+    svc._token_warning_issued = False
+    svc._http_client = None
+    yield
+    svc._goatcounter_token = None
+    svc._token_warning_issued = False
+    svc._http_client = None
+
+
 @pytest.fixture
 def tmp_content_dir(tmp_path: Path) -> Path:
     """Create a temporary content directory with default structure."""

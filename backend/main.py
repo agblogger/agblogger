@@ -274,6 +274,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
         yield
     finally:
+        from backend.services.analytics_service import close_analytics_client
+
+        try:
+            await close_analytics_client()
+        except Exception as exc:
+            logger.error("Error during analytics client shutdown: %s", exc, exc_info=True)
+
         try:
             await close_renderer()
         except Exception as exc:
