@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { X, Calendar, User, Tag } from 'lucide-react'
-import { fetchLabels } from '@/api/labels'
 import { filterLabelsBySearch } from '@/components/labels/searchUtils'
 import { useFilterPanelStore } from '@/stores/filterPanelStore'
-import type { LabelResponse } from '@/api/client'
+import { useLabels } from '@/hooks/useLabels'
 
 export interface FilterState {
   labels: string[]
@@ -34,23 +33,11 @@ export default function FilterPanel({ value, onChange }: FilterPanelProps) {
   const onAnimationEnd = useFilterPanelStore((s) => s.onAnimationEnd)
   const setActiveFilterCount = useFilterPanelStore((s) => s.setActiveFilterCount)
 
-  const [allLabels, setAllLabels] = useState<LabelResponse[]>([])
+  const { data: allLabels = [], error: labelLoadErr } = useLabels()
+  const labelLoadError = labelLoadErr ? 'Failed to load labels' : null
   const [labelSearch, setLabelSearch] = useState('')
-  const [labelLoadError, setLabelLoadError] = useState<string | null>(null)
 
   const expanded = panelState === 'open'
-
-  useEffect(() => {
-    fetchLabels()
-      .then((labels) => {
-        setAllLabels(labels)
-        setLabelLoadError(null)
-      })
-      .catch((err: unknown) => {
-        console.error('Failed to load labels:', err)
-        setLabelLoadError('Failed to load labels')
-      })
-  }, [])
 
   useEffect(() => {
     const count =

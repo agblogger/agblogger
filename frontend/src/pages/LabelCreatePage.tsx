@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import AlertBanner from '@/components/AlertBanner'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import BackLink from '@/components/BackLink'
@@ -8,9 +8,9 @@ import { Tag } from 'lucide-react'
 
 import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
 import { useRequireAuth } from '@/hooks/useRequireAuth'
-import { createLabel, fetchLabels } from '@/api/labels'
+import { createLabel } from '@/api/labels'
 import { HTTPError } from '@/api/client'
-import type { LabelResponse } from '@/api/client'
+import { useLabels } from '@/hooks/useLabels'
 import LabelNamesEditor from '@/components/labels/LabelNamesEditor'
 import LabelParentsSelector from '@/components/labels/LabelParentsSelector'
 
@@ -20,15 +20,19 @@ export default function LabelCreatePage() {
   const navigate = useNavigate()
   const { isReady } = useRequireAuth({ requireAdmin: true })
 
-  const [allLabels, setAllLabels] = useState<LabelResponse[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const { data: allLabels = [], error: labelsErr, isLoading } = useLabels()
+  const labelsLoadError = labelsErr
+    ? labelsErr instanceof HTTPError && labelsErr.response.status === 401
+      ? 'Session expired. Please log in again.'
+      : 'Failed to load labels. Please try again later.'
+    : null
 
   // Form state
   const [labelId, setLabelId] = useState('')
   const [names, setNames] = useState<string[]>([])
   const [parents, setParents] = useState<string[]>([])
   const [creating, setCreating] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const isValidId = labelId.length > 0 && labelId.length <= 100 && LABEL_ID_REGEX.test(labelId)
 
@@ -45,21 +49,6 @@ export default function LabelCreatePage() {
     setParents(updated)
     setError(null)
   }, [])
-
-  useEffect(() => {
-    if (!isReady) return
-    fetchLabels()
-      .then(setAllLabels)
-      .catch((err: unknown) => {
-        if (err instanceof HTTPError && err.response.status === 401) {
-          setError('Session expired. Please log in again.')
-        } else {
-          console.error('Failed to load labels:', err)
-          setError('Failed to load labels. Please try again later.')
-        }
-      })
-      .finally(() => setLoading(false))
-  }, [isReady])
 
   async function handleCreate() {
     if (!isValidId) return
@@ -105,12 +94,12 @@ export default function LabelCreatePage() {
     return null
   }
 
-  if (loading) {
+  if (isLoading) {
     return <LoadingSpinner />
   }
 
-  if (error !== null && allLabels.length === 0) {
-    return <ErrorBlock message={error} backTo="/labels" backLabel="Back to labels" />
+  if (labelsLoadError !== null && allLabels.length === 0) {
+    return <ErrorBlock message={labelsLoadError} backTo="/labels" backLabel="Back to labels" />
   }
 
   return (

@@ -1,12 +1,11 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useMemo, useState } from 'react'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import { Link } from 'react-router-dom'
 import { Tag, Settings, Search, Plus } from 'lucide-react'
 
 import { useAuthStore } from '@/stores/authStore'
-import { fetchLabels } from '@/api/labels'
 import { HTTPError } from '@/api/client'
-import type { LabelResponse } from '@/api/client'
+import { useLabels } from '@/hooks/useLabels'
 import { filterLabelsBySearch } from '@/components/labels/searchUtils'
 import LabelChip from '@/components/labels/LabelChip'
 import ParentLabelLinks from '@/components/labels/ParentLabelLinks'
@@ -92,22 +91,12 @@ export default function LabelsPage() {
 
 function LabelListView({ search }: { search: string }) {
   const user = useAuthStore((s) => s.user)
-  const [labels, setLabels] = useState<LabelResponse[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    fetchLabels()
-      .then(setLabels)
-      .catch((err: unknown) => {
-        if (err instanceof HTTPError && err.response.status === 401) {
-          setError('Session expired. Please log in again.')
-        } else {
-          setError('Failed to load labels. Please try again later.')
-        }
-      })
-      .finally(() => setLoading(false))
-  }, [])
+  const { data: labels = [], error, isLoading: loading } = useLabels()
+  const errorMsg = error
+    ? error instanceof HTTPError && error.response.status === 401
+      ? 'Session expired. Please log in again.'
+      : 'Failed to load labels. Please try again later.'
+    : null
 
   const filteredLabels = useMemo(() => filterLabelsBySearch(labels, search), [labels, search])
 
@@ -115,10 +104,10 @@ function LabelListView({ search }: { search: string }) {
     return <LoadingSpinner />
   }
 
-  if (error !== null) {
+  if (errorMsg !== null) {
     return (
       <div className="text-center py-24">
-        <p className="text-red-600 dark:text-red-400">{error}</p>
+        <p className="text-red-600 dark:text-red-400">{errorMsg}</p>
       </div>
     )
   }

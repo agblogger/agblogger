@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 
-import { createLabel, fetchLabels } from '@/api/labels'
+import { createLabel } from '@/api/labels'
 import { HTTPError } from '@/api/client'
 import { filterLabelsBySearch } from '@/components/labels/searchUtils'
-import type { LabelResponse } from '@/api/client'
 import { parseErrorDetail } from '@/api/parseError'
+import { useLabels } from '@/hooks/useLabels'
 
 interface LabelInputProps {
   value: string[]
@@ -15,23 +15,15 @@ interface LabelInputProps {
 
 export default function LabelInput({ value, onChange, disabled }: LabelInputProps) {
   const [query, setQuery] = useState('')
-  const [allLabels, setAllLabels] = useState<LabelResponse[]>([])
+  const { data: allLabels = [], error: labelsError, mutate: mutateLabels } = useLabels()
+  const [createLoadError, setCreateLoadError] = useState(false)
+  const loadError = !!labelsError || createLoadError
   const [open, setOpen] = useState(false)
   const [creating, setCreating] = useState(false)
-  const [loadError, setLoadError] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
   const [activeIndex, setActiveIndex] = useState(-1)
   const inputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    fetchLabels()
-      .then((labels) => {
-        setAllLabels(labels)
-        setLoadError(false)
-      })
-      .catch(() => setLoadError(true))
-  }, [])
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -72,8 +64,8 @@ export default function LabelInput({ value, onChange, disabled }: LabelInputProp
     setCreating(true)
     try {
       const label = await createLabel({ id: trimmed })
-      setAllLabels((prev) => [...prev, label])
-      setLoadError(false)
+      void mutateLabels([...allLabels, label], false)
+      setCreateLoadError(false)
       addLabel(label.id)
     } catch (err) {
       if (err instanceof HTTPError && err.response.status === 409) {
@@ -82,7 +74,7 @@ export default function LabelInput({ value, onChange, disabled }: LabelInputProp
         const message = await parseErrorDetail(err.response, 'Invalid label ID')
         setCreateError(message)
       } else {
-        setLoadError(true)
+        setCreateLoadError(true)
       }
     } finally {
       setCreating(false)

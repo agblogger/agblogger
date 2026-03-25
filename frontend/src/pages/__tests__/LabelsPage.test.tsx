@@ -2,6 +2,7 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { SWRConfig } from 'swr'
 
 import { fetchLabels } from '@/api/labels'
 import type { LabelResponse, UserResponse } from '@/api/client'
@@ -56,9 +57,11 @@ const sampleLabels: LabelResponse[] = [
 
 function renderLabelsPage() {
   return render(
-    <MemoryRouter initialEntries={['/labels']}>
-      <LabelsPage />
-    </MemoryRouter>,
+    <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+      <MemoryRouter initialEntries={['/labels']}>
+        <LabelsPage />
+      </MemoryRouter>
+    </SWRConfig>,
   )
 }
 

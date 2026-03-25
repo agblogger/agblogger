@@ -8,9 +8,10 @@ import { Settings, Trash2 } from 'lucide-react'
 
 import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
 import { useRequireAuth } from '@/hooks/useRequireAuth'
-import { fetchLabel, fetchLabels, updateLabel, deleteLabel } from '@/api/labels'
+import { fetchLabel, updateLabel, deleteLabel } from '@/api/labels'
 import { HTTPError } from '@/api/client'
 import type { LabelResponse } from '@/api/client'
+import { useLabels } from '@/hooks/useLabels'
 import { computeDescendants } from '@/components/labels/graphUtils'
 import LabelNamesEditor from '@/components/labels/LabelNamesEditor'
 import LabelParentsSelector from '@/components/labels/LabelParentsSelector'
@@ -32,9 +33,10 @@ export default function LabelSettingsPage() {
   const navigate = useNavigate()
   const { isReady } = useRequireAuth({ requireAdmin: true })
 
+  const { data: allLabels = [], isLoading: allLabelsLoading } = useLabels()
+
   const [label, setLabel] = useState<LabelResponse | null>(null)
-  const [allLabels, setAllLabels] = useState<LabelResponse[]>([])
-  const [loading, setLoading] = useState(true)
+  const [labelLoading, setLabelLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   // Editable state
@@ -48,15 +50,16 @@ export default function LabelSettingsPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const busy = saving || deleting
 
+  const loading = labelLoading || allLabelsLoading
+
   useEffect(() => {
     if (!isReady) return
     if (labelId === undefined) return
-    setLoading(true)
+    setLabelLoading(true)
     setError(null)
-    void Promise.all([fetchLabel(labelId), fetchLabels()])
-      .then(([l, all]) => {
+    void fetchLabel(labelId)
+      .then((l) => {
         setLabel(l)
-        setAllLabels(all)
         setNames(l.names)
         setParents(l.parents)
         setSavedNames(l.names)
@@ -72,7 +75,7 @@ export default function LabelSettingsPage() {
         }
       })
       .finally(() => {
-        setLoading(false)
+        setLabelLoading(false)
       })
   }, [labelId, isReady])
 

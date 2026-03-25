@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { SWRConfig } from 'swr'
 
 import type { UserResponse, LabelResponse } from '@/api/client'
 import { mockHttpError } from '@/test/MockHTTPError'
@@ -52,7 +53,11 @@ function renderCreatePage() {
     [{ path: '/labels/new', element: createElement(LabelCreatePage) }],
     { initialEntries: ['/labels/new'] },
   )
-  return render(createElement(RouterProvider, { router }))
+  return render(
+    createElement(SWRConfig, { value: { provider: () => new Map(), dedupingInterval: 0 } },
+      createElement(RouterProvider, { router }),
+    ),
+  )
 }
 
 describe('LabelCreatePage', () => {

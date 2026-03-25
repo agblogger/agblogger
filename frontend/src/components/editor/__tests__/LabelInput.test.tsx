@@ -1,6 +1,7 @@
 import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { SWRConfig } from 'swr'
 
 import { fetchLabels, createLabel } from '@/api/labels'
 import { HTTPError } from '@/test/MockHTTPError'
@@ -32,7 +33,9 @@ async function renderLabelInput(
 ) {
   const onChange = props.onChange ?? vi.fn<(labels: string[]) => void>()
   const result = render(
-    <LabelInput value={props.value ?? []} onChange={onChange} {...(props.disabled != null && { disabled: props.disabled })} />,
+    <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+      <LabelInput value={props.value ?? []} onChange={onChange} {...(props.disabled != null && { disabled: props.disabled })} />
+    </SWRConfig>,
   )
   // Flush microtasks from the initial fetchLabels() effect
   await act(async () => {})

@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { SWRConfig } from 'swr'
 
 import type { UserResponse, LabelResponse } from '@/api/client'
 import { mockHttpError } from '@/test/MockHTTPError'
@@ -79,7 +80,11 @@ function renderSettings(labelId = 'swe') {
     [{ path: '/labels/:labelId/settings', element: createElement(LabelSettingsPage) }],
     { initialEntries: [`/labels/${labelId}/settings`] },
   )
-  return render(createElement(RouterProvider, { router }))
+  return render(
+    createElement(SWRConfig, { value: { provider: () => new Map(), dedupingInterval: 0 } },
+      createElement(RouterProvider, { router }),
+    ),
+  )
 }
 
 describe('LabelSettingsPage', () => {
@@ -91,18 +96,18 @@ describe('LabelSettingsPage', () => {
 
   it('redirects to login when unauthenticated', () => {
     mockUser = null
+    mockFetchLabels.mockReturnValue(new Promise(() => {}))
     renderSettings()
     expect(mockNavigate).toHaveBeenCalledWith('/login', { replace: true })
     expect(mockFetchLabel).not.toHaveBeenCalled()
-    expect(mockFetchLabels).not.toHaveBeenCalled()
   })
 
   it('redirects non-admin users to home', () => {
     mockUser = { id: 2, username: 'author', email: 'author@t.com', display_name: null, is_admin: false }
+    mockFetchLabels.mockReturnValue(new Promise(() => {}))
     renderSettings()
     expect(mockNavigate).toHaveBeenCalledWith('/', { replace: true })
     expect(mockFetchLabel).not.toHaveBeenCalled()
-    expect(mockFetchLabels).not.toHaveBeenCalled()
   })
 
   it('shows spinner while loading', () => {

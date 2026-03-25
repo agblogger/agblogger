@@ -1,6 +1,7 @@
 import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { SWRConfig } from 'swr'
 
 import type { LabelResponse } from '@/api/client'
 import FilterPanel, { EMPTY_FILTER, type FilterState } from '../FilterPanel'
@@ -38,7 +39,11 @@ const allLabels: LabelResponse[] = [
 ]
 
 async function renderPanel(value: FilterState = EMPTY_FILTER, onChange = vi.fn()) {
-  const result = render(<FilterPanel value={value} onChange={onChange} />)
+  const result = render(
+    <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+      <FilterPanel value={value} onChange={onChange} />
+    </SWRConfig>,
+  )
   // Flush microtasks from the initial fetchLabels() effect
   await act(async () => {})
   return { ...result, onChange }
