@@ -29,6 +29,8 @@ function LazyFallback() {
   return <LoadingSpinner />;
 }
 
+const SWR_CONFIG = { fetcher: (url: string) => api.get(url).json(), dedupingInterval: 2000 };
+
 function Layout() {
   const location = useLocation();
   const isEditor = location.pathname.startsWith("/editor");
@@ -59,7 +61,7 @@ function Layout() {
   }, [siteTitle]);
 
   return (
-    <SWRConfig value={{ fetcher: (url: string) => api.get(url).json(), dedupingInterval: 2000 }}>
+    <SWRConfig value={SWR_CONFIG}>
       <div className="min-h-screen bg-paper">
         <Header />
         <main className={mainClass}>
