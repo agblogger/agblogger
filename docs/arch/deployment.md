@@ -17,9 +17,9 @@ The preferred production topology places a reverse proxy in front of the applica
 - one application container serving the API and SPA
 - a GoatCounter container for page view analytics (soft dependency, internal network only, no public exposure)
 - an optional reverse proxy in front for TLS termination and public ingress
-- persistent volumes for content, database state, and GoatCounter data (including the shared API token)
+- persistent volumes for content, database state, GoatCounter database state, and a separate GoatCounter token volume
 
-The GoatCounter container provisions itself on first boot via a custom entrypoint script (`goatcounter/entrypoint.sh`) that creates the site, generates an API token, and writes it to a shared volume.
+The GoatCounter container provisions itself on first boot via a custom entrypoint script (`goatcounter/entrypoint.sh`) that creates the site, generates an API token, and writes it to a dedicated token-only volume. The AgBlogger container mounts that token volume read-only and does not receive the GoatCounter database volume.
 
 ## Packaging
 

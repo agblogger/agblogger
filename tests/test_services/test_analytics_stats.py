@@ -45,7 +45,7 @@ async def test_fetch_total_stats_returns_correct_data(session: AsyncSession) -> 
         new_callable=AsyncMock,
         return_value=fake_response,
     ):
-        result = await fetch_total_stats(start="2025-01-01", end="2025-01-31")
+        result = await fetch_total_stats(session, start="2025-01-01", end="2025-01-31")
 
     assert result.total_views == 120
     assert result.total_unique == 85
@@ -60,9 +60,28 @@ async def test_fetch_total_stats_returns_none_when_unavailable_legacy(
         new_callable=AsyncMock,
         return_value=None,
     ):
-        result = await fetch_total_stats()
+        result = await fetch_total_stats(session)
 
     assert result is None
+
+
+async def test_fetch_total_stats_returns_none_when_analytics_disabled(
+    session: AsyncSession,
+) -> None:
+    """Admin stats reads are gated off when analytics are disabled."""
+    from backend.services.analytics_service import update_analytics_settings
+
+    await update_analytics_settings(session, analytics_enabled=False)
+
+    with patch(
+        "backend.services.analytics_service._stats_request",
+        new_callable=AsyncMock,
+        return_value={"total": 120, "total_unique": 85},
+    ) as mock_req:
+        result = await fetch_total_stats(session)
+
+    assert result is None
+    mock_req.assert_not_called()
 
 
 # ── fetch_path_hits ────────────────────────────────────────────────────────────
@@ -82,7 +101,7 @@ async def test_fetch_path_hits_returns_correct_data(session: AsyncSession) -> No
         new_callable=AsyncMock,
         return_value=fake_response,
     ):
-        result = await fetch_path_hits(start="2025-01-01", end="2025-01-31")
+        result = await fetch_path_hits(session, start="2025-01-01", end="2025-01-31")
 
     assert len(result.paths) == 2
     assert result.paths[0].path_id == 1
@@ -107,7 +126,7 @@ async def test_fetch_path_hits_skips_entries_with_missing_id(session: AsyncSessi
         new_callable=AsyncMock,
         return_value=fake_response,
     ):
-        result = await fetch_path_hits()
+        result = await fetch_path_hits(session)
 
     assert len(result.paths) == 1
     assert result.paths[0].path_id == 1
@@ -126,7 +145,7 @@ async def test_fetch_path_hits_skips_entries_with_zero_id(session: AsyncSession)
         new_callable=AsyncMock,
         return_value=fake_response,
     ):
-        result = await fetch_path_hits()
+        result = await fetch_path_hits(session)
 
     assert len(result.paths) == 1
     assert result.paths[0].path_id == 2
@@ -145,7 +164,7 @@ async def test_fetch_path_hits_skips_entries_with_empty_path(session: AsyncSessi
         new_callable=AsyncMock,
         return_value=fake_response,
     ):
-        result = await fetch_path_hits()
+        result = await fetch_path_hits(session)
 
     assert len(result.paths) == 1
     assert result.paths[0].path_id == 2
@@ -160,9 +179,28 @@ async def test_fetch_path_hits_returns_none_when_unavailable_legacy(
         new_callable=AsyncMock,
         return_value=None,
     ):
-        result = await fetch_path_hits()
+        result = await fetch_path_hits(session)
 
     assert result is None
+
+
+async def test_fetch_path_hits_returns_none_when_analytics_disabled(
+    session: AsyncSession,
+) -> None:
+    """Per-path admin stats are gated off when analytics are disabled."""
+    from backend.services.analytics_service import update_analytics_settings
+
+    await update_analytics_settings(session, analytics_enabled=False)
+
+    with patch(
+        "backend.services.analytics_service._stats_request",
+        new_callable=AsyncMock,
+        return_value={"hits": []},
+    ) as mock_req:
+        result = await fetch_path_hits(session)
+
+    assert result is None
+    mock_req.assert_not_called()
 
 
 # ── fetch_path_referrers ───────────────────────────────────────────────────────
@@ -182,7 +220,7 @@ async def test_fetch_path_referrers_returns_correct_data(session: AsyncSession) 
         new_callable=AsyncMock,
         return_value=fake_response,
     ):
-        result = await fetch_path_referrers(path_id=42)
+        result = await fetch_path_referrers(session, path_id=42)
 
     assert result.path_id == 42
     assert len(result.referrers) == 2
@@ -200,9 +238,28 @@ async def test_fetch_path_referrers_returns_none_when_unavailable_legacy(
         new_callable=AsyncMock,
         return_value=None,
     ):
-        result = await fetch_path_referrers(path_id=7)
+        result = await fetch_path_referrers(session, path_id=7)
 
     assert result is None
+
+
+async def test_fetch_path_referrers_returns_none_when_analytics_disabled(
+    session: AsyncSession,
+) -> None:
+    """Referrer admin stats are gated off when analytics are disabled."""
+    from backend.services.analytics_service import update_analytics_settings
+
+    await update_analytics_settings(session, analytics_enabled=False)
+
+    with patch(
+        "backend.services.analytics_service._stats_request",
+        new_callable=AsyncMock,
+        return_value={"referrers": []},
+    ) as mock_req:
+        result = await fetch_path_referrers(session, path_id=7)
+
+    assert result is None
+    mock_req.assert_not_called()
 
 
 # ── fetch_breakdown ────────────────────────────────────────────────────────────
@@ -222,7 +279,7 @@ async def test_fetch_breakdown_returns_correct_data(session: AsyncSession) -> No
         new_callable=AsyncMock,
         return_value=fake_response,
     ):
-        result = await fetch_breakdown("browsers", start="2025-01-01")
+        result = await fetch_breakdown(session, "browsers", start="2025-01-01")
 
     assert result.category == "browsers"
     assert len(result.entries) == 2
@@ -241,9 +298,28 @@ async def test_fetch_breakdown_returns_none_when_unavailable_legacy(
         new_callable=AsyncMock,
         return_value=None,
     ):
-        result = await fetch_breakdown("browsers")
+        result = await fetch_breakdown(session, "browsers")
 
     assert result is None
+
+
+async def test_fetch_breakdown_returns_none_when_analytics_disabled(
+    session: AsyncSession,
+) -> None:
+    """Breakdown admin stats are gated off when analytics are disabled."""
+    from backend.services.analytics_service import update_analytics_settings
+
+    await update_analytics_settings(session, analytics_enabled=False)
+
+    with patch(
+        "backend.services.analytics_service._stats_request",
+        new_callable=AsyncMock,
+        return_value={"stats": []},
+    ) as mock_req:
+        result = await fetch_breakdown(session, "browsers")
+
+    assert result is None
+    mock_req.assert_not_called()
 
 
 # ── fetch_view_count ───────────────────────────────────────────────────────────
@@ -326,53 +402,70 @@ async def test_fetch_view_count_returns_zero_for_unknown_path(session: AsyncSess
     assert count == 0
 
 
+async def test_fetch_view_count_returns_none_when_analytics_disabled(session: AsyncSession) -> None:
+    """Public view counts are gated off when analytics are disabled."""
+    from backend.services.analytics_service import update_analytics_settings
+
+    await update_analytics_settings(session, analytics_enabled=False, show_views_on_posts=True)
+
+    with patch(
+        "backend.services.analytics_service._stats_request",
+        new_callable=AsyncMock,
+        return_value={"hits": [{"path": "/post/hello", "count": 99}]},
+    ) as mock_req:
+        count = await fetch_view_count(session, "/post/hello")
+
+    assert count is None
+    mock_req.assert_not_called()
+
+
 # ── fetch_* returns None when GoatCounter is down (Issue 5) ───────────────────
 
 
-async def test_fetch_total_stats_returns_none_when_unavailable() -> None:
+async def test_fetch_total_stats_returns_none_when_unavailable(session: AsyncSession) -> None:
     """fetch_total_stats returns None when _stats_request returns None."""
     with patch(
         "backend.services.analytics_service._stats_request",
         new_callable=AsyncMock,
         return_value=None,
     ):
-        result = await fetch_total_stats()
+        result = await fetch_total_stats(session)
 
     assert result is None
 
 
-async def test_fetch_path_hits_returns_none_when_unavailable() -> None:
+async def test_fetch_path_hits_returns_none_when_unavailable(session: AsyncSession) -> None:
     """fetch_path_hits returns None when _stats_request returns None."""
     with patch(
         "backend.services.analytics_service._stats_request",
         new_callable=AsyncMock,
         return_value=None,
     ):
-        result = await fetch_path_hits()
+        result = await fetch_path_hits(session)
 
     assert result is None
 
 
-async def test_fetch_path_referrers_returns_none_when_unavailable() -> None:
+async def test_fetch_path_referrers_returns_none_when_unavailable(session: AsyncSession) -> None:
     """fetch_path_referrers returns None when _stats_request returns None."""
     with patch(
         "backend.services.analytics_service._stats_request",
         new_callable=AsyncMock,
         return_value=None,
     ):
-        result = await fetch_path_referrers(path_id=7)
+        result = await fetch_path_referrers(session, path_id=7)
 
     assert result is None
 
 
-async def test_fetch_breakdown_returns_none_when_unavailable() -> None:
+async def test_fetch_breakdown_returns_none_when_unavailable(session: AsyncSession) -> None:
     """fetch_breakdown returns None when _stats_request returns None."""
     with patch(
         "backend.services.analytics_service._stats_request",
         new_callable=AsyncMock,
         return_value=None,
     ):
-        result = await fetch_breakdown("browsers")
+        result = await fetch_breakdown(session, "browsers")
 
     assert result is None
 

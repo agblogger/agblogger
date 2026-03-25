@@ -36,11 +36,12 @@ logger = logging.getLogger(__name__)
 
 # Internal Docker network address; matches the goatcounter service in docker-compose.yml
 GOATCOUNTER_URL = "http://goatcounter:8080"
-GOATCOUNTER_AUTH_FILE = "/data/goatcounter/token"
+GOATCOUNTER_AUTH_FILE = "/data/goatcounter-token/token"
 _HIT_TIMEOUT = 2.0
 _STATS_TIMEOUT = 5.0
 _HIT_ERRORS = (httpx.HTTPError, OSError)
 _STATS_ERRORS = (httpx.HTTPError, httpx.InvalidURL, ValueError)
+_MAX_BACKGROUND_TASKS = 64
 
 # ── Module-level singletons ────────────────────────────────────────────────────
 
@@ -283,6 +284,14 @@ def fire_background_hit(
     client_ip = request.client.host if request.client and request.client.host else "unknown"
     user_agent = request.headers.get("user-agent", "")
 
+    if len(_background_tasks) >= _MAX_BACKGROUND_TASKS:
+        logger.warning(
+            "Dropping analytics hit for %r because the background task limit (%d) was reached",
+            path,
+            _MAX_BACKGROUND_TASKS,
+        )
+        return
+
     async def _do_hit() -> None:
         try:
             async with session_factory() as session:
@@ -302,10 +311,15 @@ def fire_background_hit(
 
 
 async def fetch_total_stats(
+    session: AsyncSession,
     start: str | None = None,
     end: str | None = None,
 ) -> TotalStatsResponse | None:
     """Proxy GoatCounter total stats; returns None when unavailable."""
+    settings = await get_analytics_settings(session)
+    if not settings.analytics_enabled:
+        return None
+
     params: dict[str, Any] = {}
     if start is not None:
         params["start"] = start
@@ -322,10 +336,15 @@ async def fetch_total_stats(
 
 
 async def fetch_path_hits(
+    session: AsyncSession,
     start: str | None = None,
     end: str | None = None,
 ) -> PathHitsResponse | None:
     """Proxy GoatCounter per-path hit counts; returns None when unavailable."""
+    settings = await get_analytics_settings(session)
+    if not settings.analytics_enabled:
+        return None
+
     params: dict[str, Any] = {}
     if start is not None:
         params["start"] = start
@@ -355,9 +374,14 @@ async def fetch_path_hits(
 
 
 async def fetch_path_referrers(
+    session: AsyncSession,
     path_id: int,
 ) -> PathReferrersResponse | None:
     """Proxy GoatCounter referrer breakdown for a path; returns None when unavailable."""
+    settings = await get_analytics_settings(session)
+    if not settings.analytics_enabled:
+        return None
+
     data = await _stats_request(f"/api/v0/stats/hits/{path_id}/referrers")
     if data is None:
         return None
@@ -372,6 +396,7 @@ async def fetch_path_referrers(
 
 
 async def fetch_breakdown(
+    session: AsyncSession,
     category: BreakdownCategory,
     start: str | None = None,
     end: str | None = None,
@@ -380,6 +405,10 @@ async def fetch_breakdown(
 
     Returns None when GoatCounter is unavailable.
     """
+    settings = await get_analytics_settings(session)
+    if not settings.analytics_enabled:
+        return None
+
     params: dict[str, Any] = {}
     if start is not None:
         params["start"] = start
@@ -411,7 +440,7 @@ async def fetch_view_count(
     raising.
     """
     settings = await get_analytics_settings(session)
-    if not settings.show_views_on_posts:
+    if not settings.analytics_enabled or not settings.show_views_on_posts:
         return None
 
     data = await _stats_request("/api/v0/stats/hits", {"filter": path})

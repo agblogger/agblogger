@@ -944,7 +944,8 @@ def _goatcounter_service_section(
         '      - "8080"\n'
         '    entrypoint: ["/bin/sh", "/entrypoint.sh"]\n'
         "    volumes:\n"
-        "      - goatcounter-data:/data/goatcounter\n"
+        "      - goatcounter-db:/data/goatcounter\n"
+        "      - goatcounter-token:/data/goatcounter-token\n"
         "      - ./goatcounter/entrypoint.sh:/entrypoint.sh:ro\n"
         "    restart: unless-stopped\n"
         "    healthcheck:\n"
@@ -986,7 +987,7 @@ def build_direct_compose_content() -> str:
         "    volumes:\n"
         "      - ./content:/data/content\n"
         "      - agblogger-db:/data/db\n"
-        "      - goatcounter-data:/data/goatcounter\n"
+        "      - goatcounter-token:/data/goatcounter-token:ro\n"
         + _agblogger_env_section()
         + _agblogger_healthcheck_section()
         + "\n"
@@ -994,7 +995,8 @@ def build_direct_compose_content() -> str:
         + "\n"
         "volumes:\n"
         "  agblogger-db:\n"
-        "  goatcounter-data:\n"
+        "  goatcounter-db:\n"
+        "  goatcounter-token:\n"
     )
 
 
@@ -1010,7 +1012,7 @@ def build_image_compose_content(*, caddy_public: bool = False) -> str:
         "    volumes:\n"
         "      - ./content:/data/content\n"
         "      - agblogger-db:/data/db\n"
-        "      - goatcounter-data:/data/goatcounter\n"
+        "      - goatcounter-token:/data/goatcounter-token:ro\n"
         + _agblogger_env_section()
         + _agblogger_healthcheck_section(include_network=True)
         + "\n"
@@ -1024,7 +1026,8 @@ def build_image_compose_content(*, caddy_public: bool = False) -> str:
         "  agblogger-db:\n"
         "  caddy-data:\n"
         "  caddy-config:\n"
-        "  goatcounter-data:\n"
+        "  goatcounter-db:\n"
+        "  goatcounter-token:\n"
     )
 
 
@@ -1040,7 +1043,7 @@ def build_image_direct_compose_content() -> str:
         "    volumes:\n"
         "      - ./content:/data/content\n"
         "      - agblogger-db:/data/db\n"
-        "      - goatcounter-data:/data/goatcounter\n"
+        "      - goatcounter-token:/data/goatcounter-token:ro\n"
         + _agblogger_env_section()
         + _agblogger_healthcheck_section()
         + "\n"
@@ -1048,7 +1051,8 @@ def build_image_direct_compose_content() -> str:
         + "\n"
         "volumes:\n"
         "  agblogger-db:\n"
-        "  goatcounter-data:\n"
+        "  goatcounter-db:\n"
+        "  goatcounter-token:\n"
     )
 
 
@@ -1080,7 +1084,7 @@ def build_external_caddy_compose_content() -> str:
         "    volumes:\n"
         "      - ./content:/data/content\n"
         "      - agblogger-db:/data/db\n"
-        "      - goatcounter-data:/data/goatcounter\n"
+        "      - goatcounter-token:/data/goatcounter-token:ro\n"
         + _agblogger_env_section()
         + _agblogger_healthcheck_section()
         + "    networks:\n"
@@ -1088,7 +1092,8 @@ def build_external_caddy_compose_content() -> str:
         "\n" + _goatcounter_service_section(network_name=EXTERNAL_CADDY_NETWORK_NAME) + "\n"
         "volumes:\n"
         "  agblogger-db:\n"
-        "  goatcounter-data:\n"
+        "  goatcounter-db:\n"
+        "  goatcounter-token:\n"
         "\n" + _external_caddy_network_block()
     )
 
@@ -1105,7 +1110,7 @@ def build_image_external_caddy_compose_content() -> str:
         "    volumes:\n"
         "      - ./content:/data/content\n"
         "      - agblogger-db:/data/db\n"
-        "      - goatcounter-data:/data/goatcounter\n"
+        "      - goatcounter-token:/data/goatcounter-token:ro\n"
         + _agblogger_env_section()
         + _agblogger_healthcheck_section()
         + "    networks:\n"
@@ -1113,7 +1118,8 @@ def build_image_external_caddy_compose_content() -> str:
         "\n" + _goatcounter_service_section(network_name=EXTERNAL_CADDY_NETWORK_NAME) + "\n"
         "volumes:\n"
         "  agblogger-db:\n"
-        "  goatcounter-data:\n"
+        "  goatcounter-db:\n"
+        "  goatcounter-token:\n"
         "\n" + _external_caddy_network_block()
     )
 

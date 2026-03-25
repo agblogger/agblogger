@@ -34,7 +34,7 @@ External providers are treated as untrusted systems. Their credentials are prote
 
 ## Analytics Sidecar Security
 
-The GoatCounter analytics sidecar is internal to the server deployment. Its API token is a fixed credential that never leaves the private Docker network. The threat model for analytics is limited to the internal deployment boundary.
+The GoatCounter analytics sidecar is internal to the server deployment. Its API token is a fixed credential that never leaves the private Docker network and is mounted into the application container through a dedicated read-only token volume rather than the full GoatCounter data volume. The GoatCounter database stays private to the sidecar. Analytics background work is bounded so public traffic spikes do not create an unbounded amount of in-process work in the application.
 
 ## Runtime Hardening
 

@@ -495,3 +495,52 @@ async def test_fire_background_hit_catches_exceptions(
         await asyncio.sleep(0.01)
 
     assert any("Background analytics hit failed" in r.message for r in caplog.records)
+
+
+async def test_fire_background_hit_drops_when_capacity_is_reached(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Background hit scheduling should shed load instead of growing without bound."""
+    import asyncio
+    import logging
+
+    from backend.services.analytics_service import fire_background_hit
+
+    blocker = asyncio.Event()
+
+    async def hold_slot() -> None:
+        await blocker.wait()
+
+    occupied_task = asyncio.create_task(hold_slot())
+    svc._background_tasks.add(occupied_task)
+
+    mock_request = MagicMock()
+    mock_request.client = MagicMock()
+    mock_request.client.host = "10.0.0.1"
+    mock_request.headers = {"user-agent": "TestAgent/1.0"}
+
+    mock_session_factory = MagicMock()
+
+    try:
+        with (
+            patch.object(svc, "_MAX_BACKGROUND_TASKS", 1, create=True),
+            patch(
+                "backend.services.analytics_service.record_hit",
+                new_callable=AsyncMock,
+            ) as mock_record,
+            caplog.at_level(logging.WARNING, logger="backend.services.analytics_service"),
+        ):
+            fire_background_hit(
+                request=mock_request,
+                session_factory=mock_session_factory,
+                path="/post/hello",
+                user=None,
+            )
+            await asyncio.sleep(0.01)
+
+        mock_record.assert_not_called()
+        assert any("dropping analytics hit" in r.message.lower() for r in caplog.records)
+    finally:
+        blocker.set()
+        await occupied_task
+        svc._background_tasks.discard(occupied_task)

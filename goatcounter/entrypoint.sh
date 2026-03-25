@@ -2,11 +2,12 @@
 set -eu
 
 GOATCOUNTER_DB="/data/goatcounter/goatcounter.db"
-TOKEN_FILE="/data/goatcounter/token"
+TOKEN_FILE="/data/goatcounter-token/token"
 
 # First-boot provisioning
 if [ ! -f "$TOKEN_FILE" ]; then
     mkdir -p /data/goatcounter
+    mkdir -p /data/goatcounter-token
 
     echo "Provisioning GoatCounter: creating site..."
     goatcounter db create-site \

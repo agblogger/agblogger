@@ -8,7 +8,7 @@ services:
     volumes:
       - ./content:/data/content
       - agblogger-db:/data/db
-      - goatcounter-data:/data/goatcounter
+      - goatcounter-token:/data/goatcounter-token:ro
     environment:
       - SECRET_KEY=${SECRET_KEY?Set SECRET_KEY}
       - ADMIN_USERNAME=${ADMIN_USERNAME?Set ADMIN_USERNAME}
@@ -60,7 +60,8 @@ services:
       - "8080"
     entrypoint: ["/bin/sh", "/entrypoint.sh"]
     volumes:
-      - goatcounter-data:/data/goatcounter
+      - goatcounter-db:/data/goatcounter
+      - goatcounter-token:/data/goatcounter-token
       - ./goatcounter/entrypoint.sh:/entrypoint.sh:ro
     restart: unless-stopped
     healthcheck:
@@ -84,4 +85,5 @@ volumes:
   agblogger-db:
   caddy-data:
   caddy-config:
-  goatcounter-data:
+  goatcounter-db:
+  goatcounter-token:

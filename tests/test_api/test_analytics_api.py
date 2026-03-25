@@ -308,6 +308,29 @@ class TestPublicViewCount:
         assert data["views"] is None
 
     @pytest.mark.asyncio
+    async def test_view_count_returns_null_when_analytics_disabled_even_if_post_views_enabled(
+        self, client: AsyncClient
+    ) -> None:
+        token = await _get_admin_token(client)
+        headers = {"Authorization": f"Bearer {token}"}
+        await client.put(
+            "/api/admin/analytics/settings",
+            json={"analytics_enabled": False, "show_views_on_posts": True},
+            headers=headers,
+        )
+        _, slug = await _create_published_post(client, headers, title="Analytics disabled post")
+
+        with patch(
+            "backend.services.analytics_service._stats_request",
+            new=AsyncMock(return_value={"hits": [{"path": f"/post/{slug}", "count": 42}]}),
+        ) as mock_req:
+            resp = await client.get(f"/api/analytics/views/{slug}")
+
+        assert resp.status_code == 200
+        assert resp.json()["views"] is None
+        mock_req.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_view_count_returns_null_for_nonexistent_post_when_disabled(
         self, client: AsyncClient
     ) -> None:
@@ -492,6 +515,32 @@ class TestStatsServiceUnavailable:
             )
         assert resp.status_code == 503
         assert resp.json()["detail"] == "Analytics service unavailable"
+
+    @pytest.mark.asyncio
+    async def test_total_stats_returns_503_without_reaching_goatcounter_when_analytics_disabled(
+        self, client: AsyncClient
+    ) -> None:
+        token = await _get_admin_token(client)
+        headers = {"Authorization": f"Bearer {token}"}
+        update_resp = await client.put(
+            "/api/admin/analytics/settings",
+            json={"analytics_enabled": False},
+            headers=headers,
+        )
+        assert update_resp.status_code == 200
+
+        with patch(
+            "backend.services.analytics_service._stats_request",
+            new=AsyncMock(return_value={"total": 1, "total_unique": 1}),
+        ) as mock_req:
+            resp = await client.get(
+                "/api/admin/analytics/stats/total",
+                headers=headers,
+            )
+
+        assert resp.status_code == 503
+        assert resp.json()["detail"] == "Analytics service unavailable"
+        mock_req.assert_not_called()
 
 
 class TestDateParameterValidation:

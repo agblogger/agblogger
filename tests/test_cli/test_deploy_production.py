@@ -5464,25 +5464,28 @@ def test_build_direct_compose_includes_goatcounter_service() -> None:
     content = build_direct_compose_content()
     assert "goatcounter:" in content
     assert "goatcounter/goatcounter:latest" in content
-    assert "goatcounter-data:/data/goatcounter" in content
+    assert "goatcounter-db:/data/goatcounter" in content
+    assert "goatcounter-token:/data/goatcounter-token:ro" in content
 
 
 def test_build_image_compose_includes_goatcounter_service() -> None:
     content = build_image_compose_content()
     assert "goatcounter:" in content
     assert "goatcounter/goatcounter:latest" in content
-    assert "goatcounter-data:/data/goatcounter" in content
+    assert "goatcounter-db:/data/goatcounter" in content
+    assert "goatcounter-token:/data/goatcounter-token:ro" in content
     assert GOATCOUNTER_STATIC_IP in content
 
 
 def test_build_image_direct_compose_includes_goatcounter_service() -> None:
     content = build_image_direct_compose_content()
     assert "goatcounter:" in content
-    assert "goatcounter-data:/data/goatcounter" in content
+    assert "goatcounter-db:/data/goatcounter" in content
+    assert "goatcounter-token:/data/goatcounter-token:ro" in content
 
 
-def test_all_compose_builders_include_goatcounter_shared_volume() -> None:
-    """All compose builders mount goatcounter-data on the agblogger service."""
+def test_all_compose_builders_share_only_the_goatcounter_token_with_agblogger() -> None:
+    """All compose builders should expose only the token volume to agblogger, not the DB volume."""
     builders_and_contents = [
         ("build_direct_compose_content", build_direct_compose_content()),
         ("build_image_compose_content", build_image_compose_content()),
@@ -5494,8 +5497,12 @@ def test_all_compose_builders_include_goatcounter_shared_volume() -> None:
         ),
     ]
     for name, content in builders_and_contents:
-        # The volume should appear in both the agblogger service (shared token) and volumes section
-        assert content.count("goatcounter-data") >= 2, f"{name} missing goatcounter-data"
+        assert "goatcounter-token:/data/goatcounter-token:ro" in content, (
+            f"{name} missing read-only GoatCounter token mount"
+        )
+        assert content.count("goatcounter-db:/data/goatcounter") == 1, (
+            f"{name} should keep GoatCounter DB private to the GoatCounter service"
+        )
 
 
 def test_build_external_caddy_compose_includes_goatcounter_on_caddy_network() -> None:
