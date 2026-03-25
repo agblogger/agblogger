@@ -27,6 +27,8 @@ All `just` commands must be run unsandboxed.
 
 Always start a dev server with `just start` (unsandboxed). Remember to stop a running dev server with `just stop` when finished.
 
+Use unsandboxed `uv run` for ALL Python tooling.
+
 ## Coding Style & Naming Conventions
 
 ### Python (backend/, cli/, tests/)
