@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { BarChart2, Loader2 } from 'lucide-react'
 import {
   BarChart,
@@ -9,15 +9,10 @@ import {
   ResponsiveContainer,
 } from 'recharts'
 
-import {
-  fetchAnalyticsSettings,
-  updateAnalyticsSettings,
-  fetchTotalStats,
-  fetchPathHits,
-  fetchPathReferrers,
-  fetchBreakdown,
-} from '@/api/analytics'
-import type { AnalyticsSettings, PathHit, ReferrerEntry, BreakdownEntry } from '@/api/client'
+import { updateAnalyticsSettings } from '@/api/analytics'
+import { HTTPError } from '@/api/client'
+import type { AnalyticsSettings } from '@/api/client'
+import { useAnalyticsDashboard, usePathReferrers } from '@/hooks/useAnalyticsDashboard'
 
 interface AnalyticsPanelProps {
   busy: boolean
@@ -25,17 +20,6 @@ interface AnalyticsPanelProps {
 }
 
 type DateRange = '7d' | '30d' | '90d'
-
-function getDateRange(range: DateRange): { start: string; end: string } {
-  const end = new Date()
-  const start = new Date()
-  const days = range === '7d' ? 7 : range === '30d' ? 30 : 90
-  start.setDate(start.getDate() - days)
-  return {
-    start: start.toISOString().slice(0, 10),
-    end: end.toISOString().slice(0, 10),
-  }
-}
 
 function ToggleSwitch({
   id,
@@ -75,86 +59,40 @@ function ToggleSwitch({
 }
 
 export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelProps) {
-  const [loading, setLoading] = useState(true)
-  const [unavailable, setUnavailable] = useState(false)
   const [dateRange, setDateRange] = useState<DateRange>('7d')
-  const [settings, setSettings] = useState<AnalyticsSettings>({
-    analytics_enabled: false,
-    show_views_on_posts: false,
-  })
-  const [totalViews, setTotalViews] = useState(0)
-  const [totalUnique, setTotalUnique] = useState(0)
-  const [paths, setPaths] = useState<PathHit[]>([])
   const [selectedPath, setSelectedPath] = useState<{ path: string; path_id: number } | null>(null)
-  const [referrers, setReferrers] = useState<ReferrerEntry[]>([])
-  const [referrersLoading, setReferrersLoading] = useState(false)
-  const [referrerError, setReferrerError] = useState<string | null>(null)
-  const [browsers, setBrowsers] = useState<BreakdownEntry[]>([])
-  const [operatingSystems, setOperatingSystems] = useState<BreakdownEntry[]>([])
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
 
-  const sortedPaths = useMemo(() => [...paths].sort((a, b) => b.views - a.views), [paths])
+  const { data, error: dashboardError, isLoading: loading, mutate: dashboardMutate } = useAnalyticsDashboard(dateRange)
+  const { data: referrerData, error: referrerError, isLoading: referrersLoading } = usePathReferrers(selectedPath?.path_id ?? null)
+
+  const is401 = dashboardError instanceof HTTPError && dashboardError.response.status === 401
+  const unavailable = dashboardError !== undefined && !is401
+  const sessionExpiredError = is401 ? 'Session expired. Please log in again.' : null
+
+  const settings: AnalyticsSettings = data?.settings ?? { analytics_enabled: false, show_views_on_posts: false }
+  const sortedPaths = useMemo(
+    () => [...(data?.paths.paths ?? [])].sort((a, b) => b.views - a.views),
+    [data],
+  )
   const topPage = sortedPaths.length > 0 && sortedPaths[0] ? sortedPaths[0].path : '—'
+  const browsers = data?.browsers ?? []
+  const operatingSystems = data?.operatingSystems ?? []
+  const referrers = referrerData?.referrers ?? []
+  const referrerErrorMsg = referrerError !== undefined ? 'Failed to load referrers. Please try again.' : null
 
   const localBusy = saving
-  const onBusyChangeRef = useRef(onBusyChange)
-  onBusyChangeRef.current = onBusyChange
-
   useEffect(() => {
-    onBusyChangeRef.current(localBusy)
-  }, [localBusy])
-
-  async function loadDashboard(range: DateRange) {
-    setLoading(true)
-    setUnavailable(false)
-    const { start, end } = getDateRange(range)
-    try {
-      const [settingsData, statsData, pathsData, browsersData, osData] = await Promise.all([
-        fetchAnalyticsSettings(),
-        fetchTotalStats(start, end),
-        fetchPathHits(start, end),
-        fetchBreakdown('browsers', start, end),
-        fetchBreakdown('systems', start, end),
-      ])
-      setSettings(settingsData)
-      setTotalViews(statsData.total_views)
-      setTotalUnique(statsData.total_unique)
-      setPaths(pathsData.paths)
-      setBrowsers(browsersData.entries)
-      setOperatingSystems(osData.entries)
-    } catch (err) {
-      if (err instanceof Error && 'response' in err) {
-        const resp = (err as { response: { status: number } }).response
-        if (resp.status === 401) {
-          setSaveError('Session expired. Please log in again.')
-          return
-        }
-      }
-      setUnavailable(true)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const loadDashboardCb = useCallback(loadDashboard, [])
-
-  useEffect(() => {
-    void loadDashboardCb('7d')
-  }, [loadDashboardCb])
-
-  async function handleRangeChange(range: DateRange) {
-    setDateRange(range)
-    setSelectedPath(null)
-    await loadDashboard(range)
-  }
+    onBusyChange(localBusy)
+  }, [localBusy, onBusyChange])
 
   async function handleToggle(field: keyof AnalyticsSettings, value: boolean) {
     setSaving(true)
     setSaveError(null)
     try {
-      const updated = await updateAnalyticsSettings({ ...settings, [field]: value })
-      setSettings(updated)
+      await updateAnalyticsSettings({ ...settings, [field]: value })
+      void dashboardMutate()
     } catch {
       setSaveError('Failed to update setting. Please try again.')
     } finally {
@@ -162,22 +100,8 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
     }
   }
 
-  async function handlePathClick(path: PathHit, pathId: number) {
-    setSelectedPath({ path: path.path, path_id: pathId })
-    setReferrersLoading(true)
-    setReferrerError(null)
-    try {
-      const data = await fetchPathReferrers(pathId)
-      setReferrers(data.referrers)
-    } catch {
-      setReferrers([])
-      setReferrerError('Failed to load referrers. Please try again.')
-    } finally {
-      setReferrersLoading(false)
-    }
-  }
-
   const allBusy = busy || localBusy
+  const displayError = saveError ?? sessionExpiredError
 
   return (
     <div className="space-y-6">
@@ -188,7 +112,7 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
           {(['7d', '30d', '90d'] as const).map((range) => (
             <button
               key={range}
-              onClick={() => void handleRangeChange(range)}
+              onClick={() => { setDateRange(range); setSelectedPath(null) }}
               disabled={allBusy || loading}
               aria-label={`Last ${range === '7d' ? '7 days' : range === '30d' ? '30 days' : '90 days'}`}
               className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
@@ -221,8 +145,8 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
         </div>
       </div>
 
-      {saveError !== null && (
-        <p className="text-sm text-red-600 dark:text-red-400">{saveError}</p>
+      {displayError !== null && (
+        <p className="text-sm text-red-600 dark:text-red-400">{displayError}</p>
       )}
 
       {/* Content area */}
@@ -244,11 +168,11 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="bg-surface border border-border rounded-lg px-5 py-4">
               <p className="text-xs text-muted uppercase tracking-wide mb-1">Total Views</p>
-              <p className="text-2xl font-semibold text-ink">{totalViews.toLocaleString()}</p>
+              <p className="text-2xl font-semibold text-ink">{(data?.stats.total_views ?? 0).toLocaleString()}</p>
             </div>
             <div className="bg-surface border border-border rounded-lg px-5 py-4">
               <p className="text-xs text-muted uppercase tracking-wide mb-1">Unique Visitors</p>
-              <p className="text-2xl font-semibold text-ink">{totalUnique.toLocaleString()}</p>
+              <p className="text-2xl font-semibold text-ink">{(data?.stats.total_unique ?? 0).toLocaleString()}</p>
             </div>
             <div className="bg-surface border border-border rounded-lg px-5 py-4">
               <p className="text-xs text-muted uppercase tracking-wide mb-1">Top Page</p>
@@ -261,7 +185,7 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
           {/* Top pages table */}
           <div className="bg-surface border border-border rounded-lg p-5">
             <h3 className="text-sm font-medium text-ink mb-4">Top pages</h3>
-            {paths.length === 0 ? (
+            {sortedPaths.length === 0 ? (
               <p className="text-muted text-sm">No page data for selected range.</p>
             ) : (
               <div className="overflow-x-auto">
@@ -280,11 +204,11 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
                         role="button"
                         tabIndex={0}
                         className="border-b border-border last:border-0 hover:bg-base cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-accent/40"
-                        onClick={() => void handlePathClick(p, p.path_id)}
+                        onClick={() => setSelectedPath({ path: p.path, path_id: p.path_id })}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' || e.key === ' ') {
                             e.preventDefault()
-                            void handlePathClick(p, p.path_id)
+                            setSelectedPath({ path: p.path, path_id: p.path_id })
                           }
                         }}
                         aria-label={`View referrers for ${p.path}`}
@@ -324,8 +248,8 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
                 >
                   <Loader2 size={16} className="text-accent animate-spin" />
                 </div>
-              ) : referrerError !== null ? (
-                <p className="text-sm text-red-600 dark:text-red-400">{referrerError}</p>
+              ) : referrerErrorMsg !== null ? (
+                <p className="text-sm text-red-600 dark:text-red-400">{referrerErrorMsg}</p>
               ) : referrers.length === 0 ? (
                 <p className="text-muted text-sm">No referrer data for this page.</p>
               ) : (

@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { SWRConfig } from 'swr'
 
 const mockFetchAnalyticsSettings = vi.fn()
 const mockUpdateAnalyticsSettings = vi.fn()
@@ -20,6 +21,14 @@ vi.mock('@/api/analytics', () => ({
   fetchBreakdown: (...args: unknown[]) => mockFetchBreakdown(...args) as unknown,
 }))
 
+vi.mock('@/api/client', async () => {
+  const { MockHTTPError } = await import('@/test/MockHTTPError')
+  return {
+    default: {},
+    HTTPError: MockHTTPError,
+  }
+})
+
 // Recharts uses ResizeObserver — provide a stub in jsdom
 globalThis.ResizeObserver = class ResizeObserver {
   observe() {}
@@ -28,6 +37,7 @@ globalThis.ResizeObserver = class ResizeObserver {
 }
 
 import AnalyticsPanel from '../AnalyticsPanel'
+import { MockHTTPError } from '@/test/MockHTTPError'
 
 const DEFAULT_SETTINGS = { analytics_enabled: true, show_views_on_posts: false }
 
@@ -73,7 +83,11 @@ function renderPanel(props: { busy?: boolean; onBusyChange?: (busy: boolean) => 
     onBusyChange: vi.fn(),
     ...props,
   }
-  return render(<AnalyticsPanel {...defaultProps} />)
+  return render(
+    <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0, shouldRetryOnError: false }}>
+      <AnalyticsPanel {...defaultProps} />
+    </SWRConfig>,
+  )
 }
 
 describe('AnalyticsPanel', () => {
@@ -327,9 +341,7 @@ describe('AnalyticsPanel', () => {
   })
 
   it('shows session expired message on 401 during loadDashboard', async () => {
-    const authError = Object.assign(new Error('Unauthorized'), {
-      response: { status: 401 },
-    })
+    const authError = new MockHTTPError(401)
     mockFetchAnalyticsSettings.mockRejectedValue(authError)
     mockFetchTotalStats.mockRejectedValue(authError)
     mockFetchPathHits.mockRejectedValue(authError)
