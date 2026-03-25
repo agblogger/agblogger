@@ -5,6 +5,8 @@ import {
   useLocation,
   Outlet,
 } from "react-router-dom";
+import { SWRConfig } from "swr";
+import api from "@/api/client";
 import Header from "@/components/layout/Header";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import TimelinePage from "@/pages/TimelinePage";
@@ -57,30 +59,32 @@ function Layout() {
   }, [siteTitle]);
 
   return (
-    <div className="min-h-screen bg-paper">
-      <Header />
-      <main className={mainClass}>
-        <Suspense fallback={<LazyFallback />}>
-          <Outlet />
-        </Suspense>
-      </main>
+    <SWRConfig value={{ fetcher: (url: string) => api.get(url).json(), dedupingInterval: 2000 }}>
+      <div className="min-h-screen bg-paper">
+        <Header />
+        <main className={mainClass}>
+          <Suspense fallback={<LazyFallback />}>
+            <Outlet />
+          </Suspense>
+        </main>
 
-      <footer className="border-t border-border mt-16">
-        <div className="max-w-3xl mx-auto px-6 py-8">
-          <p className="text-xs text-muted text-center font-mono tracking-wide">
-            Powered by{" "}
-            <a
-              href="https://agblogger.github.io"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline decoration-border hover:text-accent hover:decoration-accent transition-colors"
-            >
-              AgBlogger
-            </a>
-          </p>
-        </div>
-      </footer>
-    </div>
+        <footer className="border-t border-border mt-16">
+          <div className="max-w-3xl mx-auto px-6 py-8">
+            <p className="text-xs text-muted text-center font-mono tracking-wide">
+              Powered by{" "}
+              <a
+                href="https://agblogger.github.io"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline decoration-border hover:text-accent hover:decoration-accent transition-colors"
+              >
+                AgBlogger
+              </a>
+            </p>
+          </div>
+        </footer>
+      </div>
+    </SWRConfig>
   );
 }
 
