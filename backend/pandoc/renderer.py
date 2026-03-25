@@ -12,6 +12,8 @@ from urllib.parse import urlparse as _urlparse
 
 import httpx
 
+from backend.utils.slug import is_directory_post_path as _is_directory_post_path
+
 if TYPE_CHECKING:
     from collections.abc import Callable
 
@@ -403,9 +405,7 @@ def rewrite_relative_urls(html: str, file_path: str) -> str:
         HTML with relative URLs resolved to absolute paths.
     """
     base_dir = posixpath.dirname(file_path)
-    from backend.utils.slug import is_directory_post_path
-
-    is_directory_backed_post = is_directory_post_path(file_path)
+    is_directory_backed_post = _is_directory_post_path(file_path)
 
     def _replace(match: re.Match[str]) -> str:
         attr = match.group(1)
@@ -426,6 +426,9 @@ def rewrite_relative_urls(html: str, file_path: str) -> str:
         # Only canonical directory-backed posts get clean /post URLs.
         if is_directory_backed_post and resolved.startswith("posts/"):
             short = resolved.removeprefix("posts/")
+            # Self-referential index.md links resolve to the post itself.
+            if short.endswith("/index.md"):
+                short = short.removesuffix("/index.md")
             return f"{attr}={quote}/post/{short}{quote}"
         return f"{attr}={quote}/api/content/{resolved}{quote}"
 

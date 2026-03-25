@@ -402,7 +402,8 @@ class TestRenamedDraftRedirectVisibility:
         )
 
         assert redirect_resp.status_code == 301
-        assert redirect_resp.headers["location"] == f"/api/posts/{new_path}"
+        new_slug = new_path.removeprefix("posts/").removesuffix("/index.md")
+        assert redirect_resp.headers["location"] == f"/post/{new_slug}"
         assert redirect_resp.headers["cache-control"] == "private, no-store"
 
 

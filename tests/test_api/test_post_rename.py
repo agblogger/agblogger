@@ -381,13 +381,14 @@ class TestPostRename:
         new_path = resp.json()["file_path"]
         assert new_path != original_path
 
-        # GET the old path - should redirect
+        # GET the old path - should redirect to the shortened /post/<slug> URL
         resp = await client.get(
             f"/api/posts/{original_path}",
             follow_redirects=False,
         )
         assert resp.status_code == 301
-        assert new_path in resp.headers["location"]
+        new_slug = new_path.removeprefix("posts/").removesuffix("/index.md")
+        assert resp.headers["location"] == f"/post/{new_slug}"
 
     @pytest.mark.asyncio
     async def test_old_api_path_redirect_serves_correct_post(
@@ -410,11 +411,18 @@ class TestPostRename:
         )
         assert resp.status_code == 200
 
-        # GET the old path with follow_redirects=True
+        new_path = resp.json()["file_path"]
+
+        # GET the old path — redirect leads to /post/<slug> (the frontend route)
         resp = await client.get(
             f"/api/posts/{original_path}",
-            follow_redirects=True,
+            follow_redirects=False,
         )
+        assert resp.status_code == 301
+        assert resp.headers["location"].startswith("/post/")
+
+        # Verify the renamed post is directly accessible at its new API path
+        resp = await client.get(f"/api/posts/{new_path}")
         assert resp.status_code == 200
         assert resp.json()["title"] == "Follow Target"
 

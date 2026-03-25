@@ -58,7 +58,7 @@ from backend.services.post_service import (
     search_posts,
 )
 from backend.services.slug_service import generate_post_path, generate_post_slug
-from backend.utils.slug import resolve_slug_candidates
+from backend.utils.slug import file_path_to_slug, resolve_slug_candidates
 
 logger = logging.getLogger(__name__)
 
@@ -712,8 +712,9 @@ async def get_post_endpoint(
         )
         if redirect_target is not None:
             headers = {"Cache-Control": "private, no-store"} if redirect_target.is_draft else None
+            slug = file_path_to_slug(resolved)
             return RedirectResponse(
-                url=f"/api/posts/{resolved}",
+                url=f"/post/{slug}",
                 status_code=301,
                 headers=headers,
             )

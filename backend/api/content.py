@@ -90,15 +90,17 @@ async def _check_draft_access(
         return
 
     # For the canonical post path itself (posts/<slug>/index.md), do an exact
-    # file_path lookup. For co-located assets (posts/<slug>/photo.png), use a
-    # directory prefix lookup to find the owning post.
+    # file_path lookup.  For co-located assets (posts/<slug>/photo.png), use a
+    # directory prefix lookup to find the owning post.  Flat .md files (e.g.
+    # posts/hello.md) are blocked by the 404 guard earlier so skip them here.
     parts = file_path.split("/")
     if is_directory_post_path(file_path):
         stmt = select(PostCache).where(PostCache.file_path == file_path).limit(1)
-    else:
+    elif len(parts) >= 2 and "/" in file_path:
         dir_prefix = "/".join(parts[:2]) + "/"
-        # Find any post whose file_path lives in this directory.
         stmt = select(PostCache).where(PostCache.file_path.startswith(dir_prefix)).limit(1)
+    else:
+        return
 
     result = await session.execute(stmt)
     post = result.scalar_one_or_none()

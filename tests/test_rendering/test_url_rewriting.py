@@ -129,6 +129,18 @@ class TestRewriteRelativeUrls:
         result = rewrite_relative_urls(html, "posts/hello/index.md")
         assert result == "<img src='https://example.com/img.png'>"
 
+    def test_self_referential_index_md_link(self) -> None:
+        """Self-referential index.md link resolves to /post/<slug>."""
+        html = '<a href="index.md">'
+        result = rewrite_relative_urls(html, "posts/my-post/index.md")
+        assert result == '<a href="/post/my-post">'
+
+    def test_self_referential_dot_slash_index_md(self) -> None:
+        """A link to ./index.md resolves to the clean post URL."""
+        html = '<a href="./index.md">'
+        result = rewrite_relative_urls(html, "posts/2026-02-20-my-post/index.md")
+        assert result == '<a href="/post/2026-02-20-my-post">'
+
     def test_no_src_or_href(self) -> None:
         """HTML without src/href attributes is returned unchanged."""
         html = "<p>Hello world</p>"

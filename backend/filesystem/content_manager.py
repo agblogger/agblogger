@@ -196,9 +196,10 @@ class ContentManager:
     def delete_post(self, rel_path: str, *, delete_assets: bool = False) -> bool:
         """Delete a post from disk.
 
-        If delete_assets is True and the post is index.md, removes the entire
-        directory and any symlinks in the parent directory pointing to it.
-        Otherwise, only the post file itself is removed.
+        Only accepts canonical directory-backed paths (``posts/<slug>/index.md``).
+        If *delete_assets* is True, removes the entire directory and any symlinks
+        in the parent directory pointing to it.  Otherwise, only the post file
+        itself is removed.
 
         Returns True if the file existed.
         Raises OSError if the deletion fails.

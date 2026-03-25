@@ -63,9 +63,13 @@ _DEFAULT_LABELS_TOML = "[labels]\n"
 def _looks_like_post_asset_path(file_path: str) -> bool:
     """Identify asset requests using extension-based heuristics.
 
-    Returns True when the leaf filename has a file extension other than .md.
-    Extensionless paths and .md files are not assets.
+    Returns True when the path contains at least one ``/`` (i.e. ``<slug>/<file>``)
+    and the leaf filename has a file extension other than ``.md``.
+    A bare slug (no ``/``) is never an asset, even if it contains a dot.
     """
+    if "/" not in file_path:
+        return False
+
     leaf = posixpath.basename(file_path.rstrip("/"))
     if leaf == "" or leaf == "index.md":
         return False

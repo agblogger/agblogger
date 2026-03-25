@@ -62,23 +62,27 @@ class TestLooksLikePostAssetPath:
     def test_index_md_leaf_returns_false(self) -> None:
         assert _looks_like_post_asset_path("index.md") is False
 
-    def test_png_extension_returns_true(self) -> None:
-        assert _looks_like_post_asset_path("photo.png") is True
+    def test_bare_filename_with_extension_returns_false(self) -> None:
+        # Bare paths without "/" are slugs, not assets (e.g. slug "my-post-v1.0")
+        assert _looks_like_post_asset_path("photo.png") is False
 
-    def test_jpg_extension_returns_true(self) -> None:
-        assert _looks_like_post_asset_path("image.jpg") is True
-
-    def test_css_extension_returns_true(self) -> None:
-        assert _looks_like_post_asset_path("styles.css") is True
-
-    def test_js_extension_returns_true(self) -> None:
-        assert _looks_like_post_asset_path("bundle.js") is True
+    def test_bare_slug_with_dot_returns_false(self) -> None:
+        assert _looks_like_post_asset_path("my-post-v1.0") is False
 
     def test_empty_string_returns_false(self) -> None:
         assert _looks_like_post_asset_path("") is False
 
     def test_nested_path_with_asset_extension_returns_true(self) -> None:
         assert _looks_like_post_asset_path("my-post/photo.png") is True
+
+    def test_nested_path_with_jpg_returns_true(self) -> None:
+        assert _looks_like_post_asset_path("my-post/image.jpg") is True
+
+    def test_nested_path_with_css_returns_true(self) -> None:
+        assert _looks_like_post_asset_path("my-post/styles.css") is True
+
+    def test_nested_path_with_js_returns_true(self) -> None:
+        assert _looks_like_post_asset_path("my-post/bundle.js") is True
 
     def test_nested_path_without_extension_returns_false(self) -> None:
         assert _looks_like_post_asset_path("my-post/assets") is False
