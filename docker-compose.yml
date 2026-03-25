@@ -8,6 +8,7 @@ services:
     volumes:
       - ./content:/data/content
       - agblogger-db:/data/db
+      - goatcounter-data:/data/goatcounter
     environment:
       - SECRET_KEY=${SECRET_KEY?Set SECRET_KEY}
       - ADMIN_USERNAME=${ADMIN_USERNAME?Set ADMIN_USERNAME}
@@ -53,6 +54,25 @@ services:
       default:
         ipv4_address: 172.30.0.2
 
+  goatcounter:
+    image: goatcounter/goatcounter:latest
+    expose:
+      - "8080"
+    entrypoint: ["/bin/sh", "/entrypoint.sh"]
+    volumes:
+      - goatcounter-data:/data/goatcounter
+      - ./goatcounter/entrypoint.sh:/entrypoint.sh:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    networks:
+      default:
+        ipv4_address: 172.30.0.4
+
 networks:
   default:
     driver: bridge
@@ -64,3 +84,4 @@ volumes:
   agblogger-db:
   caddy-data:
   caddy-config:
+  goatcounter-data:
