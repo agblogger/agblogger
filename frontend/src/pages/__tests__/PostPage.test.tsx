@@ -4,6 +4,7 @@ import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { SWRConfig } from 'swr'
 
 import { fetchPost, deletePost, updatePost, fetchPostForEdit } from '@/api/posts'
 import type { UserResponse, PostDetail } from '@/api/client'
@@ -106,11 +107,13 @@ vi.mock('react-router-dom', async () => {
 
 function renderPostPage(path = '/post/hello') {
   return render(
-    <MemoryRouter initialEntries={[path]}>
-      <Routes>
-        <Route path="/post/*" element={<PostPage />} />
-      </Routes>
-    </MemoryRouter>,
+    <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0, shouldRetryOnError: false, revalidateOnFocus: false, revalidateOnReconnect: false, onError: () => {} }}>
+      <MemoryRouter initialEntries={[path]}>
+        <Routes>
+          <Route path="/post/*" element={<PostPage />} />
+        </Routes>
+      </MemoryRouter>
+    </SWRConfig>,
   )
 }
 
@@ -598,7 +601,7 @@ describe('PostPage', () => {
   })
 
   it('does not display view count when analytics fetch fails', async () => {
-    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.spyOn(console, 'error').mockImplementation(() => {})
     mockFetchViewCount.mockRejectedValue(new Error('unavailable'))
     mockFetchPost.mockResolvedValue(postDetail)
     renderPostPage()
@@ -611,22 +614,20 @@ describe('PostPage', () => {
     expect(screen.queryByText(/views$/)).not.toBeInTheDocument()
   })
 
-  it('warns via console.warn when view count fetch fails', async () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const fetchError = new Error('network error')
-    mockFetchViewCount.mockRejectedValue(fetchError)
+  it('does not crash when view count fetch fails', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    mockFetchViewCount.mockRejectedValue(new Error('network error'))
     mockFetchPost.mockResolvedValue(postDetail)
     renderPostPage()
 
     await waitFor(() => {
       expect(screen.getByText('Hello World')).toBeInTheDocument()
     })
-    // Flush microtask queue so the fire-and-forget promise resolves
+    // Flush microtask queue so the SWR error handler resolves
     await act(async () => {})
-    expect(warnSpy).toHaveBeenCalledWith('Failed to fetch view count:', fetchError)
     // Component should still render without crashing
     expect(screen.getByText('Hello World')).toBeInTheDocument()
-    warnSpy.mockRestore()
+    errorSpy.mockRestore()
   })
 
   it('delete error is rendered via AlertBanner with mb-6 spacing class', async () => {

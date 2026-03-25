@@ -4,14 +4,14 @@ import { fetchViewCount } from '@/api/analytics'
 import type { PostDetail, ViewCountResponse } from '@/api/client'
 
 export function usePost(slug: string | null) {
-  return useSWR<PostDetail>(
+  return useSWR<PostDetail, Error>(
     slug !== null ? ['post', slug] : null,
     ([, s]: [string, string]) => fetchPost(s),
   )
 }
 
 export function useViewCount(slug: string | null) {
-  return useSWR<ViewCountResponse>(
+  return useSWR<ViewCountResponse, Error>(
     slug !== null ? ['viewCount', slug] : null,
     ([, s]: [string, string]) => fetchViewCount(s),
   )

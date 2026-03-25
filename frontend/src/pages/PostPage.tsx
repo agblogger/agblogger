@@ -1,9 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { Calendar, User, PenLine, Trash2, Eye } from 'lucide-react'
-import { fetchPost, deletePost, fetchPostForEdit, updatePost } from '@/api/posts'
-import { fetchViewCount } from '@/api/analytics'
+import { deletePost, fetchPostForEdit, updatePost } from '@/api/posts'
 import AlertBanner from '@/components/AlertBanner'
 import BackLink from '@/components/BackLink'
 import { useAuthStore } from '@/stores/authStore'
@@ -16,15 +15,21 @@ import ShareBar from '@/components/share/ShareBar'
 import { useRenderedHtml } from '@/hooks/useKatex'
 import { useCodeBlockEnhance } from '@/hooks/useCodeBlockEnhance'
 import TableOfContents from '@/components/posts/TableOfContents'
-import type { PostDetail } from '@/api/client'
+import { usePost, useViewCount } from '@/hooks/usePost'
 import { formatDate } from '@/utils/date'
 export default function PostPage() {
   const { '*': slug } = useParams()
   const navigate = useNavigate()
-  const [post, setPost] = useState<PostDetail | null>(null)
-  const [viewCount, setViewCount] = useState<number | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [loadError, setLoadError] = useState<string | null>(null)
+  const { data: post, error: postError, isLoading: loading, mutate: mutatePost } = usePost(slug ?? null)
+  const { data: viewData } = useViewCount(slug ?? null)
+  const viewCount = viewData?.views ?? null
+  const loadError = postError !== undefined
+    ? postError instanceof HTTPError && postError.response.status === 404
+      ? 'Post not found'
+      : postError instanceof HTTPError && postError.response.status === 401
+        ? 'Session expired. Please log in again.'
+        : 'Failed to load post. Please try again later.'
+    : null
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [publishError, setPublishError] = useState<string | null>(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -66,7 +71,7 @@ export default function PostPage() {
         labels: editData.labels,
         is_draft: false,
       })
-      setPost(updated)
+      await mutatePost(updated, { revalidate: false })
     } catch (err) {
       if (err instanceof HTTPError && err.response.status === 401) {
         setPublishError('Session expired. Please log in again.')
@@ -83,36 +88,6 @@ export default function PostPage() {
       setPublishing(false)
     }
   }
-
-  useEffect(() => {
-    if (slug === undefined || slug === '') return
-    const ctrl = { cancelled: false }
-    void (async () => {
-      setLoading(true)
-      setLoadError(null)
-      setViewCount(null)
-      try {
-        const p = await fetchPost(slug)
-        if (ctrl.cancelled) return
-        setPost(p)
-        fetchViewCount(slug)
-          .then((res) => { if (!ctrl.cancelled) setViewCount(res.views) })
-          .catch((err: unknown) => { console.warn('Failed to fetch view count:', err) })
-      } catch (err) {
-        if (ctrl.cancelled) return
-        if (err instanceof HTTPError && err.response.status === 404) {
-          setLoadError('Post not found')
-        } else if (err instanceof HTTPError && err.response.status === 401) {
-          setLoadError('Session expired. Please log in again.')
-        } else {
-          setLoadError('Failed to load post. Please try again later.')
-        }
-      } finally {
-        if (!ctrl.cancelled) setLoading(false)
-      }
-    })()
-    return () => { ctrl.cancelled = true }
-  }, [slug])
 
   if (loading) {
     return (
@@ -140,7 +115,7 @@ export default function PostPage() {
     )
   }
 
-  if (loadError !== null || post === null) {
+  if (loadError !== null || post == null) {
     return (
       <div className="text-center py-24">
         <p className="font-display text-3xl text-muted italic">
