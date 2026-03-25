@@ -2,29 +2,36 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 
 from backend.models.analytics import AnalyticsSettings
+from backend.schemas.analytics import AnalyticsSettingsResponse
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
+logger = logging.getLogger(__name__)
 
-async def get_analytics_settings(session: AsyncSession) -> AnalyticsSettings:
+
+async def get_analytics_settings(session: AsyncSession) -> AnalyticsSettingsResponse:
     """Return current analytics settings, falling back to defaults if no row exists.
 
-    Returns an AnalyticsSettings instance with defaults (analytics_enabled=True,
+    Returns an AnalyticsSettingsResponse with defaults (analytics_enabled=True,
     show_views_on_posts=False) when no row has been persisted yet. The returned
-    instance is not added to the session; callers that need a persistent row
+    response is not backed by a persisted row; callers that need a persistent row
     should use update_analytics_settings instead.
     """
     result = await session.execute(select(AnalyticsSettings).limit(1))
     row = result.scalar_one_or_none()
     if row is None:
-        return AnalyticsSettings(analytics_enabled=True, show_views_on_posts=False)
-    return row
+        return AnalyticsSettingsResponse(analytics_enabled=True, show_views_on_posts=False)
+    return AnalyticsSettingsResponse(
+        analytics_enabled=row.analytics_enabled,
+        show_views_on_posts=row.show_views_on_posts,
+    )
 
 
 async def update_analytics_settings(
@@ -32,7 +39,7 @@ async def update_analytics_settings(
     *,
     analytics_enabled: bool | None,
     show_views_on_posts: bool | None,
-) -> AnalyticsSettings:
+) -> AnalyticsSettingsResponse:
     """Create or update analytics settings, applying only the provided fields.
 
     On first call, creates the singleton settings row. On subsequent calls,
@@ -55,4 +62,7 @@ async def update_analytics_settings(
 
     await session.commit()
     await session.refresh(row)
-    return row
+    return AnalyticsSettingsResponse(
+        analytics_enabled=row.analytics_enabled,
+        show_views_on_posts=row.show_views_on_posts,
+    )

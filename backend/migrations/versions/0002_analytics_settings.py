@@ -26,8 +26,8 @@ def upgrade() -> None:
     op.create_table(
         "analytics_settings",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
-        sa.Column("analytics_enabled", sa.Boolean(), nullable=False),
-        sa.Column("show_views_on_posts", sa.Boolean(), nullable=False),
+        sa.Column("analytics_enabled", sa.Boolean(), nullable=False, server_default=sa.text("1")),
+        sa.Column("show_views_on_posts", sa.Boolean(), nullable=False, server_default=sa.text("0")),
         sa.PrimaryKeyConstraint("id"),
     )
 
