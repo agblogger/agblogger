@@ -47,6 +47,7 @@ DEPLOY_MODES = {DEPLOY_MODE_LOCAL, DEPLOY_MODE_REGISTRY, DEPLOY_MODE_TARBALL}
 LOCAL_IMAGE_TAG = "agblogger:latest"
 AGBLOGGER_STATIC_IP = "172.30.0.3"
 CADDY_STATIC_IP = "172.30.0.2"
+GOATCOUNTER_STATIC_IP = "172.30.0.4"
 COMPOSE_SUBNET = "172.30.0.0/24"
 # Constructed to avoid static-analysis tools flagging literal 0.0.0.0
 PUBLIC_BIND_IP = ".".join(("0", "0", "0", "0"))
@@ -932,6 +933,30 @@ def _caddy_service_section(*, caddy_public: bool = False) -> str:
     )
 
 
+def _goatcounter_service_section(*, include_network: bool = False) -> str:
+    """Return the GoatCounter sidecar service YAML block."""
+    block = (
+        "  goatcounter:\n"
+        "    image: goatcounter/goatcounter:latest\n"
+        "    expose:\n"
+        '      - "8080"\n'
+        '    entrypoint: ["/bin/sh", "/entrypoint.sh"]\n'
+        "    volumes:\n"
+        "      - goatcounter-data:/data/goatcounter\n"
+        "      - ./goatcounter/entrypoint.sh:/entrypoint.sh:ro\n"
+        "    restart: unless-stopped\n"
+        "    healthcheck:\n"
+        '      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080"]\n'
+        "      interval: 30s\n"
+        "      timeout: 5s\n"
+        "      start_period: 15s\n"
+        "      retries: 3\n"
+    )
+    if include_network:
+        block += f"    networks:\n      default:\n        ipv4_address: {GOATCOUNTER_STATIC_IP}\n"
+    return block
+
+
 def _compose_network_block() -> str:
     """Return the custom network YAML block for Caddy proxy IP."""
     return (
@@ -957,11 +982,15 @@ def build_direct_compose_content() -> str:
         "    volumes:\n"
         "      - ./content:/data/content\n"
         "      - agblogger-db:/data/db\n"
+        "      - goatcounter-data:/data/goatcounter\n"
         + _agblogger_env_section()
         + _agblogger_healthcheck_section()
         + "\n"
+        + _goatcounter_service_section()
+        + "\n"
         "volumes:\n"
         "  agblogger-db:\n"
+        "  goatcounter-data:\n"
     )
 
 
@@ -977,10 +1006,13 @@ def build_image_compose_content(*, caddy_public: bool = False) -> str:
         "    volumes:\n"
         "      - ./content:/data/content\n"
         "      - agblogger-db:/data/db\n"
+        "      - goatcounter-data:/data/goatcounter\n"
         + _agblogger_env_section()
         + _agblogger_healthcheck_section(include_network=True)
         + "\n"
         + _caddy_service_section(caddy_public=caddy_public)
+        + "\n"
+        + _goatcounter_service_section(include_network=True)
         + "\n"
         + _compose_network_block()
         + "\n"
@@ -988,6 +1020,7 @@ def build_image_compose_content(*, caddy_public: bool = False) -> str:
         "  agblogger-db:\n"
         "  caddy-data:\n"
         "  caddy-config:\n"
+        "  goatcounter-data:\n"
     )
 
 
@@ -1003,11 +1036,15 @@ def build_image_direct_compose_content() -> str:
         "    volumes:\n"
         "      - ./content:/data/content\n"
         "      - agblogger-db:/data/db\n"
+        "      - goatcounter-data:/data/goatcounter\n"
         + _agblogger_env_section()
         + _agblogger_healthcheck_section()
         + "\n"
+        + _goatcounter_service_section()
+        + "\n"
         "volumes:\n"
         "  agblogger-db:\n"
+        "  goatcounter-data:\n"
     )
 
 
@@ -1039,13 +1076,15 @@ def build_external_caddy_compose_content() -> str:
         "    volumes:\n"
         "      - ./content:/data/content\n"
         "      - agblogger-db:/data/db\n"
+        "      - goatcounter-data:/data/goatcounter\n"
         + _agblogger_env_section()
         + _agblogger_healthcheck_section()
         + "    networks:\n"
         f"      - {EXTERNAL_CADDY_NETWORK_NAME}\n"
-        "\n"
+        "\n" + _goatcounter_service_section() + "\n"
         "volumes:\n"
         "  agblogger-db:\n"
+        "  goatcounter-data:\n"
         "\n" + _external_caddy_network_block()
     )
 
@@ -1062,13 +1101,15 @@ def build_image_external_caddy_compose_content() -> str:
         "    volumes:\n"
         "      - ./content:/data/content\n"
         "      - agblogger-db:/data/db\n"
+        "      - goatcounter-data:/data/goatcounter\n"
         + _agblogger_env_section()
         + _agblogger_healthcheck_section()
         + "    networks:\n"
         f"      - {EXTERNAL_CADDY_NETWORK_NAME}\n"
-        "\n"
+        "\n" + _goatcounter_service_section() + "\n"
         "volumes:\n"
         "  agblogger-db:\n"
+        "  goatcounter-data:\n"
         "\n" + _external_caddy_network_block()
     )
 
@@ -1650,6 +1691,20 @@ def write_bundle_files(config: DeployConfig, bundle_dir: Path) -> None:
         _build_remote_readme_content(config, commands),
         encoding="utf-8",
     )
+
+    # Copy GoatCounter entrypoint script into the bundle
+    goatcounter_dir = bundle_dir / "goatcounter"
+    goatcounter_dir.mkdir(exist_ok=True)
+    entrypoint_src = Path(__file__).resolve().parent.parent / "goatcounter" / "entrypoint.sh"
+    entrypoint_dst = goatcounter_dir / "entrypoint.sh"
+    shutil.copy2(entrypoint_src, entrypoint_dst)
+    try:
+        entrypoint_dst.chmod(entrypoint_dst.stat().st_mode | 0o755)
+    except OSError as exc:
+        print(
+            f"WARNING: Could not set executable permission on goatcounter/entrypoint.sh: {exc}",
+            file=sys.stderr,
+        )
 
     # Write idempotent setup script
     setup_path = bundle_dir / DEFAULT_SETUP_SCRIPT

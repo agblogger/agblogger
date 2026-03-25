@@ -42,6 +42,7 @@ from cli.deploy_production import (
     DEPLOY_MODE_REGISTRY,
     DEPLOY_MODE_TARBALL,
     EXTERNAL_CADDY_NETWORK_NAME,
+    GOATCOUNTER_STATIC_IP,
     LOCAL_IMAGE_TAG,
     LOCALHOST_BIND_IP,
     MIN_SECRET_KEY_LENGTH,
@@ -5454,3 +5455,44 @@ def test_setup_script_teardown_warns_on_failure() -> None:
     # A warning is emitted to stderr.
     assert ">&2" in script
     assert "Warning:" in script
+
+
+# ── GoatCounter integration in compose builders ───────────────────────
+
+
+def test_build_direct_compose_includes_goatcounter_service() -> None:
+    content = build_direct_compose_content()
+    assert "goatcounter:" in content
+    assert "goatcounter/goatcounter:latest" in content
+    assert "goatcounter-data:/data/goatcounter" in content
+
+
+def test_build_image_compose_includes_goatcounter_service() -> None:
+    content = build_image_compose_content()
+    assert "goatcounter:" in content
+    assert "goatcounter/goatcounter:latest" in content
+    assert "goatcounter-data:/data/goatcounter" in content
+    assert GOATCOUNTER_STATIC_IP in content
+
+
+def test_build_image_direct_compose_includes_goatcounter_service() -> None:
+    content = build_image_direct_compose_content()
+    assert "goatcounter:" in content
+    assert "goatcounter-data:/data/goatcounter" in content
+
+
+def test_all_compose_builders_include_goatcounter_shared_volume() -> None:
+    """All compose builders mount goatcounter-data on the agblogger service."""
+    builders_and_contents = [
+        ("build_direct_compose_content", build_direct_compose_content()),
+        ("build_image_compose_content", build_image_compose_content()),
+        ("build_image_direct_compose_content", build_image_direct_compose_content()),
+        ("build_external_caddy_compose_content", build_external_caddy_compose_content()),
+        (
+            "build_image_external_caddy_compose_content",
+            build_image_external_caddy_compose_content(),
+        ),
+    ]
+    for name, content in builders_and_contents:
+        # The volume should appear in both the agblogger service (shared token) and volumes section
+        assert content.count("goatcounter-data") >= 2, f"{name} missing goatcounter-data"
