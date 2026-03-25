@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Share2 } from 'lucide-react'
 
 import type { SocialAccount } from '@/api/crosspost'
 import type { PostDetail } from '@/api/client'
-import { extractErrorDetail } from '@/api/parseError'
+import { HTTPError } from '@/api/client'
 import CrossPostDialog from '@/components/crosspost/CrossPostDialog'
 import CrossPostHistory from '@/components/crosspost/CrossPostHistory'
 import { useSocialAccounts } from '@/hooks/useSocialAccounts'
@@ -16,8 +16,6 @@ interface CrossPostSectionProps {
 }
 
 export default function CrossPostSection({ filePath, post }: CrossPostSectionProps) {
-  const [historyError, setHistoryError] = useState<string | null>(null)
-  const [accountsError, setAccountsError] = useState<string | null>(null)
   const [showDialog, setShowDialog] = useState(false)
 
   const {
@@ -35,28 +33,16 @@ export default function CrossPostSection({ filePath, post }: CrossPostSectionPro
 
   const historyItems = historyData?.items ?? []
   const accounts: SocialAccount[] = accountsData
-
-  useEffect(() => {
-    if (historyErr === undefined || historyErr === null) {
-      setHistoryError(null)
-      return
-    }
-    void extractErrorDetail(
-      historyErr,
-      'Failed to load cross-post history. Please try again.',
-    ).then(setHistoryError)
-  }, [historyErr])
-
-  useEffect(() => {
-    if (accountsErr === undefined || accountsErr === null) {
-      setAccountsError(null)
-      return
-    }
-    void extractErrorDetail(
-      accountsErr,
-      'Failed to load connected social accounts. Please try again.',
-    ).then(setAccountsError)
-  }, [accountsErr])
+  const historyError = historyErr instanceof HTTPError && historyErr.response.status === 401
+    ? 'Session expired. Please log in again.'
+    : historyErr !== undefined
+      ? 'Failed to load cross-post history. Please try again.'
+      : null
+  const accountsError = accountsErr instanceof HTTPError && accountsErr.response.status === 401
+    ? 'Session expired. Please log in again.'
+    : accountsErr !== undefined
+      ? 'Failed to load connected social accounts. Please try again.'
+      : null
 
   if (post.is_draft) {
     return (

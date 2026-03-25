@@ -8,7 +8,7 @@ interface LabelPostsData {
 }
 
 export function useLabelPosts(labelId: string | null) {
-  return useSWR<LabelPostsData>(
+  return useSWR<LabelPostsData, Error>(
     labelId !== null ? ['labelPosts', labelId] : null,
     async ([, id]: [string, string]) => {
       const [label, posts] = await Promise.all([fetchLabel(id), fetchLabelPosts(id)])

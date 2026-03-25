@@ -6,6 +6,6 @@ import type { SWRConfiguration } from 'swr'
  * Keys are ky-relative URL paths (e.g., 'labels', 'posts/my-slug').
  * Pass null as key to suppress fetching.
  */
-export function useSWRFetch<T>(key: string | null, options?: SWRConfiguration<T>) {
-  return useSWR<T>(key, options)
+export function useSWRFetch<T>(key: string | null, options?: SWRConfiguration<T, Error>) {
+  return useSWR<T, Error>(key, options)
 }

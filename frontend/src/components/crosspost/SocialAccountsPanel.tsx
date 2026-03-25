@@ -77,7 +77,7 @@ export default function SocialAccountsPanel({ busy, onBusyChange }: SocialAccoun
   }, [localBusy])
 
   useEffect(() => {
-    if (loadErr === undefined || loadErr === null) {
+    if (loadErr === undefined) {
       setError(null)
       return
     }
