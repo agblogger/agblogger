@@ -2,6 +2,7 @@ import { createElement } from 'react'
 import { render, screen, waitFor } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { SWRConfig } from 'swr'
 
 import type { UserResponse, LabelResponse, PostListResponse } from '@/api/client'
 import { mockHttpError } from '@/test/MockHTTPError'
@@ -73,7 +74,13 @@ function renderPage(labelId = 'swe') {
     [{ path: '/labels/:labelId', element: createElement(LabelPostsPage) }],
     { initialEntries: [`/labels/${labelId}`] },
   )
-  return render(createElement(RouterProvider, { router }))
+  return render(
+    createElement(
+      SWRConfig,
+      { value: { provider: () => new Map(), dedupingInterval: 0 } },
+      createElement(RouterProvider, { router }),
+    ),
+  )
 }
 
 describe('LabelPostsPage', () => {

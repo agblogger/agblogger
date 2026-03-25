@@ -2,6 +2,7 @@ import { createElement } from 'react'
 import { render, screen, waitFor } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { SWRConfig } from 'swr'
 
 const mockApiGet = vi.fn()
 
@@ -20,7 +21,13 @@ function renderPage(pageId = 'about') {
     [{ path: '/page/:pageId', element: createElement(PageViewPage) }],
     { initialEntries: [`/page/${pageId}`] },
   )
-  return render(createElement(RouterProvider, { router }))
+  return render(
+    createElement(
+      SWRConfig,
+      { value: { fetcher: mockApiGet, provider: () => new Map(), dedupingInterval: 0 } },
+      createElement(RouterProvider, { router }),
+    ),
+  )
 }
 
 describe('PageViewPage', () => {

@@ -1,38 +1,19 @@
-import { useEffect, useState } from 'react'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import { useParams } from 'react-router-dom'
-import api from '@/api/client'
 import { useRenderedHtml } from '@/hooks/useKatex'
-import type { PageResponse } from '@/api/client'
+import { usePage } from '@/hooks/usePage'
 
 export default function PageViewPage() {
   const { pageId } = useParams()
-  const [page, setPage] = useState<PageResponse | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const { data: page, error: pageErr, isLoading: loading } = usePage(pageId ?? null)
+  const error = pageErr ? 'Failed to load page.' : null
   const renderedHtml = useRenderedHtml(page?.rendered_html)
-
-  useEffect(() => {
-    if (pageId === undefined) return
-    void (async () => {
-      setLoading(true)
-      setError(null)
-      try {
-        const p = await api.get(`pages/${pageId}`).json<PageResponse>()
-        setPage(p)
-      } catch {
-        setError('Failed to load page.')
-      } finally {
-        setLoading(false)
-      }
-    })()
-  }, [pageId])
 
   if (loading) {
     return <LoadingSpinner />
   }
 
-  if (error !== null || page === null) {
+  if (error !== null || page == null) {
     return (
       <div className="text-center py-24">
         <p className="text-red-600 dark:text-red-400">{error ?? 'Page not found'}</p>

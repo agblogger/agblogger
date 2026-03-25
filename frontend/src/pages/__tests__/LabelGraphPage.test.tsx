@@ -2,6 +2,7 @@ import { render, screen, waitFor, act } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { useState } from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { SWRConfig } from 'swr'
 
 import type { UserResponse, LabelGraphResponse } from '@/api/client'
 import { MockHTTPError } from '@/test/MockHTTPError'
@@ -136,9 +137,11 @@ const graphData: LabelGraphResponse = {
 
 function renderGraph(search = '') {
   return render(
-    <MemoryRouter>
-      <LabelGraphPage search={search} />
-    </MemoryRouter>,
+    <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+      <MemoryRouter>
+        <LabelGraphPage search={search} />
+      </MemoryRouter>
+    </SWRConfig>,
   )
 }
 

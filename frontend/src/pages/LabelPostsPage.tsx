@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import { useParams, Link } from 'react-router-dom'
 import { Tag, Settings } from 'lucide-react'
@@ -9,40 +8,23 @@ import LabelChip from '@/components/labels/LabelChip'
 import ParentLabelLinks from '@/components/labels/ParentLabelLinks'
 import PostCard from '@/components/posts/PostCard'
 import { useAuthStore } from '@/stores/authStore'
-import { fetchLabelPosts, fetchLabel } from '@/api/labels'
 import { HTTPError } from '@/api/client'
-import type { LabelResponse, PostListResponse } from '@/api/client'
+import { useLabelPosts } from '@/hooks/useLabelPosts'
 
 export default function LabelPostsPage() {
   const { labelId } = useParams()
   const user = useAuthStore((s) => s.user)
-  const [label, setLabel] = useState<LabelResponse | null>(null)
-  const [data, setData] = useState<PostListResponse | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const { data, error: fetchErr, isLoading: loading } = useLabelPosts(labelId ?? null)
+  const label = data?.label ?? null
+  const posts = data?.posts ?? null
 
-  useEffect(() => {
-    if (labelId === undefined) return
-    void (async () => {
-      setLoading(true)
-      setError(null)
-      try {
-        const [l, d] = await Promise.all([fetchLabel(labelId), fetchLabelPosts(labelId)])
-        setLabel(l)
-        setData(d)
-      } catch (err) {
-        if (err instanceof HTTPError && err.response.status === 404) {
-          setError('Label not found.')
-        } else if (err instanceof HTTPError && err.response.status === 401) {
-          setError('Session expired. Please log in again.')
-        } else {
-          setError('Failed to load label posts. Please try again later.')
-        }
-      } finally {
-        setLoading(false)
-      }
-    })()
-  }, [labelId])
+  const error = fetchErr instanceof HTTPError && fetchErr.response.status === 404
+    ? 'Label not found.'
+    : fetchErr instanceof HTTPError && fetchErr.response.status === 401
+      ? 'Session expired. Please log in again.'
+      : fetchErr !== undefined
+        ? 'Failed to load label posts. Please try again later.'
+        : null
 
   if (loading) {
     return <LoadingSpinner />
@@ -100,11 +82,11 @@ export default function LabelPostsPage() {
         </div>
       )}
 
-      {!data || data.posts.length === 0 ? (
+      {!posts || posts.posts.length === 0 ? (
         <p className="text-muted text-center py-16">No posts with this label.</p>
       ) : (
         <div className="divide-y divide-border/60">
-          {data.posts.map((post, i) => (
+          {posts.posts.map((post, i) => (
             <PostCard key={post.id} post={post} index={i} />
           ))}
         </div>

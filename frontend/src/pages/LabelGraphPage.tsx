@@ -21,11 +21,12 @@ import '@xyflow/react/dist/style.css'
 import Dagre from '@dagrejs/dagre'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import { useAuthStore } from '@/stores/authStore'
-import { fetchLabel, fetchLabelGraph, updateLabel } from '@/api/labels'
+import { fetchLabel, updateLabel } from '@/api/labels'
 import { HTTPError } from '@/api/client'
 import { matchesLabelSearch } from '@/components/labels/searchUtils'
 import type { LabelGraphResponse } from '@/api/client'
 import { computeDepths, wouldCreateCycle } from '@/components/labels/graphUtils'
+import { useLabelGraph } from '@/hooks/useLabelGraph'
 
 /* ── Types ─────────────────────────────────────────── */
 
@@ -129,27 +130,17 @@ export default function LabelGraphPage({ search }: { search: string }) {
   const user = useAuthStore((s) => s.user)
   const initialNodes: Node[] = []
   const initialEdges: Edge[] = []
-  const [graphData, setGraphData] = useState<LabelGraphResponse | null>(null)
-  const [loading, setLoading] = useState(true)
+  const { data: graphData, error: graphErr, isLoading: loading, mutate: mutateGraph } = useLabelGraph()
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
   const [mutating, setMutating] = useState(false)
   const [editError, setEditError] = useState<string | null>(null)
 
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    fetchLabelGraph()
-      .then(setGraphData)
-      .catch((err: unknown) => {
-        if (err instanceof HTTPError && err.response.status === 401) {
-          setError('Session expired. Please log in to view the graph.')
-        } else {
-          setError('Failed to load label graph. Please try again later.')
-        }
-      })
-      .finally(() => setLoading(false))
-  }, [])
+  const error = graphErr instanceof HTTPError && graphErr.response.status === 401
+    ? 'Session expired. Please log in to view the graph.'
+    : graphErr !== undefined
+      ? 'Failed to load label graph. Please try again later.'
+      : null
 
   const depthMap = useMemo(
     () => (graphData ? computeDepths(graphData) : new Map<string, number>()),
@@ -185,7 +176,7 @@ export default function LabelGraphPage({ search }: { search: string }) {
 
   const isValidConnection = useCallback(
     (connection: { source: string | null; target: string | null }) => {
-      if (graphData === null || connection.source === null || connection.target === null) return false
+      if (graphData == null || connection.source === null || connection.target === null) return false
       if (connection.source === connection.target) return false
       // connection.source = parent node (React Flow source), connection.target = child node
       // Check if child -> parent would create a cycle
@@ -211,16 +202,15 @@ export default function LabelGraphPage({ search }: { search: string }) {
         const childLabel = await fetchLabel(childId)
         const newParents = [...new Set([...childLabel.parents, parentId])]
         await updateLabel(childId, { names: childLabel.names, parents: newParents })
-        // Refetch graph
-        const newGraphData = await fetchLabelGraph()
-        setGraphData(newGraphData)
+        // Refetch graph via SWR mutate
+        await mutateGraph()
       } catch {
         setEditError('Failed to add parent relationship.')
       } finally {
         setMutating(false)
       }
     },
-    [graphData, user, mutating],
+    [graphData, user, mutating, mutateGraph],
   )
 
   const onEdgeClick = useCallback(
@@ -239,15 +229,14 @@ export default function LabelGraphPage({ search }: { search: string }) {
         const childLabel = await fetchLabel(childId)
         const newParents = childLabel.parents.filter((p) => p !== parentId)
         await updateLabel(childId, { names: childLabel.names, parents: newParents })
-        const newGraphData = await fetchLabelGraph()
-        setGraphData(newGraphData)
+        await mutateGraph()
       } catch {
         setEditError('Failed to remove parent relationship.')
       } finally {
         setMutating(false)
       }
     },
-    [graphData, user, mutating],
+    [graphData, user, mutating, mutateGraph],
   )
 
   const interactiveFlowProps = useMemo<

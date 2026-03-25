@@ -1,12 +1,13 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { Paperclip, ChevronDown, ChevronUp, Plus } from 'lucide-react'
 import { HTTPError } from '@/api/client'
 import type { AssetInfo } from '@/api/client'
 import { parseErrorDetail } from '@/api/parseError'
-import { fetchPostAssets, deletePostAsset, renamePostAsset } from '@/api/posts'
+import { deletePostAsset, renamePostAsset } from '@/api/posts'
 import FileCard from './FileCard'
 import { rewriteMarkdownAssetReferences } from './markdownAssetReferences'
 import { useFileUpload } from './useFileUpload'
+import { usePostAssets } from '@/hooks/usePostAssets'
 
 interface FileStripProps {
   filePath: string | null
@@ -26,37 +27,34 @@ export default function FileStrip({
   refreshToken,
 }: FileStripProps) {
   const [expanded, setExpanded] = useState(false)
-  const [assets, setAssets] = useState<AssetInfo[]>([])
   const [operating, setOperating] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [opError, setOpError] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
 
-  const loadAssets = useCallback(async () => {
-    if (filePath === null) return
-    try {
-      const response = await fetchPostAssets(filePath)
-      setAssets(response.assets)
-      setError(null)
-    } catch (err) {
-      if (err instanceof HTTPError) {
-        const detail = await parseErrorDetail(err.response, 'Failed to load assets')
-        setError(detail)
-      } else {
-        setError('Failed to load assets')
-      }
-    }
-  }, [filePath])
+  const { data: assetsData, error: assetsErr, mutate: mutateAssets } = usePostAssets(filePath, refreshToken)
+  const assets: AssetInfo[] = assetsData?.assets ?? []
 
   useEffect(() => {
-    void loadAssets()
-  }, [loadAssets, refreshToken])
+    if (assetsErr === undefined) {
+      setLoadError(null)
+      return
+    }
+    if (assetsErr instanceof HTTPError) {
+      void parseErrorDetail(assetsErr.response, 'Failed to load assets').then(setLoadError)
+    } else {
+      setLoadError('Failed to load assets')
+    }
+  }, [assetsErr])
+
+  const error = opError ?? loadError
 
   const { triggerUpload, uploading: uploadOperating, inputProps: uploadInputProps } = useFileUpload({
     filePath,
     multiple: true,
-    onStart: () => setError(null),
-    onSuccess: () => void loadAssets(),
-    onError: setError,
+    onStart: () => setOpError(null),
+    onSuccess: () => void mutateAssets(),
+    onError: setOpError,
   })
 
   if (filePath === null) {
@@ -89,17 +87,17 @@ export default function FileStrip({
   async function performDelete(name: string) {
     if (filePath === null) return
     setOperating(true)
-    setError(null)
+    setOpError(null)
     setConfirmDelete(null)
     try {
       await deletePostAsset(filePath, name)
-      await loadAssets()
+      await mutateAssets()
     } catch (err) {
       if (err instanceof HTTPError) {
         const detail = await parseErrorDetail(err.response, 'Failed to delete file')
-        setError(detail)
+        setOpError(detail)
       } else {
-        setError('Failed to delete file')
+        setOpError('Failed to delete file')
       }
     } finally {
       setOperating(false)
@@ -109,18 +107,18 @@ export default function FileStrip({
   async function handleRename(oldName: string, newName: string) {
     if (filePath === null) return
     setOperating(true)
-    setError(null)
+    setOpError(null)
     try {
       await renamePostAsset(filePath, oldName, newName)
       const updatedBody = rewriteMarkdownAssetReferences(body, oldName, newName)
       onBodyChange(updatedBody)
-      await loadAssets()
+      await mutateAssets()
     } catch (err) {
       if (err instanceof HTTPError) {
         const detail = await parseErrorDetail(err.response, 'Failed to rename file')
-        setError(detail)
+        setOpError(detail)
       } else {
-        setError('Failed to rename file')
+        setOpError('Failed to rename file')
       }
     } finally {
       setOperating(false)

@@ -2,6 +2,7 @@ import { createElement } from 'react'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { SWRConfig } from 'swr'
 
 import type { AssetInfo } from '@/api/client'
 import { HTTPError } from '@/api/client'
@@ -48,7 +49,13 @@ function renderStrip(overrides: Partial<StripProps> = {}) {
     disabled: false,
     ...overrides,
   }
-  const result = render(createElement(FileStrip, props))
+  const result = render(
+    createElement(
+      SWRConfig,
+      { value: { provider: () => new Map(), dedupingInterval: 0 } },
+      createElement(FileStrip, props),
+    ),
+  )
   return { ...result, ...props }
 }
 
@@ -348,14 +355,18 @@ describe('FileStrip', () => {
     const initialCount = mockFetchPostAssets.mock.calls.length
 
     rerender(
-      createElement(FileStrip, {
-        filePath: 'posts/2026-03-08-test/index.md',
-        body: 'Some markdown content',
-        onBodyChange: vi.fn(),
-        onInsertAtCursor: vi.fn(),
-        disabled: false,
-        refreshToken: 1,
-      }),
+      createElement(
+        SWRConfig,
+        { value: { provider: () => new Map(), dedupingInterval: 0 } },
+        createElement(FileStrip, {
+          filePath: 'posts/2026-03-08-test/index.md',
+          body: 'Some markdown content',
+          onBodyChange: vi.fn(),
+          onInsertAtCursor: vi.fn(),
+          disabled: false,
+          refreshToken: 1,
+        }),
+      ),
     )
 
     await waitFor(() => {
