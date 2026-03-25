@@ -11,7 +11,7 @@ from pathlib import Path as FilePath
 from typing import Annotated, Literal
 
 import yaml
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, UploadFile
 from fastapi.responses import RedirectResponse
 from sqlalchemy import delete, select, text
 from sqlalchemy.exc import IntegrityError, OperationalError
@@ -47,6 +47,7 @@ from backend.schemas.post import (
     PostSave,
     SearchResult,
 )
+from backend.services.analytics_service import record_hit
 from backend.services.datetime_service import format_iso, now_utc
 from backend.services.git_service import GitService
 from backend.services.label_service import ensure_label_cache_entry
@@ -61,6 +62,9 @@ from backend.services.slug_service import generate_post_path, generate_post_slug
 from backend.utils.slug import file_path_to_slug, resolve_slug_candidates
 
 logger = logging.getLogger(__name__)
+
+# Strong references to fire-and-forget analytics tasks, preventing GC before completion.
+_background_tasks: set[asyncio.Task[None]] = set()
 
 
 async def _empty_string() -> str:
@@ -674,6 +678,7 @@ def _resolve_symlink_redirect(file_path: str, content_manager: ContentManager) -
 )
 async def get_post_endpoint(
     file_path: str,
+    request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
     user: Annotated[User | None, Depends(get_current_user)],
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
@@ -688,6 +693,7 @@ async def get_post_endpoint(
     draft_owner_username = user.username if user else None
     post = await get_post(session, file_path, draft_owner_username=draft_owner_username)
     if post is not None:
+        _fire_post_hit(request, session, post.file_path, user)
         return post
 
     # Slug-based resolution: try canonical file layouts when a bare slug is given
@@ -695,6 +701,7 @@ async def get_post_endpoint(
         for candidate in resolve_slug_candidates(file_path):
             post = await get_post(session, candidate, draft_owner_username=draft_owner_username)
             if post is not None:
+                _fire_post_hit(request, session, post.file_path, user)
                 return post
 
     # Check if the path resolves through a symlink to a renamed post
@@ -720,6 +727,37 @@ async def get_post_endpoint(
             )
 
     raise HTTPException(status_code=404, detail="Post not found")
+
+
+def _fire_post_hit(
+    request: Request,
+    session: AsyncSession,
+    post_file_path: str,
+    user: User | None,
+) -> None:
+    """Fire a background analytics hit for a post view.
+
+    Extracts the slug from the canonical file path and schedules a fire-and-forget
+    hit recording task via asyncio.create_task.
+    """
+    try:
+        slug = file_path_to_slug(post_file_path)
+    except ValueError:
+        # Non-canonical path: skip hit recording
+        return
+    client_ip = request.client.host if request.client and request.client.host else "unknown"
+    user_agent = request.headers.get("user-agent", "")
+    task = asyncio.create_task(
+        record_hit(
+            session=session,
+            path=f"/post/{slug}",
+            client_ip=client_ip,
+            user_agent=user_agent,
+            user=user,
+        )
+    )
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
 
 
 @router.post("", response_model=PostDetail, status_code=201)

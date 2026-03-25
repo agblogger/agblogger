@@ -73,7 +73,8 @@ def _load_token() -> str | None:
         if not _token_warning_issued:
             _token_warning_issued = True
             logger.warning(
-                "GoatCounter token not yet available at %s — analytics disabled until token appears",
+                "GoatCounter token not yet available at %s"
+                " — analytics disabled until token appears",
                 GOATCOUNTER_AUTH_FILE,
             )
         else:
