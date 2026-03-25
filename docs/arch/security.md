@@ -32,6 +32,10 @@ Filesystem access is constrained to managed content paths, and sync exposes only
 
 External providers are treated as untrusted systems. Their credentials are protected at rest, provider-specific behavior is isolated behind adapters and services, and external failures are prevented from redefining core content ownership or application identity boundaries.
 
+## Analytics Sidecar Security
+
+The GoatCounter analytics sidecar is internal to the server deployment. Its API token is a fixed credential that never leaves the private Docker network. The threat model for analytics is limited to the internal deployment boundary.
+
 ## Runtime Hardening
 
 Production hardening combines application and deployment controls: startup validation of critical security settings, controlled proxy and host boundaries, hardened HTTP behavior, and container-oriented deployment practices that minimize exposed surface area.

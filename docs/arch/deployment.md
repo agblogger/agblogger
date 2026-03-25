@@ -15,11 +15,11 @@ This matches the project's self-hosted deployment model.
 The preferred production topology places a reverse proxy in front of the application, with a GoatCounter analytics sidecar on the internal network:
 
 - one application container serving the API and SPA
-- a GoatCounter container for page view analytics (internal network only, no public exposure)
+- a GoatCounter container for page view analytics (soft dependency, internal network only, no public exposure)
 - an optional reverse proxy in front for TLS termination and public ingress
 - persistent volumes for content, database state, and GoatCounter data (including the shared API token)
 
-GoatCounter is a soft dependency — the application starts and serves content normally when GoatCounter is unavailable. The GoatCounter container provisions itself on first boot via a custom entrypoint script (`goatcounter/entrypoint.sh`) that creates the site, generates an API token, and writes it to a shared volume.
+The GoatCounter container provisions itself on first boot via a custom entrypoint script (`goatcounter/entrypoint.sh`) that creates the site, generates an API token, and writes it to a shared volume.
 
 ## Packaging
 

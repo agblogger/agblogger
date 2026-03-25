@@ -222,6 +222,12 @@ Startup validation enforces basic production security requirements for secrets, 
 - Do not copy dev dependencies or build tools into the production image.
 - AgBlogger is internal-only in `docker-compose.yml` (`expose: 8000`, not `ports`). Only Caddy publishes ports to the host.
 
+### GoatCounter API Token
+
+- The GoatCounter API token must never be exposed publicly.
+- Do not add endpoints, logging, or error messages that expose the token value to clients.
+- Do not route GoatCounter traffic over public networks. All communication with GoatCounter must stay on the internal Docker network.
+
 ### Subprocess safety
 
 - Prefer argument lists over shell command strings. Do not use shell invocation for operations that can be expressed as fixed argv.
