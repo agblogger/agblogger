@@ -28,20 +28,25 @@ from pathlib import Path
 @pytest.fixture
 def draft_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
     """Create settings for draft visibility tests."""
+    # Define a label for label-posts draft visibility tests
+    (tmp_content_dir / "labels.toml").write_text(
+        '[labels]\n\n[labels.test-label]\nnames = ["Test Label"]\n'
+    )
+
     # Add a published post by Admin
     posts_dir = tmp_content_dir / "posts"
     published_dir = posts_dir / "published"
     published_dir.mkdir()
     (published_dir / "index.md").write_text(
         "---\ntitle: Published Post\ncreated_at: 2026-02-02 22:21:29+00\n"
-        "author: admin\nlabels: []\n---\nPublished content.\n"
+        "author: admin\nlabels: [test-label]\n---\nPublished content.\n"
     )
     # Add a draft post by Admin
     admin_draft_dir = posts_dir / "admin-draft"
     admin_draft_dir.mkdir()
     (admin_draft_dir / "index.md").write_text(
         "---\ntitle: Admin Draft\ncreated_at: 2026-02-02 22:21:29+00\n"
-        "author: admin\nlabels: []\ndraft: true\n---\nDraft content.\n"
+        "author: admin\nlabels: [test-label]\ndraft: true\n---\nDraft content.\n"
     )
     (admin_draft_dir / "photo.png").write_bytes(b"fake-draft-asset")
     # Add a draft post directory with an image asset
@@ -417,3 +422,36 @@ class TestDraftAssetAccess:
         """An unauthenticated user cannot access an asset inside a draft post directory."""
         resp = await client.get("/api/content/posts/admin-draft/photo.png")
         assert resp.status_code == 404
+
+
+class TestDraftLabelPostsVisibility:
+    """Draft posts should respect visibility rules in label_posts endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_draft_not_in_label_posts_for_anonymous(self, client: AsyncClient) -> None:
+        """Unauthenticated users should not see drafts in label-filtered post listings."""
+        resp = await client.get("/api/labels/test-label/posts")
+        assert resp.status_code == 200
+        titles = [p["title"] for p in resp.json()["posts"]]
+        assert "Published Post" in titles
+        assert "Admin Draft" not in titles
+
+    @pytest.mark.asyncio
+    async def test_draft_in_label_posts_for_author(self, client: AsyncClient) -> None:
+        """The author should see their own drafts in label-filtered post listings."""
+        token = await _login(client, "admin", "admin123")
+        resp = await client.get("/api/labels/test-label/posts", headers=_auth_headers(token))
+        assert resp.status_code == 200
+        titles = [p["title"] for p in resp.json()["posts"]]
+        assert "Published Post" in titles
+        assert "Admin Draft" in titles
+
+    @pytest.mark.asyncio
+    async def test_draft_not_in_label_posts_for_other_user(self, client: AsyncClient) -> None:
+        """A different user should not see another user's drafts in label posts."""
+        token = await _register_and_login(client, "viewer", "viewer@test.com", "password1234")
+        resp = await client.get("/api/labels/test-label/posts", headers=_auth_headers(token))
+        assert resp.status_code == 200
+        titles = [p["title"] for p in resp.json()["posts"]]
+        assert "Published Post" in titles
+        assert "Admin Draft" not in titles
