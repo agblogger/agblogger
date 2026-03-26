@@ -190,13 +190,13 @@ async def record_hit(
     visible in the caller's error handling.
 
     Skips recording when:
-    - The request carries a valid authenticated user session.
+    - The request carries an admin user session.
     - The User-Agent is identified as a bot/crawler.
     - Analytics are disabled in settings.
     - The GoatCounter token is not yet available.
     """
-    # Skip authenticated users — admin/editor browsing should not inflate counts.
-    if user is not None:
+    # Skip admin users — admin browsing should not inflate counts.
+    if user is not None and user.is_admin:
         return
 
     if _crawler_detect.is_crawler(user_agent):
