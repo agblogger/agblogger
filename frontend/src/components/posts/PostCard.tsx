@@ -29,6 +29,12 @@ function PostCardInner({ post, index = 0 }: PostCardProps) {
             {post.title}
           </h2>
 
+          {post.subtitle != null && (
+            <p data-testid="card-subtitle" className="text-base text-ink/60 mt-1 leading-snug">
+              {post.subtitle}
+            </p>
+          )}
+
           {sanitizedExcerpt !== '' && (
             <div
               className="mt-2 text-sm text-muted leading-relaxed line-clamp-2 prose-excerpt"

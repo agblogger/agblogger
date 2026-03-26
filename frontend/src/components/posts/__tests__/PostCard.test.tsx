@@ -92,6 +92,16 @@ describe('PostCard', () => {
     expect(screen.getByText('not-a-date')).toBeInTheDocument()
   })
 
+  it('renders subtitle when present', () => {
+    renderCard(makePost({ subtitle: 'Card subtitle' }))
+    expect(screen.getByText('Card subtitle')).toBeInTheDocument()
+  })
+
+  it('does not render subtitle when null', () => {
+    renderCard(makePost({ subtitle: null }))
+    expect(screen.queryByTestId('card-subtitle')).not.toBeInTheDocument()
+  })
+
   it('is wrapped in React.memo', async () => {
     const { default: PostCardModule } = await import('../PostCard')
     expect((PostCardModule as unknown as { $$typeof: symbol }).$$typeof).toBe(Symbol.for('react.memo'))
