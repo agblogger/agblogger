@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from typing import Any
 
 import grapheme
@@ -23,6 +22,7 @@ from backend.crosspost.atproto_oauth import create_dpop_proof
 from backend.crosspost.base import CrossPostContent, CrossPostResult
 from backend.crosspost.http_utils import get_str_field, parse_json_object
 from backend.crosspost.ssrf import ssrf_safe_client
+from backend.services.datetime_service import now_utc
 
 logger = logging.getLogger(__name__)
 
@@ -276,7 +276,7 @@ class BlueskyCrossPoster:
         record: dict[str, Any] = {
             "$type": "app.bsky.feed.post",
             "text": text,
-            "createdAt": datetime.now(UTC).isoformat(),
+            "createdAt": now_utc().isoformat(),
         }
         if facets:
             record["facets"] = facets

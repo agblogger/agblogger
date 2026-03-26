@@ -46,7 +46,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 def create_access_token(data: dict[str, Any], secret_key: str, expires_minutes: int = 15) -> str:
     """Create a JWT access token."""
     to_encode = data.copy()
-    expire = datetime.now(UTC) + timedelta(minutes=expires_minutes)
+    expire = now_utc() + timedelta(minutes=expires_minutes)
     to_encode.update({"exp": expire, "type": "access"})
     signing_key = derive_access_token_key(secret_key)
     return str(jwt.encode(to_encode, signing_key, algorithm=ALGORITHM))
@@ -134,7 +134,7 @@ async def refresh_tokens(
         await session.execute(delete(RefreshToken).where(RefreshToken.id == stored_token.id))
         await session.commit()
         return None
-    if expires < datetime.now(UTC):
+    if expires < now_utc():
         await session.execute(delete(RefreshToken).where(RefreshToken.id == stored_token.id))
         await session.commit()
         return None

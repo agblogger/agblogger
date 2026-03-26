@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from datetime import date
 from typing import TYPE_CHECKING
+
+from backend.services.datetime_service import now_utc
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -63,7 +64,7 @@ def generate_post_path(title: str, posts_dir: Path) -> Path:
     If the directory already exists, appends -2, -3, etc.
     """
     slug = generate_post_slug(title)
-    today = date.today().isoformat()
+    today = now_utc().date().isoformat()
     base_name = f"{today}-{slug}"
 
     dir_path = posts_dir / base_name

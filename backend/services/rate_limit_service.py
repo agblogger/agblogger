@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from collections import deque
-from datetime import UTC, datetime
+
+from backend.services.datetime_service import now_utc
 
 
 class InMemoryRateLimiter:
@@ -29,7 +30,7 @@ class InMemoryRateLimiter:
         attempts = self._attempts.get(key)
         if attempts is None:
             return None
-        now = datetime.now(UTC).timestamp()
+        now = now_utc().timestamp()
         cutoff = now - window_seconds
         while attempts and attempts[0] < cutoff:
             attempts.popleft()
@@ -43,13 +44,13 @@ class InMemoryRateLimiter:
         attempts = self._prune(key, window_seconds)
         if attempts is None or len(attempts) < limit:
             return False, 0
-        now = datetime.now(UTC).timestamp()
+        now = now_utc().timestamp()
         retry_after = int(attempts[0] + window_seconds - now) + 1
         return True, max(retry_after, 1)
 
     def add_failure(self, key: str, window_seconds: int) -> None:
         """Record one failed attempt."""
-        now = datetime.now(UTC).timestamp()
+        now = now_utc().timestamp()
         if key not in self._attempts:
             if len(self._attempts) >= self._MAX_KEYS:
                 self._prune_all_expired(window_seconds)
@@ -62,7 +63,7 @@ class InMemoryRateLimiter:
 
     def _prune_all_expired(self, window_seconds: int) -> None:
         """Remove all fully-expired keys to bound memory usage."""
-        now = datetime.now(UTC).timestamp()
+        now = now_utc().timestamp()
         cutoff = now - window_seconds
         expired = [k for k, dq in self._attempts.items() if not dq or dq[-1] < cutoff]
         for k in expired:

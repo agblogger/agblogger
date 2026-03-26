@@ -64,6 +64,7 @@ RUN mkdir -p /data/content /data/db && chown -R agblogger:agblogger /data
 VOLUME /data/content
 VOLUME /data/db
 
+ENV TZ=UTC
 ENV CONTENT_DIR=/data/content
 ENV DATABASE_URL=sqlite+aiosqlite:////data/db/agblogger.db
 ENV FRONTEND_DIR=/app/frontend/dist

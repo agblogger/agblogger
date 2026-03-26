@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from unittest.mock import patch
 
 from backend.services.rate_limit_service import InMemoryRateLimiter
@@ -49,14 +50,14 @@ class TestInMemoryRateLimiter:
     def test_expired_attempts_are_evicted(self):
         limiter = InMemoryRateLimiter()
         # Add failures with a very short window
-        with patch("backend.services.rate_limit_service.datetime") as mock_dt:
+        with patch("backend.services.rate_limit_service.now_utc") as mock_now:
             # Simulate failures at time T
-            mock_dt.now.return_value.timestamp.return_value = 1000.0
+            mock_now.return_value = datetime.fromtimestamp(1000.0, tz=UTC)
             for _ in range(5):
                 limiter.add_failure("key1", 10)
 
             # Check at T+11 (window expired)
-            mock_dt.now.return_value.timestamp.return_value = 1011.0
+            mock_now.return_value = datetime.fromtimestamp(1011.0, tz=UTC)
             limited, _ = limiter.is_limited("key1", 3, 10)
             assert not limited
 
@@ -70,20 +71,20 @@ class TestInMemoryRateLimiter:
     def test_empty_deque_cleaned_up_after_expiry(self):
         """After all attempts expire, the key should behave as if it never had failures."""
         limiter = InMemoryRateLimiter()
-        with patch("backend.services.rate_limit_service.datetime") as mock_dt:
-            mock_dt.now.return_value.timestamp.return_value = 1000.0
+        with patch("backend.services.rate_limit_service.now_utc") as mock_now:
+            mock_now.return_value = datetime.fromtimestamp(1000.0, tz=UTC)
             limiter.add_failure("key1", 10)
 
             # After window expires
-            mock_dt.now.return_value.timestamp.return_value = 1011.0
+            mock_now.return_value = datetime.fromtimestamp(1011.0, tz=UTC)
             limited, retry = limiter.is_limited("key1", 3, 10)
             assert not limited
             assert retry == 0
 
     def test_zero_window_keeps_current_timestamp(self):
         limiter = InMemoryRateLimiter()
-        with patch("backend.services.rate_limit_service.datetime") as mock_dt:
-            mock_dt.now.return_value.timestamp.return_value = 1000.0
+        with patch("backend.services.rate_limit_service.now_utc") as mock_now:
+            mock_now.return_value = datetime.fromtimestamp(1000.0, tz=UTC)
             for _ in range(3):
                 limiter.add_failure("key1", 0)
             limited, _ = limiter.is_limited("key1", 3, 0)
@@ -91,13 +92,13 @@ class TestInMemoryRateLimiter:
 
     def test_max_keys_eviction(self):
         limiter = InMemoryRateLimiter()
-        with patch("backend.services.rate_limit_service.datetime") as mock_dt:
-            mock_dt.now.return_value.timestamp.return_value = 1000.0
+        with patch("backend.services.rate_limit_service.now_utc") as mock_now:
+            mock_now.return_value = datetime.fromtimestamp(1000.0, tz=UTC)
             for i in range(limiter._MAX_KEYS):
                 limiter.add_failure(f"key-{i}", 60)
             assert len(limiter._attempts) == limiter._MAX_KEYS
 
-            mock_dt.now.return_value.timestamp.return_value = 1070.0
+            mock_now.return_value = datetime.fromtimestamp(1070.0, tz=UTC)
             limiter.add_failure("overflow-key", 60)
             assert "overflow-key" in limiter._attempts
             assert len(limiter._attempts) == 1

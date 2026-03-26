@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
 from backend.services.slug_service import generate_post_path, generate_post_slug
+
+FIXED_UTC = datetime(2026, 3, 15, 1, 0, 0, tzinfo=UTC)
+"""A time where the UTC date (Mar 15) differs from UTC+10 local date (Mar 16)."""
 
 
 class TestGeneratePostSlug:
@@ -103,15 +108,13 @@ class TestGeneratePostPath:
         assert len(parts[1]) == 2  # month
         assert len(parts[2]) == 2  # day
 
-    def test_path_uses_today_date(self, tmp_path: Path) -> None:
-        from datetime import date
-
+    def test_path_uses_utc_date(self, tmp_path: Path) -> None:
         posts_dir = tmp_path / "posts"
         posts_dir.mkdir()
-        result = generate_post_path("Test Post", posts_dir)
-        today = date.today().isoformat()  # YYYY-MM-DD
+        with patch("backend.services.slug_service.now_utc", return_value=FIXED_UTC):
+            result = generate_post_path("Test Post", posts_dir)
         dir_name = result.parent.name
-        assert dir_name.startswith(today)
+        assert dir_name.startswith("2026-03-15")
 
     def test_collision_appends_suffix(self, tmp_path: Path) -> None:
         posts_dir = tmp_path / "posts"
@@ -154,27 +157,27 @@ class TestGeneratePostPath:
 class TestSlugCollisionCap:
     def test_raises_after_1000_collisions(self, tmp_path: Path) -> None:
         """generate_post_path must raise ValueError after 1000 collisions."""
-        from datetime import date
-
         posts_dir = tmp_path / "posts"
         posts_dir.mkdir()
         slug = generate_post_slug("My Post")
-        today = date.today().isoformat()
+        today = "2026-03-15"
         (posts_dir / f"{today}-{slug}").mkdir()
         for i in range(2, 1001):
             (posts_dir / f"{today}-{slug}-{i}").mkdir()
-        with pytest.raises(ValueError, match="Too many slug collisions"):
+        with (
+            patch("backend.services.slug_service.now_utc", return_value=FIXED_UTC),
+            pytest.raises(ValueError, match="Too many slug collisions"),
+        ):
             generate_post_path("My Post", posts_dir)
 
     def test_finds_slot_just_before_cap(self, tmp_path: Path) -> None:
-        from datetime import date
-
         posts_dir = tmp_path / "posts"
         posts_dir.mkdir()
         slug = generate_post_slug("My Post")
-        today = date.today().isoformat()
+        today = "2026-03-15"
         (posts_dir / f"{today}-{slug}").mkdir()
         for i in range(2, 1000):
             (posts_dir / f"{today}-{slug}-{i}").mkdir()
-        result = generate_post_path("My Post", posts_dir)
+        with patch("backend.services.slug_service.now_utc", return_value=FIXED_UTC):
+            result = generate_post_path("My Post", posts_dir)
         assert result.parent.name == f"{today}-{slug}-1000"
