@@ -32,15 +32,9 @@ Filesystem access is constrained to managed content paths, and sync exposes only
 
 External providers are treated as untrusted systems. Their credentials are protected at rest, provider-specific behavior is isolated behind adapters and services, and external failures are prevented from redefining core content ownership or application identity boundaries.
 
-## Analytics Sidecar Security
-
-The GoatCounter analytics sidecar is internal to the server deployment. Its API token is a fixed credential that never leaves the private Docker network and is mounted into the application container through a dedicated read-only token volume rather than the full GoatCounter data volume. The GoatCounter database stays private to the sidecar. Analytics background work is bounded so public traffic spikes do not create an unbounded amount of in-process work in the application.
-
 ## Runtime Hardening
 
 Production hardening combines application and deployment controls: startup validation of critical security settings, controlled proxy and host boundaries, hardened HTTP behavior, and container-oriented deployment practices that minimize exposed surface area.
-
-When deployed behind a TLS-terminating reverse proxy (e.g. Caddy), the `_ProxyHeadersMiddleware` in `backend/main.py` rewrites the ASGI scope using `X-Forwarded-Proto` and `X-Forwarded-For` headers — but only from IPs listed in `TRUSTED_PROXY_IPS`. This ensures `request.url.scheme`, `request.base_url`, and `request.client` reflect the public connection so that origin checks, cookie `Secure` flags, and rate limiting work correctly behind a proxy.
 
 ## Verification Strategy
 

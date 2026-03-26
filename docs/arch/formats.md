@@ -16,8 +16,6 @@ content/
 
 Posts are stored as directory-backed content units so each post keeps its markdown source and related assets together. The tree may also contain internal dotfiles used by local workflows or integrations, but those are not part of the publishing model.
 
-Legacy flat post files such as `content/posts/example.md` are no longer part of the supported content model. Canonical post paths are always `content/posts/<slug>/index.md`.
-
 Example:
 
 ```text
@@ -61,7 +59,7 @@ Format notes:
 - the markdown body carries the post content itself
 - assets that belong to a post live next to its `index.md`
 - the canonical on-disk post path is always `posts/<slug>/index.md`
-- clean public post slugs and clean post-asset URLs are derived from these directory-backed post units
+- public post slugs and post-asset URLs are derived from these directory-backed post units
 - shared assets can live under `content/assets/` when they are not scoped to a single post
 
 ## Site Configuration

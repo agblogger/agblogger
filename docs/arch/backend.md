@@ -22,8 +22,6 @@ The backend follows a layered structure:
 
 The filesystem remains the source of truth for content. The database exists primarily to support efficient reads, search, and integration state.
 
-Within that filesystem model, posts are canonical only when they live at `posts/<slug>/index.md`. Backend content reads, sync normalization, slug resolution, and asset management reject legacy `posts/<slug>.md` flat-file posts.
-
 ## Core Runtime Services
 
 Several long-lived services define the runtime architecture:
@@ -61,18 +59,6 @@ The database uses two separate declarative bases to distinguish durable state fr
 
 This separation means adding a column to a durable table requires an Alembic migration, while cache table schema changes take effect automatically on the next restart.
 
-## Analytics Integration
-
-The backend integrates with a GoatCounter sidecar container for server-side page view analytics. The analytics service (`backend/services/analytics_service.py`) has three responsibilities:
-
-- **Hit recording**: when a reader fetches a post or page through the API, it fires an async hit to GoatCounter's internal API. Hits are fire-and-forget — network failures are logged but never affect the reader's response. Authenticated users and detected bots are excluded, and background analytics work is capped so public traffic cannot create an unbounded number of in-flight tasks.
-- **Stats proxy**: admin dashboard data (total views, per-path hits, referrers, browser/OS breakdowns) is proxied from GoatCounter's stats API through admin-only backend endpoints, but only while `analytics_enabled` remains on.
-- **Settings management**: analytics-enabled and show-views-on-posts toggles are stored in a durable `analytics_settings` table (Alembic-managed).
-
-Public post view counts are only exposed when analytics is enabled, post-view counts are enabled, and the requested slug or canonical post path still resolves to a published post in `posts_cache`. The public analytics endpoint normalizes canonical file paths like `posts/hello/index.md` back to the short `/post/hello` GoatCounter path before looking up hits, and it returns the same `views: null` response for draft, deleted, disabled, or non-existent posts to avoid leaking hidden content state.
-
-GoatCounter is treated as a soft dependency — the backend starts and serves content normally when GoatCounter is unavailable. The API token is loaded lazily from a dedicated read-only token mount (`/data/goatcounter-token/token`), while the GoatCounter database stays private to the sidecar container.
-
 ## API Surface
 
 The API is organized around a small set of concerns:
@@ -102,7 +88,7 @@ The goal is to preserve content, preserve service availability where possible, a
 
 - `backend/main.py` is the main runtime entry point.
 - `backend/api/` contains the HTTP-facing modules grouped by feature area.
-- `backend/services/` contains the orchestration and business-logic layer.
+- `backend/services/` contains the orchestration and business-logic layer, including services for page retrieval and rendering, posts CRUD operations, authentication, cross-posting, sync, analytics, and admin panel business logic.
 - `backend/models/` contains SQLAlchemy ORM models for both durable tables (users, tokens, social accounts, cross-posts, analytics settings) and cache tables (posts, labels, sync manifest).
 - `backend/schemas/` contains Pydantic request/response schemas that define the API contracts.
 - `backend/filesystem/` contains the canonical content model.

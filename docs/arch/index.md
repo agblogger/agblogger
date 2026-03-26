@@ -33,6 +33,7 @@ The backend serves both the JSON API and the built frontend, so browser clients 
 - Read [auth.md](auth.md) and [security.md](security.md) for authentication, authorization, session, validation, or security-sensitive work.
 - Read [sync.md](sync.md) for sync protocol, manifest, merge, or CLI sync tasks.
 - Read [cross-posting.md](cross-posting.md) for provider integrations, connected accounts, or publication-to-social-platform tasks.
+- Read [analytics.md](analytics.md) for page-view tracking, GoatCounter sidecar, stats proxy, or view-count tasks.
 - Read [testing.md](testing.md) when changing tests, validation strategy, or repository quality gates.
 - Read [deployment.md](deployment.md) only for packaging, container, runtime topology, or deployment-helper work.
 

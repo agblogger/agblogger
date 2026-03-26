@@ -227,7 +227,6 @@ Startup validation enforces basic production security requirements for secrets, 
 - The GoatCounter API token must never be exposed publicly.
 - Do not add endpoints, logging, or error messages that expose the token value to clients.
 - Do not route GoatCounter traffic over public networks. All communication with GoatCounter must stay on the internal Docker network.
-- Do not share the full GoatCounter data volume with the application container. Mount only the minimum token material needed by AgBlogger, and mount it read-only.
 
 ### Subprocess safety
 

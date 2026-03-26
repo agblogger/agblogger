@@ -19,8 +19,6 @@ The preferred production topology places a reverse proxy in front of the applica
 - an optional reverse proxy in front for TLS termination and public ingress
 - persistent volumes for content, database state, GoatCounter database state, and a separate GoatCounter token volume
 
-The GoatCounter container provisions itself via a custom entrypoint script (`goatcounter/entrypoint.sh`) that creates the site, generates an API token, and writes it to a dedicated token-only volume. Because the database and token live on separate named volumes, the entrypoint re-runs provisioning whenever the token is missing or the GoatCounter database file is missing/empty, so an independently replaced DB volume cannot leave the sidecar serving with a stale token. The AgBlogger container mounts only the token volume read-only and does not receive the GoatCounter database volume.
-
 ## Packaging
 
 The production image contains the backend runtime, the built frontend assets, and the external tools the application depends on at runtime. Containerization preserves the filesystem-first content model by mounting persistent storage for content and database state instead of baking them into the image.
