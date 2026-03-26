@@ -872,6 +872,7 @@ def _agblogger_env_section() -> str:
         "      - ADMIN_DISPLAY_NAME=${ADMIN_DISPLAY_NAME:-}\n"
         "      - TRUSTED_HOSTS=${TRUSTED_HOSTS?Set TRUSTED_HOSTS}\n"
         "      - TRUSTED_PROXY_IPS=${TRUSTED_PROXY_IPS:-[]}\n"
+        "      - TZ=UTC\n"
         "      - CONTENT_DIR=/data/content\n"
         "      - DATABASE_URL=sqlite+aiosqlite:////data/db/agblogger.db\n"
         "      - DEBUG=${DEBUG:-false}\n"
