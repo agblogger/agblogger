@@ -57,19 +57,23 @@ zap_full_minutes := env("ZAP_FULL_MINUTES", "")
 zap_caddy_port := env("ZAP_CADDY_PORT", "8080")
 local_caddy_port := env("LOCAL_CADDY_PORT", "8080")
 
+# Verbose output for check/test commands (v=1 on CLI, or VERBOSE=1 in env)
+v := env("VERBOSE", "")
+
 # Run all static analysis checks (no tests)
 check-static: check-backend-static check-frontend-static check-vulture check-trivy
-    @echo "\n✓ Static checks passed"
+    @{{ if v == "" { "true" } else { "echo" } }}
+    @echo "✓ Static checks passed"
 
 # Run all test suites, excluding slow tests (pass coverage=true for coverage reports)
-test coverage="false":
-    just test-backend "{{ coverage }}"
-    just test-frontend "{{ coverage }}"
-    @echo "\n✓ Tests passed"
+test coverage="false": (test-backend coverage) (test-frontend coverage)
+    @{{ if v == "" { "true" } else { "echo" } }}
+    @echo "✓ Tests passed"
 
 # Run full quality gate (static checks first, then tests with coverage enforcement)
 check: check-static (test "true")
-    @echo "\n✓ All checks passed"
+    @{{ if v == "" { "true" } else { "echo" } }}
+    @echo "✓ All checks passed"
 
 # Run full frontend vulnerability audit (including dev dependencies)
 check-audit-full:
@@ -182,32 +186,63 @@ mutation-full: mutation-backend mutation-backend-full mutation-frontend-full
 
 # Backend static checks: mypy, pyright, deptry, import-linter, ruff, pip-audit
 check-backend-static:
-    @echo "── Backend: type checking ──"
-    uv run mypy backend/ cli/ tests/
-    @echo "\n── Backend: pyright type checking ──"
-    uv run basedpyright backend/ cli/
-    @echo "\n── Backend: dependency hygiene ──"
-    uv run deptry .
-    @echo "\n── Backend: import contracts ──"
-    uv run lint-imports
-    @echo "\n── Backend: linting ──"
-    uv run ruff check backend/ cli/ tests/
-    @echo "\n── Backend: format check ──"
-    uv run ruff format --check backend/ cli/ tests/
-    @echo "\n── Backend: vulnerability audit ──"
-    @requirements_file="$(mktemp)"; trap 'rm -f "$requirements_file"' EXIT; uv export --format requirements.txt --no-dev --no-emit-project --frozen -o "$requirements_file" > /dev/null; uv run pip-audit --progress-spinner off --requirement "$requirements_file"
+    #!/usr/bin/env bash
+    set -euo pipefail
+    _out="$(mktemp)"
+    trap 'rm -f "$_out"' EXIT
+    run_step() {
+        local label="$1"; shift
+        if [ -n "{{ v }}" ]; then
+            printf '%s\n' "$label"
+            "$@"
+        else
+            local rc=0
+            "$@" > "$_out" 2>&1 || rc=$?
+            if [ $rc -ne 0 ]; then
+                printf '%s\n' "$label"
+                cat "$_out"
+                return $rc
+            fi
+        fi
+    }
+    run_step "── Backend: type checking ──" uv run mypy backend/ cli/ tests/
+    run_step $'\n── Backend: pyright type checking ──' uv run basedpyright backend/ cli/
+    run_step $'\n── Backend: dependency hygiene ──' uv run deptry .
+    run_step $'\n── Backend: import contracts ──' uv run lint-imports
+    run_step $'\n── Backend: linting ──' uv run ruff check backend/ cli/ tests/
+    run_step $'\n── Backend: format check ──' uv run ruff format --check backend/ cli/ tests/
+    requirements_file="$(mktemp)"
+    trap 'rm -f "$_out" "$requirements_file"' EXIT
+    uv export --format requirements.txt --no-dev --no-emit-project --frozen -o "$requirements_file" > /dev/null
+    run_step $'\n── Backend: vulnerability audit ──' uv run pip-audit --progress-spinner off --requirement "$requirements_file"
+    echo "✓ Backend static checks passed"
 
 # Backend tests, excluding slow tests (pass coverage=true for coverage report)
 test-backend coverage="false":
-    @echo "\n── Backend: tests ──"
-    if [ "{{ coverage }}" = "true" ] || [ "{{ coverage }}" = "coverage=true" ]; then \
-        uv run pytest tests/ -v -m "not slow" -n auto --cov=backend --cov=cli --cov-report=term-missing; \
-    elif [ "{{ coverage }}" = "false" ] || [ "{{ coverage }}" = "coverage=false" ]; then \
-        uv run pytest tests/ -v -m "not slow" -n auto; \
-    else \
-        echo "Invalid coverage option '{{ coverage }}' (use coverage=true|false)" >&2; \
-        exit 1; \
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cmd=(uv run pytest tests/ -m "not slow" -n auto)
+    if [ "{{ coverage }}" = "true" ] || [ "{{ coverage }}" = "coverage=true" ]; then
+        cmd+=(--cov=backend --cov=cli --cov-report=term-missing)
+    elif [ "{{ coverage }}" != "false" ] && [ "{{ coverage }}" != "coverage=false" ]; then
+        echo "Invalid coverage option '{{ coverage }}' (use coverage=true|false)" >&2
+        exit 1
     fi
+    if [ -n "{{ v }}" ]; then
+        printf '\n── Backend: tests ──\n'
+        "${cmd[@]}" -v
+    else
+        _out="$(mktemp)"
+        trap 'rm -f "$_out"' EXIT
+        rc=0
+        "${cmd[@]}" -q --tb=short > "$_out" 2>&1 || rc=$?
+        if [ $rc -ne 0 ]; then
+            printf '\n── Backend: tests ──\n'
+            cat "$_out"
+            exit $rc
+        fi
+    fi
+    echo "✓ Backend tests passed"
 
 # Backend slow tests only (marked @pytest.mark.slow)
 test-backend-slow:
@@ -219,36 +254,87 @@ check-backend: check-backend-static test-backend
 
 # Frontend static checks: tsc, eslint, dependency-cruiser, knip, npm audit
 check-frontend-static:
-    @echo "── Frontend: type checking ──"
-    cd frontend && npm run typecheck
-    @echo "\n── Frontend: linting ──"
-    cd frontend && npm run lint
-    @echo "\n── Frontend: dependency graph checks ──"
-    cd frontend && npm run lint:deps
-    @echo "\n── Frontend: dependency hygiene ──"
-    cd frontend && npm run lint:unused
-    @echo "\n── Frontend: vulnerability audit ──"
-    cd frontend && npm run audit
+    #!/usr/bin/env bash
+    set -euo pipefail
+    _out="$(mktemp)"
+    trap 'rm -f "$_out"' EXIT
+    run_step() {
+        local label="$1"; shift
+        if [ -n "{{ v }}" ]; then
+            printf '%s\n' "$label"
+            "$@"
+        else
+            local rc=0
+            "$@" > "$_out" 2>&1 || rc=$?
+            if [ $rc -ne 0 ]; then
+                printf '%s\n' "$label"
+                cat "$_out"
+                return $rc
+            fi
+        fi
+    }
+    cd frontend
+    run_step "── Frontend: type checking ──" npm run typecheck
+    run_step $'\n── Frontend: linting ──' npm run lint
+    run_step $'\n── Frontend: dependency graph checks ──' npm run lint:deps
+    run_step $'\n── Frontend: dependency hygiene ──' npm run lint:unused
+    run_step $'\n── Frontend: vulnerability audit ──' npm run audit
+    echo "✓ Frontend static checks passed"
 
 # Frontend tests (pass coverage=true for coverage report)
 test-frontend coverage="false":
-    @echo "\n── Frontend: tests ──"
-    if [ "{{ coverage }}" = "true" ] || [ "{{ coverage }}" = "coverage=true" ]; then \
-        cd frontend && npm run test:coverage; \
-    elif [ "{{ coverage }}" = "false" ] || [ "{{ coverage }}" = "coverage=false" ]; then \
-        cd frontend && npm test; \
-    else \
-        echo "Invalid coverage option '{{ coverage }}' (use coverage=true|false)" >&2; \
-        exit 1; \
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ "{{ coverage }}" != "true" ] && [ "{{ coverage }}" != "coverage=true" ] \
+        && [ "{{ coverage }}" != "false" ] && [ "{{ coverage }}" != "coverage=false" ]; then
+        echo "Invalid coverage option '{{ coverage }}' (use coverage=true|false)" >&2
+        exit 1
     fi
+    cd frontend
+    if [ "{{ coverage }}" = "true" ] || [ "{{ coverage }}" = "coverage=true" ]; then
+        cmd=(npm run test:coverage)
+    else
+        cmd=(npm test)
+    fi
+    if [ -n "{{ v }}" ]; then
+        printf '\n── Frontend: tests ──\n'
+        "${cmd[@]}"
+    else
+        _out="$(mktemp)"
+        trap 'rm -f "$_out"' EXIT
+        rc=0
+        "${cmd[@]}" > "$_out" 2>&1 || rc=$?
+        if [ $rc -ne 0 ]; then
+            printf '\n── Frontend: tests ──\n'
+            # Show only failure details and summary (skip per-file pass list)
+            sed -n '/Failed Tests/,$p' "$_out" || cat "$_out"
+            exit $rc
+        fi
+    fi
+    echo "✓ Frontend tests passed"
 
 # Frontend full gate (static + tests)
 check-frontend: check-frontend-static test-frontend
 
 # Dead-code analysis (Vulture), scoped to runtime Python code only.
 check-vulture:
-    @echo "── Runtime dead-code analysis (Vulture) ──"
-    uv run vulture backend cli --exclude "backend/migrations" --min-confidence 80 --ignore-names "readline"
+    #!/usr/bin/env bash
+    set -euo pipefail
+    _out="$(mktemp)"
+    trap 'rm -f "$_out"' EXIT
+    if [ -n "{{ v }}" ]; then
+        echo "── Runtime dead-code analysis (Vulture) ──"
+        uv run vulture backend cli --exclude "backend/migrations" --min-confidence 80 --ignore-names "readline"
+    else
+        rc=0
+        uv run vulture backend cli --exclude "backend/migrations" --min-confidence 80 --ignore-names "readline" > "$_out" 2>&1 || rc=$?
+        if [ $rc -ne 0 ]; then
+            echo "── Runtime dead-code analysis (Vulture) ──"
+            cat "$_out"
+            exit $rc
+        fi
+    fi
+    echo "✓ Vulture passed"
 
 # Runtime security-focused static analysis (Semgrep)
 check-semgrep:
@@ -275,11 +361,23 @@ check-semgrep:
 
 # Trivy security scans.
 check-trivy:
-    @echo "\n── Security scan (Trivy: all scanners/configured severities) ──"
-    trivy fs -q \
-        --scanners vuln,misconfig,secret,license \
-        --exit-code 1 \
-        .
+    #!/usr/bin/env bash
+    set -euo pipefail
+    _out="$(mktemp)"
+    trap 'rm -f "$_out"' EXIT
+    if [ -n "{{ v }}" ]; then
+        printf '\n── Security scan (Trivy: all scanners/configured severities) ──\n'
+        trivy fs -q --scanners vuln,misconfig,secret,license --exit-code 1 .
+    else
+        rc=0
+        trivy fs -q --scanners vuln,misconfig,secret,license --exit-code 1 . > "$_out" 2>&1 || rc=$?
+        if [ $rc -ne 0 ]; then
+            printf '\n── Security scan (Trivy: all scanners/configured severities) ──\n'
+            cat "$_out"
+            exit $rc
+        fi
+    fi
+    echo "✓ Trivy passed"
 
 # Internal: run a ZAP scan of the given mode with optional env-var fallback for minutes.
 _zap mode env_minutes minutes:
