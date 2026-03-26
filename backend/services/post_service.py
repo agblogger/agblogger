@@ -219,6 +219,7 @@ async def list_posts(
                 id=post.id,
                 file_path=post.file_path,
                 title=post.title,
+                subtitle=post.subtitle,
                 author=display_author,
                 created_at=format_iso(post.created_at),
                 modified_at=format_iso(post.modified_at),
@@ -269,6 +270,7 @@ async def get_post(
         id=post.id,
         file_path=post.file_path,
         title=post.title,
+        subtitle=post.subtitle,
         author=display_author,
         created_at=format_iso(post.created_at),
         modified_at=format_iso(post.modified_at),
@@ -289,7 +291,7 @@ async def search_posts(session: AsyncSession, query: str, *, limit: int = 20) ->
         return []
     safe_query = " ".join('"' + t.replace('"', '""') + '"*' for t in terms if t)
     stmt = text("""
-        SELECT p.id, p.file_path, p.title, p.rendered_excerpt, p.created_at,
+        SELECT p.id, p.file_path, p.title, p.subtitle, p.rendered_excerpt, p.created_at,
                rank
         FROM posts_fts fts
         JOIN posts_cache p ON fts.rowid = p.id
@@ -302,7 +304,7 @@ async def search_posts(session: AsyncSession, query: str, *, limit: int = 20) ->
     rows = result.all()
     results: list[SearchResult] = []
     for r in rows:
-        created_at_val = r[4]
+        created_at_val = r[5]
         if isinstance(created_at_val, datetime):
             created_at_str = format_iso(created_at_val)
         else:
@@ -312,9 +314,10 @@ async def search_posts(session: AsyncSession, query: str, *, limit: int = 20) ->
                 id=r[0],
                 file_path=r[1],
                 title=r[2],
-                rendered_excerpt=r[3],
+                subtitle=r[3],
+                rendered_excerpt=r[4],
                 created_at=created_at_str,
-                rank=float(r[5]) if r[5] else 0.0,
+                rank=float(r[6]) if r[6] else 0.0,
             )
         )
     return results
