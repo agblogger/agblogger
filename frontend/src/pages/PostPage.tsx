@@ -151,6 +151,12 @@ export default function PostPage() {
           {post.title}
         </h1>
 
+        {post.subtitle != null && (
+          <p data-testid="post-subtitle" className="font-display text-xl md:text-2xl text-ink/70 mt-2 leading-snug">
+            {post.subtitle}
+          </p>
+        )}
+
         {user && post.is_draft && (
           <div className="flex items-center justify-between mt-3">
             <span className="text-xs px-2 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 rounded-full font-medium">

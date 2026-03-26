@@ -648,6 +648,23 @@ describe('PostPage', () => {
     errorSpy.mockRestore()
   })
 
+  it('displays subtitle when present', async () => {
+    mockFetchPost.mockResolvedValue({ ...postDetail, subtitle: 'A deeper look at the topic' })
+    renderPostPage()
+    await waitFor(() => {
+      expect(screen.getByText('A deeper look at the topic')).toBeInTheDocument()
+    })
+  })
+
+  it('does not render subtitle element when null', async () => {
+    mockFetchPost.mockResolvedValue({ ...postDetail, subtitle: null })
+    renderPostPage()
+    await waitFor(() => {
+      expect(screen.getByText(postDetail.title)).toBeInTheDocument()
+    })
+    expect(screen.queryByTestId('post-subtitle')).not.toBeInTheDocument()
+  })
+
   it('delete error is rendered via AlertBanner with mb-6 spacing class', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null, is_admin: true }
