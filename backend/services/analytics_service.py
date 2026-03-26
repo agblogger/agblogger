@@ -82,27 +82,27 @@ def _load_token() -> str | None:
             _token_warning_issued = False
             return _goatcounter_token
         _goatcounter_token = None
-        logger.warning("GoatCounter token file is empty: %s", GOATCOUNTER_AUTH_FILE)
+        logger.warning("GoatCounter auth file is empty: %s", GOATCOUNTER_AUTH_FILE)
         return None
     except FileNotFoundError:
         _goatcounter_token = None
         if not _token_warning_issued:
             _token_warning_issued = True
             logger.warning(
-                "GoatCounter token not yet available at %s"
-                " — analytics disabled until token appears",
+                "GoatCounter auth file not yet available at %s"
+                " — analytics disabled until file appears",
                 GOATCOUNTER_AUTH_FILE,
             )
         else:
             logger.debug(
-                "GoatCounter token still not available at %s",
+                "GoatCounter auth file still not available at %s",
                 GOATCOUNTER_AUTH_FILE,
             )
         return None
     except OSError as exc:
         _goatcounter_token = None
         logger.error(
-            "Cannot read GoatCounter token file %s: %s",
+            "Cannot read GoatCounter auth file %s: %s",
             GOATCOUNTER_AUTH_FILE,
             exc,
             exc_info=True,

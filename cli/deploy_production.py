@@ -709,7 +709,7 @@ def build_setup_script_content(config: DeployConfig) -> str:
             '        echo "--- Manual health check probe ---" >&2',
             (
                 '        docker exec "$CONTAINER_ID"'
-                " wget -O - http://127.0.0.1:8000/api/health"
+                " wget -O - http://127.0.0.1:8000/api/health"  # nosemgrep: wget-unencrypted-url
                 " >&2 2>&1 || true"
             ),
             '        echo "" >&2',
@@ -891,6 +891,7 @@ def _agblogger_healthcheck_section(*, include_network: bool = False) -> str:
     block = (
         "    restart: unless-stopped\n"
         "    healthcheck:\n"
+        # nosemgrep: wget-unencrypted-url (localhost health check)
         '      test: ["CMD-SHELL", "wget -qO/dev/null http://127.0.0.1:8000/api/health"]\n'
         "      interval: 10s\n"
         "      timeout: 5s\n"
@@ -950,6 +951,7 @@ def _goatcounter_service_section(
         "      - ./goatcounter/entrypoint.sh:/entrypoint.sh:ro\n"
         "    restart: unless-stopped\n"
         "    healthcheck:\n"
+        # nosemgrep: wget-unencrypted-url (localhost health check)
         '      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080"]\n'
         "      interval: 30s\n"
         "      timeout: 5s\n"
