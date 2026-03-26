@@ -44,7 +44,7 @@ async def rebuild_cache(
         await session.execute(
             text(
                 "CREATE VIRTUAL TABLE IF NOT EXISTS posts_fts USING fts5("
-                "title, content, content='posts_cache', content_rowid='id')"
+                "title, subtitle, content, content='posts_cache', content_rowid='id')"
             )
         )
 
@@ -110,6 +110,7 @@ async def rebuild_cache(
             post = PostCache(
                 file_path=post_data.file_path,
                 title=post_data.title,
+                subtitle=post_data.subtitle,
                 author=post_data.author,
                 created_at=post_data.created_at,
                 modified_at=post_data.modified_at,
@@ -124,11 +125,13 @@ async def rebuild_cache(
             # Index in FTS
             await session.execute(
                 text(
-                    "INSERT INTO posts_fts(rowid, title, content) VALUES (:rowid, :title, :content)"
+                    "INSERT INTO posts_fts(rowid, title, subtitle, content) "
+                    "VALUES (:rowid, :title, :subtitle, :content)"
                 ),
                 {
                     "rowid": post.id,
                     "title": post_data.title,
+                    "subtitle": post_data.subtitle or "",
                     "content": post_data.content,
                 },
             )
@@ -163,7 +166,7 @@ async def ensure_tables(session: AsyncSession) -> None:
     await session.execute(
         text(
             "CREATE VIRTUAL TABLE IF NOT EXISTS posts_fts USING fts5("
-            "title, content, content='posts_cache', content_rowid='id')"
+            "title, subtitle, content, content='posts_cache', content_rowid='id')"
         )
     )
     await session.commit()
