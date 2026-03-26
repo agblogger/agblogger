@@ -1707,6 +1707,12 @@ def write_bundle_files(config: DeployConfig, bundle_dir: Path) -> None:
     goatcounter_dir = bundle_dir / "goatcounter"
     goatcounter_dir.mkdir(exist_ok=True)
     entrypoint_src = Path(__file__).resolve().parent.parent / "goatcounter" / "entrypoint.sh"
+    if not entrypoint_src.is_file():
+        print(
+            f"ERROR: GoatCounter entrypoint script not found: {entrypoint_src}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
     entrypoint_dst = goatcounter_dir / "entrypoint.sh"
     shutil.copy2(entrypoint_src, entrypoint_dst)
     try:

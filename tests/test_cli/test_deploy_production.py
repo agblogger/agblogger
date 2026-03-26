@@ -5530,3 +5530,32 @@ def test_write_bundle_files_includes_goatcounter_entrypoint(tmp_path: Path) -> N
     entrypoint = bundle_dir / "goatcounter" / "entrypoint.sh"
     assert entrypoint.exists()
     assert entrypoint.stat().st_mode & 0o111 != 0
+
+
+def test_write_bundle_files_fails_gracefully_when_entrypoint_missing(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Deployment bundle should fail with a clear error when entrypoint.sh is missing."""
+    config = _make_config(
+        deployment_mode=DEPLOY_MODE_TARBALL,
+        image_ref="ghcr.io/example/agblogger:v1.0",
+    )
+    bundle_dir = tmp_path / "bundle"
+
+    # Make the entrypoint source path resolve to a non-existent location
+    fake_goatcounter_dir = tmp_path / "fake_repo" / "goatcounter"
+    fake_goatcounter_dir.mkdir(parents=True)
+    # Do NOT create entrypoint.sh — it should be missing
+
+    with (
+        patch(
+            "cli.deploy_production.Path.resolve",
+            return_value=tmp_path / "fake_repo" / "cli" / "deploy_production.py",
+        ),
+        pytest.raises(SystemExit),
+    ):
+        write_bundle_files(config, bundle_dir)
+
+    captured = capsys.readouterr()
+    assert "entrypoint" in captured.err.lower()

@@ -181,6 +181,32 @@ async def test_close_analytics_client_sets_global_to_none() -> None:
     assert svc._http_client is None
 
 
+async def test_close_analytics_client_drains_pending_tasks() -> None:
+    """close_analytics_client waits for pending background tasks before closing."""
+    import asyncio
+
+    from backend.services.analytics_service import _get_http_client
+
+    # Ensure a client exists
+    _get_http_client()
+
+    completed = False
+
+    async def slow_task() -> None:
+        nonlocal completed
+        await asyncio.sleep(0.05)
+        completed = True
+
+    task = asyncio.create_task(slow_task())
+    svc._background_tasks.add(task)
+    task.add_done_callback(svc._background_tasks.discard)
+
+    await close_analytics_client()
+
+    assert completed, "close_analytics_client should have waited for pending tasks"
+    assert svc._http_client is None
+
+
 # ── Issue 3: httpx client timeout must not be None ────────────────────────────
 
 
@@ -310,6 +336,32 @@ async def test_stats_request_catches_http_error_returns_none() -> None:
         result = await _stats_request("/api/v0/stats/total")
 
     assert result is None
+
+
+async def test_stats_request_propagates_value_error() -> None:
+    """A ValueError in _stats_request (not JSON decode) must propagate as a programming bug."""
+    from backend.services.analytics_service import _stats_request
+
+    mock_response = MagicMock()
+    mock_response.raise_for_status.return_value = None
+    mock_response.json.return_value = {"total": 0}
+
+    mock_client = MagicMock()
+    # Inject a ValueError from a different source (e.g., URL construction bug)
+    mock_client.get = AsyncMock(side_effect=ValueError("invalid literal"))
+
+    with (
+        patch(
+            "backend.services.analytics_service._get_http_client",
+            return_value=mock_client,
+        ),
+        patch(
+            "backend.services.analytics_service._load_token",
+            return_value="test-token",
+        ),
+        pytest.raises(ValueError, match="invalid literal"),
+    ):
+        await _stats_request("/api/v0/stats/total")
 
 
 # ── Issue 9: _stats_request token-None path ───────────────────────────────────

@@ -65,7 +65,7 @@ class ReferrerEntry(BaseModel):
 class PathReferrersResponse(BaseModel):
     """Referrer breakdown for a given path ID."""
 
-    path_id: int
+    path_id: int = Field(ge=1)
     referrers: list[ReferrerEntry] = Field(default_factory=list)
 
 

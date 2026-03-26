@@ -1,10 +1,11 @@
-"""Analytics service: settings management, hit recording, and stats proxy."""
+"""Analytics service: settings, hit recording, stats proxy, and background tasks."""
 
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 import httpx
 from crawlerdetect import CrawlerDetect
@@ -39,8 +40,10 @@ GOATCOUNTER_URL = "http://goatcounter:8080"
 GOATCOUNTER_AUTH_FILE = "/data/goatcounter-token/token"
 _HIT_TIMEOUT = 2.0
 _STATS_TIMEOUT = 5.0
+# OSError covers socket-level failures that may not be wrapped by httpx.
 _HIT_ERRORS = (httpx.HTTPError, OSError)
-_STATS_ERRORS = (httpx.HTTPError, httpx.InvalidURL, ValueError)
+_STATS_ERRORS = (httpx.HTTPError, httpx.InvalidURL, json.JSONDecodeError)
+_COUNT_PARSE_ERRORS = (TypeError, ValueError)
 _MAX_BACKGROUND_TASKS = 64
 
 # ── Module-level singletons ────────────────────────────────────────────────────
@@ -193,7 +196,7 @@ async def record_hit(
     visible in the caller's error handling.
 
     Skips recording when:
-    - The request carries an admin user session.
+    - The authenticated user has admin privileges.
     - The User-Agent is identified as a bot/crawler.
     - Analytics are disabled in settings.
     - The GoatCounter token is not yet available.
@@ -258,7 +261,15 @@ async def _stats_request(
             timeout=_STATS_TIMEOUT,
         )
         response.raise_for_status()
-        return cast("dict[str, Any]", response.json())
+        data = response.json()
+        if not isinstance(data, dict):
+            logger.warning(
+                "GoatCounter returned non-object JSON for %r: %s",
+                endpoint,
+                type(data).__name__,
+            )
+            return None
+        return data
     except _STATS_ERRORS:
         logger.warning(
             "GoatCounter stats request to %r (params=%r) failed",
@@ -452,13 +463,23 @@ async def fetch_view_count(
     hits = data.get("hits", [])
     for entry in hits:
         if entry.get("path") == path:
-            return int(entry.get("count", 0))
+            try:
+                return int(entry.get("count", 0))
+            except _COUNT_PARSE_ERRORS:
+                logger.warning("Unexpected count value in GoatCounter response for path %r", path)
+                return 0
     return 0
 
 
 async def close_analytics_client() -> None:
-    """Close the shared httpx client, releasing connections."""
+    """Close the shared httpx client, releasing connections.
+
+    Drains pending background tasks (with a short timeout) before closing
+    the client to avoid noisy ClosedPoolError warnings from in-flight hits.
+    """
     global _http_client
+    if _background_tasks:
+        await asyncio.wait(_background_tasks, timeout=3.0)
     if _http_client is not None:
         await _http_client.aclose()
         _http_client = None

@@ -24,6 +24,8 @@ export interface AnalyticsDashboardData {
 
 export type DateRange = '7d' | '30d' | '90d'
 
+const RANGE_DAYS: Record<DateRange, number> = { '7d': 7, '30d': 30, '90d': 90 }
+
 interface AnalyticsDashboardStatsData {
   stats: TotalStatsResponse
   paths: PathHitsResponse
@@ -58,17 +60,27 @@ function formatLocalDate(date: Date): string {
   return `${year}-${month}-${day}`
 }
 
+/**
+ * Compute start/end date strings for a given range.
+ *
+ * Dates are intentionally computed in the browser's local timezone so the
+ * dashboard aligns with the user's calendar day, not UTC midnight.
+ */
 function getDateRange(range: DateRange): { start: string; end: string } {
   const end = new Date()
   const start = new Date()
-  const days = range === '7d' ? 7 : range === '30d' ? 30 : 90
-  start.setDate(start.getDate() - days)
+  start.setDate(start.getDate() - RANGE_DAYS[range])
   return {
     start: formatLocalDate(start),
     end: formatLocalDate(end),
   }
 }
 
+/**
+ * Composite SWR hook that fetches analytics settings first, then conditionally
+ * fetches stats (total, paths, browsers, OS) in parallel when analytics is enabled.
+ * Returns zeroed-out data when analytics is disabled rather than triggering fetches.
+ */
 export function useAnalyticsDashboard(range: DateRange) {
   const { start, end } = getDateRange(range)
 

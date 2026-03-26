@@ -523,9 +523,11 @@ async def test_stats_request_returns_none_on_timeout() -> None:
 
 async def test_stats_request_returns_none_on_invalid_json() -> None:
     """_stats_request returns None when the response body is not valid JSON."""
+    import json
+
     mock_response = MagicMock()
     mock_response.raise_for_status.return_value = None
-    mock_response.json.side_effect = ValueError("invalid JSON")
+    mock_response.json.side_effect = json.JSONDecodeError("Expecting value", "", 0)
     mock_client = MagicMock()
     mock_client.get = AsyncMock(return_value=mock_response)
 
@@ -542,3 +544,48 @@ async def test_stats_request_returns_none_on_invalid_json() -> None:
         result = await _stats_request("/api/v0/stats/total")
 
     assert result is None
+
+
+async def test_stats_request_returns_none_on_non_dict_json() -> None:
+    """_stats_request returns None when GoatCounter returns a JSON array instead of object."""
+    mock_response = MagicMock()
+    mock_response.raise_for_status.return_value = None
+    mock_response.json.return_value = [{"unexpected": "array"}]
+    mock_client = MagicMock()
+    mock_client.get = AsyncMock(return_value=mock_response)
+
+    with (
+        patch(
+            "backend.services.analytics_service._get_http_client",
+            return_value=mock_client,
+        ),
+        patch(
+            "backend.services.analytics_service._load_token",
+            return_value="test-token",
+        ),
+    ):
+        result = await _stats_request("/api/v0/stats/total")
+
+    assert result is None
+
+
+async def test_fetch_view_count_handles_non_numeric_count(session: AsyncSession) -> None:
+    """fetch_view_count returns 0 when GoatCounter returns a non-numeric count value."""
+    from backend.services.analytics_service import update_analytics_settings
+
+    await update_analytics_settings(session, analytics_enabled=True, show_views_on_posts=True)
+
+    fake_response = {
+        "hits": [
+            {"path": "/post/hello", "count": "N/A"},
+        ]
+    }
+
+    with patch(
+        "backend.services.analytics_service._stats_request",
+        new_callable=AsyncMock,
+        return_value=fake_response,
+    ):
+        count = await fetch_view_count(session, "/post/hello")
+
+    assert count == 0

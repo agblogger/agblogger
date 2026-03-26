@@ -320,3 +320,25 @@ class TestFirePostHitNonCanonicalPath:
         with patch("backend.api.posts.fire_background_hit") as mock_fire:
             _fire_post_hit(mock_request, mock_session_factory, "posts/my-post.md", None)
             mock_fire.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_non_canonical_file_path_logs_warning(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """_fire_post_hit logs a warning when file_path_to_slug raises ValueError."""
+        import logging
+        from unittest.mock import MagicMock
+
+        from backend.api.posts import _fire_post_hit
+
+        mock_request = MagicMock()
+        mock_request.client = MagicMock()
+        mock_request.client.host = "127.0.0.1"
+        mock_request.headers = {"user-agent": "test-agent"}
+
+        mock_session_factory = MagicMock()
+
+        with caplog.at_level(logging.WARNING, logger="backend.api.posts"):
+            _fire_post_hit(mock_request, mock_session_factory, "posts/my-post.md", None)
+
+        assert any("posts/my-post.md" in r.message for r in caplog.records)

@@ -742,7 +742,11 @@ def _fire_post_hit(
     try:
         slug = file_path_to_slug(post_file_path)
     except ValueError:
-        # Non-canonical path: skip hit recording
+        logger.warning(
+            "Skipping analytics hit: cannot convert file path %r to slug",
+            post_file_path,
+            exc_info=True,
+        )
         return
     fire_background_hit(
         request=request,

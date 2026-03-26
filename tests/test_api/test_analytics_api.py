@@ -13,6 +13,7 @@ from backend.schemas.analytics import (
     AnalyticsSettingsUpdate,
     BreakdownEntry,
     PathHit,
+    PathReferrersResponse,
     TotalStatsResponse,
 )
 from backend.utils.slug import file_path_to_slug
@@ -730,6 +731,44 @@ class TestPathHitSchemaValidation:
         """Empty path string should be rejected."""
         with pytest.raises(ValidationError):
             PathHit(path_id=1, path="", views=1, unique=1)
+
+
+class TestPathReferrersResponseSchemaValidation:
+    """PathReferrersResponse.path_id must enforce ge=1 like PathHit.path_id."""
+
+    def test_path_referrers_response_rejects_zero_path_id(self) -> None:
+        with pytest.raises(ValidationError):
+            PathReferrersResponse(path_id=0, referrers=[])
+
+    def test_path_referrers_response_rejects_negative_path_id(self) -> None:
+        with pytest.raises(ValidationError):
+            PathReferrersResponse(path_id=-1, referrers=[])
+
+    def test_path_referrers_response_accepts_valid_path_id(self) -> None:
+        resp = PathReferrersResponse(path_id=1, referrers=[])
+        assert resp.path_id == 1
+
+
+class TestPathReferrersEndpointValidation:
+    """Referrers endpoint must validate path_id >= 1."""
+
+    @pytest.mark.asyncio
+    async def test_referrers_rejects_zero_path_id(self, client: AsyncClient) -> None:
+        token = await _get_admin_token(client)
+        resp = await client.get(
+            "/api/admin/analytics/stats/hits/0",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_referrers_rejects_negative_path_id(self, client: AsyncClient) -> None:
+        token = await _get_admin_token(client)
+        resp = await client.get(
+            "/api/admin/analytics/stats/hits/-1",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 422
 
 
 class TestPublicViewCountPathSanitization:

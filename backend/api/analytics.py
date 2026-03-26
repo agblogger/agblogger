@@ -6,7 +6,7 @@ import logging
 import re
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -39,6 +39,8 @@ logger = logging.getLogger(__name__)
 admin_router = APIRouter(prefix="/api/admin/analytics", tags=["analytics-admin"])
 public_router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 
+# Restrict public file_path to safe characters and bounded length to prevent
+# path traversal, injection, and abuse of the GoatCounter filter API.
 _SAFE_PATH_PATTERN = re.compile(r"^[a-zA-Z0-9/_.-]{1,200}$")
 
 
@@ -46,9 +48,10 @@ async def _resolve_public_post_slug(session: AsyncSession, file_path: str) -> st
     """Resolve *file_path* to a published post slug or return None.
 
     Accepts either a bare slug (``hello``) or the canonical directory-backed
-    file path (``posts/hello/index.md``). Draft, deleted, and otherwise
-    non-public posts intentionally resolve to ``None`` so the public views
-    endpoint stays non-enumerating.
+    file path (``posts/hello/index.md``). Paths starting with ``posts/`` that
+    do not match the canonical directory-backed form are rejected. Draft,
+    deleted, and otherwise non-public posts intentionally resolve to ``None``
+    so the public views endpoint stays non-enumerating.
     """
     normalized_path = file_path.strip().strip("/")
     if normalized_path == "":
@@ -134,7 +137,7 @@ async def get_path_hits(
 
 @admin_router.get("/stats/hits/{path_id}", response_model=PathReferrersResponse)
 async def get_path_referrers(
-    path_id: int,
+    path_id: Annotated[int, Path(ge=1)],
     session: Annotated[AsyncSession, Depends(get_session)],
     _user: Annotated[User, Depends(require_admin)],
 ) -> PathReferrersResponse:
