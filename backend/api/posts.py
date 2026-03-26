@@ -73,12 +73,13 @@ async def _empty_string() -> str:
 router = APIRouter(prefix="/api/posts", tags=["posts"])
 
 _FTS_DELETE_SQL = text(
-    "INSERT INTO posts_fts(posts_fts, rowid, title, content) "
-    "VALUES ('delete', :rowid, :title, :content)"
+    "INSERT INTO posts_fts(posts_fts, rowid, title, subtitle, content) "
+    "VALUES ('delete', :rowid, :title, :subtitle, :content)"
 )
 
 _FTS_INSERT_SQL = text(
-    "INSERT INTO posts_fts(rowid, title, content) VALUES (:rowid, :title, :content)"
+    "INSERT INTO posts_fts(rowid, title, subtitle, content) "
+    "VALUES (:rowid, :title, :subtitle, :content)"
 )
 
 
@@ -109,24 +110,31 @@ async def _upsert_post_fts(
     *,
     post_id: int,
     title: str,
+    subtitle: str,
     content: str,
     old_title: str | None = None,
+    old_subtitle: str | None = None,
     old_content: str | None = None,
 ) -> None:
     """Keep the full-text index row in sync with post cache mutations."""
     if old_title is not None and old_content is not None:
         await session.execute(
             _FTS_DELETE_SQL,
-            {"rowid": post_id, "title": old_title, "content": old_content},
+            {
+                "rowid": post_id,
+                "title": old_title,
+                "subtitle": old_subtitle or "",
+                "content": old_content,
+            },
         )
     await session.execute(
         _FTS_INSERT_SQL,
-        {"rowid": post_id, "title": title, "content": content},
+        {"rowid": post_id, "title": title, "subtitle": subtitle, "content": content},
     )
 
 
 async def _delete_post_fts(
-    session: AsyncSession, *, post_id: int, title: str, content: str
+    session: AsyncSession, *, post_id: int, title: str, subtitle: str, content: str
 ) -> None:
     """Delete a post row from the full-text index.
 
@@ -136,7 +144,7 @@ async def _delete_post_fts(
     try:
         await session.execute(
             _FTS_DELETE_SQL,
-            {"rowid": post_id, "title": title, "content": content},
+            {"rowid": post_id, "title": title, "subtitle": subtitle, "content": content},
         )
     except OperationalError as exc:
         logger.warning(
@@ -180,6 +188,7 @@ async def _build_post_detail(
         id=post.id,
         file_path=post.file_path,
         title=post.title,
+        subtitle=post.subtitle,
         author=display_author,
         created_at=format_iso(post.created_at),
         modified_at=format_iso(post.modified_at),
@@ -357,6 +366,7 @@ async def upload_post(
             post = PostCache(
                 file_path=file_path,
                 title=post_data.title,
+                subtitle=post_data.subtitle,
                 author=post_data.author,
                 created_at=post_data.created_at,
                 modified_at=post_data.modified_at,
@@ -372,6 +382,7 @@ async def upload_post(
                 session,
                 post_id=post.id,
                 title=post_data.title,
+                subtitle=post_data.subtitle or "",
                 content=post_data.content,
             )
             content_manager.write_post(file_path, post_data)
@@ -419,6 +430,7 @@ async def get_post_for_edit(
     return PostEditResponse(
         file_path=file_path,
         title=post_data.title,
+        subtitle=post_data.subtitle,
         body=post_data.content,
         labels=post_data.labels,
         is_draft=post_data.is_draft,
@@ -788,6 +800,7 @@ async def create_post_endpoint(
 
         post_data = PostData(
             title=body.title,
+            subtitle=body.subtitle,
             content=body.body,
             raw_content="",
             created_at=now,
@@ -805,6 +818,7 @@ async def create_post_endpoint(
         post = PostCache(
             file_path=file_path,
             title=post_data.title,
+            subtitle=post_data.subtitle,
             author=post_data.author,
             created_at=post_data.created_at,
             modified_at=post_data.modified_at,
@@ -821,6 +835,7 @@ async def create_post_endpoint(
                 session,
                 post_id=post.id,
                 title=post_data.title,
+                subtitle=post_data.subtitle or "",
                 content=post_data.content,
             )
         except Exception:
@@ -898,6 +913,7 @@ async def update_post_endpoint(
 
         post_data = PostData(
             title=title,
+            subtitle=body.subtitle,
             content=body.body,
             raw_content="",
             created_at=created_at,
@@ -957,9 +973,11 @@ async def update_post_endpoint(
                 needs_rename = True
 
         previous_title = existing.title
+        previous_subtitle = existing.subtitle or ""
         previous_content = existing_post_data.content if existing_post_data else ""
 
         existing.title = title
+        existing.subtitle = body.subtitle
         existing.author = author
         existing.created_at = created_at
         existing.modified_at = now
@@ -972,8 +990,10 @@ async def update_post_endpoint(
             session,
             post_id=existing.id,
             title=title,
+            subtitle=body.subtitle or "",
             content=post_data.content,
             old_title=previous_title,
+            old_subtitle=previous_subtitle,
             old_content=previous_content,
         )
 
@@ -1084,6 +1104,7 @@ async def delete_post_endpoint(
             session,
             post_id=existing.id,
             title=existing.title,
+            subtitle=existing.subtitle or "",
             content=old_content,
         )
         await session.delete(existing)
