@@ -14,6 +14,7 @@ from backend.services.datetime_service import format_datetime, parse_datetime
 RECOGNIZED_FIELDS: frozenset[str] = frozenset(
     {
         "title",
+        "subtitle",
         "created_at",
         "modified_at",
         "author",
@@ -32,6 +33,7 @@ class PostData:
     raw_content: str
     created_at: datetime
     modified_at: datetime
+    subtitle: str | None = None
     author: str | None = None
     labels: list[str] = field(default_factory=list)
     is_draft: bool = False
@@ -42,6 +44,7 @@ class FrontmatterMetadata(TypedDict):
     title: str
     created_at: str
     modified_at: str
+    subtitle: NotRequired[str]
     author: NotRequired[str]
     labels: NotRequired[list[str]]
     draft: NotRequired[bool]
@@ -165,6 +168,14 @@ def parse_post(
         author = str(raw_author).strip() or None
     else:
         author = None
+    raw_subtitle = post.get("subtitle")
+    subtitle: str | None
+    if isinstance(raw_subtitle, str):
+        subtitle = raw_subtitle.strip() or None
+    elif raw_subtitle is not None:
+        subtitle = str(raw_subtitle).strip() or None
+    else:
+        subtitle = None
     is_draft = bool(post.get("draft", False))
 
     return PostData(
@@ -173,6 +184,7 @@ def parse_post(
         raw_content=raw_content,
         created_at=created_at,
         modified_at=modified_at,
+        subtitle=subtitle,
         author=author,
         labels=labels,
         is_draft=is_draft,
@@ -187,6 +199,8 @@ def serialize_post(post_data: PostData) -> str:
         "created_at": format_datetime(post_data.created_at),
         "modified_at": format_datetime(post_data.modified_at),
     }
+    if post_data.subtitle:
+        metadata["subtitle"] = post_data.subtitle
     if post_data.author:
         metadata["author"] = post_data.author
     if post_data.labels:

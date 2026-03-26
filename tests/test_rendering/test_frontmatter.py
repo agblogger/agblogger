@@ -409,6 +409,135 @@ Body content.
         assert "author_username" not in result
 
 
+class TestSubtitle:
+    def test_subtitle_recognized_field(self) -> None:
+        assert "subtitle" in RECOGNIZED_FIELDS
+
+    def test_parse_subtitle_from_frontmatter(self) -> None:
+        content = """\
+---
+title: My Post
+subtitle: A deeper look
+created_at: 2026-02-02 22:21:29.975359+00
+---
+
+Body content.
+"""
+        post = parse_post(content)
+        assert post.subtitle == "A deeper look"
+
+    def test_parse_subtitle_none_when_absent(self) -> None:
+        content = """\
+---
+title: My Post
+created_at: 2026-02-02 22:21:29.975359+00
+---
+
+Body content.
+"""
+        post = parse_post(content)
+        assert post.subtitle is None
+
+    def test_parse_subtitle_none_when_empty_string(self) -> None:
+        content = """\
+---
+title: My Post
+subtitle: ""
+created_at: 2026-02-02 22:21:29.975359+00
+---
+
+Body content.
+"""
+        post = parse_post(content)
+        assert post.subtitle is None
+
+    def test_parse_subtitle_whitespace_stripped(self) -> None:
+        content = """\
+---
+title: My Post
+subtitle: "  Spaces around  "
+created_at: 2026-02-02 22:21:29.975359+00
+---
+
+Body content.
+"""
+        post = parse_post(content)
+        assert post.subtitle == "Spaces around"
+
+    def test_parse_numeric_subtitle_coerced(self) -> None:
+        content = """\
+---
+title: My Post
+subtitle: 42
+created_at: 2026-02-02 22:21:29.975359+00
+---
+
+Body content.
+"""
+        post = parse_post(content)
+        assert post.subtitle == "42"
+
+    def test_serialize_includes_subtitle_when_present(self) -> None:
+        now = now_utc()
+        post_data = PostData(
+            title="Test",
+            subtitle="My subtitle",
+            content="Body",
+            raw_content="",
+            created_at=now,
+            modified_at=now,
+        )
+        result = serialize_post(post_data)
+        parsed = frontmatter.loads(result)
+        assert parsed["subtitle"] == "My subtitle"
+
+    def test_serialize_omits_subtitle_when_none(self) -> None:
+        now = now_utc()
+        post_data = PostData(
+            title="Test",
+            subtitle=None,
+            content="Body",
+            raw_content="",
+            created_at=now,
+            modified_at=now,
+        )
+        result = serialize_post(post_data)
+        parsed = frontmatter.loads(result)
+        assert "subtitle" not in parsed.metadata
+
+    def test_subtitle_roundtrip(self) -> None:
+        now = now_utc()
+        original = PostData(
+            title="Round Trip",
+            subtitle="The subtitle",
+            content="Full content here.",
+            raw_content="",
+            created_at=now,
+            modified_at=now,
+            author="Admin",
+            labels=["swe"],
+            is_draft=False,
+            file_path="posts/roundtrip/index.md",
+        )
+        serialized = serialize_post(original)
+        reparsed = parse_post(serialized, file_path="posts/roundtrip/index.md")
+        assert reparsed.subtitle == "The subtitle"
+        assert reparsed.title == "Round Trip"
+
+    def test_subtitle_absent_roundtrip(self) -> None:
+        now = now_utc()
+        original = PostData(
+            title="No Subtitle",
+            content="Content.",
+            raw_content="",
+            created_at=now,
+            modified_at=now,
+        )
+        serialized = serialize_post(original)
+        reparsed = parse_post(serialized)
+        assert reparsed.subtitle is None
+
+
 class TestStripLeadingHeading:
     def test_strips_matching_heading(self) -> None:
         assert strip_leading_heading("# Hello\n\nContent", "Hello") == "\nContent"
