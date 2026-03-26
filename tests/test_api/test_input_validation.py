@@ -191,6 +191,13 @@ class TestDateFilterValidation:
         resp = await client.get("/api/posts?from=2026-01-01&to=2026-12-31")
         assert resp.status_code == 200
 
+    @pytest.mark.asyncio
+    async def test_valid_iso_timestamps_work(self, client: AsyncClient) -> None:
+        resp = await client.get(
+            "/api/posts?from=2026-01-01T00:00:00.000Z&to=2026-12-31T23:59:59.999Z"
+        )
+        assert resp.status_code == 200
+
 
 class TestValueErrorForwarding:
     """ValueError handler returns a generic message to avoid leaking internals."""

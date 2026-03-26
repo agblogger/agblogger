@@ -112,22 +112,20 @@ async def list_posts(
 
     if from_date:
         try:
-            date_part = from_date.split("T")[0].split(" ")[0]
-            from_dt = parse_datetime(date_part + " 00:00:00", fallback_tz="UTC")
+            from_dt = parse_datetime(from_date)
             stmt = stmt.where(PostCache.created_at >= from_dt)
         except ValueError:
             logger.warning("Failed to parse 'from' date %r", from_date, exc_info=True)
-            msg = f"Invalid 'from' date format: {from_date!r}. Expected YYYY-MM-DD."
+            msg = f"Invalid 'from' date format: {from_date!r}. Expected ISO 8601."
             raise ValueError(msg) from None
 
     if to_date:
         try:
-            date_part = to_date.split("T")[0].split(" ")[0]
-            to_dt = parse_datetime(date_part + " 23:59:59.999999", fallback_tz="UTC")
+            to_dt = parse_datetime(to_date)
             stmt = stmt.where(PostCache.created_at <= to_dt)
         except ValueError:
             logger.warning("Failed to parse 'to' date %r", to_date, exc_info=True)
-            msg = f"Invalid 'to' date format: {to_date!r}. Expected YYYY-MM-DD."
+            msg = f"Invalid 'to' date format: {to_date!r}. Expected ISO 8601."
             raise ValueError(msg) from None
 
     # Label filtering
