@@ -40,3 +40,25 @@ export function formatRelativeDate(dateStr: string): string {
     return dateStr || ''
   }
 }
+
+/**
+ * Convert a YYYY-MM-DD date string to a UTC ISO timestamp representing
+ * the start of that day in the user's local timezone.
+ */
+export function localDateToUtcStart(dateStr: string): string {
+  if (!dateStr) return ''
+  const [year, month, day] = dateStr.split('-').map(Number)
+  const local = new Date(year, month - 1, day, 0, 0, 0, 0)
+  return local.toISOString()
+}
+
+/**
+ * Convert a YYYY-MM-DD date string to a UTC ISO timestamp representing
+ * the end of that day in the user's local timezone.
+ */
+export function localDateToUtcEnd(dateStr: string): string {
+  if (!dateStr) return ''
+  const [year, month, day] = dateStr.split('-').map(Number)
+  const local = new Date(year, month - 1, day, 23, 59, 59, 999)
+  return local.toISOString()
+}

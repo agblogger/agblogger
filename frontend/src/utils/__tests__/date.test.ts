@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { formatDate, formatRelativeDate } from '../date'
+import { formatDate, formatRelativeDate, localDateToUtcStart, localDateToUtcEnd } from '../date'
 
 describe('formatDate', () => {
   it('formats standard ISO timestamp', () => {
@@ -81,5 +81,34 @@ describe('formatRelativeDate', () => {
   it('falls back to full string on multi-word invalid input', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     expect(formatRelativeDate('totally invalid date')).toBe('totally invalid date')
+  })
+})
+
+describe('localDateToUtcStart', () => {
+  it('converts a date string to UTC start-of-day ISO string', () => {
+    const result = localDateToUtcStart('2026-03-01')
+    expect(result).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/)
+    const parsed = new Date(result)
+    expect(parsed.getFullYear()).toBe(2026)
+    const local = new Date(2026, 2, 1, 0, 0, 0, 0)
+    expect(parsed.getTime()).toBe(local.getTime())
+  })
+
+  it('returns empty string for empty input', () => {
+    expect(localDateToUtcStart('')).toBe('')
+  })
+})
+
+describe('localDateToUtcEnd', () => {
+  it('converts a date string to UTC end-of-day ISO string', () => {
+    const result = localDateToUtcEnd('2026-03-01')
+    expect(result).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/)
+    const parsed = new Date(result)
+    const local = new Date(2026, 2, 1, 23, 59, 59, 999)
+    expect(parsed.getTime()).toBe(local.getTime())
+  })
+
+  it('returns empty string for empty input', () => {
+    expect(localDateToUtcEnd('')).toBe('')
   })
 })
