@@ -24,3 +24,20 @@ def test_entrypoint_site_creation_does_not_silently_ignore_errors() -> None:
     entrypoint = Path("goatcounter/entrypoint.sh").read_text()
     # The old pattern '|| echo "..."' hides real failures behind a misleading message
     assert '|| echo "Site creation skipped' not in entrypoint
+
+
+def test_entrypoint_site_creation_exits_on_unexpected_failure() -> None:
+    """Site creation must exit with error for unexpected (non-idempotent) failures."""
+    entrypoint = Path("goatcounter/entrypoint.sh").read_text()
+    # Must capture output and check for known-safe patterns
+    assert "output=$(" in entrypoint
+    assert '"already exists"' in entrypoint
+    assert '"UNIQUE constraint"' in entrypoint
+    # Must exit 1 on unexpected failures
+    assert "exit 1" in entrypoint
+
+
+def test_entrypoint_perm_flag_has_bitmask_comment() -> None:
+    """The -perm 3 flag must have a comment explaining the bitmask value."""
+    entrypoint = Path("goatcounter/entrypoint.sh").read_text()
+    assert "-perm 3)  # bitmask:" in entrypoint

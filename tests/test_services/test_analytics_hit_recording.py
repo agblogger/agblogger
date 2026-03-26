@@ -288,3 +288,38 @@ async def test_record_hit_no_http_call_when_token_none(
         )
 
     mock_client.post.assert_not_called()
+
+
+async def test_record_hit_catches_oserror(
+    session: AsyncSession,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A bare OSError (e.g. ConnectionResetError) from post() is caught and logged.
+
+    This is a regression test: OSError is in _HIT_ERRORS so it must be caught
+    without propagating.
+    """
+    mock_client = MagicMock()
+    mock_client.post = AsyncMock(side_effect=ConnectionResetError("Connection reset by peer"))
+
+    with (
+        patch(
+            "backend.services.analytics_service._get_http_client",
+            return_value=mock_client,
+        ),
+        patch(
+            "backend.services.analytics_service._load_token",
+            return_value="test-token",
+        ),
+        caplog.at_level("WARNING", logger="backend.services.analytics_service"),
+    ):
+        # Must not raise
+        await record_hit(
+            session=session,
+            path="/post/hello-world",
+            client_ip="1.2.3.4",
+            user_agent="Mozilla/5.0",
+            user=None,
+        )
+
+    assert any("Failed to record analytics hit" in r.message for r in caplog.records)

@@ -11,21 +11,27 @@ mkdir -p /data/goatcounter-token
 if [ ! -f "$TOKEN_FILE" ] || [ ! -s "$GOATCOUNTER_DB" ]; then
 
     echo "Provisioning GoatCounter: creating site..."
-    if ! goatcounter db create-site \
+    if ! output=$(goatcounter db create-site \
         -createdb \
         -db "sqlite+$GOATCOUNTER_DB" \
         -vhost stats.internal \
         -user.email admin@localhost \
         -user.password "$(head -c 32 /dev/urandom | base64)" \
-        2>&1; then
-        echo "WARNING: Site creation failed (may already exist, continuing...)" >&2
+        2>&1); then
+        case "$output" in
+            *"already exists"*|*"UNIQUE constraint"*)
+                echo "GoatCounter site already exists, continuing..." ;;
+            *)
+                echo "ERROR: Site creation failed: $output" >&2
+                exit 1 ;;
+        esac
     fi
 
     echo "Provisioning GoatCounter: creating API token..."
     TOKEN=$(goatcounter db create-apitoken \
         -db "sqlite+$GOATCOUNTER_DB" \
         -site-id 1 \
-        -perm 3)
+        -perm 3)  # bitmask: 1 (read stats) + 2 (record hits)
 
     if [ -z "$TOKEN" ]; then
         echo "ERROR: Failed to create GoatCounter API token" >&2

@@ -325,6 +325,18 @@ def test_build_direct_compose_content_passes_all_env_vars() -> None:
     assert "AUTH_LOGIN_MAX_FAILURES=${AUTH_LOGIN_MAX_FAILURES:-5}" in content
 
 
+def test_build_direct_compose_content_includes_tz_utc() -> None:
+    """TZ=UTC must be present in agblogger environment to ensure consistent timestamps."""
+    content = build_direct_compose_content()
+    assert "TZ=UTC" in content
+
+
+def test_build_image_compose_content_includes_tz_utc() -> None:
+    """TZ=UTC must be present in image-based compose to ensure consistent timestamps."""
+    content = build_image_compose_content()
+    assert "TZ=UTC" in content
+
+
 def test_build_image_compose_content_uses_required_image_reference() -> None:
     content = build_image_compose_content()
     assert "${AGBLOGGER_IMAGE?Set AGBLOGGER_IMAGE}" in content

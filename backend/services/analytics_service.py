@@ -42,7 +42,7 @@ _HIT_TIMEOUT = 2.0
 _STATS_TIMEOUT = 5.0
 # OSError covers socket-level failures that may not be wrapped by httpx.
 _HIT_ERRORS = (httpx.HTTPError, OSError)
-_STATS_ERRORS = (httpx.HTTPError, httpx.InvalidURL, json.JSONDecodeError)
+_STATS_ERRORS = (httpx.HTTPError, httpx.InvalidURL, json.JSONDecodeError, OSError)
 _COUNT_PARSE_ERRORS = (TypeError, ValueError)
 _MAX_BACKGROUND_TASKS = 64
 
@@ -105,6 +105,7 @@ def _load_token() -> str | None:
             "Cannot read GoatCounter token file %s: %s",
             GOATCOUNTER_AUTH_FILE,
             exc,
+            exc_info=True,
         )
         return None
 
@@ -343,10 +344,7 @@ async def fetch_total_stats(
     data = await _stats_request("/api/v0/stats/total", params or None)
     if data is None:
         return None
-    return TotalStatsResponse(
-        total_views=data.get("total", 0),
-        total_unique=data.get("total_unique", 0),
-    )
+    return TotalStatsResponse.from_goatcounter(data)
 
 
 async def fetch_path_hits(
@@ -376,14 +374,7 @@ async def fetch_path_hits(
         path = entry.get("path", "")
         if not path:
             continue
-        paths.append(
-            PathHit(
-                path_id=path_id,
-                path=path,
-                views=entry.get("count", 0),
-                unique=entry.get("count_unique", 0),
-            )
-        )
+        paths.append(PathHit.from_goatcounter(entry))
     return PathHitsResponse(paths=paths)
 
 
@@ -399,13 +390,7 @@ async def fetch_path_referrers(
     data = await _stats_request(f"/api/v0/stats/hits/{path_id}/referrers")
     if data is None:
         return None
-    referrers = [
-        ReferrerEntry(
-            referrer=entry.get("name", ""),
-            count=entry.get("count", 0),
-        )
-        for entry in data.get("referrers", [])
-    ]
+    referrers = [ReferrerEntry.from_goatcounter(entry) for entry in data.get("referrers", [])]
     return PathReferrersResponse(path_id=path_id, referrers=referrers)
 
 
@@ -432,14 +417,7 @@ async def fetch_breakdown(
     data = await _stats_request(f"/api/v0/stats/{category}", params or None)
     if data is None:
         return None
-    entries = [
-        BreakdownEntry(
-            name=entry.get("name", ""),
-            count=entry.get("count", 0),
-            percent=entry.get("percent", 0.0),
-        )
-        for entry in data.get("stats", [])
-    ]
+    entries = [BreakdownEntry.from_goatcounter(entry) for entry in data.get("stats", [])]
     return BreakdownResponse(category=category, entries=entries)
 
 
@@ -467,7 +445,7 @@ async def fetch_view_count(
                 return int(entry.get("count", 0))
             except _COUNT_PARSE_ERRORS:
                 logger.warning("Unexpected count value in GoatCounter response for path %r", path)
-                return 0
+                return None
     return 0
 
 

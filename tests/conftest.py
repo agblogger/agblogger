@@ -268,16 +268,29 @@ async def create_test_client(settings: Settings) -> AsyncGenerator[AsyncClient]:
 
 @pytest.fixture(autouse=True)
 def _reset_analytics_globals():
-    """Reset analytics service module-level state between tests."""
+    """Reset analytics service module-level state between tests.
+
+    Saves and restores _goatcounter_token, _token_warning_issued, _http_client,
+    and _background_tasks so that mutations in one test do not leak into others.
+    """
     import backend.services.analytics_service as svc
+
+    saved_token = svc._goatcounter_token
+    saved_warning = svc._token_warning_issued
+    saved_client = svc._http_client
+    saved_tasks = svc._background_tasks.copy()
 
     svc._goatcounter_token = None
     svc._token_warning_issued = False
     svc._http_client = None
+    svc._background_tasks = set()
+
     yield
-    svc._goatcounter_token = None
-    svc._token_warning_issued = False
-    svc._http_client = None
+
+    svc._goatcounter_token = saved_token
+    svc._token_warning_issued = saved_warning
+    svc._http_client = saved_client
+    svc._background_tasks = saved_tasks
 
 
 @pytest.fixture

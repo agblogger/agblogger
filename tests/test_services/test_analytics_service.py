@@ -153,6 +153,21 @@ def test_load_token_permission_error_returns_none_and_logs_error(
     assert any(r.levelname == "ERROR" for r in caplog.records)
 
 
+def test_load_token_oserror_log_includes_exc_info(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """_load_token OSError handler logs with exc_info so the traceback is captured."""
+    with (
+        patch.object(builtins, "open", side_effect=PermissionError("access denied")),
+        caplog.at_level("ERROR", logger="backend.services.analytics_service"),
+    ):
+        _load_token()
+
+    error_records = [r for r in caplog.records if r.levelname == "ERROR"]
+    assert error_records, "Expected at least one ERROR log record"
+    assert error_records[0].exc_info is not None, "exc_info should be set on the ERROR log record"
+
+
 def test_load_token_rereads_file_when_cached_token_exists() -> None:
     """_load_token refreshes the cached token from disk on every call."""
     svc._goatcounter_token = "cached-token"

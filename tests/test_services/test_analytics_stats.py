@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -9,6 +10,7 @@ import httpx
 import pytest
 
 from backend.models.base import DurableBase
+from backend.schemas.analytics import BreakdownEntry, PathHit, ReferrerEntry, TotalStatsResponse
 from backend.services.analytics_service import (
     _stats_request,
     fetch_breakdown,
@@ -570,7 +572,7 @@ async def test_stats_request_returns_none_on_non_dict_json() -> None:
 
 
 async def test_fetch_view_count_handles_non_numeric_count(session: AsyncSession) -> None:
-    """fetch_view_count returns 0 when GoatCounter returns a non-numeric count value."""
+    """fetch_view_count returns None when GoatCounter returns a non-numeric count value."""
     from backend.services.analytics_service import update_analytics_settings
 
     await update_analytics_settings(session, analytics_enabled=True, show_views_on_posts=True)
@@ -588,4 +590,217 @@ async def test_fetch_view_count_handles_non_numeric_count(session: AsyncSession)
     ):
         count = await fetch_view_count(session, "/post/hello")
 
-    assert count == 0
+    assert count is None
+
+
+async def test_fetch_view_count_returns_none_when_count_is_none_type(
+    session: AsyncSession,
+) -> None:
+    """fetch_view_count returns None when GoatCounter returns count=None (TypeError path)."""
+    from backend.services.analytics_service import update_analytics_settings
+
+    await update_analytics_settings(session, analytics_enabled=True, show_views_on_posts=True)
+
+    fake_response = {
+        "hits": [
+            {"path": "/post/hello", "count": None},
+        ]
+    }
+
+    with patch(
+        "backend.services.analytics_service._stats_request",
+        new_callable=AsyncMock,
+        return_value=fake_response,
+    ):
+        count = await fetch_view_count(session, "/post/hello")
+
+    assert count is None
+
+
+# ── Issue 1: _stats_request catches OSError (socket-level failures) ───────────
+
+
+async def test_stats_request_returns_none_on_connection_reset() -> None:
+    """_stats_request returns None when a ConnectionResetError is raised."""
+    mock_client = MagicMock()
+    mock_client.get = AsyncMock(side_effect=ConnectionResetError("Connection reset by peer"))
+
+    with (
+        patch(
+            "backend.services.analytics_service._get_http_client",
+            return_value=mock_client,
+        ),
+        patch(
+            "backend.services.analytics_service._load_token",
+            return_value="test-token",
+        ),
+    ):
+        result = await _stats_request("/api/v0/stats/total")
+
+    assert result is None
+
+
+# ── Issue 6: DEBUG logging for missing GoatCounter response keys ──────────────
+
+
+async def test_fetch_total_stats_logs_debug_on_missing_keys(
+    session: AsyncSession,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """fetch_total_stats logs DEBUG when expected GoatCounter keys are absent."""
+    import logging
+
+    with (
+        patch(
+            "backend.services.analytics_service._stats_request",
+            new_callable=AsyncMock,
+            return_value={"unexpected": 999},
+        ),
+        caplog.at_level(logging.DEBUG, logger="backend.schemas.analytics"),
+    ):
+        result = await fetch_total_stats(session)
+
+    assert result is not None
+    assert any(r.levelno == logging.DEBUG for r in caplog.records)
+    log_messages = " ".join(r.message for r in caplog.records)
+    assert "total" in log_messages
+
+
+async def test_fetch_path_hits_logs_debug_on_missing_keys(
+    session: AsyncSession,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """fetch_path_hits logs DEBUG when expected GoatCounter keys are absent in an entry."""
+    import logging
+
+    # Provide a hit entry that is missing expected keys
+    with (
+        patch(
+            "backend.services.analytics_service._stats_request",
+            new_callable=AsyncMock,
+            return_value={
+                "hits": [
+                    {"id": 1, "path": "/post/hello", "unexpected_key": 42},
+                ]
+            },
+        ),
+        caplog.at_level(logging.DEBUG, logger="backend.schemas.analytics"),
+    ):
+        result = await fetch_path_hits(session)
+
+    assert result is not None
+    assert any(r.levelno == logging.DEBUG for r in caplog.records)
+    log_messages = " ".join(r.message for r in caplog.records)
+    assert "count" in log_messages
+
+
+# ── Issue 12: Schema factory classmethod tests ────────────────────────────────
+
+
+def test_total_stats_response_from_goatcounter_maps_fields() -> None:
+    """TotalStatsResponse.from_goatcounter maps total and total_unique correctly."""
+    data = {"total": 120, "total_unique": 85}
+    result = TotalStatsResponse.from_goatcounter(data)
+    assert result.total_views == 120
+    assert result.total_unique == 85
+
+
+def test_total_stats_response_from_goatcounter_defaults_on_missing_keys() -> None:
+    """TotalStatsResponse.from_goatcounter defaults to 0 when keys are missing."""
+    result = TotalStatsResponse.from_goatcounter({})
+    assert result.total_views == 0
+    assert result.total_unique == 0
+
+
+def test_total_stats_response_from_goatcounter_logs_debug_on_missing_keys(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """TotalStatsResponse.from_goatcounter logs DEBUG when keys are absent."""
+    with caplog.at_level(logging.DEBUG, logger="backend.schemas.analytics"):
+        TotalStatsResponse.from_goatcounter({"unexpected": 99})
+
+    assert any(r.levelno == logging.DEBUG for r in caplog.records)
+    log_messages = " ".join(r.message for r in caplog.records)
+    assert "total" in log_messages
+
+
+def test_path_hit_from_goatcounter_maps_fields() -> None:
+    """PathHit.from_goatcounter maps all expected fields correctly."""
+    entry = {"id": 3, "path": "/post/test", "count": 42, "count_unique": 30}
+    result = PathHit.from_goatcounter(entry)
+    assert result.path_id == 3
+    assert result.path == "/post/test"
+    assert result.views == 42
+    assert result.unique == 30
+
+
+def test_path_hit_from_goatcounter_defaults_on_missing_keys() -> None:
+    """PathHit.from_goatcounter defaults numeric fields to 0 when absent."""
+    entry = {"id": 1, "path": "/post/test"}
+    result = PathHit.from_goatcounter(entry)
+    assert result.views == 0
+    assert result.unique == 0
+
+
+def test_path_hit_from_goatcounter_logs_debug_on_missing_keys(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """PathHit.from_goatcounter logs DEBUG when count or count_unique are absent."""
+    with caplog.at_level(logging.DEBUG, logger="backend.schemas.analytics"):
+        PathHit.from_goatcounter({"id": 1, "path": "/post/test"})
+
+    assert any(r.levelno == logging.DEBUG for r in caplog.records)
+    log_messages = " ".join(r.message for r in caplog.records)
+    assert "count" in log_messages
+
+
+def test_referrer_entry_from_goatcounter_maps_fields() -> None:
+    """ReferrerEntry.from_goatcounter maps name and count correctly."""
+    entry = {"name": "https://example.com", "count": 8}
+    result = ReferrerEntry.from_goatcounter(entry)
+    assert result.referrer == "https://example.com"
+    assert result.count == 8
+
+
+def test_referrer_entry_from_goatcounter_defaults_on_missing_keys() -> None:
+    """ReferrerEntry.from_goatcounter defaults to empty string and 0 when keys absent."""
+    result = ReferrerEntry.from_goatcounter({})
+    assert result.referrer == ""
+    assert result.count == 0
+
+
+def test_referrer_entry_from_goatcounter_logs_debug_on_missing_keys(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """ReferrerEntry.from_goatcounter logs DEBUG when expected keys are absent."""
+    with caplog.at_level(logging.DEBUG, logger="backend.schemas.analytics"):
+        ReferrerEntry.from_goatcounter({"unexpected": 1})
+
+    assert any(r.levelno == logging.DEBUG for r in caplog.records)
+
+
+def test_breakdown_entry_from_goatcounter_maps_fields() -> None:
+    """BreakdownEntry.from_goatcounter maps name, count, and percent correctly."""
+    entry = {"name": "Chrome", "count": 60, "percent": 60.0}
+    result = BreakdownEntry.from_goatcounter(entry)
+    assert result.name == "Chrome"
+    assert result.count == 60
+    assert result.percent == 60.0
+
+
+def test_breakdown_entry_from_goatcounter_defaults_on_missing_keys() -> None:
+    """BreakdownEntry.from_goatcounter defaults to zeros when keys are absent."""
+    result = BreakdownEntry.from_goatcounter({})
+    assert result.name == ""
+    assert result.count == 0
+    assert result.percent == 0.0
+
+
+def test_breakdown_entry_from_goatcounter_logs_debug_on_missing_keys(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """BreakdownEntry.from_goatcounter logs DEBUG when expected keys are absent."""
+    with caplog.at_level(logging.DEBUG, logger="backend.schemas.analytics"):
+        BreakdownEntry.from_goatcounter({"unexpected": 1})
+
+    assert any(r.levelno == logging.DEBUG for r in caplog.records)

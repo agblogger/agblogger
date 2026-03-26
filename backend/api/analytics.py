@@ -179,6 +179,8 @@ async def get_view_count(
     normalized_path = file_path.strip().strip("/")
     if not _SAFE_PATH_PATTERN.match(normalized_path):
         return ViewCountResponse(views=None)
+    if ".." in normalized_path:
+        return ViewCountResponse(views=None)
 
     post_slug = await _resolve_public_post_slug(session, normalized_path)
     if post_slug is None:

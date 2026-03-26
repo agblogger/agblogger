@@ -7,8 +7,12 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from pydantic import ValidationError
+from sqlalchemy import text
 
+from backend.api.analytics import _resolve_public_post_slug
 from backend.config import Settings
+from backend.models.base import CacheBase
+from backend.models.post import PostCache
 from backend.schemas.analytics import (
     AnalyticsSettingsUpdate,
     BreakdownEntry,
@@ -24,6 +28,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from httpx import AsyncClient
+    from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 
 @pytest.fixture
@@ -876,3 +881,171 @@ class TestPublicViewCountPathSanitization:
         if resp.status_code == 200:
             assert resp.json()["views"] is None
             mock_req.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_dotdot_traversal_posts_etc_passwd_rejected(self, client: AsyncClient) -> None:
+        """posts/%2E%2E/etc/passwd must be rejected by the sanitizer, not the DB lookup.
+
+        The `..` segments are percent-encoded so the HTTP client does not
+        normalize the path before reaching the FastAPI handler.  We mock
+        ``_resolve_public_post_slug`` to always return a slug so that if the
+        sanitizer fails to block the request the service *would* be reached
+        and the test would fail via ``mock_slug.assert_not_called()``.
+        """
+        await self._enable_views(client)
+        with patch(
+            "backend.api.analytics._resolve_public_post_slug",
+            new=AsyncMock(return_value="some-slug"),
+        ) as mock_slug:
+            resp = await client.get("/api/analytics/views/posts/%2E%2E/etc/passwd")
+        assert resp.status_code == 200
+        assert resp.json()["views"] is None
+        mock_slug.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_dotdot_traversal_leading_dotdot_rejected(self, client: AsyncClient) -> None:
+        """%2E%2E/secret must be rejected by the sanitizer before the DB is consulted."""
+        await self._enable_views(client)
+        with patch(
+            "backend.api.analytics._resolve_public_post_slug",
+            new=AsyncMock(return_value="some-slug"),
+        ) as mock_slug:
+            resp = await client.get("/api/analytics/views/%2E%2E/secret")
+        assert resp.status_code == 200
+        assert resp.json()["views"] is None
+        mock_slug.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_dotdot_traversal_deep_path_rejected(self, client: AsyncClient) -> None:
+        """posts/%2E%2E/%2E%2E/etc/shadow must be rejected by the sanitizer."""
+        await self._enable_views(client)
+        with patch(
+            "backend.api.analytics._resolve_public_post_slug",
+            new=AsyncMock(return_value="some-slug"),
+        ) as mock_slug:
+            resp = await client.get("/api/analytics/views/posts/%2E%2E/%2E%2E/etc/shadow")
+        assert resp.status_code == 200
+        assert resp.json()["views"] is None
+        mock_slug.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_dotdot_traversal_middle_segment_rejected(self, client: AsyncClient) -> None:
+        """foo/%2E%2E/bar must be rejected by the sanitizer before the DB is consulted."""
+        await self._enable_views(client)
+        with patch(
+            "backend.api.analytics._resolve_public_post_slug",
+            new=AsyncMock(return_value="some-slug"),
+        ) as mock_slug:
+            resp = await client.get("/api/analytics/views/foo/%2E%2E/bar")
+        assert resp.status_code == 200
+        assert resp.json()["views"] is None
+        mock_slug.assert_not_called()
+
+
+# ── Fixtures for _resolve_public_post_slug unit tests ──────────────────────────
+
+
+@pytest.fixture
+async def _cache_tables(db_engine: AsyncEngine) -> None:
+    """Create cache tables (PostCache) for unit tests."""
+    async with db_engine.begin() as conn:
+        await conn.execute(text("DROP TABLE IF EXISTS posts_fts"))
+        await conn.run_sync(CacheBase.metadata.drop_all)
+        await conn.run_sync(CacheBase.metadata.create_all)
+
+
+@pytest.fixture
+async def post_session(db_session: AsyncSession, _cache_tables: None) -> AsyncSession:
+    """AsyncSession with cache tables created."""
+    return db_session
+
+
+class TestResolvePublicPostSlug:
+    """Issue 9: Direct unit tests for _resolve_public_post_slug branching logic."""
+
+    @pytest.mark.asyncio
+    async def test_empty_string_returns_none(self, post_session: AsyncSession) -> None:
+        """Empty path → None without touching the DB."""
+        result = await _resolve_public_post_slug(post_session, "")
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_whitespace_only_returns_none(self, post_session: AsyncSession) -> None:
+        """Whitespace-only path → None without touching the DB."""
+        result = await _resolve_public_post_slug(post_session, "   ")
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_published_post_bare_slug_resolves(self, post_session: AsyncSession) -> None:
+        """A bare slug for a published post resolves to that slug."""
+        from datetime import UTC, datetime
+
+        post_session.add(
+            PostCache(
+                file_path="posts/hello-world/index.md",
+                title="Hello World",
+                is_draft=False,
+                created_at=datetime.now(UTC),
+                modified_at=datetime.now(UTC),
+                content_hash="abc123",
+            )
+        )
+        await post_session.commit()
+
+        result = await _resolve_public_post_slug(post_session, "hello-world")
+        assert result == "hello-world"
+
+    @pytest.mark.asyncio
+    async def test_published_post_canonical_path_resolves(self, post_session: AsyncSession) -> None:
+        """The canonical directory-backed path for a published post resolves to its slug."""
+        from datetime import UTC, datetime
+
+        post_session.add(
+            PostCache(
+                file_path="posts/canonical-post/index.md",
+                title="Canonical Post",
+                is_draft=False,
+                created_at=datetime.now(UTC),
+                modified_at=datetime.now(UTC),
+                content_hash="def456",
+            )
+        )
+        await post_session.commit()
+
+        result = await _resolve_public_post_slug(post_session, "posts/canonical-post/index.md")
+        assert result == "canonical-post"
+
+    @pytest.mark.asyncio
+    async def test_draft_post_returns_none(self, post_session: AsyncSession) -> None:
+        """Draft posts must not be resolvable (non-enumerating)."""
+        from datetime import UTC, datetime
+
+        post_session.add(
+            PostCache(
+                file_path="posts/draft-post/index.md",
+                title="Draft Post",
+                is_draft=True,
+                created_at=datetime.now(UTC),
+                modified_at=datetime.now(UTC),
+                content_hash="ghi789",
+            )
+        )
+        await post_session.commit()
+
+        result = await _resolve_public_post_slug(post_session, "draft-post")
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_nonexistent_post_returns_none(self, post_session: AsyncSession) -> None:
+        """A slug that does not exist in the DB returns None."""
+        result = await _resolve_public_post_slug(post_session, "does-not-exist")
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_posts_prefix_non_canonical_returns_none(
+        self, post_session: AsyncSession
+    ) -> None:
+        """A path starting with posts/ but not matching the canonical form is rejected."""
+        # posts/flat.md is NOT a canonical directory-backed path
+        result = await _resolve_public_post_slug(post_session, "posts/flat.md")
+        assert result is None
