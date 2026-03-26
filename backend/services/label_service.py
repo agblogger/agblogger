@@ -6,9 +6,10 @@ import json
 import logging
 from typing import TYPE_CHECKING
 
-from sqlalchemy import delete, func, select, text
+from sqlalchemy import delete, func, or_, select, text
 
 from backend.models.label import LabelCache, LabelParentCache, PostLabelCache
+from backend.models.post import PostCache
 from backend.schemas.label import (
     LabelGraphEdge,
     LabelGraphNode,
@@ -43,8 +44,17 @@ async def ensure_label_cache_entry(session: AsyncSession, label_id: str) -> None
         await session.flush()
 
 
-async def get_all_labels(session: AsyncSession) -> list[LabelResponse]:
-    """Get all labels with parent/child info and post counts."""
+async def get_all_labels(
+    session: AsyncSession,
+    *,
+    draft_owner_username: str | None = None,
+) -> list[LabelResponse]:
+    """Get all labels with parent/child info and post counts.
+
+    When *draft_owner_username* is provided, post_count includes published
+    posts plus drafts authored by the given user. Otherwise only published
+    posts are counted.
+    """
     # Get all labels
     stmt = select(LabelCache)
     result = await session.execute(stmt)
@@ -61,8 +71,18 @@ async def get_all_labels(session: AsyncSession) -> list[LabelResponse]:
         parents_map.setdefault(rel.label_id, []).append(rel.parent_id)
         children_map.setdefault(rel.parent_id, []).append(rel.label_id)
 
-    # Batch: get all post counts in one query
-    count_stmt = select(PostLabelCache.label_id, func.count()).group_by(PostLabelCache.label_id)
+    # Batch: get all post counts in one query, filtered by visibility
+    count_stmt = (
+        select(PostLabelCache.label_id, func.count())
+        .join(PostCache, PostLabelCache.post_id == PostCache.id)
+        .group_by(PostLabelCache.label_id)
+    )
+    if draft_owner_username:
+        count_stmt = count_stmt.where(
+            or_(PostCache.is_draft.is_(False), PostCache.author == draft_owner_username)
+        )
+    else:
+        count_stmt = count_stmt.where(PostCache.is_draft.is_(False))
     count_result = await session.execute(count_stmt)
     post_counts: dict[str, int] = {row[0]: row[1] for row in count_result.all()}
 
@@ -82,8 +102,18 @@ async def get_all_labels(session: AsyncSession) -> list[LabelResponse]:
     return responses
 
 
-async def get_label(session: AsyncSession, label_id: str) -> LabelResponse | None:
-    """Get a single label by ID."""
+async def get_label(
+    session: AsyncSession,
+    label_id: str,
+    *,
+    draft_owner_username: str | None = None,
+) -> LabelResponse | None:
+    """Get a single label by ID.
+
+    When *draft_owner_username* is provided, post_count includes published
+    posts plus drafts authored by the given user. Otherwise only published
+    posts are counted.
+    """
     label = await session.get(LabelCache, label_id)
     if label is None:
         return None
@@ -97,8 +127,17 @@ async def get_label(session: AsyncSession, label_id: str) -> LabelResponse | Non
     children = [r[0] for r in child_result.all()]
 
     count_stmt = (
-        select(func.count()).select_from(PostLabelCache).where(PostLabelCache.label_id == label_id)
+        select(func.count())
+        .select_from(PostLabelCache)
+        .join(PostCache, PostLabelCache.post_id == PostCache.id)
+        .where(PostLabelCache.label_id == label_id)
     )
+    if draft_owner_username:
+        count_stmt = count_stmt.where(
+            or_(PostCache.is_draft.is_(False), PostCache.author == draft_owner_username)
+        )
+    else:
+        count_stmt = count_stmt.where(PostCache.is_draft.is_(False))
     count_result = await session.execute(count_stmt)
     post_count = count_result.scalar() or 0
 
@@ -288,9 +327,13 @@ async def would_create_cycle(
     return result.first() is not None
 
 
-async def get_label_graph(session: AsyncSession) -> LabelGraphResponse:
+async def get_label_graph(
+    session: AsyncSession,
+    *,
+    draft_owner_username: str | None = None,
+) -> LabelGraphResponse:
     """Get the full label DAG for visualization."""
-    labels = await get_all_labels(session)
+    labels = await get_all_labels(session, draft_owner_username=draft_owner_username)
 
     nodes = [
         LabelGraphNode(

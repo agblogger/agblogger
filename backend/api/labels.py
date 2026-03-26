@@ -13,6 +13,7 @@ from backend.api.deps import (
     AsyncWriteLock,
     get_content_manager,
     get_content_write_lock,
+    get_current_user,
     get_git_service,
     get_session,
     require_admin,
@@ -91,17 +92,21 @@ router = APIRouter(prefix="/api/labels", tags=["labels"])
 @router.get("", response_model=list[LabelResponse])
 async def list_labels(
     session: Annotated[AsyncSession, Depends(get_session)],
+    user: Annotated[User | None, Depends(get_current_user)] = None,
 ) -> list[LabelResponse]:
     """List all labels."""
-    return await get_all_labels(session)
+    draft_owner_username = user.username if user else None
+    return await get_all_labels(session, draft_owner_username=draft_owner_username)
 
 
 @router.get("/graph", response_model=LabelGraphResponse)
 async def label_graph(
     session: Annotated[AsyncSession, Depends(get_session)],
+    user: Annotated[User | None, Depends(get_current_user)] = None,
 ) -> LabelGraphResponse:
     """Get the full label DAG for graph visualization."""
-    return await get_label_graph(session)
+    draft_owner_username = user.username if user else None
+    return await get_label_graph(session, draft_owner_username=draft_owner_username)
 
 
 @router.post("", response_model=LabelResponse, status_code=201)
@@ -236,9 +241,11 @@ async def delete_label_endpoint(
 async def get_label_endpoint(
     label_id: str,
     session: Annotated[AsyncSession, Depends(get_session)],
+    user: Annotated[User | None, Depends(get_current_user)] = None,
 ) -> LabelResponse:
     """Get a single label by ID."""
-    label = await get_label(session, label_id)
+    draft_owner_username = user.username if user else None
+    label = await get_label(session, label_id, draft_owner_username=draft_owner_username)
     if label is None:
         raise HTTPException(status_code=404, detail="Label not found")
     return label
