@@ -31,7 +31,7 @@ function renderSearch(query = '') {
 }
 
 const mockResults: SearchResult[] = [
-  { id: 1, file_path: 'posts/hello/index.md', title: 'Hello World', subtitle: null, rendered_excerpt: '<p>A first post</p>', created_at: '2026-02-01 12:00:00+00:00', rank: 1.0 },
+  { id: 1, file_path: 'posts/hello/index.md', title: 'Hello World', subtitle: 'A first subtitle', rendered_excerpt: '<p>A first post</p>', created_at: '2026-02-01 12:00:00+00:00', rank: 1.0 },
   { id: 2, file_path: 'posts/react/index.md', title: 'React Guide', subtitle: null, rendered_excerpt: '<p>Learn React</p>', created_at: '2026-02-02 12:00:00+00:00', rank: 0.9 },
 ]
 
@@ -163,6 +163,14 @@ describe('SearchPage', () => {
       expect(screen.getByText('Feb 1, 2026')).toBeInTheDocument()
     })
     expect(screen.getByText('Feb 2, 2026')).toBeInTheDocument()
+  })
+
+  it('displays subtitle in search results when present', async () => {
+    mockSearchPosts.mockResolvedValue(mockResults)
+    renderSearch('hello')
+    await waitFor(() => {
+      expect(screen.getByText('A first subtitle')).toBeInTheDocument()
+    })
   })
 
   it('shows result count', async () => {

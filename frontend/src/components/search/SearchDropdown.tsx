@@ -81,6 +81,9 @@ export default function SearchDropdown({
                   seg.match ? <mark key={j}>{seg.text}</mark> : seg.text,
                 )}
               </div>
+              {result.subtitle != null && (
+                <div className="text-xs text-ink/60 truncate">{result.subtitle}</div>
+              )}
               <div className="text-xs text-muted mt-0.5">
                 {formatRelativeDate(result.created_at)}
               </div>

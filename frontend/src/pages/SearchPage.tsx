@@ -131,6 +131,9 @@ const SearchResultItem = memo(function SearchResultItem({ result, index }: { res
                 opacity-0 animate-slide-up stagger-${Math.min(index + 1, 8)}`}
     >
       <h3 className="font-display text-lg text-ink">{result.title}</h3>
+      {result.subtitle != null && (
+        <p className="text-sm text-ink/60 mt-0.5">{result.subtitle}</p>
+      )}
       {renderedExcerpt && (
         <div
           className="text-sm text-muted mt-1 line-clamp-2 prose-excerpt"
