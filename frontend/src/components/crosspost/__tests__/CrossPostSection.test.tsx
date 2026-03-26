@@ -47,6 +47,7 @@ const mockPost = {
   id: 1,
   file_path: 'posts/test/index.md',
   title: 'Test Post',
+  subtitle: null,
   author: 'admin',
   created_at: '2026-01-01T00:00:00Z',
   modified_at: '2026-01-01T00:00:00Z',

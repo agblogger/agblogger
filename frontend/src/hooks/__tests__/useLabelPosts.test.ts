@@ -99,6 +99,7 @@ describe('useLabelPosts', () => {
             id: 1,
             file_path: 'posts/draft-post/index.md',
             title: 'Draft Post',
+            subtitle: null,
             author: 'author',
             created_at: '2026-01-01T00:00:00Z',
             modified_at: '2026-01-01T00:00:00Z',

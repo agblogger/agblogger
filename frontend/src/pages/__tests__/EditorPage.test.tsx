@@ -127,6 +127,7 @@ function renderEditorWithPost(path: string) {
 const editResponse: PostEditResponse = {
   file_path: 'posts/existing/index.md',
   title: 'Existing Post',
+  subtitle: null,
   body: 'Content here.',
   labels: ['swe'],
   is_draft: false,
@@ -144,6 +145,7 @@ const postDetail: PostDetail = {
   id: 1,
   file_path: 'posts/existing/index.md',
   title: 'Existing Post',
+  subtitle: null,
   author: 'Admin',
   created_at: '2026-02-01 12:00:00+00:00',
   modified_at: '2026-02-01 13:00:00+00:00',
@@ -259,6 +261,7 @@ describe('EditorPage', () => {
     const createdEditResponse: PostEditResponse = {
       file_path: 'posts/2026-03-08-my-title/index.md',
       title: 'My Title',
+      subtitle: null,
       body: 'Published content',
       labels: ['swe'],
       is_draft: false,
@@ -537,7 +540,7 @@ describe('EditorPage', () => {
     const mockCreatePost = vi.mocked(createPost)
     const savedPost: PostDetail = {
       id: 1, file_path: 'posts/2026-02-22-my-title/index.md',
-      title: 'My Title', author: 'jane', created_at: '2026-02-22 12:00:00+00:00',
+      title: 'My Title', subtitle: null, author: 'jane', created_at: '2026-02-22 12:00:00+00:00',
       modified_at: '2026-02-22 12:00:00+00:00', is_draft: false,
       rendered_excerpt: '', rendered_html: '<p>Hello</p>', content: 'Hello', labels: [],
     }
@@ -545,6 +548,7 @@ describe('EditorPage', () => {
     mockFetchPostForEdit.mockResolvedValue({
       file_path: 'posts/2026-02-22-my-title/index.md',
       title: 'My Title',
+      subtitle: null,
       body: '',
       labels: [],
       is_draft: false,
@@ -565,6 +569,7 @@ describe('EditorPage', () => {
     await waitFor(() => {
       expect(mockCreatePost).toHaveBeenCalledWith({
         title: 'My Title',
+        subtitle: null,
         body: '',
         labels: [],
         is_draft: false,
@@ -580,7 +585,7 @@ describe('EditorPage', () => {
     mockFetchPostForEdit.mockResolvedValue(editResponse)
     const updatedPost: PostDetail = {
       id: 1, file_path: 'posts/existing/index.md',
-      title: 'Existing Post', author: 'Admin', created_at: '2026-02-01 12:00:00+00:00',
+      title: 'Existing Post', subtitle: null, author: 'Admin', created_at: '2026-02-01 12:00:00+00:00',
       modified_at: '2026-02-22 12:00:00+00:00', is_draft: false,
       rendered_excerpt: '', rendered_html: '<p>Content</p>', content: 'Content', labels: ['swe'],
     }
@@ -597,6 +602,7 @@ describe('EditorPage', () => {
     await waitFor(() => {
       expect(mockUpdatePost).toHaveBeenCalledWith('posts/existing/index.md', {
         title: 'Existing Post',
+        subtitle: null,
         body: 'Content here.',
         labels: ['swe'],
         is_draft: false,
@@ -781,7 +787,7 @@ describe('EditorPage', () => {
     mockFetchPostForEdit.mockResolvedValue(draftEditResponse)
     const publishedPost: PostDetail = {
       id: 1, file_path: 'posts/existing/index.md',
-      title: 'Existing Post', author: 'Admin', created_at: '2026-03-15 09:00:00+00:00',
+      title: 'Existing Post', subtitle: null, author: 'Admin', created_at: '2026-03-15 09:00:00+00:00',
       modified_at: '2026-03-15 09:00:00+00:00', is_draft: false,
       rendered_excerpt: '', rendered_html: '<p>Content</p>', content: 'Content', labels: ['swe'],
     }
@@ -808,7 +814,7 @@ describe('EditorPage', () => {
     mockFetchPostForEdit.mockResolvedValue(editResponse)
     const updatedPost: PostDetail = {
       id: 1, file_path: 'posts/existing/index.md',
-      title: 'Existing Post', author: 'Admin', created_at: '2026-02-01 12:00:00+00:00',
+      title: 'Existing Post', subtitle: null, author: 'Admin', created_at: '2026-02-01 12:00:00+00:00',
       modified_at: '2026-02-22 09:00:00+00:00', is_draft: false,
       rendered_excerpt: '', rendered_html: '<p>Content</p>', content: 'Content', labels: ['swe'],
     }
@@ -944,7 +950,7 @@ describe('EditorPage', () => {
     const mockCreatePost = vi.mocked(createPost)
     const savedPost: PostDetail = {
       id: 1, file_path: 'posts/2026-03-08-my-title/index.md',
-      title: 'My Title', author: 'jane', created_at: '2026-03-08 12:00:00+00:00',
+      title: 'My Title', subtitle: null, author: 'jane', created_at: '2026-03-08 12:00:00+00:00',
       modified_at: '2026-03-08 12:00:00+00:00', is_draft: false,
       rendered_excerpt: '', rendered_html: '<p>Hello</p>', content: 'Hello', labels: [],
     }
@@ -953,7 +959,7 @@ describe('EditorPage', () => {
     // and calls fetchPostForEdit for the new path
     mockFetchPostForEdit.mockResolvedValue({
       file_path: 'posts/2026-03-08-my-title/index.md',
-      title: 'My Title', body: '', labels: [], is_draft: false,
+      title: 'My Title', subtitle: null, body: '', labels: [], is_draft: false,
       created_at: '2026-03-08 12:00:00+00:00',
       modified_at: '2026-03-08 12:00:00+00:00',
       author: 'jane',
@@ -1177,6 +1183,7 @@ describe('EditorPage', () => {
       id: 1,
       file_path: 'posts/2026-03-13-test/index.md',
       title: 'Test',
+      subtitle: null,
       author: 'jane',
       created_at: '2026-03-13 12:00:00+00:00',
       modified_at: '2026-03-13 12:00:00+00:00',
@@ -1217,6 +1224,7 @@ describe('EditorPage', () => {
     await waitFor(() => {
       expect(mockCreatePost).toHaveBeenCalledWith({
         title: 'Test',
+        subtitle: null,
         body: '',
         labels: [],
         is_draft: true,
@@ -1355,14 +1363,14 @@ describe('EditorPage', () => {
     const mockCreatePost = vi.mocked(createPost)
     const savedPost: PostDetail = {
       id: 1, file_path: 'posts/2026-03-08-my-title/index.md',
-      title: 'My Title', author: 'jane', created_at: '2026-03-08 12:00:00+00:00',
+      title: 'My Title', subtitle: null, author: 'jane', created_at: '2026-03-08 12:00:00+00:00',
       modified_at: '2026-03-08 12:00:00+00:00', is_draft: false,
       rendered_excerpt: '', rendered_html: '<p>Hello</p>', content: 'Hello', labels: [],
     }
     mockCreatePost.mockResolvedValue(savedPost)
     mockFetchPostForEdit.mockResolvedValue({
       file_path: 'posts/2026-03-08-my-title/index.md',
-      title: 'My Title', body: '', labels: [], is_draft: false,
+      title: 'My Title', subtitle: null, body: '', labels: [], is_draft: false,
       created_at: '2026-03-08 12:00:00+00:00',
       modified_at: '2026-03-08 12:00:00+00:00',
       author: 'jane',
@@ -1388,6 +1396,38 @@ describe('EditorPage', () => {
     // post is reloaded; its presence confirms navigation was NOT blocked.
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /view post/i })).toBeInTheDocument()
+    })
+  })
+
+  it('renders subtitle input and includes it in save', async () => {
+    const user = userEvent.setup()
+    const savedPost: PostDetail = {
+      id: 1, file_path: 'posts/2026-03-08-my-title/index.md',
+      title: 'Test Title', subtitle: 'My subtitle', author: 'jane',
+      created_at: '2026-03-08 12:00:00+00:00', modified_at: '2026-03-08 12:00:00+00:00',
+      is_draft: false, rendered_excerpt: '', rendered_html: '<p>Body text</p>',
+      content: 'Body text', labels: [],
+    }
+    vi.mocked(createPost).mockResolvedValue(savedPost)
+
+    renderEditor('/editor/new')
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('Subtitle')).toBeInTheDocument()
+    })
+
+    const subtitleInput = screen.getByPlaceholderText('Subtitle')
+    expect(subtitleInput).toBeInTheDocument()
+
+    await user.type(screen.getByPlaceholderText('Post title'), 'Test Title')
+    await user.type(subtitleInput, 'My subtitle')
+
+    await user.click(screen.getByRole('button', { name: /save/i }))
+
+    await waitFor(() => {
+      expect(createPost).toHaveBeenCalledWith(
+        expect.objectContaining({ subtitle: 'My subtitle' }),
+      )
     })
   })
 })

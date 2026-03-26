@@ -118,7 +118,7 @@ describe('createPost', () => {
   })
 
   it('sends POST with correct JSON body', async () => {
-    const newPost = { title: 'New Post', body: '# Hello', labels: ['swe'], is_draft: false }
+    const newPost = { title: 'New Post', subtitle: null, body: '# Hello', labels: ['swe'], is_draft: false }
     const responsePost = { file_path: 'new-post', ...newPost }
     mockPost.mockReturnValue(mockJsonResponse(responsePost))
 
@@ -136,7 +136,7 @@ describe('updatePost', () => {
   })
 
   it('sends PUT to correct path with JSON body', async () => {
-    const params = { title: 'Updated', body: '# Updated', labels: ['cs'], is_draft: true }
+    const params = { title: 'Updated', subtitle: null, body: '# Updated', labels: ['cs'], is_draft: true }
     const responsePost = { file_path: 'my-post', ...params }
     mockPut.mockReturnValue(mockJsonResponse(responsePost))
 

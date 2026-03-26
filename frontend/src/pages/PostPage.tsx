@@ -69,6 +69,7 @@ export default function PostPage() {
       const editData = await fetchPostForEdit(post.file_path)
       const updated = await updatePost(post.file_path, {
         title: editData.title,
+        subtitle: editData.subtitle,
         body: editData.body,
         labels: editData.labels,
         is_draft: false,

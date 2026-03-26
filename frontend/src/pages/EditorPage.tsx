@@ -41,6 +41,7 @@ export default function EditorPage() {
   const { mutate } = useSWRConfig()
 
   const [title, setTitle] = useState('')
+  const [subtitle, setSubtitle] = useState('')
   const [body, setBody] = useState('')
   const [labels, setLabels] = useState<string[]>([])
   const [isDraft, setIsDraft] = useState(false)
@@ -77,12 +78,13 @@ export default function EditorPage() {
   const draftOwnerId = user?.id ?? 0
   const autoSaveKey = buildEditorDraftStorageKey(draftOwnerId, isNew ? undefined : filePath)
   const currentState = useMemo<DraftData>(
-    () => ({ title, body, labels, isDraft }),
-    [title, body, labels, isDraft],
+    () => ({ title, subtitle, body, labels, isDraft }),
+    [title, subtitle, body, labels, isDraft],
   )
 
   const handleRestore = useCallback((draft: DraftData) => {
     setTitle(draft.title)
+    setSubtitle(draft.subtitle)
     setBody(draft.body)
     setLabels(draft.labels)
     setIsDraft(draft.isDraft)
@@ -102,6 +104,7 @@ export default function EditorPage() {
       fetchPostForEdit(filePath)
         .then((data) => {
           setTitle(data.title)
+          setSubtitle(data.subtitle ?? '')
           setBody(data.body)
           setLabels(data.labels)
           setIsDraft(data.is_draft)
@@ -156,9 +159,9 @@ export default function EditorPage() {
     try {
       let result
       if (isNew) {
-        result = await createPost({ title, body, labels, is_draft: isDraft })
+        result = await createPost({ title, subtitle: subtitle.trim() || null, body, labels, is_draft: isDraft })
       } else {
-        result = await updatePost(filePath, { title, body, labels, is_draft: isDraft })
+        result = await updatePost(filePath, { title, subtitle: subtitle.trim() || null, body, labels, is_draft: isDraft })
       }
       const resultSlug = postUrl(result.file_path).replace('/post/', '')
       await mutate(['post', resultSlug, draftOwnerId], result, { revalidate: false })
@@ -400,6 +403,22 @@ export default function EditorPage() {
             disabled={saving}
             maxLength={500}
             placeholder="Post title"
+            className="w-full px-3 py-2 bg-paper-warm border border-border rounded-lg
+                     text-ink text-sm
+                     focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/20
+                     disabled:opacity-50"
+          />
+        </div>
+
+        <div>
+          <input
+            id="subtitle"
+            type="text"
+            value={subtitle}
+            onChange={(e) => setSubtitle(e.target.value)}
+            disabled={saving}
+            maxLength={500}
+            placeholder="Subtitle"
             className="w-full px-3 py-2 bg-paper-warm border border-border rounded-lg
                      text-ink text-sm
                      focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/20

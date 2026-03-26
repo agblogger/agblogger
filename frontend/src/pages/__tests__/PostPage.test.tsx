@@ -68,6 +68,7 @@ const postDetail: PostDetail = {
   id: 1,
   file_path: 'posts/hello/index.md',
   title: 'Hello World',
+  subtitle: null,
   author: 'Admin',
   created_at: '2026-02-01 12:00:00+00:00',
   modified_at: '2026-02-01 12:00:00+00:00',
@@ -82,6 +83,7 @@ const draftPost: PostDetail = {
   id: 2,
   file_path: 'posts/2026-03-08-draft/index.md',
   title: 'My Draft',
+  subtitle: null,
   author: 'Admin',
   created_at: '2026-03-08 10:00:00+00:00',
   modified_at: '2026-03-08 10:00:00+00:00',
@@ -435,6 +437,7 @@ describe('PostPage', () => {
     mockFetchPostForEdit.mockResolvedValue({
       file_path: 'posts/2026-03-08-draft/index.md',
       title: 'My Draft',
+      subtitle: null,
       body: 'Draft content.\n',
       labels: ['tech'],
       is_draft: true,
@@ -501,6 +504,7 @@ describe('PostPage', () => {
     mockFetchPostForEdit.mockResolvedValue({
       file_path: 'posts/2026-03-08-draft/index.md',
       title: 'My Draft',
+      subtitle: null,
       body: 'Draft content.\n',
       labels: ['tech'],
       is_draft: true,
@@ -531,6 +535,7 @@ describe('PostPage', () => {
     mockFetchPostForEdit.mockResolvedValue({
       file_path: 'posts/2026-03-08-draft/index.md',
       title: 'My Draft',
+      subtitle: null,
       body: 'Draft content.\n',
       labels: ['tech'],
       is_draft: true,

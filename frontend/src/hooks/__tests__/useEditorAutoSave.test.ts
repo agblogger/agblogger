@@ -38,6 +38,7 @@ function createWrapper() {
 
 const baseState: DraftData = {
   title: 'Hello',
+  subtitle: '',
   body: '# Hello\n\nWorld',
   labels: ['swe'],
   isDraft: false,

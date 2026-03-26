@@ -20,6 +20,7 @@ import type { PostDetail, ViewCountResponse } from '@/api/client'
 const postDetail: PostDetail = {
   id: 1,
   title: 'My Post',
+  subtitle: null,
   file_path: 'my-post/index.md',
   author: 'admin',
   created_at: '2026-01-01T00:00:00Z',

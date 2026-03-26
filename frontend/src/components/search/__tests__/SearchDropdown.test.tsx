@@ -5,8 +5,8 @@ import SearchDropdown from '../SearchDropdown'
 import type { SearchResult } from '@/api/client'
 
 const results: SearchResult[] = [
-  { id: 1, file_path: 'posts/hello/index.md', title: 'Hello World', rendered_excerpt: null, created_at: '2026-02-01 12:00:00+00:00', rank: 1.0 },
-  { id: 2, file_path: 'posts/react/index.md', title: 'React Guide', rendered_excerpt: null, created_at: '2026-02-02 12:00:00+00:00', rank: 0.9 },
+  { id: 1, file_path: 'posts/hello/index.md', title: 'Hello World', subtitle: null, rendered_excerpt: null, created_at: '2026-02-01 12:00:00+00:00', rank: 1.0 },
+  { id: 2, file_path: 'posts/react/index.md', title: 'React Guide', subtitle: null, rendered_excerpt: null, created_at: '2026-02-02 12:00:00+00:00', rank: 0.9 },
 ]
 
 function renderDropdown(props: Partial<React.ComponentProps<typeof SearchDropdown>> = {}) {

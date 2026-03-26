@@ -14,6 +14,7 @@ function makePost(overrides: Partial<PostSummary> = {}): PostSummary {
     id: 1,
     file_path: 'posts/test/index.md',
     title: 'Test Post',
+    subtitle: null,
     author: 'Admin',
     created_at: '2026-02-01 12:00:00+00:00',
     modified_at: '2026-02-01 12:00:00+00:00',
