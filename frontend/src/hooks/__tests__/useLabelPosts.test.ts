@@ -1,10 +1,11 @@
-import { renderHook, waitFor } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { createElement } from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { ReactNode } from 'react'
 
 import type { LabelResponse, PostListResponse } from '@/api/client'
 import { SWRTestWrapper } from '@/test/swrWrapper'
+import { useAuthStore } from '@/stores/authStore'
 
 const mockLabel: LabelResponse = {
   id: 'tech',
@@ -42,6 +43,13 @@ function wrapper({ children }: { children: ReactNode }) {
 describe('useLabelPosts', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    useAuthStore.setState({
+      user: null,
+      isLoading: false,
+      isLoggingOut: false,
+      isInitialized: false,
+      error: null,
+    })
   })
 
   it('returns combined label and posts data on success', async () => {
@@ -70,5 +78,54 @@ describe('useLabelPosts', () => {
     expect(result.current.isLoading).toBe(false)
     expect(mockFetchLabel).not.toHaveBeenCalled()
     expect(mockFetchLabelPosts).not.toHaveBeenCalled()
+  })
+
+  it('revalidates with a separate cache entry after logout', async () => {
+    useAuthStore.setState({
+      user: {
+        id: 1,
+        username: 'author',
+        email: 'author@example.com',
+        display_name: 'Author',
+        is_admin: false,
+      },
+    })
+    mockFetchLabel.mockResolvedValue(mockLabel)
+    mockFetchLabelPosts
+      .mockResolvedValueOnce({
+        ...mockPosts,
+        posts: [
+          {
+            id: 1,
+            file_path: 'posts/draft-post/index.md',
+            title: 'Draft Post',
+            author: 'author',
+            created_at: '2026-01-01T00:00:00Z',
+            modified_at: '2026-01-01T00:00:00Z',
+            is_draft: true,
+            rendered_excerpt: '<p>Draft</p>',
+            labels: ['tech'],
+          },
+        ],
+        total: 1,
+        total_pages: 1,
+      })
+      .mockResolvedValueOnce(mockPosts)
+
+    const { result } = renderHook(() => useLabelPosts('tech'), { wrapper })
+
+    await waitFor(() => {
+      expect(result.current.data?.posts.posts).toHaveLength(1)
+    })
+
+    act(() => {
+      useAuthStore.setState({ user: null })
+    })
+
+    await waitFor(() => {
+      expect(result.current.data?.posts.posts).toHaveLength(0)
+    })
+
+    expect(mockFetchLabelPosts).toHaveBeenCalledTimes(2)
   })
 })

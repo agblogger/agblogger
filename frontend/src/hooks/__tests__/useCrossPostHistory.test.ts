@@ -1,10 +1,11 @@
-import { renderHook, waitFor } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { createElement } from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { ReactNode } from 'react'
 
 import type { CrossPostHistory } from '@/api/crosspost'
 import { SWRTestWrapper } from '@/test/swrWrapper'
+import { useAuthStore } from '@/stores/authStore'
 
 const mockHistory: CrossPostHistory = {
   items: [
@@ -36,9 +37,25 @@ function wrapper({ children }: { children: ReactNode }) {
 describe('useCrossPostHistory', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    useAuthStore.setState({
+      user: null,
+      isLoading: false,
+      isLoggingOut: false,
+      isInitialized: false,
+      error: null,
+    })
   })
 
   it('returns history data on success', async () => {
+    useAuthStore.setState({
+      user: {
+        id: 1,
+        username: 'author',
+        email: 'author@example.com',
+        display_name: 'Author',
+        is_admin: false,
+      },
+    })
     mockFetchCrossPostHistory.mockResolvedValueOnce(mockHistory)
     const { result } = renderHook(() => useCrossPostHistory('posts/my-post'), { wrapper })
     await waitFor(() => expect(result.current.data).toBeDefined())
@@ -48,6 +65,15 @@ describe('useCrossPostHistory', () => {
   })
 
   it('returns error on failure', async () => {
+    useAuthStore.setState({
+      user: {
+        id: 1,
+        username: 'author',
+        email: 'author@example.com',
+        display_name: 'Author',
+        is_admin: false,
+      },
+    })
     vi.spyOn(console, 'error').mockImplementation(() => {})
     const err = new Error('fetch failed')
     mockFetchCrossPostHistory.mockRejectedValueOnce(err)
@@ -62,5 +88,43 @@ describe('useCrossPostHistory', () => {
     expect(result.current.data).toBeUndefined()
     expect(result.current.isLoading).toBe(false)
     expect(mockFetchCrossPostHistory).not.toHaveBeenCalled()
+  })
+
+  it('does not fetch when logged out', () => {
+    const { result } = renderHook(() => useCrossPostHistory('posts/my-post'), { wrapper })
+    expect(result.current.data).toBeUndefined()
+    expect(result.current.isLoading).toBe(false)
+    expect(mockFetchCrossPostHistory).not.toHaveBeenCalled()
+  })
+
+  it('revalidates with a separate cache entry after logout', async () => {
+    useAuthStore.setState({
+      user: {
+        id: 1,
+        username: 'author',
+        email: 'author@example.com',
+        display_name: 'Author',
+        is_admin: false,
+      },
+    })
+    mockFetchCrossPostHistory
+      .mockResolvedValueOnce(mockHistory)
+      .mockRejectedValueOnce(new Error('Unauthorized'))
+
+    const { result } = renderHook(() => useCrossPostHistory('posts/my-post'), { wrapper })
+
+    await waitFor(() => {
+      expect(result.current.data).toEqual(mockHistory)
+    })
+
+    act(() => {
+      useAuthStore.setState({ user: null })
+    })
+
+    await waitFor(() => {
+      expect(result.current.data).toBeUndefined()
+    })
+
+    expect(mockFetchCrossPostHistory).toHaveBeenCalledTimes(1)
   })
 })

@@ -5,7 +5,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { SWRConfig } from 'swr'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-import { fetchPostForEdit, createPost, updatePost, uploadAssets, fetchPostAssets } from '@/api/posts'
+import { fetchPost, fetchPostForEdit, createPost, updatePost, uploadAssets, fetchPostAssets } from '@/api/posts'
 import { fetchSocialAccounts } from '@/api/crosspost'
 import type { UserResponse, PostEditResponse, PostDetail } from '@/api/client'
 import { DRAFT_SCHEMA_VERSION } from '@/hooks/useEditorAutoSave'
@@ -31,6 +31,7 @@ Object.defineProperty(window, 'localStorage', {
 import { mockHttpError } from '@/test/MockHTTPError'
 
 vi.mock('@/api/posts', () => ({
+  fetchPost: vi.fn(),
   fetchPostForEdit: vi.fn(),
   createPost: vi.fn(),
   updatePost: vi.fn(),
@@ -38,6 +39,12 @@ vi.mock('@/api/posts', () => ({
   fetchPostAssets: vi.fn().mockResolvedValue({ assets: [] }),
   deletePostAsset: vi.fn(),
   renamePostAsset: vi.fn(),
+}))
+
+const mockFetchViewCount = vi.fn()
+
+vi.mock('@/api/analytics', () => ({
+  fetchViewCount: (...args: unknown[]) => mockFetchViewCount(...args) as unknown,
 }))
 
 vi.mock('@/api/client', async () => {
@@ -68,8 +75,14 @@ vi.mock('@/hooks/useKatex', () => ({
   useRenderedHtml: (html: string | null) => html ?? '',
 }))
 
-import EditorPage from '../EditorPage'
+vi.mock('@/components/posts/TableOfContents', () => ({
+  default: () => <div data-testid="toc" />,
+}))
 
+import EditorPage from '../EditorPage'
+import PostPage from '../PostPage'
+
+const mockFetchPost = vi.mocked(fetchPost)
 const mockFetchPostForEdit = vi.mocked(fetchPostForEdit)
 const mockFetchSocialAccounts = vi.mocked(fetchSocialAccounts)
 
@@ -92,6 +105,25 @@ function renderEditor(path = '/editor/new') {
   )
 }
 
+function renderEditorWithPost(path: string) {
+  const router = createMemoryRouter(
+    [
+      { path: '/editor/new', element: createElement(EditorPage) },
+      { path: '/editor/*', element: createElement(EditorPage) },
+      { path: '/post/*', element: createElement(PostPage) },
+      { path: '/login', element: createElement('div', null, 'Login') },
+    ],
+    { initialEntries: [path] },
+  )
+  return render(
+    createElement(
+      SWRConfig,
+      { value: { provider: () => new Map(), dedupingInterval: 2000, shouldRetryOnError: false } },
+      createElement(RouterProvider, { router }),
+    ),
+  )
+}
+
 const editResponse: PostEditResponse = {
   file_path: 'posts/existing/index.md',
   title: 'Existing Post',
@@ -108,12 +140,29 @@ const directoryEditResponse: PostEditResponse = {
   file_path: 'posts/2026-03-08-existing-post/index.md',
 }
 
+const postDetail: PostDetail = {
+  id: 1,
+  file_path: 'posts/existing/index.md',
+  title: 'Existing Post',
+  author: 'Admin',
+  created_at: '2026-02-01 12:00:00+00:00',
+  modified_at: '2026-02-01 13:00:00+00:00',
+  is_draft: false,
+  rendered_excerpt: '<p>Excerpt</p>',
+  labels: ['swe'],
+  rendered_html: '<p>Published content</p>',
+  content: 'Published content',
+}
+
 describe('EditorPage', () => {
   beforeEach(() => {
     mockUser = { id: 1, username: 'jane', email: 'jane@test.com', display_name: null, is_admin: true }
+    mockFetchPost.mockReset()
     mockFetchPostForEdit.mockReset()
     mockFetchSocialAccounts.mockReset()
     mockFetchSocialAccounts.mockResolvedValue([])
+    mockFetchViewCount.mockReset()
+    mockFetchViewCount.mockResolvedValue({ views: null })
     localStorage.clear()
   })
 
@@ -152,6 +201,122 @@ describe('EditorPage', () => {
       expect(screen.getByText('Admin')).toBeInTheDocument()
     })
     expect(mockFetchPostForEdit).toHaveBeenCalledWith('posts/existing/index.md')
+  })
+
+  it('shows the updated draft state when viewing a post immediately after saving it as draft', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    mockUser = { id: 1, username: 'jane', email: 'jane@test.com', display_name: null, is_admin: false }
+    mockFetchPost.mockResolvedValue(postDetail)
+    mockFetchPostForEdit.mockResolvedValue(editResponse)
+    vi.mocked(updatePost).mockResolvedValue({
+      ...postDetail,
+      is_draft: true,
+      rendered_html: '<p>Now draft</p>',
+      content: 'Now draft',
+    })
+    const user = userEvent.setup()
+
+    renderEditorWithPost('/post/existing')
+
+    await waitFor(() => {
+      expect(screen.getByText('Existing Post')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('link', { name: /edit/i }))
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/title/i)).toHaveValue('Existing Post')
+    })
+
+    await user.click(screen.getByRole('checkbox', { name: /draft/i }))
+    await user.click(screen.getByRole('button', { name: /save/i }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /view post/i })).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: /view post/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Draft')).toBeInTheDocument()
+    })
+
+    expect(mockFetchPost).toHaveBeenCalledTimes(1)
+    confirmSpy.mockRestore()
+  })
+
+  it('keeps the post view in sync after creating a public post and later switching it to draft', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const mockApi = (await import('@/api/client')).default
+    vi.mocked(mockApi.post).mockReturnValue({
+      json: () => Promise.resolve({ html: '<p>Preview</p>' }),
+    } as ReturnType<typeof mockApi.post>)
+    const createdPost: PostDetail = {
+      ...postDetail,
+      file_path: 'posts/2026-03-08-my-title/index.md',
+      title: 'My Title',
+    }
+    const createdEditResponse: PostEditResponse = {
+      file_path: 'posts/2026-03-08-my-title/index.md',
+      title: 'My Title',
+      body: 'Published content',
+      labels: ['swe'],
+      is_draft: false,
+      created_at: '2026-03-08 12:00:00+00:00',
+      modified_at: '2026-03-08 12:00:00+00:00',
+      author: 'Admin',
+    }
+    mockUser = { id: 1, username: 'jane', email: 'jane@test.com', display_name: null, is_admin: false }
+    vi.mocked(createPost).mockResolvedValue(createdPost)
+    vi.mocked(updatePost).mockResolvedValue({
+      ...createdPost,
+      is_draft: true,
+      rendered_html: '<p>Now draft</p>',
+      content: 'Now draft',
+    })
+    mockFetchPostForEdit
+      .mockResolvedValueOnce(createdEditResponse)
+      .mockResolvedValueOnce(createdEditResponse)
+    mockFetchPost.mockResolvedValue(createdPost)
+    const user = userEvent.setup()
+
+    renderEditorWithPost('/editor/new')
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/title/i)).toBeInTheDocument()
+    })
+
+    await user.type(screen.getByLabelText(/title/i), 'My Title')
+    const textareas = document.querySelectorAll('textarea')
+    await user.type(textareas[0]!, 'Published content')
+    await user.click(screen.getByRole('button', { name: /save/i }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /view post/i })).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: /view post/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('My Title')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('link', { name: /edit/i }))
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/title/i)).toHaveValue('My Title')
+    })
+
+    await user.click(screen.getByRole('checkbox', { name: /draft/i }))
+    await user.click(screen.getByRole('button', { name: /save/i }))
+    await user.click(screen.getByRole('button', { name: /view post/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Draft')).toBeInTheDocument()
+    })
+
+    expect(mockFetchPost).toHaveBeenCalledTimes(1)
+    confirmSpy.mockRestore()
   })
 
   it('uses cross-post wording for save-time distribution when accounts are connected', async () => {
@@ -377,6 +542,16 @@ describe('EditorPage', () => {
       rendered_excerpt: '', rendered_html: '<p>Hello</p>', content: 'Hello', labels: [],
     }
     mockCreatePost.mockResolvedValue(savedPost)
+    mockFetchPostForEdit.mockResolvedValue({
+      file_path: 'posts/2026-02-22-my-title/index.md',
+      title: 'My Title',
+      body: '',
+      labels: [],
+      is_draft: false,
+      created_at: '2026-02-22 12:00:00+00:00',
+      modified_at: '2026-02-22 12:00:00+00:00',
+      author: 'jane',
+    })
     const user = userEvent.setup()
     renderEditor('/editor/new')
 

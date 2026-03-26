@@ -1,6 +1,7 @@
 import useSWR from 'swr'
 import { fetchLabel, fetchLabelPosts } from '@/api/labels'
 import type { LabelResponse, PostListResponse } from '@/api/client'
+import { useAuthStore } from '@/stores/authStore'
 
 interface LabelPostsData {
   label: LabelResponse
@@ -8,9 +9,11 @@ interface LabelPostsData {
 }
 
 export function useLabelPosts(labelId: string | null) {
+  const userId = useAuthStore((state) => state.user?.id ?? null)
+
   return useSWR<LabelPostsData, Error>(
-    labelId !== null ? ['labelPosts', labelId] : null,
-    async ([, id]: [string, string]) => {
+    labelId !== null ? ['labelPosts', labelId, userId] : null,
+    async ([, id]: [string, string, number | null]) => {
       const [label, posts] = await Promise.all([fetchLabel(id), fetchLabelPosts(id)])
       return { label, posts }
     },

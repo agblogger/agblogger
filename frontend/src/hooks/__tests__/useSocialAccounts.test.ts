@@ -1,7 +1,8 @@
-import { renderHook, waitFor } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { SocialAccount } from '@/api/crosspost'
 import { SWRTestWrapper } from '@/test/swrWrapper'
+import { useAuthStore } from '@/stores/authStore'
 
 const mockFetchSocialAccounts = vi.fn()
 vi.mock('@/api/crosspost', () => ({
@@ -28,9 +29,25 @@ const sampleAccounts: SocialAccount[] = [
 describe('useSocialAccounts', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    useAuthStore.setState({
+      user: null,
+      isLoading: false,
+      isLoggingOut: false,
+      isInitialized: false,
+      error: null,
+    })
   })
 
   it('returns social accounts on success', async () => {
+    useAuthStore.setState({
+      user: {
+        id: 1,
+        username: 'author',
+        email: 'author@example.com',
+        display_name: 'Author',
+        is_admin: false,
+      },
+    })
     mockFetchSocialAccounts.mockResolvedValue(sampleAccounts)
 
     const { result } = renderHook(() => useSocialAccounts(), {
@@ -45,6 +62,15 @@ describe('useSocialAccounts', () => {
   })
 
   it('returns error when fetch fails', async () => {
+    useAuthStore.setState({
+      user: {
+        id: 1,
+        username: 'author',
+        email: 'author@example.com',
+        display_name: 'Author',
+        is_admin: false,
+      },
+    })
     const fetchError = new Error('Unauthorized')
     mockFetchSocialAccounts.mockRejectedValue(fetchError)
 
@@ -57,5 +83,48 @@ describe('useSocialAccounts', () => {
     })
     expect(result.current.data).toBeUndefined()
     expect(result.current.error).toBe(fetchError)
+  })
+
+  it('does not fetch when logged out', () => {
+    const { result } = renderHook(() => useSocialAccounts(), {
+      wrapper: SWRTestWrapper,
+    })
+
+    expect(result.current.data).toBeUndefined()
+    expect(result.current.isLoading).toBe(false)
+    expect(mockFetchSocialAccounts).not.toHaveBeenCalled()
+  })
+
+  it('revalidates with a separate cache entry after logout', async () => {
+    useAuthStore.setState({
+      user: {
+        id: 1,
+        username: 'author',
+        email: 'author@example.com',
+        display_name: 'Author',
+        is_admin: false,
+      },
+    })
+    mockFetchSocialAccounts
+      .mockResolvedValueOnce(sampleAccounts)
+      .mockResolvedValueOnce([])
+
+    const { result } = renderHook(() => useSocialAccounts(), {
+      wrapper: SWRTestWrapper,
+    })
+
+    await waitFor(() => {
+      expect(result.current.data).toEqual(sampleAccounts)
+    })
+
+    act(() => {
+      useAuthStore.setState({ user: null })
+    })
+
+    await waitFor(() => {
+      expect(result.current.data).toBeUndefined()
+    })
+
+    expect(mockFetchSocialAccounts).toHaveBeenCalledTimes(1)
   })
 })

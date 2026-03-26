@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Save, ArrowLeft, Eye } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
+import { useSWRConfig } from 'swr'
 import { formatDate } from '@/utils/date'
 
 import { fetchPostForEdit, createPost, updatePost } from '@/api/posts'
@@ -37,6 +38,7 @@ export default function EditorPage() {
   const navigate = useNavigate()
   const isNew = filePath === undefined || filePath === 'new'
   const { user, isReady } = useRequireAuth()
+  const { mutate } = useSWRConfig()
 
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
@@ -158,6 +160,16 @@ export default function EditorPage() {
       } else {
         result = await updatePost(filePath, { title, body, labels, is_draft: isDraft })
       }
+      const resultSlug = postUrl(result.file_path).replace('/post/', '')
+      await mutate(['post', resultSlug, draftOwnerId], result, { revalidate: false })
+      await mutate(
+        (key) =>
+          Array.isArray(key) &&
+          key[0] === 'labelPosts' &&
+          key[2] === draftOwnerId,
+        undefined,
+        { revalidate: true },
+      )
       markSaved()
       setSavedFilePath(result.file_path)
       setEffectiveFilePath(result.file_path)

@@ -4,6 +4,7 @@ import { SWRConfig } from 'swr'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import { MockHTTPError } from '@/test/MockHTTPError'
+import { useAuthStore } from '@/stores/authStore'
 
 vi.mock('@/api/client', async () => {
   const { MockHTTPError } = await import('@/test/MockHTTPError')
@@ -48,6 +49,19 @@ function renderPanel(props: { busy?: boolean; onBusyChange?: (busy: boolean) => 
 describe('SocialAccountsPanel', () => {
   beforeEach(() => {
     vi.resetAllMocks()
+    useAuthStore.setState({
+      user: {
+        id: 1,
+        username: 'admin',
+        email: 'admin@example.com',
+        display_name: 'Admin',
+        is_admin: true,
+      },
+      isLoading: false,
+      isLoggingOut: false,
+      isInitialized: true,
+      error: null,
+    })
     mockFetchSocialAccounts.mockResolvedValue([])
   })
 

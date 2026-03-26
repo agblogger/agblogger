@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import type { CrossPostResult, SocialAccount } from '@/api/crosspost'
 import { MockHTTPError } from '@/test/MockHTTPError'
+import { useAuthStore } from '@/stores/authStore'
 
 const mockFetchCrossPostHistory = vi.fn()
 const mockFetchSocialAccounts = vi.fn()
@@ -75,6 +76,19 @@ const mockHistory: CrossPostResult[] = [
 describe('CrossPostSection', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    useAuthStore.setState({
+      user: {
+        id: 1,
+        username: 'admin',
+        email: 'admin@example.com',
+        display_name: 'Admin',
+        is_admin: true,
+      },
+      isLoading: false,
+      isLoggingOut: false,
+      isInitialized: true,
+      error: null,
+    })
   })
 
   it('renders section heading', async () => {

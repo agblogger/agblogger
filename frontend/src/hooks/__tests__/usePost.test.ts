@@ -1,6 +1,8 @@
-import { renderHook, waitFor } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { SWRTestWrapper } from '@/test/swrWrapper'
+import { MockHTTPError } from '@/test/MockHTTPError'
+import { useAuthStore } from '@/stores/authStore'
 
 const mockFetchPost = vi.fn()
 vi.mock('@/api/posts', () => ({
@@ -34,6 +36,13 @@ const viewCountResponse: ViewCountResponse = { views: 42 }
 describe('usePost', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    useAuthStore.setState({
+      user: null,
+      isLoading: false,
+      isLoggingOut: false,
+      isInitialized: false,
+      error: null,
+    })
   })
 
   it('fetches post by slug', async () => {
@@ -62,6 +71,45 @@ describe('usePost', () => {
 
     expect(mockFetchPost).not.toHaveBeenCalled()
     expect(result.current.data).toBeUndefined()
+  })
+
+  it('revalidates with a separate cache entry after logout', async () => {
+    useAuthStore.setState({
+      user: {
+        id: 1,
+        username: 'author',
+        email: 'author@example.com',
+        display_name: 'Author',
+        is_admin: false,
+      },
+    })
+    mockFetchPost.mockResolvedValueOnce({
+      ...postDetail,
+      is_draft: true,
+      author: 'author',
+    })
+
+    const { result } = renderHook(() => usePost('draft-post/index.md'), {
+      wrapper: SWRTestWrapper,
+    })
+
+    await waitFor(() => {
+      expect(result.current.data?.is_draft).toBe(true)
+    })
+
+    mockFetchPost.mockRejectedValueOnce(new MockHTTPError(404))
+
+    act(() => {
+      useAuthStore.setState({ user: null })
+    })
+
+    await waitFor(() => {
+      expect(result.current.data).toBeUndefined()
+      expect(result.current.error).toBeInstanceOf(MockHTTPError)
+    })
+
+    expect(mockFetchPost).toHaveBeenNthCalledWith(1, 'draft-post/index.md')
+    expect(mockFetchPost).toHaveBeenNthCalledWith(2, 'draft-post/index.md')
   })
 })
 

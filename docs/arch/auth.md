@@ -23,6 +23,8 @@ Authorization is enforced at the API boundary with a small role model:
 
 Some content also carries an ownership boundary. Draft content is not public, and user-scoped features such as connected social accounts remain isolated to the owning user even though broader editorial workflows stay admin-led.
 
+Frontend caches for reads whose response depends on the current browser user, including draft-only content and user-scoped account data, are scoped to the current browser user identity so session changes force revalidation instead of reusing stale authorized responses.
+
 ## Registration Posture
 
 The default operating model is a closed, self-hosted deployment. Registration is admin-controlled, invite flows are available, and rate limiting protects authentication endpoints from abuse.
