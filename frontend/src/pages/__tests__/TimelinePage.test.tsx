@@ -7,6 +7,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { fetchPosts, uploadPost } from '@/api/posts'
 import type { PostListResponse, UserResponse } from '@/api/client'
 import { mockHttpError } from '@/test/MockHTTPError'
+import { localDateToUtcStart, localDateToUtcEnd } from '@/utils/date'
 
 vi.mock('@/api/posts', () => ({
   fetchPosts: vi.fn(),
@@ -483,8 +484,8 @@ describe('TimelinePage', () => {
         expect.objectContaining({
           labels: 'swe,cs',
           author: 'Admin',
-          from: '2026-01-01',
-          to: '2026-02-01',
+          from: localDateToUtcStart('2026-01-01'),
+          to: localDateToUtcEnd('2026-02-01'),
         }),
       )
     })

@@ -9,6 +9,7 @@ import { HTTPError } from '@/api/client'
 import type { PostListResponse } from '@/api/client'
 import { useAuthStore } from '@/stores/authStore'
 import { postUrl } from '@/utils/postUrl'
+import { localDateToUtcStart, localDateToUtcEnd } from '@/utils/date'
 
 export default function TimelinePage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -76,8 +77,8 @@ export default function TimelinePage() {
         if (labelMode !== 'or') params.labelMode = labelMode
         if (includeSublabels) params.includeSublabels = true
         if (author) params.author = author
-        if (fromDate) params.from = fromDate
-        if (toDate) params.to = toDate
+        if (fromDate) params.from = localDateToUtcStart(fromDate)
+        if (toDate) params.to = localDateToUtcEnd(toDate)
         const d = await fetchPosts(params)
         setData(d)
       } catch (err) {
