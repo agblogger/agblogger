@@ -13,6 +13,7 @@ class PostSummary(BaseModel):
     id: int
     file_path: str
     title: str
+    subtitle: str | None = None
     author: str | None = None
     created_at: str
     modified_at: str
@@ -34,6 +35,7 @@ class PostEditResponse(BaseModel):
 
     file_path: str
     title: str
+    subtitle: str | None = None
     body: str
     labels: list[str] = Field(default_factory=list)
     is_draft: bool = False
@@ -50,6 +52,11 @@ class PostSave(BaseModel):
         max_length=500,
         description="Post title",
     )
+    subtitle: str | None = Field(
+        default=None,
+        max_length=500,
+        description="Optional post subtitle",
+    )
     body: str = Field(
         min_length=1,
         max_length=500_000,
@@ -63,6 +70,15 @@ class PostSave(BaseModel):
     def strip_title(cls, v: str) -> str:
         _ = cls
         return v.strip()
+
+    @field_validator("subtitle", mode="before")
+    @classmethod
+    def strip_subtitle(cls, v: str | None) -> str | None:
+        _ = cls
+        if v is None:
+            return None
+        stripped = v.strip()
+        return stripped or None
 
     @field_validator("labels")
     @classmethod
@@ -92,6 +108,7 @@ class SearchResult(BaseModel):
     id: int
     file_path: str
     title: str
+    subtitle: str | None = None
     rendered_excerpt: str | None = None
     created_at: str
     rank: float = 0.0
