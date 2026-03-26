@@ -31,14 +31,21 @@ interface AnalyticsDashboardStatsData {
   operatingSystems: BreakdownResponse
 }
 
+function formatLocalDate(date: Date): string {
+  const year = String(date.getFullYear())
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 function getDateRange(range: DateRange): { start: string; end: string } {
   const end = new Date()
   const start = new Date()
   const days = range === '7d' ? 7 : range === '30d' ? 30 : 90
   start.setDate(start.getDate() - days)
   return {
-    start: start.toISOString().slice(0, 10),
-    end: end.toISOString().slice(0, 10),
+    start: formatLocalDate(start),
+    end: formatLocalDate(end),
   }
 }
 

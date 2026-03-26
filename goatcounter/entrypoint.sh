@@ -4,10 +4,11 @@ set -eu
 GOATCOUNTER_DB="/data/goatcounter/goatcounter.db"
 TOKEN_FILE="/data/goatcounter-token/token"
 
-# First-boot provisioning
-if [ ! -f "$TOKEN_FILE" ]; then
-    mkdir -p /data/goatcounter
-    mkdir -p /data/goatcounter-token
+mkdir -p /data/goatcounter
+mkdir -p /data/goatcounter-token
+
+# Re-provision if either persistent volume is missing its expected state.
+if [ ! -f "$TOKEN_FILE" ] || [ ! -s "$GOATCOUNTER_DB" ]; then
 
     echo "Provisioning GoatCounter: creating site..."
     goatcounter db create-site \

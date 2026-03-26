@@ -25,35 +25,15 @@ The frontend talks to the backend through a shared HTTP client shaped around the
 
 ## Data Fetching
 
-Read-only data fetching uses SWR hooks in `frontend/src/hooks/`. A global `SWRConfig` in the `Layout` component (`App.tsx`) provides the default fetcher backed by the ky API client. Each resource has a dedicated hook (e.g., `useLabels`, `usePost`, `useSocialAccounts`) that encapsulates the SWR key, fetcher, and return types.
-
-Shared hooks like `useLabels()` (used by 5 components) and `useSocialAccounts()` (used by 3 components) provide automatic request deduplication — multiple components calling the same hook share a single network request and cache entry. SWR also provides caching across navigation and automatic revalidation on window focus.
-
-Write operations (create, update, delete) use direct API calls from `frontend/src/api/`. After a mutation, components call `mutate()` from the relevant SWR hook to trigger revalidation.
-
-Components with debounced search (Header, SearchPage) and paginated/filtered fetches (TimelinePage) continue to use manual `useEffect`+`useState` patterns, as do mutation-only components.
-
-Tests use `<SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>` for cache isolation between test cases.
+Read-only data fetching uses SWR hooks. Each resource has a dedicated hook that encapsulates the SWR key, fetcher, and return types. Write operations use direct API calls. After a mutation, components call `mutate()` from the relevant SWR hook to trigger revalidation. Components with debounced search (Header, SearchPage) and paginated/filtered fetches (TimelinePage) use manual `useEffect`+`useState` patterns, as do mutation-only components.
 
 ## Editing Architecture
 
 The editor is built around structured post authoring instead of raw filesystem manipulation. Metadata editing, markdown editing, preview, and asset management are presented as one workflow over a canonical post unit. Preview rendering is delegated to the backend so the editor and published site use the same rendering and sanitization pipeline.
 
-Frontend post navigation and editor workflows assume the backend canonical post shape `posts/<slug>/index.md`. The SPA no longer preserves or generates legacy `posts/<slug>.md` flat-file paths.
-
 ## Rendering Model
 
 The frontend does not own markdown rendering. It receives rendered HTML from the backend and then adds browser-only enhancements such as navigation affordances, math hydration, and interaction helpers.
-
-## Analytics
-
-The admin panel includes an Analytics tab that displays page view statistics from the backend's GoatCounter proxy. The dashboard component (`frontend/src/components/admin/AnalyticsPanel.tsx`) is lazy-loaded to keep the main bundle small since it pulls in a charting library (currently Recharts).
-
-The dashboard shows summary cards (total views, unique visitors, top page), a top pages table with referrer drill-down, and browser/OS breakdown bar charts. Date range selection (7d/30d/90d) and settings toggles (analytics enabled, show views on posts) are included.
-
-The analytics settings fetch is intentionally decoupled from the GoatCounter stats fetches so the admin can still inspect and change persisted settings while the stats sidecar is unavailable. The unavailable state in the panel reflects stats fetch failure, not loss of the saved toggle state.
-
-When the admin enables "show views on posts", individual post pages display a view count in the metadata bar, fetched from the public analytics API endpoint. The post page derives that lookup key from the canonical `post.file_path`, so short `/post/<slug>` URLs and accepted file-path forms such as `/post/posts/<slug>/index.md` resolve to the same GoatCounter path and show the same count.
 
 ## Code Entry Points
 
@@ -61,7 +41,7 @@ When the admin enables "show views on posts", individual post pages display a vi
 - `frontend/src/pages/` contains the main public browsing, authentication, editing and administration entry points.
 - `frontend/src/stores/` contains the small set of shared Zustand stores for auth, site config, theme, and UI coordination.
 - `frontend/src/api/` contains the HTTP client and API-facing modules that connect the SPA to the backend.
-- `frontend/src/hooks/` contains SWR data-fetching hooks (e.g., `useLabels`, `usePost`, `useSocialAccounts`) and client-side enhancements layered on top of backend-rendered content and editor workflows.
+- `frontend/src/hooks/` contains SWR data-fetching hooks and client-side enhancements layered on top of backend-rendered content and editor workflows.
 - `frontend/src/components/search/` contains the live search dropdown components used by the header for as-you-type search previews.
 - `frontend/src/components/share/` contains the social sharing bar and platform-specific sharing components used by the post view.
 - `frontend/src/components/labels/` contains shared label form components (names editor, parents selector) used by both the label creation and label settings pages.

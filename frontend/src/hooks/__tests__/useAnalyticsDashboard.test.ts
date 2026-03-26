@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { SWRTestWrapper } from '@/test/swrWrapper'
 
@@ -24,6 +24,10 @@ import type {
   BreakdownResponse,
   PathReferrersResponse,
 } from '@/api/client'
+
+const nodeProcess = (globalThis as unknown as {
+  process: { env: Record<string, string | undefined> }
+}).process
 
 const analyticsSettings: AnalyticsSettings = {
   analytics_enabled: true,
@@ -69,6 +73,7 @@ const pathReferrers: PathReferrersResponse = {
 describe('useAnalyticsDashboard', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.useRealTimers()
   })
 
   it('fetches all 5 resources in parallel and returns composite data', async () => {
@@ -159,6 +164,40 @@ describe('useAnalyticsDashboard', () => {
     expect(mockFetchBreakdown).toHaveBeenCalledTimes(2)
     expect(mockFetchBreakdown).toHaveBeenCalledWith('browsers', expect.any(String), expect.any(String))
     expect(mockFetchBreakdown).toHaveBeenCalledWith('systems', expect.any(String), expect.any(String))
+  })
+
+  it('formats dashboard ranges using the local calendar date instead of UTC slices', async () => {
+    const originalTz = nodeProcess.env['TZ']
+    nodeProcess.env['TZ'] = 'Europe/Warsaw'
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-03-25T23:30:00Z'))
+
+    mockFetchAnalyticsSettings.mockResolvedValue(analyticsSettings)
+    mockFetchTotalStats.mockResolvedValue(totalStats)
+    mockFetchPathHits.mockResolvedValue(pathHits)
+    mockFetchBreakdown.mockImplementation((category: string) => {
+      if (category === 'browsers') return Promise.resolve(browsersData)
+      if (category === 'systems') return Promise.resolve(osData)
+      return Promise.reject(new Error(`Unexpected category: ${category}`))
+    })
+
+    try {
+      renderHook(() => useAnalyticsDashboard('7d'), {
+        wrapper: SWRTestWrapper,
+      })
+
+      await act(async () => {
+        await vi.runAllTimersAsync()
+      })
+
+      expect(mockFetchTotalStats).toHaveBeenCalledWith('2026-03-19', '2026-03-26')
+      expect(mockFetchPathHits).toHaveBeenCalledWith('2026-03-19', '2026-03-26')
+      expect(mockFetchBreakdown).toHaveBeenCalledWith('browsers', '2026-03-19', '2026-03-26')
+      expect(mockFetchBreakdown).toHaveBeenCalledWith('systems', '2026-03-19', '2026-03-26')
+    } finally {
+      nodeProcess.env['TZ'] = originalTz
+      vi.useRealTimers()
+    }
   })
 })
 
