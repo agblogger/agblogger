@@ -53,6 +53,7 @@ function getDisabledDashboardStats(): AnalyticsDashboardStatsData {
   }
 }
 
+/** Format a Date as YYYY-MM-DD in the browser's local timezone (not UTC). */
 function formatLocalDate(date: Date): string {
   const year = String(date.getFullYear())
   const month = String(date.getMonth() + 1).padStart(2, '0')
@@ -112,7 +113,7 @@ export function useAnalyticsDashboard(range: DateRange) {
       ? getDisabledDashboardStats()
       : dashboardResult.data
 
-  const data =
+  const data: AnalyticsDashboardData | undefined =
     settingsResult.data !== undefined && statsData !== undefined
       ? {
           settings: settingsResult.data,

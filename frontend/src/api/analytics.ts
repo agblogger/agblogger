@@ -45,6 +45,7 @@ export async function fetchBreakdown(
     .json<BreakdownResponse>()
 }
 
-export async function fetchViewCount(filePath: string): Promise<ViewCountResponse> {
-  return api.get(`analytics/views/${filePath}`).json<ViewCountResponse>()
+/** Fetch public view count. Accepts a bare slug or canonical file path (e.g., "posts/hello/index.md"). */
+export async function fetchViewCount(pathOrSlug: string): Promise<ViewCountResponse> {
+  return api.get(`analytics/views/${pathOrSlug}`).json<ViewCountResponse>()
 }
