@@ -82,8 +82,8 @@ class TestParseDatetimeProperties:
 
     @PROPERTY_SETTINGS
     @given(dt=_NAIVE_DATETIME)
-    def test_parse_datetime_object_attaches_default_tz(self, dt: datetime) -> None:
-        """Passing a naive datetime object attaches the default timezone."""
+    def test_parse_datetime_object_attaches_fallback_tz(self, dt: datetime) -> None:
+        """Passing a naive datetime object attaches the fallback timezone."""
         result = parse_datetime(dt, fallback_tz="UTC")
         assert result.tzinfo is not None
 

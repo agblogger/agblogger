@@ -47,8 +47,7 @@ export function formatRelativeDate(dateStr: string): string {
  */
 export function localDateToUtcStart(dateStr: string): string {
   if (!dateStr) return ''
-  const [year, month, day] = dateStr.split('-').map(Number)
-  const local = new Date(year, month - 1, day, 0, 0, 0, 0)
+  const local = new Date(`${dateStr}T00:00:00`)
   return local.toISOString()
 }
 
@@ -58,7 +57,6 @@ export function localDateToUtcStart(dateStr: string): string {
  */
 export function localDateToUtcEnd(dateStr: string): string {
   if (!dateStr) return ''
-  const [year, month, day] = dateStr.split('-').map(Number)
-  const local = new Date(year, month - 1, day, 23, 59, 59, 999)
+  const local = new Date(`${dateStr}T23:59:59.999`)
   return local.toISOString()
 }
