@@ -19,7 +19,6 @@ from backend.api.deps import (
     get_session,
     get_session_factory,
     get_settings,
-    require_admin,
     require_auth,
 )
 from backend.config import Settings
@@ -27,32 +26,19 @@ from backend.filesystem.content_manager import ContentManager
 from backend.models.user import User
 from backend.schemas.auth import (
     CsrfTokenResponse,
-    InviteCreateRequest,
-    InviteCreateResponse,
     LoginRequest,
     LogoutRequest,
-    PersonalAccessTokenCreateRequest,
-    PersonalAccessTokenCreateResponse,
-    PersonalAccessTokenResponse,
     ProfileUpdate,
     RefreshRequest,
-    RegisterRequest,
     SessionAuthResponse,
     TokenResponse,
     UserResponse,
 )
 from backend.services.auth_service import (
     authenticate_user,
-    consume_invite_code,
     create_access_token,
-    create_invite_code,
-    create_personal_access_token,
     create_tokens,
-    get_valid_invite_code,
-    hash_password,
-    list_personal_access_tokens,
     refresh_tokens,
-    revoke_personal_access_token,
     revoke_refresh_token,
 )
 from backend.services.csrf_service import create_csrf_token
@@ -249,81 +235,6 @@ async def token_login(
             settings.access_token_expire_minutes,
         )
     )
-
-
-@router.post("/register", response_model=UserResponse, status_code=201)
-async def register(
-    body: RegisterRequest,
-    session: Annotated[AsyncSession, Depends(get_session)],
-    settings: Annotated[Settings, Depends(get_settings)],
-) -> UserResponse:
-    """Register a new user account."""
-    invite = None
-    if not settings.auth_self_registration:
-        if not settings.auth_invites_enabled:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Registration is disabled",
-            )
-        if body.invite_code is None:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Invite code required",
-            )
-        invite = await get_valid_invite_code(session, body.invite_code)
-        if invite is None:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Invalid or expired invite code",
-            )
-
-    existing = await session.execute(
-        select(User).where((User.username == body.username) | (User.email == body.email))
-    )
-    if existing.scalar_one_or_none() is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Username or email already taken",
-        )
-
-    now = format_iso(now_utc())
-    user = User(
-        username=body.username,
-        email=body.email,
-        password_hash=hash_password(body.password),
-        display_name=body.display_name,
-        is_admin=False,
-        created_at=now,
-        updated_at=now,
-    )
-    session.add(user)
-    try:
-        await session.flush()
-    except IntegrityError:
-        await session.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Username or email already taken",
-        ) from None
-
-    if invite is not None:
-        consumed = await consume_invite_code(
-            session,
-            invite_id=invite.id,
-            used_by_user_id=user.id,
-            used_at=now,
-        )
-        if not consumed:
-            await session.rollback()
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Invite code already used",
-            )
-
-    await session.commit()
-    await session.refresh(user)
-
-    return UserResponse.from_user(user)
 
 
 @router.post("/refresh", response_model=SessionAuthResponse)
@@ -549,85 +460,3 @@ async def update_profile(
                 ) from exc
 
     return UserResponse.from_user(user)
-
-
-@router.post("/invites", response_model=InviteCreateResponse, status_code=201)
-async def create_invite(
-    body: InviteCreateRequest,
-    session: Annotated[AsyncSession, Depends(get_session)],
-    settings: Annotated[Settings, Depends(get_settings)],
-    admin_user: Annotated[User, Depends(require_admin)],
-) -> InviteCreateResponse:
-    """Create a single-use invite code."""
-    if not settings.auth_invites_enabled:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Invites are disabled",
-        )
-    expires_days = body.expires_days or settings.auth_invite_expire_days
-    invite, invite_code = await create_invite_code(session, admin_user.id, expires_days)
-    return InviteCreateResponse(
-        invite_code=invite_code,
-        created_at=invite.created_at,
-        expires_at=invite.expires_at,
-    )
-
-
-@router.post("/pats", response_model=PersonalAccessTokenCreateResponse, status_code=201)
-async def create_pat(
-    body: PersonalAccessTokenCreateRequest,
-    session: Annotated[AsyncSession, Depends(get_session)],
-    user: Annotated[User, Depends(require_auth)],
-) -> PersonalAccessTokenCreateResponse:
-    """Create a personal access token for API/CLI usage."""
-    pat, token_value = await create_personal_access_token(
-        session=session,
-        user_id=user.id,
-        name=body.name,
-        expires_days=body.expires_days,
-    )
-    return PersonalAccessTokenCreateResponse(
-        id=pat.id,
-        name=pat.name,
-        created_at=pat.created_at,
-        expires_at=pat.expires_at,
-        last_used_at=pat.last_used_at,
-        revoked_at=pat.revoked_at,
-        token=token_value,
-    )
-
-
-@router.get("/pats", response_model=list[PersonalAccessTokenResponse])
-async def list_pats(
-    session: Annotated[AsyncSession, Depends(get_session)],
-    user: Annotated[User, Depends(require_auth)],
-) -> list[PersonalAccessTokenResponse]:
-    """List personal access tokens for the current user."""
-    pats = await list_personal_access_tokens(session, user.id)
-    return [
-        PersonalAccessTokenResponse(
-            id=pat.id,
-            name=pat.name,
-            created_at=pat.created_at,
-            expires_at=pat.expires_at,
-            last_used_at=pat.last_used_at,
-            revoked_at=pat.revoked_at,
-        )
-        for pat in pats
-    ]
-
-
-@router.delete("/pats/{token_id}", status_code=204)
-async def revoke_pat(
-    token_id: int,
-    session: Annotated[AsyncSession, Depends(get_session)],
-    user: Annotated[User, Depends(require_auth)],
-) -> Response:
-    """Revoke a personal access token."""
-    deleted = await revoke_personal_access_token(session, user.id, token_id)
-    if not deleted:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Token not found",
-        )
-    return Response(status_code=204)

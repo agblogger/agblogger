@@ -1,4 +1,4 @@
-"""Tests for sync client UX improvements: PAT security, confirmation, error handling."""
+"""Tests for sync client UX improvements: confirmation, error handling."""
 
 from __future__ import annotations
 
@@ -65,71 +65,6 @@ class TestConfigFilePermissions:
         captured = capsys.readouterr()
         assert "Warning" in captured.err
         assert "chmod" in captured.err.lower() or "permission" in captured.err.lower()
-
-
-class TestInitDoesNotStorePat:
-    def test_pat_not_persisted_in_config(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setattr(
-            "sys.argv",
-            [
-                "agblogger",
-                "-d",
-                str(tmp_path),
-                "-s",
-                "https://example.com",
-                "--pat",
-                "my-secret",
-                "init",
-            ],
-        )
-        from cli.sync_client import main
-
-        main()
-        config = load_config(tmp_path)
-        assert "pat" not in config
-        assert config["server"] == "https://example.com"
-
-    def test_init_prints_env_var_guidance(
-        self,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture[str],
-    ) -> None:
-        monkeypatch.setattr(
-            "sys.argv",
-            ["agblogger", "-d", str(tmp_path), "-s", "https://example.com", "init"],
-        )
-        from cli.sync_client import main
-
-        main()
-        captured = capsys.readouterr()
-        assert "AGBLOGGER_PAT" in captured.out
-
-
-class TestEnvVarAuth:
-    def test_env_var_used_for_auth(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        save_config(tmp_path, {"server": "https://example.com"})
-        monkeypatch.setattr(
-            "sys.argv",
-            ["agblogger", "-d", str(tmp_path), "status"],
-        )
-        monkeypatch.setenv("AGBLOGGER_PAT", "env-token")
-
-        mock_client = MagicMock()
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client.status.return_value = _plan()
-
-        with patch("cli.sync_client.SyncClient") as mock_sync_cls:
-            mock_sync_cls.return_value = mock_client
-            from cli.sync_client import main
-
-            main()
-
-        mock_sync_cls.assert_called_once()
-        assert mock_sync_cls.call_args[0][2] == "env-token"
 
 
 # ── Plan helpers ─────────────────────────────────────────────────────
@@ -241,7 +176,7 @@ class TestSyncConfirmationIntegration:
         yes_flag: bool = False,
     ) -> MagicMock:
         save_config(tmp_path, {"server": "https://example.com"})
-        argv = ["agblogger", "-d", str(tmp_path), "--pat", "token", "sync"]
+        argv = ["agblogger", "-d", str(tmp_path), "sync"]
         if yes_flag:
             argv.append("--yes")
         monkeypatch.setattr("sys.argv", argv)
@@ -256,7 +191,10 @@ class TestSyncConfirmationIntegration:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         mock_client = self._setup(tmp_path, monkeypatch, _plan(to_upload=["a.md"]), yes_flag=True)
-        with patch("cli.sync_client.SyncClient", return_value=mock_client):
+        with (
+            patch("cli.sync_client.SyncClient", return_value=mock_client),
+            patch("cli.sync_client.login_interactive", return_value="token"),
+        ):
             from cli.sync_client import main
 
             main()
@@ -268,6 +206,7 @@ class TestSyncConfirmationIntegration:
         mock_client = self._setup(tmp_path, monkeypatch, _plan(to_upload=["a.md"]))
         with (
             patch("cli.sync_client.SyncClient", return_value=mock_client),
+            patch("cli.sync_client.login_interactive", return_value="token"),
             patch("cli.sync_client.confirm_sync", return_value=True) as mock_confirm,
         ):
             from cli.sync_client import main
@@ -282,6 +221,7 @@ class TestSyncConfirmationIntegration:
         mock_client = self._setup(tmp_path, monkeypatch, _plan())
         with (
             patch("cli.sync_client.SyncClient", return_value=mock_client),
+            patch("cli.sync_client.login_interactive", return_value="token"),
             patch("cli.sync_client.confirm_sync") as mock_confirm,
         ):
             from cli.sync_client import main
@@ -299,6 +239,7 @@ class TestSyncConfirmationIntegration:
         mock_client = self._setup(tmp_path, monkeypatch, _plan(to_delete_local=["a.md"]))
         with (
             patch("cli.sync_client.SyncClient", return_value=mock_client),
+            patch("cli.sync_client.login_interactive", return_value="token"),
             patch("cli.sync_client.confirm_sync", return_value=False),
             pytest.raises(SystemExit),
         ):
@@ -485,7 +426,7 @@ class TestMainHttpErrorHandling:
         save_config(tmp_path, {"server": "https://example.com"})
         monkeypatch.setattr(
             "sys.argv",
-            ["agblogger", "-d", str(tmp_path), "--pat", "token", command],
+            ["agblogger", "-d", str(tmp_path), command],
         )
         mock_client = MagicMock()
         mock_client.__enter__ = MagicMock(return_value=mock_client)
@@ -506,6 +447,7 @@ class TestMainHttpErrorHandling:
         )
         with (
             patch("cli.sync_client.SyncClient", return_value=mock_client),
+            patch("cli.sync_client.login_interactive", return_value="token"),
             pytest.raises(SystemExit) as exc_info,
         ):
             from cli.sync_client import main
@@ -530,6 +472,7 @@ class TestMainHttpErrorHandling:
         )
         with (
             patch("cli.sync_client.SyncClient", return_value=mock_client),
+            patch("cli.sync_client.login_interactive", return_value="token"),
             pytest.raises(SystemExit) as exc_info,
         ):
             from cli.sync_client import main
@@ -596,7 +539,7 @@ class TestStatusFormattingRegression:
         save_config(tmp_path, {"server": "https://example.com"})
         monkeypatch.setattr(
             "sys.argv",
-            ["agblogger", "-d", str(tmp_path), "--pat", "token", "status"],
+            ["agblogger", "-d", str(tmp_path), "status"],
         )
 
         mock_client = MagicMock()
@@ -604,7 +547,10 @@ class TestStatusFormattingRegression:
         mock_client.__exit__ = MagicMock(return_value=False)
         mock_client.status.return_value = _plan(to_delete_remote=["posts/gone/index.md"])
 
-        with patch("cli.sync_client.SyncClient", return_value=mock_client):
+        with (
+            patch("cli.sync_client.SyncClient", return_value=mock_client),
+            patch("cli.sync_client.login_interactive", return_value="token"),
+        ):
             from cli.sync_client import main
 
             main()

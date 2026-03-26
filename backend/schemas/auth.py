@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING, Literal
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 if TYPE_CHECKING:
     from backend.models.user import User
@@ -34,22 +34,6 @@ class LoginRequest(BaseModel):
 
     username: str = Field(min_length=1, max_length=50)
     password: str = Field(min_length=1, max_length=200)
-
-
-class RegisterRequest(BaseModel):
-    """User registration request."""
-
-    username: str = Field(min_length=3, max_length=50)
-    email: EmailStr
-    password: str = Field(min_length=8, max_length=200)
-    display_name: str | None = Field(default=None, max_length=100)
-    invite_code: str | None = Field(default=None, min_length=1, max_length=200)
-
-    @field_validator("username")
-    @classmethod
-    def validate_username_format(cls, v: str) -> str:
-        """Ensure username is safe for DB and YAML storage."""
-        return _validate_username(v)
 
 
 class TokenResponse(BaseModel):
@@ -81,44 +65,6 @@ class LogoutRequest(BaseModel):
     """Logout request."""
 
     refresh_token: str | None = Field(default=None, min_length=1, max_length=512)
-
-
-class InviteCreateRequest(BaseModel):
-    """Request to create a registration invite code."""
-
-    expires_days: int | None = Field(default=None, ge=1, le=90)
-
-
-class InviteCreateResponse(BaseModel):
-    """Response containing a new invite code."""
-
-    invite_code: str
-    created_at: str
-    expires_at: str
-
-
-class PersonalAccessTokenCreateRequest(BaseModel):
-    """Request to create a personal access token."""
-
-    name: str = Field(min_length=1, max_length=100)
-    expires_days: int | None = Field(default=30, ge=1, le=3650)
-
-
-class PersonalAccessTokenResponse(BaseModel):
-    """Personal access token metadata."""
-
-    id: int
-    name: str
-    created_at: str
-    expires_at: str | None = None
-    last_used_at: str | None = None
-    revoked_at: str | None = None
-
-
-class PersonalAccessTokenCreateResponse(PersonalAccessTokenResponse):
-    """Created token metadata including one-time plaintext token."""
-
-    token: str
 
 
 class ProfileUpdate(BaseModel):

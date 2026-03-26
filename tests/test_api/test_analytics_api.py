@@ -21,7 +21,7 @@ from backend.schemas.analytics import (
     TotalStatsResponse,
 )
 from backend.utils.slug import file_path_to_slug
-from tests.conftest import create_test_client
+from tests.conftest import create_test_client, create_test_user
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
@@ -43,7 +43,6 @@ def app_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
         frontend_dir=tmp_path / "frontend",
         admin_username="admin",
         admin_password="admin123",
-        auth_self_registration=True,
     )
 
 
@@ -65,18 +64,14 @@ async def _get_admin_token(client: AsyncClient) -> str:
 
 
 async def _register_and_login(client: AsyncClient, username: str, password: str) -> str:
-    """Register a non-admin user and return their token."""
+    """Create a non-admin user and return their token."""
+    await create_test_user(client, username, f"{username}@example.com", password)
     resp = await client.post(
-        "/api/auth/register",
-        json={"username": username, "email": f"{username}@example.com", "password": password},
-    )
-    assert resp.status_code in {200, 201}, resp.text
-    resp2 = await client.post(
         "/api/auth/token-login",
         json={"username": username, "password": password},
     )
-    assert resp2.status_code == 200
-    return resp2.json()["access_token"]
+    assert resp.status_code == 200
+    return resp.json()["access_token"]
 
 
 async def _enable_post_views(client: AsyncClient, headers: dict[str, str]) -> None:

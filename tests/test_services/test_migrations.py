@@ -16,8 +16,6 @@ class TestAlembicMigration:
     DURABLE_TABLES: ClassVar[set[str]] = {
         "users",
         "refresh_tokens",
-        "personal_access_tokens",
-        "invite_codes",
         "social_accounts",
         "cross_posts",
         "analytics_settings",
@@ -208,8 +206,6 @@ class TestTablePartitionInvariants:
         expected = {
             "users",
             "refresh_tokens",
-            "personal_access_tokens",
-            "invite_codes",
             "social_accounts",
             "cross_posts",
             "analytics_settings",

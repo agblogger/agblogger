@@ -11,10 +11,9 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from backend.config import Settings
-from backend.exceptions import TokenExpiredError
 from backend.filesystem.content_manager import ContentManager
 from backend.models.user import User
-from backend.services.auth_service import authenticate_personal_access_token, decode_access_token
+from backend.services.auth_service import decode_access_token
 from backend.services.git_service import GitService
 
 security = HTTPBearer(auto_error=False)
@@ -119,27 +118,14 @@ async def get_current_user(
 
     settings: Settings = request.app.state.settings
     payload = decode_access_token(token_value, settings.secret_key)
-    if payload is not None:
-        user_id = payload.get("sub")
-        if user_id is None:
-            return None
-        if not isinstance(user_id, (str, int)) or (
-            isinstance(user_id, str) and not user_id.isdigit()
-        ):
-            return None
-        return await session.get(User, int(user_id))
-
-    # PATs are supported for Bearer credentials only.
-    if credentials is not None:
-        try:
-            return await authenticate_personal_access_token(session, token_value)
-        except TokenExpiredError:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token expired",
-                headers={"WWW-Authenticate": "Bearer"},
-            ) from None
-    return None
+    if payload is None:
+        return None
+    user_id = payload.get("sub")
+    if user_id is None:
+        return None
+    if not isinstance(user_id, (str, int)) or (isinstance(user_id, str) and not user_id.isdigit()):
+        return None
+    return await session.get(User, int(user_id))
 
 
 async def require_auth(

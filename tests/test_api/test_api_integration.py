@@ -56,7 +56,6 @@ def app_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
         frontend_dir=tmp_path / "frontend",
         admin_username="admin",
         admin_password="admin123",
-        auth_self_registration=True,
     )
 
 
@@ -1573,61 +1572,6 @@ class TestSearch:
         assert len(data) >= 1
         titles = [r["title"] for r in data]
         assert any("Hello" in t for t in titles)
-
-
-class TestRegistration:
-    @pytest.mark.asyncio
-    async def test_register_new_user_succeeds(self, client: AsyncClient) -> None:
-        resp = await client.post(
-            "/api/auth/register",
-            json={
-                "username": "newuser",
-                "email": "new@test.com",
-                "password": "password1234",
-            },
-        )
-        assert resp.status_code == 201
-        assert resp.json()["username"] == "newuser"
-
-    @pytest.mark.asyncio
-    async def test_register_duplicate_username_returns_409(self, client: AsyncClient) -> None:
-        await client.post(
-            "/api/auth/register",
-            json={
-                "username": "dupuser",
-                "email": "dup1@test.com",
-                "password": "password1234",
-            },
-        )
-        resp = await client.post(
-            "/api/auth/register",
-            json={
-                "username": "dupuser",
-                "email": "dup2@test.com",
-                "password": "password1234",
-            },
-        )
-        assert resp.status_code == 409
-
-    @pytest.mark.asyncio
-    async def test_register_duplicate_email_returns_409(self, client: AsyncClient) -> None:
-        await client.post(
-            "/api/auth/register",
-            json={
-                "username": "emailuser1",
-                "email": "same@test.com",
-                "password": "password1234",
-            },
-        )
-        resp = await client.post(
-            "/api/auth/register",
-            json={
-                "username": "emailuser2",
-                "email": "same@test.com",
-                "password": "password1234",
-            },
-        )
-        assert resp.status_code == 409
 
 
 class TestSyncCycleWarnings:

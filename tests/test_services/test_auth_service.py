@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import timedelta
 from typing import TYPE_CHECKING
 
 import jwt
@@ -13,11 +12,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from backend.models.base import DurableBase
-from backend.models.user import InviteCode, RefreshToken, User
+from backend.models.user import RefreshToken, User
 from backend.services.auth_service import (
     ALGORITHM,
     authenticate_user,
-    consume_invite_code,
     create_access_token,
     create_refresh_token_value,
     create_tokens,
@@ -283,80 +281,6 @@ class TestTokenLifecycle:
 
         successes = [r for r in (first, second) if r is not None]
         assert len(successes) == 1
-        assert any("already consumed" in record.message for record in caplog.records)
-
-
-class TestInviteConsumption:
-    async def test_consume_invite_code_single_use_under_concurrency(
-        self, session: AsyncSession
-    ) -> None:
-        creator = await _create_user(session, username="invite-creator")
-        user_a = await _create_user(session, username="invite-a")
-        user_b = await _create_user(session, username="invite-b")
-
-        now = format_iso(now_utc())
-        invite = InviteCode(
-            code_hash=hash_token("aginvite_test_token"),
-            created_by_user_id=creator.id,
-            created_at=now,
-            expires_at=format_iso(now_utc()),
-        )
-        session.add(invite)
-        await session.commit()
-        await session.refresh(invite)
-
-        bind = session.bind
-        assert bind is not None
-        session_factory = async_sessionmaker(
-            bind=bind,
-            class_=AsyncSession,
-            expire_on_commit=False,
-        )
-
-        async def _consume(user_id: int) -> bool:
-            async with session_factory() as worker_session:
-                consumed = await consume_invite_code(
-                    worker_session, invite_id=invite.id, used_by_user_id=user_id, used_at=now
-                )
-                await worker_session.commit()
-                return consumed
-
-        first, second = await asyncio.gather(_consume(user_a.id), _consume(user_b.id))
-        assert {first, second} == {True, False}
-
-    async def test_consume_invite_code_race_logs_warning(
-        self, session: AsyncSession, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        """When an invite code is already consumed, a warning is logged."""
-        creator = await _create_user(session, username="invite-log-creator")
-        user = await _create_user(session, username="invite-log-user")
-
-        now = format_iso(now_utc())
-        future = format_iso(now_utc() + timedelta(days=7))
-        invite = InviteCode(
-            code_hash=hash_token("aginvite_race_log_test"),
-            created_by_user_id=creator.id,
-            created_at=now,
-            expires_at=future,
-        )
-        session.add(invite)
-        await session.commit()
-        await session.refresh(invite)
-
-        # Consume once — should succeed.
-        consumed = await consume_invite_code(
-            session, invite_id=invite.id, used_by_user_id=user.id, used_at=now
-        )
-        await session.commit()
-        assert consumed is True
-
-        # Attempt to consume again — should fail and log a warning.
-        with caplog.at_level(logging.WARNING, logger="backend.services.auth_service"):
-            consumed_again = await consume_invite_code(
-                session, invite_id=invite.id, used_by_user_id=user.id, used_at=now
-            )
-
-        assert consumed_again is False
         assert any("already consumed" in record.message for record in caplog.records)
 
 

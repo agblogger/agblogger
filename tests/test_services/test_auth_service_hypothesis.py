@@ -9,7 +9,6 @@ from hypothesis import strategies as st
 
 from backend.services.auth_service import (
     create_access_token,
-    create_personal_access_token_value,
     create_refresh_token_value,
     decode_access_token,
     hash_token,
@@ -120,13 +119,6 @@ class TestTokenGeneratorProperties:
             token = create_refresh_token_value()
             assert len(token) > 0
             assert all(c in url_safe_chars for c in token)
-
-    def test_personal_access_token_has_prefix(self) -> None:
-        """Personal access tokens start with 'agpat_'."""
-        for _ in range(10):
-            token = create_personal_access_token_value()
-            assert token.startswith("agpat_")
-            assert len(token) > len("agpat_")
 
     def test_token_generators_produce_unique_values(self) -> None:
         """Each call produces a unique token (cryptographic randomness)."""

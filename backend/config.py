@@ -78,9 +78,6 @@ class Settings(BaseSettings):
     # Auth
     access_token_expire_minutes: int = Field(default=15, ge=1)
     refresh_token_expire_days: int = Field(default=7, ge=1)
-    auth_self_registration: bool = False
-    auth_invites_enabled: bool = True
-    auth_invite_expire_days: int = Field(default=7, ge=1, le=90)
     auth_login_max_failures: int = Field(default=5, ge=1)
     auth_refresh_max_failures: int = Field(default=10, ge=1)
     auth_rate_limit_window_seconds: int = Field(default=300, ge=1)

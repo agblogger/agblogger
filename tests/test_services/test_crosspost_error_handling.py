@@ -3,17 +3,12 @@
 from __future__ import annotations
 
 import socket
-from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpcore
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.crosspost.ssrf import SSRFSafeBackend
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 class TestAsyncDNS:
@@ -75,53 +70,6 @@ class TestAsyncDNS:
 
             with pytest.raises(httpcore.ConnectError, match="DNS resolution failed"):
                 await backend.connect_tcp("nonexistent.invalid", 443)
-
-
-@pytest.mark.slow
-class TestRegisterIntegrityError:
-    """L1: concurrent registration returns 409 instead of crashing."""
-
-    @pytest.mark.asyncio
-    async def test_duplicate_user_integrity_error_returns_409(self, tmp_path: Path) -> None:
-        from sqlalchemy.exc import IntegrityError
-
-        from backend.config import Settings
-        from tests.conftest import create_test_client
-
-        content = tmp_path / "content"
-        content.mkdir()
-        (content / "posts").mkdir()
-        (content / "assets").mkdir()
-        (content / "index.toml").write_text(
-            '[site]\ntitle = "Test"\ntimezone = "UTC"\n\n'
-            '[[pages]]\nid = "timeline"\ntitle = "Posts"\n'
-        )
-        (content / "labels.toml").write_text("[labels]\n")
-
-        settings = Settings(
-            secret_key="test-secret-key-min-32-characters-long",
-            admin_password="testpassword",
-            debug=True,
-            auth_self_registration=True,
-            database_url=f"sqlite+aiosqlite:///{tmp_path}/test.db",
-            content_dir=content,
-            frontend_dir=tmp_path / "frontend",
-        )
-
-        async def patched_flush(self: AsyncSession, objects: object = None) -> None:
-            raise IntegrityError("UNIQUE constraint failed", {}, Exception())
-
-        async with create_test_client(settings) as client:
-            with patch.object(AsyncSession, "flush", patched_flush):
-                resp = await client.post(
-                    "/api/auth/register",
-                    json={
-                        "username": "testuser",
-                        "email": "test@example.com",
-                        "password": "securepass123",
-                    },
-                )
-            assert resp.status_code == 409
 
 
 class TestSocialAccountCreateDefault:

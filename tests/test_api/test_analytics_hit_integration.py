@@ -36,7 +36,6 @@ def app_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
         frontend_dir=tmp_path / "frontend",
         admin_username="admin",
         admin_password="admin123",
-        auth_self_registration=True,
     )
 
 

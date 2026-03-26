@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
-from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -35,8 +34,6 @@ def app_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
         frontend_dir=tmp_path / "frontend",
         admin_username="admin",
         admin_password="admin123",
-        auth_self_registration=False,
-        auth_invites_enabled=True,
         auth_login_max_failures=2,
         auth_refresh_max_failures=2,
         auth_rate_limit_window_seconds=300,
@@ -48,92 +45,6 @@ async def client(app_settings: Settings) -> AsyncGenerator[AsyncClient]:
     """Create test HTTP client with initialized app state."""
     async with create_test_client(app_settings) as ac:
         yield ac
-
-
-class TestRegistrationPolicy:
-    @pytest.mark.asyncio
-    async def test_register_requires_invite_when_self_registration_disabled(
-        self, client: AsyncClient
-    ) -> None:
-        resp = await client.post(
-            "/api/auth/register",
-            json={
-                "username": "newuser",
-                "email": "new@test.com",
-                "password": "password1234",
-            },
-        )
-        assert resp.status_code == 403
-
-    @pytest.mark.asyncio
-    async def test_invite_code_allows_registration(self, client: AsyncClient) -> None:
-        token_login_resp = await client.post(
-            "/api/auth/token-login",
-            json={"username": "admin", "password": "admin123"},
-        )
-        assert token_login_resp.status_code == 200
-        access_token = token_login_resp.json()["access_token"]
-
-        invite_resp = await client.post(
-            "/api/auth/invites",
-            json={},
-            headers={"Authorization": f"Bearer {access_token}"},
-        )
-        assert invite_resp.status_code == 201
-        invite_code = invite_resp.json()["invite_code"]
-        session_login_resp = await client.post(
-            "/api/auth/login",
-            json={"username": "admin", "password": "admin123"},
-        )
-        assert session_login_resp.status_code == 200
-        csrf_token = session_login_resp.json()["csrf_token"]
-
-        register_resp = await client.post(
-            "/api/auth/register",
-            json={
-                "username": "invited-user",
-                "email": "invited@test.com",
-                "password": "password1234",
-                "invite_code": invite_code,
-            },
-            headers={"X-CSRF-Token": csrf_token},
-        )
-        assert register_resp.status_code == 201
-
-    @pytest.mark.asyncio
-    async def test_register_returns_409_when_invite_consumption_conflicts(
-        self, client: AsyncClient
-    ) -> None:
-        token_login_resp = await client.post(
-            "/api/auth/token-login",
-            json={"username": "admin", "password": "admin123"},
-        )
-        assert token_login_resp.status_code == 200
-        access_token = token_login_resp.json()["access_token"]
-
-        invite_resp = await client.post(
-            "/api/auth/invites",
-            json={},
-            headers={"Authorization": f"Bearer {access_token}"},
-        )
-        assert invite_resp.status_code == 201
-        invite_code = invite_resp.json()["invite_code"]
-
-        with patch(
-            "backend.api.auth.consume_invite_code",
-            new_callable=AsyncMock,
-            return_value=False,
-        ):
-            register_resp = await client.post(
-                "/api/auth/register",
-                json={
-                    "username": "invite-race-user",
-                    "email": "invite-race@test.com",
-                    "password": "password1234",
-                    "invite_code": invite_code,
-                },
-            )
-        assert register_resp.status_code == 409
 
 
 class TestCsrf:
@@ -275,31 +186,6 @@ class TestCsrf:
         assert with_csrf.status_code == 200
 
 
-class TestPersonalAccessTokens:
-    @pytest.mark.asyncio
-    async def test_pat_can_authenticate(self, client: AsyncClient) -> None:
-        login_resp = await client.post(
-            "/api/auth/token-login",
-            json={"username": "admin", "password": "admin123"},
-        )
-        access_token = login_resp.json()["access_token"]
-
-        pat_resp = await client.post(
-            "/api/auth/pats",
-            json={"name": "cli", "expires_days": 30},
-            headers={"Authorization": f"Bearer {access_token}"},
-        )
-        assert pat_resp.status_code == 201
-        pat_token = pat_resp.json()["token"]
-
-        me_resp = await client.get(
-            "/api/auth/me",
-            headers={"Authorization": f"Bearer {pat_token}"},
-        )
-        assert me_resp.status_code == 200
-        assert me_resp.json()["username"] == "admin"
-
-
 class TestRateLimiting:
     @pytest.mark.asyncio
     async def test_login_failed_attempts_rate_limited(self, client: AsyncClient) -> None:
@@ -326,156 +212,6 @@ class TestRateLimiting:
         )
         assert first.status_code == 401
         assert second.status_code == 429
-
-
-class TestPATManagement:
-    @pytest.mark.asyncio
-    async def test_list_pats_returns_created_tokens(self, client: AsyncClient) -> None:
-        """Create 2 PATs, list them, verify both appear with correct names."""
-        login_resp = await client.post(
-            "/api/auth/token-login",
-            json={"username": "admin", "password": "admin123"},
-        )
-        access_token = login_resp.json()["access_token"]
-        headers = {"Authorization": f"Bearer {access_token}"}
-
-        pat1_resp = await client.post(
-            "/api/auth/pats",
-            json={"name": "cli-token", "expires_days": 30},
-            headers=headers,
-        )
-        assert pat1_resp.status_code == 201
-
-        pat2_resp = await client.post(
-            "/api/auth/pats",
-            json={"name": "deploy-token", "expires_days": 60},
-            headers=headers,
-        )
-        assert pat2_resp.status_code == 201
-
-        list_resp = await client.get("/api/auth/pats", headers=headers)
-        assert list_resp.status_code == 200
-        data = list_resp.json()
-        names = [pat["name"] for pat in data]
-        assert "cli-token" in names
-        assert "deploy-token" in names
-
-    @pytest.mark.asyncio
-    async def test_list_pats_requires_auth(self, client: AsyncClient) -> None:
-        """GET /api/auth/pats without auth returns 401."""
-        resp = await client.get("/api/auth/pats")
-        assert resp.status_code == 401
-
-    @pytest.mark.asyncio
-    async def test_revoke_pat_succeeds(self, client: AsyncClient) -> None:
-        """Create PAT, revoke it, verify it no longer works for authentication."""
-        login_resp = await client.post(
-            "/api/auth/token-login",
-            json={"username": "admin", "password": "admin123"},
-        )
-        access_token = login_resp.json()["access_token"]
-        headers = {"Authorization": f"Bearer {access_token}"}
-
-        pat_resp = await client.post(
-            "/api/auth/pats",
-            json={"name": "revoke-test", "expires_days": 30},
-            headers=headers,
-        )
-        assert pat_resp.status_code == 201
-        pat_token = pat_resp.json()["token"]
-        pat_id = pat_resp.json()["id"]
-
-        # Verify the PAT works before revocation
-        me_resp = await client.get(
-            "/api/auth/me",
-            headers={"Authorization": f"Bearer {pat_token}"},
-        )
-        assert me_resp.status_code == 200
-
-        # Revoke the PAT
-        revoke_resp = await client.delete(
-            f"/api/auth/pats/{pat_id}",
-            headers=headers,
-        )
-        assert revoke_resp.status_code == 204
-
-        # Verify the PAT no longer works
-        me_after = await client.get(
-            "/api/auth/me",
-            headers={"Authorization": f"Bearer {pat_token}"},
-        )
-        assert me_after.status_code == 401
-
-    @pytest.mark.asyncio
-    async def test_revoke_nonexistent_pat_returns_404(self, client: AsyncClient) -> None:
-        """DELETE /api/auth/pats/99999 returns 404."""
-        login_resp = await client.post(
-            "/api/auth/token-login",
-            json={"username": "admin", "password": "admin123"},
-        )
-        access_token = login_resp.json()["access_token"]
-        headers = {"Authorization": f"Bearer {access_token}"}
-
-        resp = await client.delete("/api/auth/pats/99999", headers=headers)
-        assert resp.status_code == 404
-
-    @pytest.mark.asyncio
-    async def test_revoke_pat_requires_auth(self, client: AsyncClient) -> None:
-        """DELETE /api/auth/pats/{token_id} without auth returns 401."""
-        resp = await client.delete("/api/auth/pats/1")
-        assert resp.status_code == 401
-
-
-class TestInviteCodeReuse:
-    @pytest.mark.asyncio
-    async def test_invite_code_reuse_rejected(self, client: AsyncClient) -> None:
-        """Using the same invite code twice should be rejected."""
-        login_resp = await client.post(
-            "/api/auth/token-login",
-            json={"username": "admin", "password": "admin123"},
-        )
-        access_token = login_resp.json()["access_token"]
-        headers = {"Authorization": f"Bearer {access_token}"}
-        session_login_resp = await client.post(
-            "/api/auth/login",
-            json={"username": "admin", "password": "admin123"},
-        )
-        csrf_token = session_login_resp.json()["csrf_token"]
-
-        # Create an invite
-        invite_resp = await client.post(
-            "/api/auth/invites",
-            json={},
-            headers=headers,
-        )
-        assert invite_resp.status_code == 201
-        invite_code = invite_resp.json()["invite_code"]
-
-        # Register first user with the invite
-        reg1 = await client.post(
-            "/api/auth/register",
-            json={
-                "username": "invite-user-1",
-                "email": "invite1@test.com",
-                "password": "password1234",
-                "invite_code": invite_code,
-            },
-            headers={"X-CSRF-Token": csrf_token},
-        )
-        assert reg1.status_code == 201
-
-        # Attempt to register second user with the same invite code
-        reg2 = await client.post(
-            "/api/auth/register",
-            json={
-                "username": "invite-user-2",
-                "email": "invite2@test.com",
-                "password": "password1234",
-                "invite_code": invite_code,
-            },
-            headers={"X-CSRF-Token": csrf_token},
-        )
-        assert reg2.status_code == 403
 
 
 class TestPasswordModelValidation:
@@ -566,9 +302,7 @@ class TestTokenLoginRefererHeader:
 
 class TestPasswordRotation:
     @pytest.mark.asyncio
-    async def test_password_change_revokes_refresh_tokens_and_pats(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_password_change_revokes_refresh_tokens(self, client: AsyncClient) -> None:
         session_login_resp = await client.post(
             "/api/auth/login",
             json={"username": "admin", "password": "admin123"},
@@ -583,14 +317,6 @@ class TestPasswordRotation:
         assert token_login_resp.status_code == 200
         access_token = token_login_resp.json()["access_token"]
         headers = {"Authorization": f"Bearer {access_token}"}
-
-        pat_resp = await client.post(
-            "/api/auth/pats",
-            json={"name": "rotation-test", "expires_days": 30},
-            headers=headers,
-        )
-        assert pat_resp.status_code == 201
-        pat_token = pat_resp.json()["token"]
 
         change_resp = await client.put(
             "/api/admin/password",
@@ -609,12 +335,6 @@ class TestPasswordRotation:
             headers={"X-CSRF-Token": csrf_token},
         )
         assert refresh_resp.status_code == 401
-
-        pat_me_resp = await client.get(
-            "/api/auth/me",
-            headers={"Authorization": f"Bearer {pat_token}"},
-        )
-        assert pat_me_resp.status_code == 401
 
 
 class TestLoginErrorMessage:
@@ -659,57 +379,6 @@ class TestLoginErrorMessage:
         )
         assert resp.status_code == 401
         assert resp.json()["detail"] == "Invalid credentials"
-
-
-class TestExpiredPATErrorMessage:
-    @pytest.mark.asyncio
-    async def test_expired_pat_returns_token_expired_message(self, client: AsyncClient) -> None:
-        """An expired PAT should return 401 with a message indicating the token expired."""
-        from datetime import timedelta
-
-        from httpx import ASGITransport
-        from sqlalchemy import select
-
-        from backend.models.user import PersonalAccessToken
-        from backend.services.datetime_service import format_iso, now_utc
-
-        # Create a PAT via the API
-        token_resp = await client.post(
-            "/api/auth/token-login",
-            json={"username": "admin", "password": "admin123"},
-        )
-        access_token = token_resp.json()["access_token"]
-
-        pat_resp = await client.post(
-            "/api/auth/pats",
-            json={"name": "expiry-test", "expires_days": 30},
-            headers={"Authorization": f"Bearer {access_token}"},
-        )
-        assert pat_resp.status_code == 201
-        pat_token = pat_resp.json()["token"]
-        pat_id = pat_resp.json()["id"]
-
-        # Manually expire the PAT via direct DB access
-        transport = client._transport
-        assert isinstance(transport, ASGITransport)
-        app = transport.app
-        state = getattr(app, "state", None)
-        assert state is not None
-        session_factory = state.session_factory
-        async with session_factory() as session:
-            stmt = select(PersonalAccessToken).where(PersonalAccessToken.id == pat_id)
-            result = await session.execute(stmt)
-            pat = result.scalar_one()
-            pat.expires_at = format_iso(now_utc() - timedelta(days=1))
-            await session.commit()
-
-        # Now try to use the expired PAT
-        me_resp = await client.get(
-            "/api/auth/me",
-            headers={"Authorization": f"Bearer {pat_token}"},
-        )
-        assert me_resp.status_code == 401
-        assert me_resp.json()["detail"] == "Token expired"
 
 
 class TestTokenLoginRateLimiting:

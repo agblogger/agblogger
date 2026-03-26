@@ -2,16 +2,11 @@
 
 ## Identity Model
 
-AgBlogger supports two access patterns:
-
-- **browser sessions** for the web UI
-- **token-based access** for CLI and automation workflows
-
-Browser auth is cookie-based so long-lived credentials do not live in readable frontend storage.
+AgBlogger uses cookie-based browser sessions for the web UI and short-lived bearer tokens for CLI and automation workflows (via the token-login endpoint).
 
 ## Credential Boundaries
 
-Passwords and long-lived credentials are stored as hashes. Browser sessions use short-lived access credentials with server-managed refresh behavior, while personal access tokens provide a separate path for non-browser clients. This separates interactive browser identity from automation use cases without pushing durable secrets into the SPA.
+Passwords are stored as bcrypt hashes. Browser sessions use short-lived JWT access tokens with server-managed refresh token rotation. The token-login endpoint issues short-lived bearer tokens for non-browser clients such as the sync CLI.
 
 ## Authorization Model
 
@@ -27,15 +22,15 @@ Frontend caches for reads whose response depends on the current browser user, in
 
 ## Registration Posture
 
-The default operating model is a closed, self-hosted deployment. Registration is admin-controlled, invite flows are available, and rate limiting protects authentication endpoints from abuse.
+The system is a closed, single-admin deployment. User accounts are managed by the admin. Rate limiting protects authentication endpoints from abuse.
 
 ## Bootstrap
 
-The backend can bootstrap an initial admin account from environment configuration during startup. Post metadata stores author identity in a durable content-friendly form, while presentation layers resolve richer profile information when content is read.
+The backend bootstraps an initial admin account from environment configuration during startup. Post metadata stores author identity in a durable content-friendly form, while presentation layers resolve richer profile information when content is read.
 
 ## Code Entry Points
 
 - `backend/api/auth.py` exposes the authentication and account-management endpoints.
 - `backend/api/deps.py` contains the shared authentication and authorization dependencies used across the API.
-- `backend/services/auth_service.py` contains the core credential, token, invite, and profile logic.
+- `backend/services/auth_service.py` contains the core credential, token, and profile logic.
 - `frontend/src/api/auth.ts` and `frontend/src/stores/authStore.ts` implement the browser-side session integration.

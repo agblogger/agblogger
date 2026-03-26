@@ -14,7 +14,7 @@ Security controls are layered so a failure in one area does not automatically co
 
 ## Identity and Session Security
 
-Browser authentication is cookie-based, CSRF protection is required for unsafe browser actions, and long-lived browser-readable credentials are avoided. Separate token-based access exists for non-browser clients so automation and CLI workflows do not need to reuse the browser session model.
+Browser authentication is cookie-based, CSRF protection is required for unsafe browser actions, and long-lived browser-readable credentials are avoided. Short-lived bearer tokens (via the token-login endpoint) exist for non-browser clients so CLI workflows do not need to reuse the browser session model.
 
 ## Authorization Boundaries
 

@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from backend.config import Settings
-from tests.conftest import create_test_client
+from tests.conftest import create_test_client, create_test_user
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
@@ -63,7 +63,6 @@ def label_count_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
         frontend_dir=tmp_path / "frontend",
         admin_username="admin",
         admin_password="admin123",
-        auth_self_registration=True,
     )
 
 
@@ -83,11 +82,7 @@ async def _login(client: AsyncClient, username: str, password: str) -> str:
 
 
 async def _register_and_login(client: AsyncClient, username: str, email: str, password: str) -> str:
-    resp = await client.post(
-        "/api/auth/register",
-        json={"username": username, "email": email, "password": password},
-    )
-    assert resp.status_code == 201
+    await create_test_user(client, username, email, password)
     return await _login(client, username, password)
 
 

@@ -21,7 +21,7 @@ Authentication is a coupled system spanning backend token logic, cookie handling
 - **Origin checks on login**: Browser login must continue to validate request origin metadata against configured allowed origins.
 - **Rate limiting**: Authentication endpoints must remain rate-limited. Do not remove or materially relax login or refresh throttling.
 - **Refresh token rotation**: Refresh must remain one-time-use from the client's perspective. A successful refresh should invalidate the prior refresh token before issuing a replacement.
-- **No plaintext durable tokens**: Refresh tokens, PATs, invite codes, and similar long-lived secrets must be stored only as one-way hashes unless there is a documented cryptographic reason not to.
+- **No plaintext durable tokens**: Refresh tokens and similar long-lived secrets must be stored only as one-way hashes unless there is a documented cryptographic reason not to.
 - **Side-channel resistance**: Keep timing-safe comparisons and anti-enumeration behavior for authentication failures.
 
 ### When adding new auth endpoints
@@ -160,7 +160,7 @@ Multipart upload routes are protected by request-size limits at both the proxy a
 
 ### Token generation
 
-Use `secrets.token_urlsafe()` for all token generation. Do not use `random`, `uuid4`, or other non-cryptographic sources. Follow the existing prefix conventions: `agpat_` for PATs, `aginvite_` for invite codes.
+Use `secrets.token_urlsafe()` for all token generation. Do not use `random`, `uuid4`, or other non-cryptographic sources.
 
 ## Outbound Integrations
 
@@ -211,7 +211,7 @@ Startup validation enforces basic production security requirements for secrets, 
 ## Logging
 
 - Log security events (failed auth, rate limiting, origin rejection, path traversal attempts) at WARNING or ERROR level.
-- Never log plaintext passwords, tokens, invite codes, or decrypted credentials.
+- Never log plaintext passwords, tokens, or decrypted credentials.
 - Use `exc_info=True` (or pass the exception directly) for error-level logs so the traceback is captured.
 
 ## Infrastructure

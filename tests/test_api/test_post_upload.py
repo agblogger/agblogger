@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from backend.config import Settings
-from tests.conftest import create_test_client
+from tests.conftest import create_test_client, create_test_user
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
@@ -27,7 +27,6 @@ def upload_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
         frontend_dir=tmp_path / "frontend",
         admin_username="admin",
         admin_password="admin123",
-        auth_self_registration=True,
     )
 
 
@@ -250,12 +249,8 @@ class TestAssetUploadAuthorization:
         assert resp.status_code == 201
         file_path = resp.json()["file_path"]
 
-        # Register another user. The admin used bearer auth, so no CSRF session is present.
-        resp = await client.post(
-            "/api/auth/register",
-            json={"username": "other", "email": "other@test.com", "password": "password1234"},
-        )
-        assert resp.status_code == 201
+        # Create another user.
+        await create_test_user(client, "other", "other@test.com", "password1234")
         resp = await client.post(
             "/api/auth/token-login",
             json={"username": "other", "password": "password1234"},

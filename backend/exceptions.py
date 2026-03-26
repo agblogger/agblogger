@@ -30,14 +30,6 @@ class BuiltinPageError(ValueError):
     """Raised when attempting to modify a built-in page (timeline, labels)."""
 
 
-class TokenExpiredError(Exception):
-    """Raised when an authentication token (PAT, etc.) has expired.
-
-    Unlike generic auth failures, the client should be informed that the token
-    expired so it can take corrective action (e.g. generate a new PAT).
-    """
-
-
 class ExternalServiceError(RuntimeError):
     """Raised when an external service (OAuth, HTTP API) fails.
 

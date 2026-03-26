@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from backend.config import Settings
-from tests.conftest import create_test_client
+from tests.conftest import create_test_client, create_test_user
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
@@ -77,7 +77,6 @@ def app_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
         frontend_dir=tmp_path / "frontend",
         admin_username="admin",
         admin_password="admin123",
-        auth_self_registration=True,
         auth_login_max_failures=2,
         auth_rate_limit_window_seconds=300,
     )
@@ -100,20 +99,10 @@ async def _login(client: AsyncClient, username: str, password: str) -> str:
     return resp.json()["access_token"]
 
 
-async def _register(client: AsyncClient, username: str, email: str, password: str) -> None:
-    """Register a non-admin user."""
-    resp = await client.post(
-        "/api/auth/register",
-        json={"username": username, "email": email, "password": password},
-    )
-    assert resp.status_code == 201
-    assert resp.json()["is_admin"] is False
-
-
 class TestSyncAuthorizationBoundary:
     @pytest.mark.asyncio
     async def test_non_admin_cannot_initialize_sync(self, client: AsyncClient) -> None:
-        await _register(client, "writer", "writer@test.com", "writer-password")
+        await create_test_user(client, "writer", "writer@test.com", "writer-password")
         token = await _login(client, "writer", "writer-password")
 
         resp = await client.post(
@@ -183,7 +172,7 @@ class TestRenderedHtmlSanitization:
 class TestRenderPreviewAuthorization:
     @pytest.mark.asyncio
     async def test_render_preview_rejects_non_admin_users(self, client: AsyncClient) -> None:
-        await _register(client, "writer", "writer@test.com", "writer-password")
+        await create_test_user(client, "writer", "writer@test.com", "writer-password")
         token = await _login(client, "writer", "writer-password")
 
         resp = await client.post(
@@ -237,7 +226,7 @@ class TestCrosspostHistoryIsolation:
         assert trigger_resp.json()[0]["status"] == "failed"
 
         client.cookies.clear()
-        await _register(client, "reader", "reader@test.com", "reader-password")
+        await create_test_user(client, "reader", "reader@test.com", "reader-password")
         reader_token = await _login(client, "reader", "reader-password")
         history_resp = await client.get(
             "/api/crosspost/history/posts/hello/index.md",
@@ -257,7 +246,7 @@ class TestDraftContentVisibility:
 
     @pytest.mark.asyncio
     async def test_draft_markdown_returns_404_for_wrong_user(self, client: AsyncClient) -> None:
-        await _register(client, "reader2", "reader2@test.com", "reader2-password")
+        await create_test_user(client, "reader2", "reader2@test.com", "reader2-password")
         reader_token = await _login(client, "reader2", "reader2-password")
         resp = await client.get(
             "/api/content/posts/admin-draft/index.md",
@@ -281,7 +270,7 @@ class TestCrosspostDraftIsolation:
     async def test_non_author_cannot_crosspost_another_users_draft(
         self, client: AsyncClient
     ) -> None:
-        await _register(client, "reader3", "reader3@test.com", "reader3-password")
+        await create_test_user(client, "reader3", "reader3@test.com", "reader3-password")
         reader_token = await _login(client, "reader3", "reader3-password")
         resp = await client.post(
             "/api/crosspost/post",
@@ -296,16 +285,7 @@ class TestDraftDisplayNameImpersonation:
     async def test_matching_authors_display_name_does_not_grant_draft_access(
         self, client: AsyncClient
     ) -> None:
-        register_resp = await client.post(
-            "/api/auth/register",
-            json={
-                "username": "imposter",
-                "email": "imposter@test.com",
-                "password": "imposter-password",
-                "display_name": "Admin",
-            },
-        )
-        assert register_resp.status_code == 201
+        await create_test_user(client, "imposter", "imposter@test.com", "imposter-password")
 
         imposter_token = await _login(client, "imposter", "imposter-password")
         headers = {"Authorization": f"Bearer {imposter_token}"}
@@ -332,7 +312,7 @@ class TestDraftDisplayNameImpersonation:
 class TestPostMutationAuthorization:
     @pytest.mark.asyncio
     async def test_non_admin_cannot_create_update_delete_posts(self, client: AsyncClient) -> None:
-        await _register(client, "writer2", "writer2@test.com", "writer2-password")
+        await create_test_user(client, "writer2", "writer2@test.com", "writer2-password")
         token = await _login(client, "writer2", "writer2-password")
         headers = {"Authorization": f"Bearer {token}"}
 
@@ -365,7 +345,7 @@ class TestPostMutationAuthorization:
 
     @pytest.mark.asyncio
     async def test_non_admin_cannot_mutate_labels(self, client: AsyncClient) -> None:
-        await _register(client, "writer4", "writer4@test.com", "writer4-password")
+        await create_test_user(client, "writer4", "writer4@test.com", "writer4-password")
         token_resp = await client.post(
             "/api/auth/token-login",
             json={"username": "writer4", "password": "writer4-password"},
@@ -384,7 +364,7 @@ class TestPostMutationAuthorization:
     async def test_non_admin_cannot_upload_posts_or_assets_or_edit_payload(
         self, client: AsyncClient
     ) -> None:
-        await _register(client, "writer3", "writer3@test.com", "writer3-password")
+        await create_test_user(client, "writer3", "writer3@test.com", "writer3-password")
         token = await _login(client, "writer3", "writer3-password")
         headers = {"Authorization": f"Bearer {token}"}
 
@@ -404,32 +384,6 @@ class TestPostMutationAuthorization:
 
         edit_resp = await client.get("/api/posts/posts/hello/index.md/edit", headers=headers)
         assert edit_resp.status_code == 403
-
-
-class TestRegistrationPasswordPolicy:
-    @pytest.mark.asyncio
-    async def test_registration_rejects_password_shorter_than_8(self, client: AsyncClient) -> None:
-        resp = await client.post(
-            "/api/auth/register",
-            json={
-                "username": "weakpw",
-                "email": "weakpw@test.com",
-                "password": "short7x",
-            },
-        )
-        assert resp.status_code == 422
-
-    @pytest.mark.asyncio
-    async def test_registration_accepts_password_of_length_8(self, client: AsyncClient) -> None:
-        resp = await client.post(
-            "/api/auth/register",
-            json={
-                "username": "strongpw",
-                "email": "strongpw@test.com",
-                "password": "exactly8",
-            },
-        )
-        assert resp.status_code == 201
 
 
 class TestAdminPasswordPolicy:
@@ -505,7 +459,6 @@ class TestPageTraversalGuard:
             frontend_dir=tmp_path / "frontend",
             admin_username="admin",
             admin_password="admin123",
-            auth_self_registration=True,
         )
 
         async with create_test_client(settings) as local_client:
@@ -663,44 +616,6 @@ class TestRefererOriginEnforcement:
             headers={"Referer": "http://evil.example/page"},
         )
         assert resp.status_code == 403
-
-
-class TestRegistrationDisabled:
-    @pytest.fixture
-    def disabled_settings(self, tmp_content_dir: Path, tmp_path: Path) -> Settings:
-        posts_dir = tmp_content_dir / "posts"
-        hello_post = posts_dir / "hello"
-        hello_post.mkdir()
-        (hello_post / "index.md").write_text("# Hello\n", encoding="utf-8")
-        (tmp_content_dir / "labels.toml").write_text("[labels]\n", encoding="utf-8")
-        db_path = tmp_path / "test_disabled.db"
-        return Settings(
-            secret_key="test-secret-key-very-long-for-security",
-            debug=True,
-            database_url=f"sqlite+aiosqlite:///{db_path}",
-            content_dir=tmp_content_dir,
-            frontend_dir=tmp_path / "frontend",
-            admin_username="admin",
-            admin_password="admin123",
-            auth_self_registration=False,
-            auth_invites_enabled=False,
-        )
-
-    @pytest.mark.asyncio
-    async def test_register_returns_403_when_registration_fully_disabled(
-        self, disabled_settings: Settings
-    ) -> None:
-        async with create_test_client(disabled_settings) as local_client:
-            resp = await local_client.post(
-                "/api/auth/register",
-                json={
-                    "username": "newuser",
-                    "email": "new@test.com",
-                    "password": "password1234",
-                },
-            )
-            assert resp.status_code == 403
-            assert "Registration is disabled" in resp.json()["detail"]
 
 
 class TestIsTrustedProxy:

@@ -9,19 +9,6 @@ export async function login(username: string, password: string): Promise<Session
   return response
 }
 
-export async function register(
-  username: string,
-  email: string,
-  password: string,
-  displayName?: string,
-): Promise<UserResponse> {
-  return api
-    .post('auth/register', {
-      json: { username, email, password, display_name: displayName },
-    })
-    .json<UserResponse>()
-}
-
 export async function fetchMe(): Promise<UserResponse> {
   return api.get('auth/me').json<UserResponse>()
 }

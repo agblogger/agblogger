@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from backend.config import Settings
-from tests.conftest import create_test_client
+from tests.conftest import create_test_client, create_test_user
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
@@ -32,8 +32,6 @@ def app_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
         frontend_dir=tmp_path / "frontend",
         admin_username="admin",
         admin_password="admin123",
-        auth_self_registration=False,
-        auth_invites_enabled=True,
     )
 
 
@@ -49,78 +47,6 @@ async def _login_admin(client: AsyncClient) -> dict[str, str]:
     assert resp.status_code == 200
     csrf = resp.json()["csrf_token"]
     return {"X-CSRF-Token": csrf}
-
-
-class TestUsernameFormatValidation:
-    async def test_register_rejects_username_with_spaces(self, client: AsyncClient) -> None:
-        resp = await client.post(
-            "/api/auth/register",
-            json={
-                "username": "bad user",
-                "email": "bad@example.com",
-                "password": "password123",
-            },
-        )
-        assert resp.status_code == 422
-
-    async def test_register_rejects_username_with_special_chars(self, client: AsyncClient) -> None:
-        resp = await client.post(
-            "/api/auth/register",
-            json={
-                "username": "user:name",
-                "email": "u@example.com",
-                "password": "password123",
-            },
-        )
-        assert resp.status_code == 422
-
-    async def test_register_rejects_username_starting_with_dot(self, client: AsyncClient) -> None:
-        resp = await client.post(
-            "/api/auth/register",
-            json={
-                "username": ".hidden",
-                "email": "h@example.com",
-                "password": "password123",
-            },
-        )
-        assert resp.status_code == 422
-
-    async def test_register_accepts_valid_username(self, client: AsyncClient) -> None:
-        headers = await _login_admin(client)
-        resp = await client.post("/api/auth/invites", json={}, headers=headers)
-        assert resp.status_code == 201
-        code = resp.json()["invite_code"]
-        resp = await client.post(
-            "/api/auth/register",
-            json={
-                "username": "valid-user_1.name",
-                "email": "valid@example.com",
-                "password": "password123",
-                "invite_code": code,
-            },
-            headers=headers,
-        )
-        assert resp.status_code == 201
-
-
-async def _create_user(
-    client: AsyncClient, headers: dict[str, str], username: str, email: str
-) -> None:
-    """Register a user via invite."""
-    resp = await client.post("/api/auth/invites", json={}, headers=headers)
-    assert resp.status_code == 201
-    code = resp.json()["invite_code"]
-    resp = await client.post(
-        "/api/auth/register",
-        json={
-            "username": username,
-            "email": email,
-            "password": "password123",
-            "invite_code": code,
-        },
-        headers=headers,
-    )
-    assert resp.status_code == 201
 
 
 class TestProfileUpdate:
@@ -157,7 +83,7 @@ class TestProfileUpdate:
 
     async def test_update_username_rejects_duplicate(self, client: AsyncClient) -> None:
         headers = await _login_admin(client)
-        await _create_user(client, headers, "other", "other@test.com")
+        await create_test_user(client, "other", "other@test.com", "password123")
         resp = await client.patch(
             "/api/auth/me",
             json={"username": "other"},
@@ -286,23 +212,6 @@ class TestProfileUpdateEdgeCases:
         resp = await client.get("/api/auth/me")
         assert resp.status_code == 200
         assert resp.json()["username"] == "newadmin"
-
-    async def test_register_rejects_long_display_name(self, client: AsyncClient) -> None:
-        headers = await _login_admin(client)
-        resp = await client.post("/api/auth/invites", json={}, headers=headers)
-        code = resp.json()["invite_code"]
-        resp = await client.post(
-            "/api/auth/register",
-            json={
-                "username": "longdisplay",
-                "email": "long@example.com",
-                "password": "password123",
-                "display_name": "A" * 101,
-                "invite_code": code,
-            },
-            headers=headers,
-        )
-        assert resp.status_code == 422
 
 
 async def _login(client: AsyncClient) -> str:

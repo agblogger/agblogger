@@ -23,7 +23,6 @@ except ImportError:
 
 MANIFEST_FILE = ".agblogger-manifest.json"
 CONFIG_FILE = ".agblogger.json"
-PAT_ENV_VAR = "AGBLOGGER_PAT"
 _LOCALHOST_HOSTS = {"localhost", "127.0.0.1", "::1"}
 
 
@@ -481,7 +480,6 @@ def main() -> None:
         help="Allow http:// server URLs for non-localhost hosts",
     )
     parser.add_argument("--username", "-u", help="Username for authentication")
-    parser.add_argument("--pat", help="Personal access token (one-time use, not stored)")
 
     subparsers = parser.add_subparsers(dest="command")
     subparsers.add_parser("init", help="Initialize sync configuration")
@@ -509,7 +507,6 @@ def main() -> None:
             config["username"] = args.username
         save_config(content_dir, config)
         print(f"Initialized sync config in {content_dir / CONFIG_FILE}")
-        print(f"Set the {PAT_ENV_VAR} environment variable for authentication.")
         return
 
     # Load config
@@ -525,14 +522,12 @@ def main() -> None:
         print(f"Error: {exc}")
         sys.exit(1)
 
-    # Resolve token: CLI flag > env var > interactive login
-    token = args.pat or os.environ.get(PAT_ENV_VAR)
-    if token is None:
-        token = login_interactive(
-            server_url,
-            cli_username=args.username,
-            config_username=config.get("username"),
-        )
+    # Authenticate interactively
+    token = login_interactive(
+        server_url,
+        cli_username=args.username,
+        config_username=config.get("username"),
+    )
 
     try:
         with SyncClient(server_url, content_dir, token) as client:

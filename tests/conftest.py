@@ -266,6 +266,40 @@ async def create_test_client(settings: Settings) -> AsyncGenerator[AsyncClient]:
         await engine.dispose()
 
 
+async def create_test_user(
+    client: AsyncClient,
+    username: str,
+    email: str,
+    password: str,
+    *,
+    is_admin: bool = False,
+) -> None:
+    """Create a user directly in the database.
+
+    Uses the app's session factory to insert the user, bypassing the API layer.
+    """
+    from backend.models.user import User
+    from backend.services.auth_service import hash_password
+    from backend.services.datetime_service import format_iso, now_utc
+
+    transport = client._transport
+    app = getattr(transport, "app", None)
+    assert app is not None, "Test client must use ASGITransport"
+    session_factory = app.state.session_factory
+    now = format_iso(now_utc())
+    async with session_factory() as session:
+        user = User(
+            username=username,
+            email=email,
+            password_hash=hash_password(password),
+            is_admin=is_admin,
+            created_at=now,
+            updated_at=now,
+        )
+        session.add(user)
+        await session.commit()
+
+
 @pytest.fixture(autouse=True)
 def _reset_analytics_globals():
     """Reset analytics service module-level state between tests.
