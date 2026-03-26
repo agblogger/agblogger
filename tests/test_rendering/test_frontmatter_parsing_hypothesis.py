@@ -235,9 +235,9 @@ class TestSerializeParseRoundtripProperties:
     @given(raw=_frontmatter_markdown())
     def test_parse_then_serialize_preserves_metadata(self, raw: str) -> None:
         """Parsing markdown and serializing it back preserves title, author, labels, draft."""
-        parsed = parse_post(raw, default_tz="UTC")
+        parsed = parse_post(raw, fallback_tz="UTC")
         serialized = serialize_post(parsed)
-        reparsed = parse_post(serialized, default_tz="UTC")
+        reparsed = parse_post(serialized, fallback_tz="UTC")
 
         assert reparsed.title == parsed.title
         assert reparsed.author == parsed.author
@@ -248,9 +248,9 @@ class TestSerializeParseRoundtripProperties:
     @given(raw=_frontmatter_markdown())
     def test_roundtrip_preserves_timestamps(self, raw: str) -> None:
         """Parse → serialize → parse preserves created_at and modified_at."""
-        parsed = parse_post(raw, default_tz="UTC")
+        parsed = parse_post(raw, fallback_tz="UTC")
         serialized = serialize_post(parsed)
-        reparsed = parse_post(serialized, default_tz="UTC")
+        reparsed = parse_post(serialized, fallback_tz="UTC")
 
         assert abs((reparsed.created_at - parsed.created_at).total_seconds()) < 0.001
         assert abs((reparsed.modified_at - parsed.modified_at).total_seconds()) < 0.001
@@ -259,7 +259,7 @@ class TestSerializeParseRoundtripProperties:
     @given(raw=_frontmatter_markdown())
     def test_serialized_output_has_frontmatter_delimiters(self, raw: str) -> None:
         """Serialized markdown starts with --- and contains a second ---."""
-        parsed = parse_post(raw, default_tz="UTC")
+        parsed = parse_post(raw, fallback_tz="UTC")
         serialized = serialize_post(parsed)
         assert serialized.startswith("---\n")
         # Second delimiter
@@ -270,7 +270,7 @@ class TestSerializeParseRoundtripProperties:
     @given(raw=_frontmatter_markdown())
     def test_labels_are_hash_prefixed_in_serialized_output(self, raw: str) -> None:
         """Labels in serialized YAML use # prefix."""
-        parsed = parse_post(raw, default_tz="UTC")
+        parsed = parse_post(raw, fallback_tz="UTC")
         if not parsed.labels:
             return
         serialized = serialize_post(parsed)

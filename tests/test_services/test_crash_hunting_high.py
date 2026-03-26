@@ -45,11 +45,11 @@ class TestScanPostsKeyErrorTypeError:
         original_parse_post = parse_post
 
         def _parse_post_raising_key_error(
-            raw_content: str, file_path: str = "", default_tz: str = "UTC"
+            raw_content: str, file_path: str = "", fallback_tz: str = "UTC"
         ) -> Any:
             if "Bad" in raw_content:
                 raise KeyError("missing_key")
-            return original_parse_post(raw_content, file_path=file_path, default_tz=default_tz)
+            return original_parse_post(raw_content, file_path=file_path, fallback_tz=fallback_tz)
 
         with patch(
             "backend.filesystem.content_manager.parse_post",
@@ -80,11 +80,11 @@ class TestScanPostsKeyErrorTypeError:
         original_parse_post = parse_post
 
         def _parse_post_raising_type_error(
-            raw_content: str, file_path: str = "", default_tz: str = "UTC"
+            raw_content: str, file_path: str = "", fallback_tz: str = "UTC"
         ) -> Any:
             if "Bad" in raw_content:
                 raise TypeError("unexpected type")
-            return original_parse_post(raw_content, file_path=file_path, default_tz=default_tz)
+            return original_parse_post(raw_content, file_path=file_path, fallback_tz=fallback_tz)
 
         with patch(
             "backend.filesystem.content_manager.parse_post",

@@ -113,7 +113,7 @@ async def list_posts(
     if from_date:
         try:
             date_part = from_date.split("T")[0].split(" ")[0]
-            from_dt = parse_datetime(date_part + " 00:00:00", default_tz="UTC")
+            from_dt = parse_datetime(date_part + " 00:00:00", fallback_tz="UTC")
             stmt = stmt.where(PostCache.created_at >= from_dt)
         except ValueError:
             logger.warning("Failed to parse 'from' date %r", from_date, exc_info=True)
@@ -123,7 +123,7 @@ async def list_posts(
     if to_date:
         try:
             date_part = to_date.split("T")[0].split(" ")[0]
-            to_dt = parse_datetime(date_part + " 23:59:59.999999", default_tz="UTC")
+            to_dt = parse_datetime(date_part + " 23:59:59.999999", fallback_tz="UTC")
             stmt = stmt.where(PostCache.created_at <= to_dt)
         except ValueError:
             logger.warning("Failed to parse 'to' date %r", to_date, exc_info=True)

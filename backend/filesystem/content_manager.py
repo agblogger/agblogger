@@ -102,7 +102,7 @@ class ContentManager:
                 post_data = parse_post(
                     raw_content,
                     file_path=rel_path,
-                    default_tz=self.site_config.timezone,
+                    fallback_tz=self.site_config.timezone,
                 )
             except (
                 UnicodeDecodeError,
@@ -134,7 +134,7 @@ class ContentManager:
         post_data = parse_post(
             raw_content,
             file_path="",
-            default_tz=self.site_config.timezone,
+            fallback_tz=self.site_config.timezone,
         )
         if title_override and (not post_data.title or post_data.title == "Untitled"):
             post_data.title = title_override
@@ -169,7 +169,7 @@ class ContentManager:
             post_data = parse_post(
                 raw_content,
                 file_path=rel_path,
-                default_tz=self.site_config.timezone,
+                fallback_tz=self.site_config.timezone,
             )
         except (UnicodeDecodeError, ValueError, yaml.YAMLError, KeyError, TypeError) as exc:
             logger.warning("Failed to parse post %s: %s", rel_path, exc)

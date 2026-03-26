@@ -112,7 +112,7 @@ def parse_labels(raw_labels: object | None) -> list[str]:
 def parse_post(
     raw_content: str,
     file_path: str = "",
-    default_tz: str = "UTC",
+    fallback_tz: str = "UTC",
 ) -> PostData:
     """Parse a markdown file with YAML front matter into PostData."""
     post = frontmatter.loads(raw_content)
@@ -123,9 +123,9 @@ def parse_post(
         if isinstance(raw_created, date) and not isinstance(raw_created, datetime):
             raw_created = datetime(raw_created.year, raw_created.month, raw_created.day)
         if isinstance(raw_created, datetime):
-            created_at = parse_datetime(raw_created, default_tz=default_tz)
+            created_at = parse_datetime(raw_created, fallback_tz=fallback_tz)
         else:
-            created_at = parse_datetime(str(raw_created), default_tz=default_tz)
+            created_at = parse_datetime(str(raw_created), fallback_tz=fallback_tz)
     else:
         from backend.services.datetime_service import now_utc
 
@@ -137,9 +137,9 @@ def parse_post(
         if isinstance(raw_modified, date) and not isinstance(raw_modified, datetime):
             raw_modified = datetime(raw_modified.year, raw_modified.month, raw_modified.day)
         if isinstance(raw_modified, datetime):
-            modified_at = parse_datetime(raw_modified, default_tz=default_tz)
+            modified_at = parse_datetime(raw_modified, fallback_tz=fallback_tz)
         else:
-            modified_at = parse_datetime(str(raw_modified), default_tz=default_tz)
+            modified_at = parse_datetime(str(raw_modified), fallback_tz=fallback_tz)
     else:
         modified_at = created_at
 
