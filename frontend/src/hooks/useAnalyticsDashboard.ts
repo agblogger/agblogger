@@ -31,6 +31,26 @@ interface AnalyticsDashboardStatsData {
   operatingSystems: BreakdownResponse
 }
 
+function getDisabledDashboardStats(): AnalyticsDashboardStatsData {
+  return {
+    stats: {
+      total_views: 0,
+      total_unique: 0,
+    },
+    paths: {
+      paths: [],
+    },
+    browsers: {
+      category: 'browsers',
+      entries: [],
+    },
+    operatingSystems: {
+      category: 'systems',
+      entries: [],
+    },
+  }
+}
+
 function formatLocalDate(date: Date): string {
   const year = String(date.getFullYear())
   const month = String(date.getMonth() + 1).padStart(2, '0')
@@ -56,9 +76,10 @@ export function useAnalyticsDashboard(range: DateRange) {
     ['analytics-dashboard-settings'],
     fetchAnalyticsSettings,
   )
+  const analyticsEnabled = settingsResult.data?.analytics_enabled ?? null
 
   const dashboardResult = useSWR<AnalyticsDashboardStatsData, Error>(
-    ['analytics-dashboard', start, end],
+    analyticsEnabled === true ? ['analytics-dashboard', start, end] : null,
     async () => {
       const [stats, paths, browsersData, osData] = await Promise.all([
         fetchTotalStats(start, end),
@@ -74,26 +95,41 @@ export function useAnalyticsDashboard(range: DateRange) {
       }
     },
   )
+  const statsData =
+    settingsResult.data?.analytics_enabled === false
+      ? getDisabledDashboardStats()
+      : dashboardResult.data
 
   const data =
-    settingsResult.data !== undefined && dashboardResult.data !== undefined
+    settingsResult.data !== undefined && statsData !== undefined
       ? {
           settings: settingsResult.data,
-          ...dashboardResult.data,
+          ...statsData,
         }
       : undefined
 
   return {
     data,
     settings: settingsResult.data,
-    error: settingsResult.error ?? dashboardResult.error,
-    isLoading: settingsResult.isLoading || dashboardResult.isLoading,
+    error:
+      settingsResult.error ??
+      (settingsResult.data?.analytics_enabled === false ? undefined : dashboardResult.error),
+    isLoading:
+      settingsResult.isLoading ||
+      (settingsResult.data?.analytics_enabled === true && dashboardResult.isLoading),
     mutate: async () => {
-      const [settings, stats] = await Promise.all([
-        settingsResult.mutate(),
-        dashboardResult.mutate(),
-      ])
-      if (settings === undefined || stats === undefined) {
+      const settings = await settingsResult.mutate()
+      if (settings === undefined) {
+        return undefined
+      }
+      if (!settings.analytics_enabled) {
+        return {
+          settings,
+          ...getDisabledDashboardStats(),
+        }
+      }
+      const stats = await dashboardResult.mutate()
+      if (stats === undefined) {
         return undefined
       }
       return {

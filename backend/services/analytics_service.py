@@ -63,24 +63,26 @@ def _get_http_client() -> httpx.AsyncClient:
 
 
 def _load_token() -> str | None:
-    """Load the GoatCounter API token from disk, caching the result.
+    """Load the GoatCounter API token from disk.
 
     Returns the token string on success, or None if the file does not exist
-    yet.  Logs a warning on the first miss and subsequent misses at DEBUG
-    level.
+    yet. Logs a warning on the first miss and subsequent misses at DEBUG
+    level. The file is re-read on every call so token-sidecar reprovisioning
+    is picked up without an application restart.
     """
     global _goatcounter_token, _token_warning_issued
-    if _goatcounter_token is not None:
-        return _goatcounter_token
     try:
         with open(GOATCOUNTER_AUTH_FILE) as fh:
             token = fh.read().strip()
         if token:
             _goatcounter_token = token
+            _token_warning_issued = False
             return _goatcounter_token
+        _goatcounter_token = None
         logger.warning("GoatCounter token file is empty: %s", GOATCOUNTER_AUTH_FILE)
         return None
     except FileNotFoundError:
+        _goatcounter_token = None
         if not _token_warning_issued:
             _token_warning_issued = True
             logger.warning(
@@ -95,6 +97,7 @@ def _load_token() -> str | None:
             )
         return None
     except OSError as exc:
+        _goatcounter_token = None
         logger.error(
             "Cannot read GoatCounter token file %s: %s",
             GOATCOUNTER_AUTH_FILE,

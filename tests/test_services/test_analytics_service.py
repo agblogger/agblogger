@@ -153,16 +153,15 @@ def test_load_token_permission_error_returns_none_and_logs_error(
     assert any(r.levelname == "ERROR" for r in caplog.records)
 
 
-def test_load_token_returns_cached_without_rereading_file() -> None:
-    """_load_token returns the cached token without re-opening the file when already set."""
+def test_load_token_rereads_file_when_cached_token_exists() -> None:
+    """_load_token refreshes the cached token from disk on every call."""
     svc._goatcounter_token = "cached-token"
 
-    open_mock = MagicMock()
-    with patch.object(builtins, "open", open_mock):
+    with patch.object(builtins, "open", return_value=StringIO("fresh-token\n")):
         token = _load_token()
 
-    assert token == "cached-token"
-    open_mock.assert_not_called()
+    assert token == "fresh-token"
+    assert svc._goatcounter_token == "fresh-token"
 
 
 # ── close_analytics_client tests ──────────────────────────────────────────────

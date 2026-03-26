@@ -9,9 +9,11 @@ import httpx
 import pytest
 
 from backend.models.base import DurableBase
-from backend.services.analytics_service import record_hit
+from backend.services.analytics_service import _load_token, record_hit
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
     from backend.models.user import User
@@ -34,6 +36,22 @@ def mock_http_client() -> MagicMock:
     client = MagicMock()
     client.post = AsyncMock(return_value=MagicMock(status_code=202))
     return client
+
+
+def test_load_token_rereads_file_after_reprovisioning(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Replacing the token volume is picked up without restarting the app."""
+    token_file = tmp_path / "goatcounter-token"
+    token_file.write_text("first-token")
+    monkeypatch.setattr("backend.services.analytics_service.GOATCOUNTER_AUTH_FILE", str(token_file))
+
+    assert _load_token() == "first-token"
+
+    token_file.write_text("second-token")
+
+    assert _load_token() == "second-token"
 
 
 async def test_record_hit_sends_to_goatcounter(

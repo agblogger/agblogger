@@ -70,6 +70,13 @@ const pathReferrers: PathReferrersResponse = {
   ],
 }
 
+const emptyStats = {
+  stats: { total_views: 0, total_unique: 0 },
+  paths: { paths: [] },
+  browsers: { category: 'browsers', entries: [] },
+  operatingSystems: { category: 'systems', entries: [] },
+}
+
 describe('useAnalyticsDashboard', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -141,6 +148,74 @@ describe('useAnalyticsDashboard', () => {
 
     expect(result.current.settings).toEqual(analyticsSettings)
     expect(result.current.error?.message).toBe('GoatCounter down')
+  })
+
+  it('skips stats fetches when analytics is disabled', async () => {
+    const disabledSettings: AnalyticsSettings = {
+      analytics_enabled: false,
+      show_views_on_posts: true,
+    }
+    mockFetchAnalyticsSettings.mockResolvedValue(disabledSettings)
+
+    const { result } = renderHook(() => useAnalyticsDashboard('7d'), {
+      wrapper: SWRTestWrapper,
+    })
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false)
+    })
+
+    expect(result.current.data).toEqual({
+      settings: disabledSettings,
+      ...emptyStats,
+    })
+    expect(result.current.error).toBeUndefined()
+    expect(mockFetchTotalStats).not.toHaveBeenCalled()
+    expect(mockFetchPathHits).not.toHaveBeenCalled()
+    expect(mockFetchBreakdown).not.toHaveBeenCalled()
+  })
+
+  it('mutate stops stats revalidation after analytics is turned off', async () => {
+    mockFetchAnalyticsSettings
+      .mockResolvedValueOnce(analyticsSettings)
+      .mockResolvedValueOnce({
+        analytics_enabled: false,
+        show_views_on_posts: true,
+      })
+    mockFetchTotalStats.mockResolvedValue(totalStats)
+    mockFetchPathHits.mockResolvedValue(pathHits)
+    mockFetchBreakdown.mockImplementation((category: string) => {
+      if (category === 'browsers') return Promise.resolve(browsersData)
+      if (category === 'systems') return Promise.resolve(osData)
+      return Promise.reject(new Error(`Unexpected category: ${category}`))
+    })
+
+    const { result } = renderHook(() => useAnalyticsDashboard('7d'), {
+      wrapper: SWRTestWrapper,
+    })
+
+    await waitFor(() => {
+      expect(result.current.data).toBeDefined()
+    })
+
+    mockFetchTotalStats.mockClear()
+    mockFetchPathHits.mockClear()
+    mockFetchBreakdown.mockClear()
+
+    await act(async () => {
+      await result.current.mutate()
+    })
+
+    expect(result.current.data).toEqual({
+      settings: {
+        analytics_enabled: false,
+        show_views_on_posts: true,
+      },
+      ...emptyStats,
+    })
+    expect(mockFetchTotalStats).not.toHaveBeenCalled()
+    expect(mockFetchPathHits).not.toHaveBeenCalled()
+    expect(mockFetchBreakdown).not.toHaveBeenCalled()
   })
 
   it('calls fetchBreakdown twice — once for browsers and once for systems', async () => {
