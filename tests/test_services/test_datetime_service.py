@@ -25,7 +25,7 @@ class TestDatetimeParsing:
         assert result.minute == 0
 
     def test_parse_with_default_timezone(self) -> None:
-        result = parse_datetime("2026-02-02 10:30", default_tz="America/New_York")
+        result = parse_datetime("2026-02-02 10:30", fallback_tz="America/New_York")
         assert result.year == 2026
         assert result.hour == 10
 
@@ -36,7 +36,7 @@ class TestDatetimeParsing:
 
     def test_parse_datetime_naive_adds_tz(self) -> None:
         dt = datetime(2026, 1, 1, 12, 0)
-        result = parse_datetime(dt, default_tz="UTC")
+        result = parse_datetime(dt, fallback_tz="UTC")
         assert result.tzinfo is not None
 
     def test_format_datetime(self) -> None:

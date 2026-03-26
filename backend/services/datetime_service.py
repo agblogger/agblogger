@@ -11,7 +11,7 @@ from pendulum.parsing.exceptions import ParserError
 STRICT_FORMAT = "%Y-%m-%d %H:%M:%S.%f%z"
 
 
-def parse_datetime(value: str | datetime, default_tz: str = "UTC") -> datetime:
+def parse_datetime(value: str | datetime, fallback_tz: str = "UTC") -> datetime:
     """Parse a lax datetime string into a strict timezone-aware datetime.
 
     Accepts various formats:
@@ -22,19 +22,19 @@ def parse_datetime(value: str | datetime, default_tz: str = "UTC") -> datetime:
     - 2026-02-02
     - ISO 8601 variants with T separator
 
-    Missing timezone defaults to default_tz.
+    Missing timezone falls back to fallback_tz.
     Missing time components default to zeros.
     """
     if isinstance(value, datetime):
         if value.tzinfo is None:
-            tz = pendulum.timezone(default_tz)
+            tz = pendulum.timezone(fallback_tz)
             value = value.replace(tzinfo=tz)
         return value
 
     value_str = value.strip()
 
     try:
-        parsed = pendulum.parse(value_str, tz=default_tz, strict=False)
+        parsed = pendulum.parse(value_str, tz=fallback_tz, strict=False)
     except ParserError as exc:
         raise ValueError(f"Cannot parse date from: {value_str}") from exc
     if isinstance(parsed, pendulum.DateTime):
@@ -43,7 +43,7 @@ def parse_datetime(value: str | datetime, default_tz: str = "UTC") -> datetime:
         msg = f"Cannot parse date from: {value_str}"
         raise ValueError(msg)
     # pendulum.parse returns Date for date-only strings
-    return pendulum.datetime(parsed.year, parsed.month, parsed.day, tz=default_tz)
+    return pendulum.datetime(parsed.year, parsed.month, parsed.day, tz=fallback_tz)
 
 
 def format_datetime(dt: datetime) -> str:

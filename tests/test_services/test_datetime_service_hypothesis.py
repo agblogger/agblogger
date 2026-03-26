@@ -84,7 +84,7 @@ class TestParseDatetimeProperties:
     @given(dt=_NAIVE_DATETIME)
     def test_parse_datetime_object_attaches_default_tz(self, dt: datetime) -> None:
         """Passing a naive datetime object attaches the default timezone."""
-        result = parse_datetime(dt, default_tz="UTC")
+        result = parse_datetime(dt, fallback_tz="UTC")
         assert result.tzinfo is not None
 
     @PROPERTY_SETTINGS
@@ -147,7 +147,7 @@ class TestDateOnlyParsingProperties:
     def test_date_only_strings_parse_to_midnight(self, d: date) -> None:
         """Date-only strings (YYYY-MM-DD) parse to midnight with default timezone."""
         date_str = d.isoformat()
-        parsed = parse_datetime(date_str, default_tz="UTC")
+        parsed = parse_datetime(date_str, fallback_tz="UTC")
         assert parsed.hour == 0
         assert parsed.minute == 0
         assert parsed.second == 0
