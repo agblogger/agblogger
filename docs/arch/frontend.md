@@ -14,18 +14,18 @@ Admin-only management routes are also guarded client-side before rendering workf
 
 Frontend state is deliberately small and split into two categories:
 
-- **server-backed state** such as the current user, site configuration, and resource data — managed by SWR hooks (`frontend/src/hooks/`) for automatic caching, deduplication, and revalidation
+- **server-backed state** such as the current user, site configuration, and resource data — managed by SWR hooks for automatic caching, deduplication, and revalidation
 - **client UI state** such as theme selection and shared panel behavior — managed by Zustand stores
 
 SWR owns server data fetching and caching; Zustand coordinates session, config, and UI-only concerns. The browser is not treated as the long-term source of truth for content or identity.
 
+## Data Fetching
+
+Read-only data fetching uses dedicated SWR hooks for each resource. Write operations use direct API calls. Components with debounced search and paginated/filtered fetches use manual `useEffect`+`useState` patterns, as do mutation-only components.
+
 ## API Integration
 
 The frontend talks to the backend through a shared HTTP client shaped around the backend’s cookie-based browser session model. Browser authentication stays cookie-first, CSRF protection is attached to unsafe requests, and session renewal is handled through the API boundary rather than by storing durable bearer credentials in app state.
-
-## Data Fetching
-
-Read-only data fetching uses SWR hooks. Each resource has a dedicated hook that encapsulates the SWR key, fetcher, and return types. Write operations use direct API calls. After a mutation, components call `mutate()` from the relevant SWR hook to trigger revalidation. Components with debounced search (Header, SearchPage) and paginated/filtered fetches (TimelinePage) use manual `useEffect`+`useState` patterns, as do mutation-only components.
 
 ## Editing Architecture
 
