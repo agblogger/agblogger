@@ -33,6 +33,7 @@ Example:
 ```md
 ---
 title: Example Post
+subtitle: A deeper look at the topic
 created_at: 2026-03-01 12:00:00.000000+0000
 modified_at: 2026-03-01 12:00:00.000000+0000
 author: admin
@@ -47,6 +48,7 @@ This is the markdown body.
 Field meanings:
 
 - `title`: human-readable post title shown in the UI and downstream integrations
+- `subtitle`: optional short description displayed below the title; omitted from front matter when absent
 - `created_at`: canonical creation timestamp for the post
 - `modified_at`: canonical last-modified timestamp used to track content changes
 - `author`: logical author identity associated with the post
