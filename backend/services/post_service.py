@@ -324,9 +324,19 @@ async def search_posts(session: AsyncSession, query: str, *, limit: int = 20) ->
 
 
 async def get_posts_by_label(
-    session: AsyncSession, label_id: str, *, page: int = 1, per_page: int = 20
+    session: AsyncSession,
+    label_id: str,
+    *,
+    page: int = 1,
+    per_page: int = 20,
+    draft_owner_username: str | None = None,
 ) -> PostListResponse:
     """Get posts for a specific label (exact match only, no descendants)."""
     return await list_posts(
-        session, page=page, per_page=per_page, label=label_id, include_descendants=False
+        session,
+        page=page,
+        per_page=per_page,
+        label=label_id,
+        include_descendants=False,
+        draft_owner_username=draft_owner_username,
     )

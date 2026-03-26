@@ -255,11 +255,15 @@ async def get_label_endpoint(
 async def label_posts(
     label_id: str,
     session: Annotated[AsyncSession, Depends(get_session)],
+    user: Annotated[User | None, Depends(get_current_user)] = None,
     page: int = Query(1, ge=1, le=MAX_SAFE_PAGE),
     per_page: int = Query(20, ge=1, le=100),
 ) -> PostListResponse:
     """Get posts for a specific label (exact match only)."""
-    label = await get_label(session, label_id)
+    draft_owner_username = user.username if user else None
+    label = await get_label(session, label_id, draft_owner_username=draft_owner_username)
     if label is None:
         raise HTTPException(status_code=404, detail="Label not found")
-    return await get_posts_by_label(session, label_id, page=page, per_page=per_page)
+    return await get_posts_by_label(
+        session, label_id, page=page, per_page=per_page, draft_owner_username=draft_owner_username
+    )
