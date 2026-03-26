@@ -136,6 +136,7 @@ export interface PostSummary {
   id: number
   file_path: string
   title: string
+  subtitle: string | null
   author: string | null
   created_at: string
   modified_at: string
@@ -232,6 +233,7 @@ export interface SearchResult {
   id: number
   file_path: string
   title: string
+  subtitle: string | null
   rendered_excerpt: string | null
   created_at: string
   rank: number
@@ -240,6 +242,7 @@ export interface SearchResult {
 export interface PostEditResponse {
   file_path: string
   title: string
+  subtitle: string | null
   body: string
   labels: string[]
   is_draft: boolean

@@ -4,7 +4,7 @@ import { useBlocker } from 'react-router-dom'
 const AUTO_SAVE_DEBOUNCE_MS = 3000
 
 /** Bump when the persisted draft shape changes so stale drafts are ignored. */
-export const DRAFT_SCHEMA_VERSION = 1
+export const DRAFT_SCHEMA_VERSION = 2
 
 export function buildEditorDraftStorageKey(userId: number, filePath?: string): string {
   return `agblogger:draft:user:${userId}:${filePath ?? 'new'}`
@@ -12,6 +12,7 @@ export function buildEditorDraftStorageKey(userId: number, filePath?: string): s
 
 export interface DraftData {
   title: string
+  subtitle: string
   body: string
   labels: string[]
   isDraft: boolean
@@ -37,6 +38,7 @@ interface UseEditorAutoSaveReturn {
 
 function statesEqual(a: DraftData, b: DraftData): boolean {
   if (a.title !== b.title) return false
+  if (a.subtitle !== b.subtitle) return false
   if (a.body !== b.body) return false
   if (a.isDraft !== b.isDraft) return false
   if (a.labels.length !== b.labels.length) return false
@@ -54,6 +56,7 @@ function readDraft(key: string): DraftData | null {
       if (parsed._v !== DRAFT_SCHEMA_VERSION) return null
       return {
         title: typeof parsed.title === 'string' ? parsed.title : '',
+        subtitle: typeof parsed.subtitle === 'string' ? parsed.subtitle : '',
         body: typeof parsed.body === 'string' ? parsed.body : '',
         labels: Array.isArray(parsed.labels) ? parsed.labels.filter((label) => typeof label === 'string') : [],
         isDraft: parsed.isDraft === true,

@@ -53,6 +53,7 @@ export async function searchPosts(
 
 export async function createPost(params: {
   title: string
+  subtitle: string | null
   body: string
   labels: string[]
   is_draft: boolean
@@ -62,7 +63,7 @@ export async function createPost(params: {
 
 export async function updatePost(
   filePath: string,
-  params: { title: string; body: string; labels: string[]; is_draft: boolean },
+  params: { title: string; subtitle: string | null; body: string; labels: string[]; is_draft: boolean },
 ): Promise<PostDetail> {
   return api.put(`posts/${filePath}`, { json: params }).json<PostDetail>()
 }
