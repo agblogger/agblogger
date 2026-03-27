@@ -197,7 +197,7 @@ async def record_hit(
     visible in the caller's error handling.
 
     Skips recording when:
-    - The authenticated user has admin privileges.
+    - The requester is authenticated (i.e., the admin).
     - The User-Agent is identified as a bot/crawler.
     - Analytics are disabled in settings.
     - The GoatCounter token is not yet available.

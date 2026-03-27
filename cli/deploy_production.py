@@ -273,8 +273,6 @@ def build_env_content(config: DeployConfig) -> str:
             f"TRUSTED_HOSTS={_list_to_env_json(config.trusted_hosts)}",
             f"TRUSTED_PROXY_IPS={_list_to_env_json(config.trusted_proxy_ips)}",
             "AUTH_ENFORCE_LOGIN_ORIGIN=true",
-            "AUTH_SELF_REGISTRATION=false",
-            "AUTH_INVITES_ENABLED=true",
             "AUTH_LOGIN_MAX_FAILURES=5",
             "AUTH_RATE_LIMIT_WINDOW_SECONDS=300",
             f"# BLUESKY_CLIENT_URL=https://{bluesky_domain}"
@@ -878,8 +876,6 @@ def _agblogger_env_section() -> str:
         "      - DEBUG=${DEBUG:-false}\n"
         "      - EXPOSE_DOCS=${EXPOSE_DOCS:-false}\n"
         "      - AUTH_ENFORCE_LOGIN_ORIGIN=${AUTH_ENFORCE_LOGIN_ORIGIN:-true}\n"
-        "      - AUTH_SELF_REGISTRATION=${AUTH_SELF_REGISTRATION:-false}\n"
-        "      - AUTH_INVITES_ENABLED=${AUTH_INVITES_ENABLED:-true}\n"
         "      - AUTH_LOGIN_MAX_FAILURES=${AUTH_LOGIN_MAX_FAILURES:-5}\n"
         "      - AUTH_RATE_LIMIT_WINDOW_SECONDS=${AUTH_RATE_LIMIT_WINDOW_SECONDS:-300}\n"
         "      - BLUESKY_CLIENT_URL=${BLUESKY_CLIENT_URL:-}\n"

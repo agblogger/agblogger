@@ -8,7 +8,7 @@ from sqlalchemy.orm import DeclarativeBase
 class DurableBase(DeclarativeBase):
     """Base class for durable tables managed by Alembic migrations.
 
-    Tables: users, refresh_tokens, social_accounts, cross_posts.
+    Tables: admin_users, admin_refresh_tokens, social_accounts, cross_posts, analytics_settings.
     """
 
 

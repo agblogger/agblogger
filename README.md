@@ -9,7 +9,7 @@ A markdown-first blogging platform where markdown files with YAML front matter a
 - **Bidirectional sync** — SHA-256 hash-based sync with three-way merge and conflict resolution
 - **Cross-posting** — Publish to Bluesky, Mastodon, X (Twitter), and Facebook
 - **Full-text search** — SQLite FTS5 index over post content and metadata
-- **Hardened authentication** — HttpOnly cookie sessions for web, invite-based registration, PATs for CLI/API
+- **Hardened authentication** — HttpOnly cookie sessions for web, interactive login for CLI
 
 ## Quick Start
 
@@ -19,7 +19,7 @@ just start    # Start backend (:8000) + frontend (:5173) in the background
 just stop     # Stop the dev server
 ```
 
-Update `.env` with your admin credentials before first start. Self-registration is disabled by default; create invite codes from the admin account.
+The admin account is bootstrapped from environment configuration (`ADMIN_USERNAME`, `ADMIN_PASSWORD_HASH`, `ADMIN_DISPLAY_NAME`). Update `.env` with your admin credentials before first start.
 
 Run `just --list` to see all available commands.
 

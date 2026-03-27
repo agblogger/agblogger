@@ -25,7 +25,7 @@ The production image contains the backend runtime, the built frontend assets, an
 
 ## Schema Migrations
 
-Database schema migrations run programmatically during application startup, before the server begins accepting requests. Durable tables (users, tokens, invites, social accounts, cross-posts) are managed by Alembic, so upgrades apply schema changes without data loss. Cache tables are regenerated from the filesystem on every startup and do not require migrations.
+Database schema migrations run programmatically during application startup, before the server begins accepting requests. Durable tables (admin users, admin refresh tokens, social accounts, cross-posts, analytics settings) are managed by Alembic, so upgrades apply schema changes without data loss. Cache tables are regenerated from the filesystem on every startup and do not require migrations.
 
 ## Deployment Workflows
 

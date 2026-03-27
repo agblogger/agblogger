@@ -247,8 +247,6 @@ def test_build_env_content_includes_auth_hardening_settings() -> None:
     content = build_env_content(config)
 
     assert "AUTH_ENFORCE_LOGIN_ORIGIN=true" in content
-    assert "AUTH_SELF_REGISTRATION=false" in content
-    assert "AUTH_INVITES_ENABLED=true" in content
     assert "AUTH_LOGIN_MAX_FAILURES=5" in content
     assert "AUTH_RATE_LIMIT_WINDOW_SECONDS=300" in content
 
@@ -321,7 +319,6 @@ def test_build_direct_compose_content_passes_all_env_vars() -> None:
     assert "EXPOSE_DOCS=${EXPOSE_DOCS:-false}" in content
     assert "DEBUG=${DEBUG:-false}" in content
     assert "AUTH_ENFORCE_LOGIN_ORIGIN=${AUTH_ENFORCE_LOGIN_ORIGIN:-true}" in content
-    assert "AUTH_SELF_REGISTRATION=${AUTH_SELF_REGISTRATION:-false}" in content
     assert "AUTH_LOGIN_MAX_FAILURES=${AUTH_LOGIN_MAX_FAILURES:-5}" in content
 
 

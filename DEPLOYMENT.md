@@ -1,6 +1,6 @@
 # Deployment Guide
 
-AgBlogger ships a single Docker image that serves both the API and the built frontend. The deployment wizard generates all necessary configuration files and orchestrates the deployment.
+AgBlogger ships a single Docker image that serves both the API and the built frontend, plus a GoatCounter analytics sidecar. The deployment wizard generates all necessary configuration files and orchestrates the deployment.
 
 ## Prerequisites
 
@@ -58,9 +58,9 @@ Builds the image from the local source tree and runs it on the same machine. Use
 **What happens:**
 1. Generates `.env.production` and compose/Caddyfile configs in the project directory.
 2. Builds the Docker image from the local `Dockerfile`.
-3. Scans the image with Trivy (if installed).
+3. Scans the image with Trivy (if installed and `--skip-scan` is not set).
 4. Starts containers with `docker compose up -d --build`.
-5. Polls until all services are healthy.
+5. Polls until all services (AgBlogger, GoatCounter, and Caddy if enabled) are healthy.
 
 **Lifecycle commands (printed after deployment):**
 ```bash
@@ -86,9 +86,10 @@ Builds the image locally, pushes it to a container registry, and produces a depl
 4. Writes a self-contained deployment bundle to `dist/deploy/`.
 
 **Bundle contents:**
-- `.env.production` — secrets and configuration
-- `docker-compose.image.yml` (or variant) — compose file referencing the registry image
-- `Caddyfile.production` — Caddy config (if Caddy is enabled)
+- `.env.production.generated` — secrets and configuration (renamed to `.env.production` on first install by `setup.sh`; preserved on upgrades)
+- `docker-compose.image.yml` (or variant) — compose file referencing the registry image (with `.generated` suffix, placed by `setup.sh`)
+- `Caddyfile.production` — Caddy config (if Caddy is enabled, with `.generated` suffix)
+- `goatcounter/entrypoint.sh` — GoatCounter sidecar startup script
 - `setup.sh` — idempotent setup/upgrade script
 - `DEPLOY-REMOTE.md` — instructions for the remote server
 - `VERSION` — version marker for upgrade tracking
@@ -96,16 +97,16 @@ Builds the image locally, pushes it to a container registry, and produces a depl
 
 ### Tarball (`tarball`)
 
-Same as registry mode, but instead of pushing to a registry, the image is saved as a `.tar` file and included in the bundle. Use this when the remote server has no registry access.
+Same as registry mode, but instead of pushing to a registry, the image is saved as a gzip-compressed tarball and included in the bundle. Use this when the remote server has no registry access.
 
 **What the wizard asks additionally:**
 - Container image reference (used as the image tag)
-- Tarball filename (default: `agblogger-image.tar`)
+- Tarball filename (default: `agblogger-image.tar.gz`)
 
 **What happens:**
 1. Builds the Docker image for `linux/amd64`.
-2. Scans the image with Trivy (if installed).
-3. Saves the image to a tarball with `docker save`.
+2. Scans the image with Trivy (if installed and `--skip-scan` is not set).
+3. Saves the image to a gzipped tarball with `docker save` + gzip compression.
 4. Writes the deployment bundle to `dist/deploy/`, including the tarball.
 
 ## Deploying to a Remote Server
@@ -114,7 +115,7 @@ For `registry` and `tarball` modes, the wizard produces a bundle at `dist/deploy
 
 ```bash
 # From your local machine
-scp -r dist/deploy user@your-server:~/agblogger
+rsync -av dist/deploy/ user@your-server:~/agblogger/
 
 # On the remote server
 cd ~/agblogger
@@ -125,10 +126,10 @@ bash setup.sh
 
 The setup script is idempotent — safe to run on both fresh installs and upgrades:
 
-1. **Preflight checks**: verifies Docker, Docker Compose V2, and `.env.production` are present.
-2. **Permissions**: sets `.env.production` to `600` (owner-only read/write).
-3. **Backup**: copies `.env.production` to `.env.production.bak`.
-4. **Image loading**: runs `docker load -i agblogger-image.tar` (tarball mode) or `docker compose pull` (registry mode).
+1. **Preflight checks**: verifies Docker, Docker Compose V2, and `.env.production` (or `.env.production.generated`) are present.
+2. **File placement**: moves `.generated` config files (compose, Caddyfile) into their final names, backing up existing versions to `.bak`. For `.env.production`, the generated file is only placed on first install — existing env files are preserved on upgrades.
+3. **Stack teardown on mode change**: if the Caddy mode changed since the last deployment, tears down the old stack before starting the new one.
+4. **Image loading**: runs `docker load -i <tarball>` (tarball mode) or `docker compose pull` (registry mode).
 5. **Shared Caddy bootstrap** (external Caddy mode only): creates the shared Caddy directory, writes the root Caddyfile and compose file, starts the Caddy container, detects the Docker network subnet, writes the site snippet, and reloads Caddy.
 6. **Starts AgBlogger**: runs `docker compose up -d`.
 7. **Health check**: polls for up to 60 seconds until all services report healthy.
@@ -142,9 +143,12 @@ The setup script is idempotent — safe to run on both fresh installs and upgrad
 
 ### Rolling Back
 
+Compose files and Caddyfile are backed up to `.bak` by `setup.sh`. To roll back:
+
 ```bash
-cp .env.production.bak .env.production
-# Then start with the previous image
+# Restore the previous compose file (example for bundled Caddy)
+cp docker-compose.image.yml.bak docker-compose.image.yml
+# Then start with the previous configuration
 docker compose --env-file .env.production -f <compose-file> up -d
 ```
 
@@ -164,15 +168,15 @@ A dedicated Caddy container runs alongside AgBlogger in the same Docker Compose 
 - Whether to expose Caddy ports 80/443 publicly (default: yes)
 
 **How it works:**
-- The compose stack includes both `agblogger` and `caddy` services on a shared bridge network (`172.30.0.0/24`).
+- The compose stack includes `agblogger`, `caddy`, and `goatcounter` services on a shared bridge network (`172.30.0.0/24`).
 - Caddy listens on ports 80 and 443 and reverse-proxies to `agblogger:8000`.
 - The Caddy subnet (`172.30.0.0/24`) is automatically added to `TRUSTED_PROXY_IPS`.
 - If public exposure is disabled, Caddy binds to `127.0.0.1` only (useful when another proxy sits in front).
 
 **Generated files:**
 - `Caddyfile.production` — domain-specific Caddy config with request body limits, HSTS, caching headers, and compression
-- `docker-compose.yml` / `docker-compose.image.yml` — compose file with both services
-- `docker-compose.caddy-public.yml` — override that binds Caddy to `0.0.0.0` (only if public exposure is chosen)
+- `docker-compose.yml` — compose file for local deploys (includes AgBlogger, Caddy, and GoatCounter). For local deploys with public Caddy, `docker-compose.caddy-public.yml` is used as an additional overlay to bind Caddy to `0.0.0.0`.
+- `docker-compose.image.yml` — compose file for remote bundles (Caddy public/private ports are baked in based on the wizard choice, no separate overlay needed)
 
 **DNS requirement:** Your domain's A/AAAA record must point to the server *before* starting. Caddy will fail to start if it cannot reach Let's Encrypt to provision a certificate.
 
@@ -220,7 +224,7 @@ No Caddy reverse proxy. AgBlogger's port is exposed directly.
 - Host port (default: 8000)
 
 **Generated files:**
-- `docker-compose.nocaddy.yml` / `docker-compose.image.nocaddy.yml` — compose file with only the AgBlogger service, ports exposed directly
+- `docker-compose.nocaddy.yml` / `docker-compose.image.nocaddy.yml` — compose file with AgBlogger and GoatCounter services, AgBlogger ports exposed directly
 
 **No TLS:** In this mode there is no automatic HTTPS. Use this behind an existing reverse proxy that handles TLS, or only for local/testing use.
 
@@ -235,9 +239,9 @@ The interactive wizard asks the following questions in order:
 | 3 | Admin username | `admin` | |
 | 4 | Admin display name | Same as username | |
 | 5 | Admin password | — | Must be 8+ characters, confirmed twice |
-| 6 | Deployment mode | `local` | `local`, `registry`, or `tarball` |
-| 7 | Image reference | — | Only for registry/tarball modes |
-| 8 | Tarball filename | `agblogger-image.tar` | Only for tarball mode |
+| 6 | Deployment mode | `tarball` | `tarball`, `registry`, or `local` |
+| 7 | Image reference | `agblogger:latest` | Only for registry/tarball modes |
+| 8 | Tarball filename | `agblogger-image.tar.gz` | Only for tarball mode |
 | 9 | Caddy mode | `bundled` | `bundled`, `external`, or `none` |
 | 10 | Public domain | — | Only for bundled/external Caddy |
 | 11 | TLS email | — | Optional, for Let's Encrypt notices |
@@ -264,6 +268,7 @@ Choose `local` deployment mode and `bundled` Caddy (or `none` for simplicity). F
 
 ```bash
 uv run agblogger-deploy --non-interactive \
+  --deployment-mode local \
   --admin-username admin \
   --admin-password 'testpassword' \
   --trusted-hosts localhost \
@@ -291,8 +296,6 @@ The generated `.env.production` contains:
 | `DEBUG` | Always `false` for production |
 | `EXPOSE_DOCS` | Whether `/docs` is accessible |
 | `AUTH_ENFORCE_LOGIN_ORIGIN` | Origin validation for login requests |
-| `AUTH_SELF_REGISTRATION` | Whether users can self-register (default: disabled) |
-| `AUTH_INVITES_ENABLED` | Whether invite codes are enabled |
 | `AUTH_LOGIN_MAX_FAILURES` | Max failed login attempts before lockout |
 | `AUTH_RATE_LIMIT_WINDOW_SECONDS` | Rate limit window duration |
 | `BLUESKY_CLIENT_URL` | Bluesky cross-posting URL (commented out by default) |
@@ -302,7 +305,9 @@ The generated `.env.production` contains:
 
 - **Content**: stored in `./content/` (bind mount). This is the canonical source of truth for all posts and site configuration.
 - **Database**: stored in the `agblogger-db` Docker volume. Contains user accounts, auth tokens, connected social accounts, and the regenerable content cache.
-- Both must be preserved during upgrades. Schema migrations run automatically on startup.
+- **GoatCounter**: analytics data stored in the `goatcounter-db` Docker volume. The `goatcounter-token` volume shares the API token between GoatCounter and AgBlogger.
+- **Caddy**: TLS certificates and configuration state stored in `caddy-data` and `caddy-config` Docker volumes (only when using bundled Caddy mode).
+- All persistent volumes and the content bind mount must be preserved during upgrades. Schema migrations run automatically on startup.
 
 ## CLI Reference
 
@@ -331,9 +336,10 @@ Configuration:
   --host-port INT             Host port (default: 8000, no-Caddy mode)
   --bind-public               Bind to 0.0.0.0 (no-Caddy mode only)
   --expose-docs               Enable /docs endpoint
-  --deployment-mode MODE      local, registry, or tarball (default: local)
+  --deployment-mode MODE      tarball, registry, or local (default: tarball)
   --image-ref TEXT            Image reference (registry/tarball modes)
   --bundle-dir PATH           Bundle output directory (default: dist/deploy)
-  --tarball-filename TEXT     Tarball name (default: agblogger-image.tar)
+  --tarball-filename TEXT     Tarball name (default: agblogger-image.tar.gz)
   --platform TEXT             Docker build platform (default: linux/amd64 for remote)
+  --skip-scan                 Skip the Trivy security scan of the Docker image
 ```
