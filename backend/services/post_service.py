@@ -7,7 +7,7 @@ import math
 from datetime import datetime
 from typing import TYPE_CHECKING, Literal
 
-from sqlalchemy import func, or_, select, text
+from sqlalchemy import func, select, text
 
 from backend.models.label import PostLabelCache
 from backend.models.post import PostCache
@@ -96,16 +96,10 @@ async def list_posts(
     stmt = _select_posts_with_author()
 
     if draft_owner_username:
-        # Show published posts + drafts authored by the given user.
-        # Draft ownership is checked against the raw username, not the display name.
-        stmt = stmt.where(
-            or_(
-                PostCache.is_draft.is_(False),
-                PostCache.author == draft_owner_username,
-            )
-        )
+        # Authenticated admin — show all posts including drafts.
+        pass
     else:
-        # No authenticated author — hide all drafts
+        # No authenticated user — hide all drafts
         stmt = stmt.where(PostCache.is_draft.is_(False))
 
     if author:
@@ -250,8 +244,9 @@ async def get_post(
 ) -> PostDetail | None:
     """Get a single post by file path.
 
-    When *draft_owner_username* is provided, draft posts are only returned if
-    their ``author`` matches.  Otherwise drafts are hidden (returns ``None``).
+    When *draft_owner_username* is provided (i.e., the requester is the
+    authenticated admin), draft posts are visible.  Otherwise drafts are
+    hidden (returns ``None``).
     """
     stmt = _select_posts_with_author().where(PostCache.file_path == file_path)
     result = await session.execute(stmt)
@@ -263,7 +258,7 @@ async def get_post(
     post = row[0]
     display_author = row[1]
 
-    if post.is_draft and (not draft_owner_username or post.author != draft_owner_username):
+    if post.is_draft and not draft_owner_username:
         return None
 
     post_label_ids = await _post_labels(session, post.id)

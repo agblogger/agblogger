@@ -555,3 +555,31 @@ class TestStripLeadingHeading:
     def test_no_strip_for_h2_heading(self) -> None:
         content = "## Hello\n\nContent"
         assert strip_leading_heading(content, "Hello") == content
+
+
+class TestPostSaveStripSubtitle:
+    """Tests for the PostSave.strip_subtitle Pydantic validator."""
+
+    def test_whitespace_only_becomes_none(self) -> None:
+        from backend.schemas.post import PostSave
+
+        ps = PostSave(title="T", subtitle="   ", body="body")
+        assert ps.subtitle is None
+
+    def test_empty_string_becomes_none(self) -> None:
+        from backend.schemas.post import PostSave
+
+        ps = PostSave(title="T", subtitle="", body="body")
+        assert ps.subtitle is None
+
+    def test_normal_subtitle_stripped(self) -> None:
+        from backend.schemas.post import PostSave
+
+        ps = PostSave(title="T", subtitle=" hello ", body="body")
+        assert ps.subtitle == "hello"
+
+    def test_none_stays_none(self) -> None:
+        from backend.schemas.post import PostSave
+
+        ps = PostSave(title="T", subtitle=None, body="body")
+        assert ps.subtitle is None

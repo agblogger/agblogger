@@ -1573,6 +1573,36 @@ class TestSearch:
         titles = [r["title"] for r in data]
         assert any("Hello" in t for t in titles)
 
+    @pytest.mark.asyncio
+    async def test_search_finds_post_by_subtitle(self, client: AsyncClient) -> None:
+        """A post with a distinctive subtitle should be findable via FTS search."""
+        login_resp = await client.post(
+            "/api/auth/token-login",
+            json={"username": "admin", "password": "admin123"},
+        )
+        token = login_resp.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        create_resp = await client.post(
+            "/api/posts",
+            json={
+                "title": "Subtitle Search Test",
+                "subtitle": "uniquesubtitlexyz",
+                "body": "This body has no special keywords.\n",
+                "labels": [],
+                "is_draft": False,
+            },
+            headers=headers,
+        )
+        assert create_resp.status_code == 201
+        created_file_path = create_resp.json()["file_path"]
+
+        search_resp = await client.get("/api/posts/search", params={"q": "uniquesubtitlexyz"})
+        assert search_resp.status_code == 200
+        results = search_resp.json()
+        file_paths = [r["file_path"] for r in results]
+        assert created_file_path in file_paths
+
 
 class TestSyncCycleWarnings:
     @pytest.mark.asyncio

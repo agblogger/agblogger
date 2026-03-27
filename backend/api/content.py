@@ -81,7 +81,7 @@ async def _check_draft_access(
 
     For files under ``posts/<dir>/``, look up the post whose ``file_path``
     starts with the same directory prefix.  If the post is a draft, only
-    its author may access the file.
+    an authenticated user (i.e., the admin) may access the file.
 
     Note: ``file_path`` should be the resolved (symlink-followed) relative
     path so that renamed post directories are matched correctly.
@@ -111,14 +111,8 @@ async def _check_draft_access(
     if not post.is_draft:
         return
 
-    # Draft post — require author match
+    # Draft post — require authentication (any authenticated user is the admin)
     if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="File not found",
-        )
-
-    if post.author != user.username:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="File not found",
@@ -135,7 +129,8 @@ async def serve_content_file(
     """Serve a file from the content directory.
 
     Files under posts/ directories belonging to draft posts are restricted
-    to the post's author. All other content is publicly accessible.
+    to authenticated users (i.e., the admin). All other content is publicly
+    accessible.
     """
     resolved = _validate_path(file_path, settings.content_dir)
     resolved_relative_path = resolved.relative_to(settings.content_dir.resolve()).as_posix()

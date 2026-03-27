@@ -4,7 +4,7 @@ import { useAuthStore } from '@/stores/authStore'
 import type { UserResponse } from '@/api/client'
 
 /**
- * Redirects unauthenticated users to /login and returns the current auth state
+ * Redirects to /login when not authenticated as the admin and returns the current auth state
  * so the caller can render a guard.
  *
  * Usage:

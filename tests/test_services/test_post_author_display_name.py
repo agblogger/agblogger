@@ -262,14 +262,16 @@ class TestGetPostAuthorDisplayName:
         assert result.author == "Admin"
 
     @pytest.mark.asyncio
-    async def test_draft_hidden_from_wrong_user(self, session: AsyncSession) -> None:
-        """get_post hides drafts from users who are not the author."""
+    async def test_draft_visible_to_any_authenticated_admin(self, session: AsyncSession) -> None:
+        """In single-admin model, any authenticated user can see any draft."""
         await _create_post(
             session, file_path="posts/draft/index.md", title="Draft", author="alice", is_draft=True
         )
         await session.commit()
 
-        assert await get_post(session, "posts/draft/index.md", draft_owner_username="bob") is None
+        result = await get_post(session, "posts/draft/index.md", draft_owner_username="bob")
+        assert result is not None
+        assert result.title == "Draft"
 
 
 class TestResolveAuthorDisplayName:

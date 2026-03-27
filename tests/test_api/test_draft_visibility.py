@@ -351,6 +351,67 @@ class TestDraftAssetAccess:
         assert resp.status_code == 404
 
 
+class TestDraftAccessSingleAdmin:
+    """In the single-admin model, any authenticated admin should access any draft."""
+
+    @pytest.fixture
+    def mismatched_admin_settings(self, tmp_content_dir: Path, tmp_path: Path) -> Settings:
+        """Settings where the admin username differs from the draft's author."""
+        posts_dir = tmp_content_dir / "posts"
+        draft_dir = posts_dir / "old-admin-draft"
+        draft_dir.mkdir()
+        (draft_dir / "index.md").write_text(
+            "---\ntitle: Old Admin Draft\ncreated_at: 2026-02-02 22:21:29+00\n"
+            "author: old-admin\nlabels: []\ndraft: true\n---\nDraft by old admin.\n"
+        )
+        db_path = tmp_path / "test.db"
+        return Settings(
+            secret_key="test-secret-key-with-at-least-32-characters",
+            debug=True,
+            database_url=f"sqlite+aiosqlite:///{db_path}",
+            content_dir=tmp_content_dir,
+            frontend_dir=tmp_path / "frontend",
+            admin_username="new-admin",
+            admin_password="admin123",
+        )
+
+    @pytest.fixture
+    async def mismatched_client(
+        self, mismatched_admin_settings: Settings
+    ) -> AsyncGenerator[AsyncClient]:
+        async with create_test_client(mismatched_admin_settings) as ac:
+            yield ac
+
+    @pytest.mark.asyncio
+    async def test_admin_can_access_draft_with_different_author(
+        self, mismatched_client: AsyncClient
+    ) -> None:
+        """The admin should access drafts regardless of the author field."""
+        token = await _login(mismatched_client, "new-admin", "admin123")
+        resp = await mismatched_client.get(
+            "/api/posts/posts/old-admin-draft/index.md",
+            headers=_auth_headers(token),
+        )
+        assert resp.status_code == 200
+        assert resp.json()["title"] == "Old Admin Draft"
+
+    @pytest.mark.asyncio
+    async def test_admin_can_access_draft_content_file_with_different_author(
+        self, mismatched_client: AsyncClient, mismatched_admin_settings: Settings
+    ) -> None:
+        """The admin should access draft content files regardless of the author field."""
+        # Create an asset in the draft directory
+        draft_dir = mismatched_admin_settings.content_dir / "posts" / "old-admin-draft"
+        (draft_dir / "photo.png").write_bytes(b"fake-png-data")
+
+        token = await _login(mismatched_client, "new-admin", "admin123")
+        resp = await mismatched_client.get(
+            "/api/content/posts/old-admin-draft/photo.png",
+            headers=_auth_headers(token),
+        )
+        assert resp.status_code == 200
+
+
 class TestDraftLabelPostsVisibility:
     """Draft posts should respect visibility rules in label_posts endpoint."""
 

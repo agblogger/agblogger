@@ -6,7 +6,7 @@ import json
 import logging
 from typing import TYPE_CHECKING
 
-from sqlalchemy import delete, func, or_, select, text
+from sqlalchemy import delete, func, select, text
 
 from backend.models.label import LabelCache, LabelParentCache, PostLabelCache
 from backend.models.post import PostCache
@@ -51,9 +51,9 @@ async def get_all_labels(
 ) -> list[LabelResponse]:
     """Get all labels with parent/child info and post counts.
 
-    When *draft_owner_username* is provided, post_count includes published
-    posts plus drafts authored by the given user. Otherwise only published
-    posts are counted.
+    When *draft_owner_username* is provided (i.e., the requester is the
+    authenticated admin), post_count includes all posts including drafts.
+    Otherwise only published posts are counted.
     """
     # Get all labels
     stmt = select(LabelCache)
@@ -77,11 +77,7 @@ async def get_all_labels(
         .join(PostCache, PostLabelCache.post_id == PostCache.id)
         .group_by(PostLabelCache.label_id)
     )
-    if draft_owner_username:
-        count_stmt = count_stmt.where(
-            or_(PostCache.is_draft.is_(False), PostCache.author == draft_owner_username)
-        )
-    else:
+    if not draft_owner_username:
         count_stmt = count_stmt.where(PostCache.is_draft.is_(False))
     count_result = await session.execute(count_stmt)
     post_counts: dict[str, int] = {row[0]: row[1] for row in count_result.all()}
@@ -110,9 +106,9 @@ async def get_label(
 ) -> LabelResponse | None:
     """Get a single label by ID.
 
-    When *draft_owner_username* is provided, post_count includes published
-    posts plus drafts authored by the given user. Otherwise only published
-    posts are counted.
+    When *draft_owner_username* is provided (i.e., the requester is the
+    authenticated admin), post_count includes all posts including drafts.
+    Otherwise only published posts are counted.
     """
     label = await session.get(LabelCache, label_id)
     if label is None:
@@ -132,11 +128,7 @@ async def get_label(
         .join(PostCache, PostLabelCache.post_id == PostCache.id)
         .where(PostLabelCache.label_id == label_id)
     )
-    if draft_owner_username:
-        count_stmt = count_stmt.where(
-            or_(PostCache.is_draft.is_(False), PostCache.author == draft_owner_username)
-        )
-    else:
+    if not draft_owner_username:
         count_stmt = count_stmt.where(PostCache.is_draft.is_(False))
     count_result = await session.execute(count_stmt)
     post_count = count_result.scalar() or 0
