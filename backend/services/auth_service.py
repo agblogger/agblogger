@@ -13,6 +13,7 @@ import jwt
 from jwt import InvalidTokenError
 from sqlalchemy import delete, select
 
+from backend.models.crosspost import CrossPost, SocialAccount
 from backend.models.user import AdminRefreshToken, AdminUser
 from backend.services.datetime_service import format_iso, now_utc
 from backend.services.key_derivation import derive_access_token_key
@@ -203,6 +204,53 @@ def _parse_iso_datetime(value: str) -> datetime | None:
     return parsed
 
 
+async def _collapse_admin_identities(
+    session: AsyncSession,
+    *,
+    target: AdminUser,
+    stale_admins: list[AdminUser],
+) -> None:
+    """Merge dependent state into ``target`` and delete stale admin rows."""
+    if not stale_admins:
+        return
+
+    stale_ids = [admin.id for admin in stale_admins]
+
+    target_accounts_result = await session.execute(
+        select(SocialAccount).where(SocialAccount.user_id == target.id)
+    )
+    target_account_keys = {
+        (account.platform, account.account_name)
+        for account in target_accounts_result.scalars().all()
+    }
+
+    stale_accounts_result = await session.execute(
+        select(SocialAccount)
+        .where(SocialAccount.user_id.in_(stale_ids))
+        .order_by(SocialAccount.id.asc())
+    )
+    for account in stale_accounts_result.scalars().all():
+        key = (account.platform, account.account_name)
+        if key in target_account_keys:
+            logger.warning(
+                "Dropping duplicate social account while collapsing stale admin id=%s",
+                account.user_id,
+            )
+            await session.delete(account)
+            continue
+        account.user_id = target.id
+        target_account_keys.add(key)
+
+    stale_cross_posts_result = await session.execute(
+        select(CrossPost).where(CrossPost.user_id.in_(stale_ids))
+    )
+    for cross_post in stale_cross_posts_result.scalars().all():
+        cross_post.user_id = target.id
+
+    for admin in stale_admins:
+        await session.delete(admin)
+
+
 async def ensure_admin_user(session: AsyncSession, settings: Settings) -> None:
     """Create or update the admin user to match environment configuration.
 
@@ -210,35 +258,56 @@ async def ensure_admin_user(session: AsyncSession, settings: Settings) -> None:
     display name are synced with the environment variables so that changing
     ``ADMIN_PASSWORD`` or ``ADMIN_DISPLAY_NAME`` takes effect on next restart.
 
-    Note: the admin *username* is NOT updated on existing accounts.  If
-    ``ADMIN_USERNAME`` is changed, a new admin account is created alongside
-    the old one rather than the existing account being renamed.
+    Startup also enforces the single-admin invariant. If stale admin rows are
+    present from older configurations, the durable auth state is collapsed to
+    the configured admin identity and stale refresh tokens are revoked.
     """
-    stmt = select(AdminUser).where(AdminUser.username == settings.admin_username)
+    stmt = select(AdminUser).order_by(AdminUser.id.asc())
     result = await session.execute(stmt)
-    existing = result.scalar_one_or_none()
+    admins = list(result.scalars().all())
+
+    existing = next((admin for admin in admins if admin.username == settings.admin_username), None)
+    stale_admins: list[AdminUser] = []
+    identity_changed = False
 
     if existing is None:
-        now = format_iso(now_utc())
-        admin = AdminUser(
-            username=settings.admin_username,
-            email=f"{settings.admin_username}@localhost",
-            password_hash=hash_password(settings.admin_password),
-            display_name=settings.admin_display_name.strip() or settings.admin_username,
-            created_at=now,
-            updated_at=now,
-        )
-        session.add(admin)
-        await session.commit()
-        return
+        if admins:
+            existing = admins[0]
+            stale_admins = admins[1:]
+            if existing.username != settings.admin_username:
+                logger.warning(
+                    "Renaming admin id=%s from %r to configured username %r",
+                    existing.id,
+                    existing.username,
+                    settings.admin_username,
+                )
+                existing.username = settings.admin_username
+                identity_changed = True
+        else:
+            now = format_iso(now_utc())
+            admin = AdminUser(
+                username=settings.admin_username,
+                email=f"{settings.admin_username}@localhost",
+                password_hash=hash_password(settings.admin_password),
+                display_name=settings.admin_display_name.strip() or settings.admin_username,
+                created_at=now,
+                updated_at=now,
+            )
+            session.add(admin)
+            await session.commit()
+            return
+    else:
+        stale_admins = [admin for admin in admins if admin.id != existing.id]
 
     # Sync mutable fields with env config.
     dirty = False
+    refresh_token_user_ids_to_revoke: set[int] = set()
     try:
         if not verify_password(settings.admin_password, existing.password_hash):
             existing.password_hash = hash_password(settings.admin_password)
             logger.info("Admin password updated to match ADMIN_PASSWORD environment variable")
             dirty = True
+            refresh_token_user_ids_to_revoke.add(existing.id)
     except Exception:
         logger.error(
             "Failed to verify or update admin password hash — skipping password sync."
@@ -251,6 +320,27 @@ async def ensure_admin_user(session: AsyncSession, settings: Settings) -> None:
         existing.display_name = target_display
         dirty = True
 
+    if identity_changed:
+        dirty = True
+        refresh_token_user_ids_to_revoke.add(existing.id)
+
+    if stale_admins:
+        logger.warning(
+            "Collapsing %d stale admin row(s) into configured admin id=%s",
+            len(stale_admins),
+            existing.id,
+        )
+        await _collapse_admin_identities(session, target=existing, stale_admins=stale_admins)
+        refresh_token_user_ids_to_revoke.update(admin.id for admin in stale_admins)
+        refresh_token_user_ids_to_revoke.add(existing.id)
+
+    if refresh_token_user_ids_to_revoke:
+        await session.execute(
+            delete(AdminRefreshToken).where(
+                AdminRefreshToken.user_id.in_(sorted(refresh_token_user_ids_to_revoke))
+            )
+        )
+
     if dirty:
         existing.updated_at = format_iso(now_utc())
-        await session.commit()
+    await session.commit()

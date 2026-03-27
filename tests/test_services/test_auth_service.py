@@ -508,3 +508,83 @@ class TestEnsureAdminUser:
         await session.refresh(admin)
 
         assert admin.updated_at == original_updated_at
+
+    @pytest.mark.asyncio
+    async def test_renames_existing_single_admin_to_configured_username(
+        self, session: AsyncSession, test_settings: Settings
+    ) -> None:
+        """A username change must not leave the old admin identity live."""
+        legacy_admin = await _create_user(
+            session,
+            username="legacy-admin",
+            password="legacy-password",
+        )
+        _, legacy_refresh = await create_tokens(session, legacy_admin, test_settings)
+
+        test_settings.admin_username = "configured-admin"
+        test_settings.admin_password = "configured-password"
+
+        await ensure_admin_user(session, test_settings)
+
+        result = await session.execute(select(AdminUser).order_by(AdminUser.id))
+        admins = list(result.scalars().all())
+        assert len(admins) == 1
+
+        admin = admins[0]
+        assert admin.id == legacy_admin.id
+        assert admin.username == "configured-admin"
+        assert await authenticate_admin(session, "legacy-admin", "legacy-password") is None
+
+        authed = await authenticate_admin(session, "configured-admin", "configured-password")
+        assert authed is not None
+        assert authed.id == legacy_admin.id
+
+        refresh_result = await session.execute(
+            select(AdminRefreshToken).where(
+                AdminRefreshToken.token_hash == hash_token(legacy_refresh)
+            )
+        )
+        assert refresh_result.scalar_one_or_none() is None
+
+    @pytest.mark.asyncio
+    async def test_collapses_duplicate_admin_rows_to_single_configured_identity(
+        self, session: AsyncSession, test_settings: Settings
+    ) -> None:
+        """Multiple admin rows must converge to exactly one configured account."""
+        stale_admin = await _create_user(session, username="stale-admin", password="stale-password")
+        _, stale_refresh = await create_tokens(session, stale_admin, test_settings)
+        configured_admin = await _create_user(
+            session,
+            username=test_settings.admin_username,
+            password="old-configured-password",
+        )
+        _, configured_refresh = await create_tokens(session, configured_admin, test_settings)
+
+        test_settings.admin_password = "rotated-configured-password"
+
+        await ensure_admin_user(session, test_settings)
+
+        result = await session.execute(select(AdminUser).order_by(AdminUser.id))
+        admins = list(result.scalars().all())
+        assert len(admins) == 1
+
+        admin = admins[0]
+        assert admin.id == configured_admin.id
+        assert admin.username == test_settings.admin_username
+        assert await session.get(AdminUser, stale_admin.id) is None
+        assert await authenticate_admin(session, "stale-admin", "stale-password") is None
+
+        authed = await authenticate_admin(
+            session, test_settings.admin_username, "rotated-configured-password"
+        )
+        assert authed is not None
+        assert authed.id == configured_admin.id
+
+        refresh_result = await session.execute(
+            select(AdminRefreshToken).where(
+                AdminRefreshToken.token_hash.in_(
+                    [hash_token(stale_refresh), hash_token(configured_refresh)]
+                )
+            )
+        )
+        assert list(refresh_result.scalars().all()) == []

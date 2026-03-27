@@ -25,7 +25,7 @@ The system is a closed, single-admin deployment. The admin account is bootstrapp
 
 ## Bootstrap
 
-The backend bootstraps an initial admin account from environment configuration during startup. Post metadata stores author identity in a durable content-friendly form, while presentation layers resolve richer profile information when content is read.
+The backend bootstraps the admin account from environment configuration during startup and converges durable auth state to a single live admin identity before serving requests. Post metadata stores author identity in a durable content-friendly form, while presentation layers resolve richer profile information when content is read.
 
 ## Code Entry Points
 
