@@ -57,7 +57,7 @@ from backend.services.post_service import (
     resolve_author_display_name,
     search_posts,
 )
-from backend.services.slug_service import generate_post_path
+from backend.services.slug_service import date_slug_prefix, generate_post_path
 from backend.utils.datetime import format_iso, now_utc
 from backend.utils.slug import file_path_to_slug, resolve_slug_candidates
 
@@ -927,8 +927,14 @@ async def update_post_endpoint(
 
         old_dir = content_manager.content_dir / FilePath(file_path).parent
         posts_dir = old_dir.parent
+        slug_prefix = date_slug_prefix(old_dir.name)
         try:
-            target_post_path = generate_post_path(title, posts_dir, current_dir=old_dir)
+            target_post_path = generate_post_path(
+                title,
+                posts_dir,
+                current_dir=old_dir,
+                slug_prefix=slug_prefix,
+            )
         except ValueError as exc:
             raise HTTPException(
                 status_code=500,

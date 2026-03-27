@@ -13,6 +13,7 @@ MAX_SLUG_LENGTH = 80
 _UNTITLED_FALLBACK = "untitled"
 _UNTITLED_COLLISION_SLUG = "untitled-post"
 _MAX_SLUG_COLLISION = 1000
+_DATE_PREFIX_RE = re.compile(r"^(?P<prefix>\d{4}-\d{2}-\d{2}-)")
 
 
 def generate_post_slug(title: str) -> str:
@@ -59,6 +60,7 @@ def generate_post_path(
     title: str,
     posts_dir: Path,
     current_dir: Path | None = None,
+    slug_prefix: str = "",
 ) -> Path:
     """Generate a unique post directory path.
 
@@ -69,8 +71,16 @@ def generate_post_path(
     callers can resolve the canonical path for an existing post without
     spuriously colliding with its current location.
     """
-    slug = generate_post_slug(title)
+    slug = f"{slug_prefix}{generate_post_slug(title)}"
     return _resolve_unique_post_path(slug, posts_dir, current_dir=current_dir)
+
+
+def date_slug_prefix(directory_name: str) -> str:
+    """Return the leading ``YYYY-MM-DD-`` prefix from an existing post directory."""
+    match = _DATE_PREFIX_RE.match(directory_name)
+    if match is None:
+        return ""
+    return match.group("prefix")
 
 
 def _resolve_unique_post_path(

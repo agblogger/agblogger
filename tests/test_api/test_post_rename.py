@@ -66,6 +66,56 @@ async def _create_post(client: AsyncClient, token: str, title: str) -> dict[str,
 
 class TestPostRename:
     @pytest.mark.asyncio
+    async def test_update_preserves_existing_date_prefixed_path(self, tmp_path: Path) -> None:
+        """Updating a date-prefixed post without a title slug change must keep its path stable."""
+        content_dir = tmp_path / "content"
+        content_dir.mkdir()
+        (content_dir / "posts").mkdir()
+        (content_dir / "assets").mkdir()
+        (content_dir / "index.toml").write_text(
+            '[site]\ntitle = "Test Blog"\ntimezone = "UTC"\n\n'
+            '[[pages]]\nid = "timeline"\ntitle = "Posts"\n'
+        )
+        (content_dir / "labels.toml").write_text("[labels]\n")
+
+        post_dir = content_dir / "posts" / "2026-03-01-round-trip-post"
+        post_dir.mkdir()
+        (post_dir / "index.md").write_text(
+            "---\ntitle: Round Trip Post\ncreated_at: 2026-03-01 12:00:00+00\n"
+            "author: admin\nlabels: []\n---\n\nOriginal content.\n"
+        )
+
+        settings = Settings(
+            secret_key="test-secret-key-with-at-least-32-characters",
+            debug=True,
+            database_url=f"sqlite+aiosqlite:///{tmp_path / 'test.db'}",
+            content_dir=content_dir,
+            frontend_dir=tmp_path / "frontend",
+            admin_username="admin",
+            admin_password="admin123",
+        )
+
+        async with create_test_client(settings) as client:
+            token = await _login(client)
+            original_path = "posts/2026-03-01-round-trip-post/index.md"
+
+            resp = await client.put(
+                f"/api/posts/{original_path}",
+                json={
+                    "title": "Round Trip Post",
+                    "body": "Updated content.\n",
+                    "labels": [],
+                    "is_draft": False,
+                },
+                headers={"Authorization": f"Bearer {token}"},
+            )
+
+        assert resp.status_code == 200
+        assert resp.json()["file_path"] == original_path
+        assert (content_dir / original_path).exists()
+        assert not (content_dir / "posts" / "round-trip-post").exists()
+
+    @pytest.mark.asyncio
     async def test_rename_changes_directory(
         self, client: AsyncClient, app_settings: Settings
     ) -> None:
