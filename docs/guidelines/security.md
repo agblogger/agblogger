@@ -26,7 +26,7 @@ Authentication is a coupled system spanning backend token logic, cookie handling
 
 ### When adding new auth endpoints
 
-1. Use `require_auth` or `require_admin` dependencies from `backend/api/deps.py`. Do not write ad-hoc auth checks inline.
+1. Use `require_admin` or `get_current_admin` dependencies from `backend/api/deps.py`. Do not write ad-hoc auth checks inline.
 2. If the endpoint accepts cookie auth and performs a state-changing operation, verify it is covered by the CSRF middleware (it is, as long as the path starts with `/api/` and the method is POST/PUT/PATCH/DELETE).
 3. If the endpoint introduces a new token type, hash it before storage and validate expiration on use.
 4. Add tests for: unauthenticated access (401), insufficient privileges (403), expired tokens, revoked tokens, and rate limiting.

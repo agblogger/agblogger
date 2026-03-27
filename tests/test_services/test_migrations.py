@@ -196,6 +196,68 @@ class TestMigrationSchemaMatch:
             )
 
 
+class TestMigrationForeignKeyTargets:
+    """Verify FK constraints point to the correct tables after all migrations."""
+
+    async def test_social_accounts_fk_points_to_admin_users(
+        self,
+        db_engine: AsyncEngine,
+    ) -> None:
+        """social_accounts.user_id FK must reference admin_users, not users."""
+        from backend.main import run_durable_migrations
+
+        await run_durable_migrations(db_engine)
+
+        async with db_engine.connect() as conn:
+            rows = (await conn.execute(text("PRAGMA foreign_key_list(social_accounts)"))).fetchall()
+
+        # PRAGMA foreign_key_list returns (id, seq, table, from, to, on_update, on_delete, match)
+        user_id_fks = [row for row in rows if row[3] == "user_id"]
+        assert len(user_id_fks) == 1, f"Expected exactly one FK on user_id, got {user_id_fks}"
+        assert user_id_fks[0][2] == "admin_users", (
+            f"social_accounts.user_id FK points to '{user_id_fks[0][2]}', expected 'admin_users'"
+        )
+
+    async def test_cross_posts_fk_points_to_admin_users(
+        self,
+        db_engine: AsyncEngine,
+    ) -> None:
+        """cross_posts.user_id FK must reference admin_users, not users."""
+        from backend.main import run_durable_migrations
+
+        await run_durable_migrations(db_engine)
+
+        async with db_engine.connect() as conn:
+            rows = (await conn.execute(text("PRAGMA foreign_key_list(cross_posts)"))).fetchall()
+
+        user_id_fks = [row for row in rows if row[3] == "user_id"]
+        assert len(user_id_fks) == 1, f"Expected exactly one FK on user_id, got {user_id_fks}"
+        assert user_id_fks[0][2] == "admin_users", (
+            f"cross_posts.user_id FK points to '{user_id_fks[0][2]}', expected 'admin_users'"
+        )
+
+    async def test_admin_refresh_tokens_fk_points_to_admin_users(
+        self,
+        db_engine: AsyncEngine,
+    ) -> None:
+        """admin_refresh_tokens.user_id FK must reference admin_users, not users."""
+        from backend.main import run_durable_migrations
+
+        await run_durable_migrations(db_engine)
+
+        async with db_engine.connect() as conn:
+            rows = (
+                await conn.execute(text("PRAGMA foreign_key_list(admin_refresh_tokens)"))
+            ).fetchall()
+
+        user_id_fks = [row for row in rows if row[3] == "user_id"]
+        assert len(user_id_fks) == 1, f"Expected exactly one FK on user_id, got {user_id_fks}"
+        assert user_id_fks[0][2] == "admin_users", (
+            f"admin_refresh_tokens.user_id FK points to '{user_id_fks[0][2]}',"
+            " expected 'admin_users'"
+        )
+
+
 class TestTablePartitionInvariants:
     """Verify DurableBase/CacheBase partition is correct and complete."""
 

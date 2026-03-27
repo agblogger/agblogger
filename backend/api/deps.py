@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import AsyncGenerator
 from types import TracebackType
 from typing import Annotated, Any, Protocol, cast
@@ -15,6 +16,8 @@ from backend.filesystem.content_manager import ContentManager
 from backend.models.user import AdminUser
 from backend.services.auth_service import decode_access_token
 from backend.services.git_service import GitService
+
+logger = logging.getLogger(__name__)
 
 security = HTTPBearer(auto_error=False)
 
@@ -109,7 +112,7 @@ async def get_current_admin(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(security)] = None,
     session: AsyncSession = Depends(get_session),
 ) -> AdminUser | None:
-    """Get current authenticated user, or None if not authenticated."""
+    """Get current authenticated admin, or None if not authenticated."""
     token_value = (
         credentials.credentials if credentials is not None else request.cookies.get("access_token")
     )
@@ -117,21 +120,44 @@ async def get_current_admin(
         return None
 
     settings: Settings = request.app.state.settings
+
+    # Differentiate expired vs invalid/malformed tokens for logging.
+    # decode_access_token handles its own logging (DEBUG for expired, WARNING for invalid),
+    # but get_current_admin also catches the specific JWT exceptions to log at the deps level.
+    import jwt as pyjwt
+
+    from backend.services.key_derivation import derive_access_token_key
+
+    try:
+        signing_key = derive_access_token_key(settings.secret_key)
+        pyjwt.decode(token_value, signing_key, algorithms=["HS256"])
+    except pyjwt.ExpiredSignatureError:
+        logger.debug("Access token expired")
+        return None
+    except pyjwt.InvalidTokenError:
+        logger.warning("Invalid access token")
+        return None
+
     payload = decode_access_token(token_value, settings.secret_key)
     if payload is None:
         return None
     user_id = payload.get("sub")
     if user_id is None:
+        logger.warning("Access token missing sub claim")
         return None
     if not isinstance(user_id, (str, int)) or (isinstance(user_id, str) and not user_id.isdigit()):
+        logger.warning("Access token missing sub claim")
         return None
-    return await session.get(AdminUser, int(user_id))
+    user = await session.get(AdminUser, int(user_id))
+    if user is None:
+        logger.warning("Access token references non-existent user id=%s", user_id)
+    return user
 
 
 async def require_admin(
     user: Annotated[AdminUser | None, Depends(get_current_admin)],
 ) -> AdminUser:
-    """Require authentication. Raises 401 if not authenticated."""
+    """Require admin authentication. Raises 401 if not authenticated."""
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

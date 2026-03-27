@@ -145,6 +145,78 @@ class TestAccessTokens:
         assert decode_access_token(token, test_settings.secret_key) is None
 
 
+class TestAccessTokenClaimsExclusion:
+    """Ensure sensitive fields are NOT included in JWT claims."""
+
+    def test_is_admin_not_in_access_token_payload(self, test_settings: Settings) -> None:
+        """is_admin must NOT be present in the access token payload.
+
+        Prevents accidental re-introduction of role claims during future merges.
+        """
+        token = create_access_token(
+            {"sub": "1", "username": "admin"},
+            test_settings.secret_key,
+        )
+        payload = decode_access_token(token, test_settings.secret_key)
+        assert payload is not None
+        assert "is_admin" not in payload
+
+
+class TestDecodeAccessTokenLogLevels:
+    """decode_access_token must log expired tokens at DEBUG and invalid tokens at WARNING."""
+
+    def test_expired_token_logged_at_debug(
+        self, test_settings: Settings, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        token = create_access_token(
+            {"sub": "1", "username": "bob"},
+            test_settings.secret_key,
+            expires_minutes=-1,
+        )
+        with caplog.at_level(logging.DEBUG, logger="backend.services.auth_service"):
+            result = decode_access_token(token, test_settings.secret_key)
+
+        assert result is None
+        debug_records = [
+            r
+            for r in caplog.records
+            if r.levelno == logging.DEBUG and "expired" in r.message.lower()
+        ]
+        assert len(debug_records) >= 1
+
+    def test_invalid_signature_logged_at_warning(
+        self, test_settings: Settings, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        token = create_access_token(
+            {"sub": "1", "username": "bob"},
+            test_settings.secret_key,
+        )
+        with caplog.at_level(logging.DEBUG, logger="backend.services.auth_service"):
+            result = decode_access_token(token, "wrong-secret-key-that-is-long-enough")
+
+        assert result is None
+        warning_records = [
+            r
+            for r in caplog.records
+            if r.levelno == logging.WARNING and "invalid" in r.message.lower()
+        ]
+        assert len(warning_records) >= 1
+
+    def test_malformed_token_logged_at_warning(
+        self, test_settings: Settings, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with caplog.at_level(logging.DEBUG, logger="backend.services.auth_service"):
+            result = decode_access_token("not-a-jwt-token", test_settings.secret_key)
+
+        assert result is None
+        warning_records = [
+            r
+            for r in caplog.records
+            if r.levelno == logging.WARNING and "invalid" in r.message.lower()
+        ]
+        assert len(warning_records) >= 1
+
+
 class TestRefreshTokenValue:
     def test_create_refresh_token_value_is_unique(self) -> None:
         a = create_refresh_token_value()

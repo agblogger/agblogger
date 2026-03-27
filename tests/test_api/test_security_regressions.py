@@ -971,3 +971,147 @@ class TestContentApiRejectsFlatMdPaths:
         """
         resp = await client.get("/api/content/posts/hello.md")
         assert resp.status_code == 404
+
+
+class TestUnauthenticatedAccessDenied:
+    """Unauthenticated requests to admin-only endpoints must return 401."""
+
+    # -- Post mutation endpoints --
+
+    @pytest.mark.asyncio
+    async def test_create_post_requires_auth(self, client: AsyncClient) -> None:
+        resp = await client.post(
+            "/api/posts",
+            json={"title": "Test", "body": "body", "labels": [], "is_draft": False},
+        )
+        assert resp.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_update_post_requires_auth(self, client: AsyncClient) -> None:
+        resp = await client.put(
+            "/api/posts/hello",
+            json={"title": "Updated", "body": "body", "labels": []},
+        )
+        assert resp.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_delete_post_requires_auth(self, client: AsyncClient) -> None:
+        resp = await client.delete("/api/posts/hello")
+        assert resp.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_upload_post_requires_auth(self, client: AsyncClient) -> None:
+        resp = await client.post(
+            "/api/posts/upload",
+            files={"file": ("test.md", b"# Test\n", "text/markdown")},
+        )
+        assert resp.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_upload_asset_requires_auth(self, client: AsyncClient) -> None:
+        resp = await client.post(
+            "/api/posts/hello/assets",
+            files={"file": ("image.png", b"\x89PNG", "image/png")},
+        )
+        assert resp.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_delete_asset_requires_auth(self, client: AsyncClient) -> None:
+        resp = await client.delete("/api/posts/hello/assets/image.png")
+        assert resp.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_get_post_edit_requires_auth(self, client: AsyncClient) -> None:
+        resp = await client.get("/api/posts/hello/edit")
+        assert resp.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_list_assets_requires_auth(self, client: AsyncClient) -> None:
+        resp = await client.get("/api/posts/hello/assets")
+        assert resp.status_code == 401
+
+    # -- Label mutation endpoints --
+
+    @pytest.mark.asyncio
+    async def test_create_label_requires_auth(self, client: AsyncClient) -> None:
+        resp = await client.post(
+            "/api/labels",
+            json={"id": "test", "names": ["Test"]},
+        )
+        assert resp.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_update_label_requires_auth(self, client: AsyncClient) -> None:
+        resp = await client.put(
+            "/api/labels/swe",
+            json={"names": ["Software Engineering"]},
+        )
+        assert resp.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_delete_label_requires_auth(self, client: AsyncClient) -> None:
+        resp = await client.delete("/api/labels/swe")
+        assert resp.status_code == 401
+
+    # -- Render preview endpoint --
+
+    @pytest.mark.asyncio
+    async def test_render_preview_requires_auth(self, client: AsyncClient) -> None:
+        resp = await client.post(
+            "/api/render/preview",
+            json={"markdown": "# Hello"},
+        )
+        assert resp.status_code == 401
+
+    # -- Crosspost endpoints --
+
+    @pytest.mark.asyncio
+    async def test_create_social_account_requires_auth(self, client: AsyncClient) -> None:
+        resp = await client.post(
+            "/api/crosspost/accounts",
+            json={"provider": "bluesky", "handle": "test.bsky.social"},
+        )
+        assert resp.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_list_social_accounts_requires_auth(self, client: AsyncClient) -> None:
+        resp = await client.get("/api/crosspost/accounts")
+        assert resp.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_delete_social_account_requires_auth(self, client: AsyncClient) -> None:
+        resp = await client.delete("/api/crosspost/accounts/1")
+        assert resp.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_crosspost_post_requires_auth(self, client: AsyncClient) -> None:
+        resp = await client.post(
+            "/api/crosspost/post",
+            json={"post_path": "hello", "account_ids": [1]},
+        )
+        assert resp.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_crosspost_history_requires_auth(self, client: AsyncClient) -> None:
+        resp = await client.get("/api/crosspost/history/hello")
+        assert resp.status_code == 401
+
+    # -- Sync endpoints --
+
+    @pytest.mark.asyncio
+    async def test_sync_status_requires_auth(self, client: AsyncClient) -> None:
+        resp = await client.post("/api/sync/status", json={})
+        assert resp.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_sync_download_requires_auth(self, client: AsyncClient) -> None:
+        resp = await client.get("/api/sync/download/posts/hello/index.md")
+        assert resp.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_sync_commit_requires_auth(self, client: AsyncClient) -> None:
+        resp = await client.post(
+            "/api/sync/commit",
+            data={"metadata": '{"deleted_files": [], "last_sync_commit": null}'},
+        )
+        assert resp.status_code == 401

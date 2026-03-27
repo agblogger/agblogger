@@ -69,15 +69,18 @@ def decode_access_token(token: str, secret_key: str) -> dict[str, Any] | None:
         if payload.get("type") != "access":
             return None
         return payload
+    except jwt.ExpiredSignatureError:
+        logger.debug("Access token expired")
+        return None
     except InvalidTokenError:
-        logger.debug("Failed to decode access token", exc_info=True)
+        logger.warning("Invalid access token", exc_info=True)
         return None
 
 
 async def authenticate_admin(
     session: AsyncSession, username: str, password: str
 ) -> AdminUser | None:
-    """Authenticate a user by username and password."""
+    """Authenticate the admin by username and password."""
     stmt = select(AdminUser).where(AdminUser.username == username)
     result = await session.execute(stmt)
     user = result.scalar_one_or_none()

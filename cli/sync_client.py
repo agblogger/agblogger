@@ -490,6 +490,12 @@ def main() -> None:
     args = parser.parse_args()
     content_dir = Path(args.dir).resolve()
 
+    if os.environ.get("AGBLOGGER_PAT"):
+        print(
+            "Warning: AGBLOGGER_PAT is no longer supported. Use interactive login instead.",
+            file=sys.stderr,
+        )
+
     if args.command == "init":
         if not args.server:
             print("Error: --server required for init")

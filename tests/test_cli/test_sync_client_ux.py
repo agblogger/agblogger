@@ -483,6 +483,72 @@ class TestMainHttpErrorHandling:
         assert "500" in captured.out
 
 
+# ── PAT deprecation warning ──────────────────────────────────────────
+
+
+class TestPATDeprecationWarning:
+    def test_agblogger_pat_env_prints_warning(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """Setting AGBLOGGER_PAT should print a deprecation warning."""
+        save_config(tmp_path, {"server": "https://example.com"})
+        monkeypatch.setattr(
+            "sys.argv",
+            ["agblogger", "-d", str(tmp_path), "status"],
+        )
+        monkeypatch.setenv("AGBLOGGER_PAT", "some-old-token")
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.status.return_value = _plan()
+
+        with (
+            patch("cli.sync_client.SyncClient", return_value=mock_client),
+            patch("cli.sync_client.login_interactive", return_value="token"),
+        ):
+            from cli.sync_client import main
+
+            main()
+
+        captured = capsys.readouterr()
+        assert "AGBLOGGER_PAT" in captured.err
+        assert "no longer supported" in captured.err
+
+    def test_no_warning_without_pat_env(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """No warning when AGBLOGGER_PAT is not set."""
+        save_config(tmp_path, {"server": "https://example.com"})
+        monkeypatch.setattr(
+            "sys.argv",
+            ["agblogger", "-d", str(tmp_path), "status"],
+        )
+        monkeypatch.delenv("AGBLOGGER_PAT", raising=False)
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.status.return_value = _plan()
+
+        with (
+            patch("cli.sync_client.SyncClient", return_value=mock_client),
+            patch("cli.sync_client.login_interactive", return_value="token"),
+        ):
+            from cli.sync_client import main
+
+            main()
+
+        captured = capsys.readouterr()
+        assert "AGBLOGGER_PAT" not in captured.err
+
+
 # ── Status formatting regression ─────────────────────────────────────
 
 

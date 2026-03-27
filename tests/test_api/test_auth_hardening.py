@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 import pytest
@@ -453,3 +454,106 @@ class TestOldPasswordAfterChange:
             json={"username": "admin", "password": "newpassword456"},
         )
         assert new_login.status_code == 200
+
+
+class TestGetCurrentAdminLogging:
+    """get_current_admin must log differentiated messages for different auth failure modes."""
+
+    @pytest.mark.asyncio
+    async def test_expired_token_logs_debug(
+        self, client: AsyncClient, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """An expired access token should produce a DEBUG log about expiry."""
+        from backend.services.auth_service import create_access_token
+
+        expired_token = create_access_token(
+            {"sub": "1", "username": "admin"},
+            "test-secret-key-with-at-least-32-characters",
+            expires_minutes=-1,
+        )
+        with caplog.at_level(logging.DEBUG, logger="backend.api.deps"):
+            resp = await client.get(
+                "/api/auth/me",
+                headers={"Authorization": f"Bearer {expired_token}"},
+            )
+        assert resp.status_code == 401
+        debug_records = [
+            r
+            for r in caplog.records
+            if r.levelno == logging.DEBUG and "expired" in r.message.lower()
+        ]
+        assert len(debug_records) >= 1
+
+    @pytest.mark.asyncio
+    async def test_invalid_token_logs_warning(
+        self, client: AsyncClient, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A malformed/invalid access token should produce a WARNING log."""
+        with caplog.at_level(logging.DEBUG, logger="backend.api.deps"):
+            resp = await client.get(
+                "/api/auth/me",
+                headers={"Authorization": "Bearer not-a-valid-jwt-token"},
+            )
+        assert resp.status_code == 401
+        warning_records = [
+            r
+            for r in caplog.records
+            if r.levelno == logging.WARNING and "invalid" in r.message.lower()
+        ]
+        assert len(warning_records) >= 1
+
+    @pytest.mark.asyncio
+    async def test_token_with_missing_sub_logs_warning(
+        self, client: AsyncClient, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A token without a sub claim should produce a WARNING log."""
+        from datetime import timedelta
+
+        import jwt as pyjwt
+
+        from backend.services.auth_service import ALGORITHM
+        from backend.services.datetime_service import now_utc
+        from backend.services.key_derivation import derive_access_token_key
+
+        secret = "test-secret-key-with-at-least-32-characters"
+        signing_key = derive_access_token_key(secret)
+        exp = now_utc() + timedelta(minutes=15)
+        token = pyjwt.encode(
+            {"username": "admin", "type": "access", "exp": exp},
+            signing_key,
+            algorithm=ALGORITHM,
+        )
+        with caplog.at_level(logging.DEBUG, logger="backend.api.deps"):
+            resp = await client.get(
+                "/api/auth/me",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert resp.status_code == 401
+        warning_records = [
+            r for r in caplog.records if r.levelno == logging.WARNING and "sub" in r.message.lower()
+        ]
+        assert len(warning_records) >= 1
+
+    @pytest.mark.asyncio
+    async def test_token_with_nonexistent_user_logs_warning(
+        self, client: AsyncClient, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A token referencing a non-existent user id should produce a WARNING log."""
+        from backend.services.auth_service import create_access_token
+
+        token = create_access_token(
+            {"sub": "99999", "username": "ghost"},
+            "test-secret-key-with-at-least-32-characters",
+        )
+        with caplog.at_level(logging.DEBUG, logger="backend.api.deps"):
+            resp = await client.get(
+                "/api/auth/me",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert resp.status_code == 401
+        warning_records = [
+            r
+            for r in caplog.records
+            if r.levelno == logging.WARNING and "non-existent" in r.message.lower()
+        ]
+        assert len(warning_records) >= 1
