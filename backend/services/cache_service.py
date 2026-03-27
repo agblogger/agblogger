@@ -10,7 +10,7 @@ from sqlalchemy import delete, text
 
 from backend.filesystem.content_manager import ContentManager, hash_content
 from backend.models.label import LabelCache, LabelParentCache, PostLabelCache
-from backend.models.post import PostCache
+from backend.models.post import FTS_INSERT_SQL, PostCache
 from backend.pandoc.renderer import render_markdown, render_markdown_excerpt, rewrite_relative_urls
 from backend.services.dag import break_cycles
 from backend.services.label_service import ensure_label_cache_entry
@@ -124,10 +124,7 @@ async def rebuild_cache(
 
             # Index in FTS
             await session.execute(
-                text(
-                    "INSERT INTO posts_fts(rowid, title, subtitle, content) "
-                    "VALUES (:rowid, :title, :subtitle, :content)"
-                ),
+                FTS_INSERT_SQL,
                 {
                     "rowid": post.id,
                     "title": post_data.title,

@@ -239,7 +239,7 @@ class TestGetPostAuthorDisplayName:
 
     @pytest.mark.asyncio
     async def test_draft_hidden_without_owner(self, session: AsyncSession) -> None:
-        """get_post hides drafts when no draft_owner_username is given."""
+        """get_post hides drafts when include_drafts is False."""
         await _create_post(
             session, file_path="posts/draft/index.md", title="Draft", author="admin", is_draft=True
         )
@@ -249,14 +249,14 @@ class TestGetPostAuthorDisplayName:
 
     @pytest.mark.asyncio
     async def test_draft_visible_to_owner(self, session: AsyncSession) -> None:
-        """get_post returns draft when draft_owner_username matches author."""
+        """get_post returns draft when include_drafts is True."""
         await _create_user(session, username="admin", display_name="Admin")
         await _create_post(
             session, file_path="posts/draft/index.md", title="Draft", author="admin", is_draft=True
         )
         await session.commit()
 
-        result = await get_post(session, "posts/draft/index.md", draft_owner_username="admin")
+        result = await get_post(session, "posts/draft/index.md", include_drafts=True)
         assert result is not None
         assert result.title == "Draft"
         assert result.author == "Admin"
@@ -269,7 +269,7 @@ class TestGetPostAuthorDisplayName:
         )
         await session.commit()
 
-        result = await get_post(session, "posts/draft/index.md", draft_owner_username="bob")
+        result = await get_post(session, "posts/draft/index.md", include_drafts=True)
         assert result is not None
         assert result.title == "Draft"
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from datetime import date, datetime
-from typing import NotRequired, TypedDict
+from typing import Any, NotRequired, TypedDict
 
 import frontmatter
 
@@ -93,6 +93,16 @@ def strip_leading_heading(content: str, title: str) -> str:
     return content
 
 
+def _parse_optional_str(post: Any, key: str) -> str | None:
+    """Parse an optional string field from front matter, coercing and stripping."""
+    raw = post.get(key)
+    if isinstance(raw, str):
+        return raw.strip() or None
+    if raw is not None:
+        return str(raw).strip() or None
+    return None
+
+
 def parse_labels(raw_labels: object | None) -> list[str]:
     """Parse label references from front matter.
 
@@ -160,22 +170,8 @@ def parse_post(
     content = strip_leading_heading(post.content, title)
 
     labels = parse_labels(post.get("labels"))
-    raw_author = post.get("author")
-    author: str | None
-    if isinstance(raw_author, str):
-        author = raw_author.strip() or None
-    elif raw_author is not None:
-        author = str(raw_author).strip() or None
-    else:
-        author = None
-    raw_subtitle = post.get("subtitle")
-    subtitle: str | None
-    if isinstance(raw_subtitle, str):
-        subtitle = raw_subtitle.strip() or None
-    elif raw_subtitle is not None:
-        subtitle = str(raw_subtitle).strip() or None
-    else:
-        subtitle = None
+    author = _parse_optional_str(post, "author")
+    subtitle = _parse_optional_str(post, "subtitle")
     is_draft = bool(post.get("draft", False))
 
     return PostData(

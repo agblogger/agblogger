@@ -47,13 +47,13 @@ async def ensure_label_cache_entry(session: AsyncSession, label_id: str) -> None
 async def get_all_labels(
     session: AsyncSession,
     *,
-    draft_owner_username: str | None = None,
+    include_drafts: bool = False,
 ) -> list[LabelResponse]:
     """Get all labels with parent/child info and post counts.
 
-    When *draft_owner_username* is provided (i.e., the requester is the
-    authenticated admin), post_count includes all posts including drafts.
-    Otherwise only published posts are counted.
+    When *include_drafts* is True (i.e., the requester is the authenticated
+    admin), post_count includes all posts including drafts.  Otherwise only
+    published posts are counted.
     """
     # Get all labels
     stmt = select(LabelCache)
@@ -72,13 +72,15 @@ async def get_all_labels(
         children_map.setdefault(rel.parent_id, []).append(rel.label_id)
 
     # Batch: get all post counts in one query, filtered by visibility
-    count_stmt = (
-        select(PostLabelCache.label_id, func.count())
-        .join(PostCache, PostLabelCache.post_id == PostCache.id)
-        .group_by(PostLabelCache.label_id)
-    )
-    if not draft_owner_username:
-        count_stmt = count_stmt.where(PostCache.is_draft.is_(False))
+    if include_drafts:
+        count_stmt = select(PostLabelCache.label_id, func.count()).group_by(PostLabelCache.label_id)
+    else:
+        count_stmt = (
+            select(PostLabelCache.label_id, func.count())
+            .join(PostCache, PostLabelCache.post_id == PostCache.id)
+            .where(PostCache.is_draft.is_(False))
+            .group_by(PostLabelCache.label_id)
+        )
     count_result = await session.execute(count_stmt)
     post_counts: dict[str, int] = {row[0]: row[1] for row in count_result.all()}
 
@@ -102,13 +104,13 @@ async def get_label(
     session: AsyncSession,
     label_id: str,
     *,
-    draft_owner_username: str | None = None,
+    include_drafts: bool = False,
 ) -> LabelResponse | None:
     """Get a single label by ID.
 
-    When *draft_owner_username* is provided (i.e., the requester is the
-    authenticated admin), post_count includes all posts including drafts.
-    Otherwise only published posts are counted.
+    When *include_drafts* is True (i.e., the requester is the authenticated
+    admin), post_count includes all posts including drafts.  Otherwise only
+    published posts are counted.
     """
     label = await session.get(LabelCache, label_id)
     if label is None:
@@ -122,14 +124,20 @@ async def get_label(
     child_result = await session.execute(child_stmt)
     children = [r[0] for r in child_result.all()]
 
-    count_stmt = (
-        select(func.count())
-        .select_from(PostLabelCache)
-        .join(PostCache, PostLabelCache.post_id == PostCache.id)
-        .where(PostLabelCache.label_id == label_id)
-    )
-    if not draft_owner_username:
-        count_stmt = count_stmt.where(PostCache.is_draft.is_(False))
+    if include_drafts:
+        count_stmt = (
+            select(func.count())
+            .select_from(PostLabelCache)
+            .where(PostLabelCache.label_id == label_id)
+        )
+    else:
+        count_stmt = (
+            select(func.count())
+            .select_from(PostLabelCache)
+            .join(PostCache, PostLabelCache.post_id == PostCache.id)
+            .where(PostLabelCache.label_id == label_id)
+            .where(PostCache.is_draft.is_(False))
+        )
     count_result = await session.execute(count_stmt)
     post_count = count_result.scalar() or 0
 
@@ -322,10 +330,10 @@ async def would_create_cycle(
 async def get_label_graph(
     session: AsyncSession,
     *,
-    draft_owner_username: str | None = None,
+    include_drafts: bool = False,
 ) -> LabelGraphResponse:
     """Get the full label DAG for visualization."""
-    labels = await get_all_labels(session, draft_owner_username=draft_owner_username)
+    labels = await get_all_labels(session, include_drafts=include_drafts)
 
     nodes = [
         LabelGraphNode(
@@ -336,10 +344,12 @@ async def get_label_graph(
         for label in labels
     ]
 
-    edge_stmt = select(LabelParentCache)
-    edge_result = await session.execute(edge_stmt)
+    # Reuse parent/child data already loaded by get_all_labels rather than
+    # re-querying LabelParentCache.
     edges = [
-        LabelGraphEdge(source=e.label_id, target=e.parent_id) for e in edge_result.scalars().all()
+        LabelGraphEdge(source=label.id, target=parent_id)
+        for label in labels
+        for parent_id in label.parents
     ]
 
     return LabelGraphResponse(nodes=nodes, edges=edges)

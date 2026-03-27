@@ -95,8 +95,7 @@ async def list_labels(
     user: Annotated[AdminUser | None, Depends(get_current_admin)] = None,
 ) -> list[LabelResponse]:
     """List all labels."""
-    draft_owner_username = user.username if user else None
-    return await get_all_labels(session, draft_owner_username=draft_owner_username)
+    return await get_all_labels(session, include_drafts=user is not None)
 
 
 @router.get("/graph", response_model=LabelGraphResponse)
@@ -105,8 +104,7 @@ async def label_graph(
     user: Annotated[AdminUser | None, Depends(get_current_admin)] = None,
 ) -> LabelGraphResponse:
     """Get the full label DAG for graph visualization."""
-    draft_owner_username = user.username if user else None
-    return await get_label_graph(session, draft_owner_username=draft_owner_username)
+    return await get_label_graph(session, include_drafts=user is not None)
 
 
 @router.post("", response_model=LabelResponse, status_code=201)
@@ -244,8 +242,7 @@ async def get_label_endpoint(
     user: Annotated[AdminUser | None, Depends(get_current_admin)] = None,
 ) -> LabelResponse:
     """Get a single label by ID."""
-    draft_owner_username = user.username if user else None
-    label = await get_label(session, label_id, draft_owner_username=draft_owner_username)
+    label = await get_label(session, label_id, include_drafts=user is not None)
     if label is None:
         raise HTTPException(status_code=404, detail="Label not found")
     return label
@@ -260,10 +257,10 @@ async def label_posts(
     per_page: int = Query(20, ge=1, le=100),
 ) -> PostListResponse:
     """Get posts for a specific label (exact match only)."""
-    draft_owner_username = user.username if user else None
-    label = await get_label(session, label_id, draft_owner_username=draft_owner_username)
+    include_drafts = user is not None
+    label = await get_label(session, label_id, include_drafts=include_drafts)
     if label is None:
         raise HTTPException(status_code=404, detail="Label not found")
     return await get_posts_by_label(
-        session, label_id, page=page, per_page=per_page, draft_owner_username=draft_owner_username
+        session, label_id, page=page, per_page=per_page, include_drafts=include_drafts
     )

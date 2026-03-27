@@ -86,7 +86,7 @@ async def list_posts(
     author: str | None = None,
     from_date: str | None = None,
     to_date: str | None = None,
-    draft_owner_username: str | None = None,
+    include_drafts: bool = False,
     sort: Literal["created_at", "modified_at", "title", "author"] = "created_at",
     order: Literal["asc", "desc"] = "desc",
 ) -> PostListResponse:
@@ -95,11 +95,7 @@ async def list_posts(
 
     stmt = _select_posts_with_author()
 
-    if draft_owner_username:
-        # Authenticated admin — show all posts including drafts.
-        pass
-    else:
-        # No authenticated user — hide all drafts
+    if not include_drafts:
         stmt = stmt.where(PostCache.is_draft.is_(False))
 
     if author:
@@ -243,13 +239,13 @@ async def get_post(
     session: AsyncSession,
     file_path: str,
     *,
-    draft_owner_username: str | None = None,
+    include_drafts: bool = False,
 ) -> PostDetail | None:
     """Get a single post by file path.
 
-    When *draft_owner_username* is provided (i.e., the requester is the
-    authenticated admin), draft posts are visible.  Otherwise drafts are
-    hidden (returns ``None``).
+    When *include_drafts* is True (i.e., the requester is the authenticated
+    admin), draft posts are visible.  Otherwise drafts are hidden (returns
+    ``None``).
     """
     stmt = _select_posts_with_author().where(PostCache.file_path == file_path)
     result = await session.execute(stmt)
@@ -261,7 +257,7 @@ async def get_post(
     post = row[0]
     display_author = row[1]
 
-    if post.is_draft and not draft_owner_username:
+    if post.is_draft and not include_drafts:
         return None
 
     post_label_ids = await _post_labels(session, post.id)
@@ -329,7 +325,7 @@ async def get_posts_by_label(
     *,
     page: int = 1,
     per_page: int = 20,
-    draft_owner_username: str | None = None,
+    include_drafts: bool = False,
 ) -> PostListResponse:
     """Get posts for a specific label (exact match only, no descendants)."""
     return await list_posts(
@@ -338,5 +334,5 @@ async def get_posts_by_label(
         per_page=per_page,
         label=label_id,
         include_descendants=False,
-        draft_owner_username=draft_owner_username,
+        include_drafts=include_drafts,
     )

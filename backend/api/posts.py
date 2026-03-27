@@ -13,7 +13,7 @@ from typing import Annotated, Literal
 import yaml
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, UploadFile
 from fastapi.responses import RedirectResponse
-from sqlalchemy import delete, select, text
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -35,7 +35,7 @@ from backend.filesystem.frontmatter import (
     serialize_post,
 )
 from backend.models.label import PostLabelCache
-from backend.models.post import PostCache
+from backend.models.post import FTS_DELETE_SQL, FTS_INSERT_SQL, PostCache
 from backend.models.user import AdminUser
 from backend.pandoc.renderer import render_markdown, render_markdown_excerpt, rewrite_relative_urls
 from backend.schemas.post import (
@@ -71,16 +71,6 @@ async def _empty_string() -> str:
 
 
 router = APIRouter(prefix="/api/posts", tags=["posts"])
-
-_FTS_DELETE_SQL = text(
-    "INSERT INTO posts_fts(posts_fts, rowid, title, subtitle, content) "
-    "VALUES ('delete', :rowid, :title, :subtitle, :content)"
-)
-
-_FTS_INSERT_SQL = text(
-    "INSERT INTO posts_fts(rowid, title, subtitle, content) "
-    "VALUES (:rowid, :title, :subtitle, :content)"
-)
 
 
 def _get_post_asset_directory(file_path: str, content_manager: ContentManager) -> FilePath:
@@ -119,7 +109,7 @@ async def _upsert_post_fts(
     """Keep the full-text index row in sync with post cache mutations."""
     if old_title is not None and old_content is not None:
         await session.execute(
-            _FTS_DELETE_SQL,
+            FTS_DELETE_SQL,
             {
                 "rowid": post_id,
                 "title": old_title,
@@ -128,7 +118,7 @@ async def _upsert_post_fts(
             },
         )
     await session.execute(
-        _FTS_INSERT_SQL,
+        FTS_INSERT_SQL,
         {"rowid": post_id, "title": title, "subtitle": subtitle, "content": content},
     )
 
@@ -143,7 +133,7 @@ async def _delete_post_fts(
     """
     try:
         await session.execute(
-            _FTS_DELETE_SQL,
+            FTS_DELETE_SQL,
             {"rowid": post_id, "title": title, "subtitle": subtitle, "content": content},
         )
     except OperationalError as exc:
@@ -218,7 +208,6 @@ async def list_posts_endpoint(
 ) -> PostListResponse:
     """List posts with pagination and filtering."""
     label_list = labels.split(",") if labels else None
-    draft_owner_username = user.username if user else None
     try:
         return await list_posts(
             session,
@@ -231,7 +220,7 @@ async def list_posts_endpoint(
             author=author,
             from_date=from_date,
             to_date=to_date,
-            draft_owner_username=draft_owner_username,
+            include_drafts=user is not None,
             sort=sort,
             order=order,
         )
@@ -701,8 +690,8 @@ async def get_post_endpoint(
     canonical directory-backed layout (``posts/<slug>/index.md``) before
     falling through to symlink resolution.
     """
-    draft_owner_username = user.username if user else None
-    post = await get_post(session, file_path, draft_owner_username=draft_owner_username)
+    include_drafts = user is not None
+    post = await get_post(session, file_path, include_drafts=include_drafts)
     if post is not None:
         _fire_post_hit(request, session_factory, post.file_path, user)
         return post
@@ -710,7 +699,7 @@ async def get_post_endpoint(
     # Slug-based resolution: try canonical file layouts when a bare slug is given
     if not file_path.startswith("posts/"):
         for candidate in resolve_slug_candidates(file_path):
-            post = await get_post(session, candidate, draft_owner_username=draft_owner_username)
+            post = await get_post(session, candidate, include_drafts=include_drafts)
             if post is not None:
                 _fire_post_hit(request, session_factory, post.file_path, user)
                 return post
@@ -726,7 +715,7 @@ async def get_post_endpoint(
         redirect_target = await get_post(
             session,
             resolved,
-            draft_owner_username=draft_owner_username,
+            include_drafts=include_drafts,
         )
         if redirect_target is not None:
             headers = {"Cache-Control": "private, no-store"} if redirect_target.is_draft else None

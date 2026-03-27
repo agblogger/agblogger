@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, Index, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Index, Integer, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.models.base import CacheBase
@@ -55,3 +55,14 @@ class PostsFTS(CacheBase):
     title: Mapped[str] = mapped_column(Text)
     subtitle: Mapped[str] = mapped_column(Text)
     content: Mapped[str] = mapped_column(Text)
+
+
+FTS_INSERT_SQL = text(
+    "INSERT INTO posts_fts(rowid, title, subtitle, content) "
+    "VALUES (:rowid, :title, :subtitle, :content)"
+)
+
+FTS_DELETE_SQL = text(
+    "INSERT INTO posts_fts(posts_fts, rowid, title, subtitle, content) "
+    "VALUES ('delete', :rowid, :title, :subtitle, :content)"
+)
