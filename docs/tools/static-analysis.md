@@ -103,7 +103,7 @@ These checks are intentionally outside `just check-static` and `just check`:
 - `just check-codeql`
   - Rebuilds and analyzes CodeQL databases for Python and JavaScript/TypeScript.
 - `just check-semgrep`
-  - Runs `uv run semgrep scan` with remote rulesets `p/ci`, `p/security-audit`, `p/secrets`, `p/owasp-top-ten`, `p/python`, `p/typescript`, `p/dockerfile`, `p/docker-compose`, `p/supply-chain`, `p/trailofbits`, plus the local `.semgrep.yml`.
+  - Runs `uv run semgrep scan` with remote rulesets `p/ci`, `p/security-audit`, `p/secrets`, `p/owasp-top-ten`, `p/python`, `p/react`, `p/typescript`, `p/dockerfile`, `p/docker-compose`, `p/supply-chain`, `p/trailofbits`, plus the local `.semgrep.yml`.
   - Scope: `backend/`, `cli/`, `frontend/src/`, `Dockerfile`, and `docker-compose.yml`.
   - Exclusions: `tests`, frontend `__tests__`, and frontend `*.test.ts(x)` files.
 - `just check-snyk-deps`

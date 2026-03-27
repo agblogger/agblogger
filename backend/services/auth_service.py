@@ -141,11 +141,7 @@ async def refresh_tokens(
 
     expires = _parse_iso_datetime(stored_token.expires_at)
     if expires is None:
-        logger.warning(
-            "Refresh token id=%s has unparseable expires_at %r, treating as expired",
-            stored_token.id,
-            stored_token.expires_at,
-        )
+        logger.warning("Refresh token has unparseable expiration metadata, treating it as expired")
         await session.execute(
             delete(AdminRefreshToken).where(AdminRefreshToken.id == stored_token.id)
         )

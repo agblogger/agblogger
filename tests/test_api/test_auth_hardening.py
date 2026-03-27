@@ -561,3 +561,30 @@ class TestGetCurrentAdminLogging:
             if r.levelno == logging.WARNING and "non-existent" in r.message.lower()
         ]
         assert len(warning_records) >= 1
+        assert all("99999" not in record.message for record in warning_records)
+
+    @pytest.mark.asyncio
+    async def test_token_with_invalid_sub_type_logs_without_raw_claim_details(
+        self, client: AsyncClient, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Invalid sub claim warnings must not leak raw claim metadata."""
+        from backend.services.auth_service import create_access_token
+
+        token = create_access_token(
+            {"sub": "not-a-number", "username": "admin"},
+            "test-secret-key-with-at-least-32-characters",
+        )
+        with caplog.at_level(logging.DEBUG, logger="backend.api.deps"):
+            resp = await client.get(
+                "/api/auth/me",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+
+        assert resp.status_code == 401
+        warning_records = [
+            r
+            for r in caplog.records
+            if r.levelno == logging.WARNING and "invalid sub claim" in r.message.lower()
+        ]
+        assert len(warning_records) >= 1
+        assert all("str" not in record.message.lower() for record in warning_records)

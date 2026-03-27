@@ -345,6 +345,7 @@ check-semgrep:
         --config p/secrets \
         --config p/owasp-top-ten \
         --config p/python \
+        --config p/react \
         --config p/typescript \
         --config p/dockerfile \
         --config p/docker-compose \

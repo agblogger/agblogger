@@ -129,11 +129,11 @@ async def get_current_admin(
         logger.warning("Access token missing sub claim")
         return None
     if not isinstance(user_id, (str, int)) or (isinstance(user_id, str) and not user_id.isdigit()):
-        logger.warning("Access token has invalid sub claim: %s", type(user_id).__name__)
+        logger.warning("Access token has invalid sub claim")
         return None
     user = await session.get(AdminUser, int(user_id))
     if user is None:
-        logger.warning("Access token references non-existent user id=%s", user_id)
+        logger.warning("Access token references non-existent user")
     return user
 
 

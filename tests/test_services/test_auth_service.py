@@ -682,6 +682,8 @@ class TestRefreshTokensUnparseableExpiresAt:
             if r.levelno == logging.WARNING and "unparseable" in r.message.lower()
         ]
         assert len(warning_records) >= 1
+        assert all("not-a-date" not in record.message for record in warning_records)
+        assert all(str(bad_token.id) not in record.message for record in warning_records)
 
 
 # ---------------------------------------------------------------------------
