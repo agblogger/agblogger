@@ -19,13 +19,9 @@ There is only one user: the admin. Every authenticated user is the admin — the
 
 Frontend caches for reads whose response depends on admin authentication, including draft-only content and admin-scoped account data, are scoped to the current browser session, so session changes force revalidation instead of reusing stale authorized responses.
 
-## Registration Posture
+## Admin Bootstrap
 
-The system is a closed, single-admin deployment. The admin account is bootstrapped from environment configuration. There is no registration flow. Rate limiting protects authentication endpoints from abuse.
-
-## Bootstrap
-
-The backend bootstraps the admin account from environment configuration during startup and converges durable auth state to a single live admin identity before serving requests. Post metadata stores author identity in a durable content-friendly form, while presentation layers resolve richer profile information when content is read.
+AgBlogger is a closed, single-admin deployment with no registration flow. The admin account is bootstrapped from environment configuration during startup, and durable auth state is converged to a single live admin identity before the app begins serving requests.
 
 ## Code Entry Points
 
