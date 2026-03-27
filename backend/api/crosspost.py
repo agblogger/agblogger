@@ -18,13 +18,13 @@ from backend.api.deps import (
     get_content_manager,
     get_session,
     get_settings,
-    require_auth,
+    require_admin,
 )
 from backend.config import Settings
 from backend.crosspost.bluesky_oauth_state import OAuthStateStore, OAuthUserLimitError
 from backend.exceptions import PostNotFoundError
 from backend.filesystem.content_manager import ContentManager
-from backend.models.user import User
+from backend.models.user import AdminUser
 from backend.schemas.crosspost import (
     BlueskyAuthorizeRequest,
     BlueskyAuthorizeResponse,
@@ -143,7 +143,7 @@ async def create_account_endpoint(
     body: SocialAccountCreate,
     session: Annotated[AsyncSession, Depends(get_session)],
     settings: Annotated[Settings, Depends(get_settings)],
-    user: Annotated[User, Depends(require_auth)],
+    user: Annotated[AdminUser, Depends(require_admin)],
 ) -> SocialAccountResponse:
     """Connect a social media account for cross-posting."""
     try:
@@ -169,7 +169,7 @@ async def create_account_endpoint(
 @router.get("/accounts", response_model=list[SocialAccountResponse])
 async def list_accounts_endpoint(
     session: Annotated[AsyncSession, Depends(get_session)],
-    user: Annotated[User, Depends(require_auth)],
+    user: Annotated[AdminUser, Depends(require_admin)],
 ) -> list[SocialAccountResponse]:
     """List connected social accounts."""
     accounts = await get_social_accounts(session, user.id)
@@ -188,7 +188,7 @@ async def list_accounts_endpoint(
 async def delete_account_endpoint(
     account_id: int,
     session: Annotated[AsyncSession, Depends(get_session)],
-    user: Annotated[User, Depends(require_auth)],
+    user: Annotated[AdminUser, Depends(require_admin)],
 ) -> None:
     """Delete a connected social account."""
     deleted = await delete_social_account(session, account_id, user.id)
@@ -205,7 +205,7 @@ async def crosspost_endpoint(
     session: Annotated[AsyncSession, Depends(get_session)],
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
     settings: Annotated[Settings, Depends(get_settings)],
-    user: Annotated[User, Depends(require_auth)],
+    user: Annotated[AdminUser, Depends(require_admin)],
 ) -> list[CrossPostResponse]:
     """Cross-post a blog post to selected platforms."""
     # Build site URL from settings
@@ -253,7 +253,7 @@ async def crosspost_endpoint(
 async def history_endpoint(
     post_path: str,
     session: Annotated[AsyncSession, Depends(get_session)],
-    user: Annotated[User, Depends(require_auth)],
+    user: Annotated[AdminUser, Depends(require_admin)],
 ) -> CrossPostHistoryResponse:
     """Get cross-posting history for a blog post."""
     records = await get_crosspost_history(session, post_path, user.id)
@@ -308,7 +308,7 @@ async def bluesky_client_metadata(
 async def bluesky_authorize(
     body: BlueskyAuthorizeRequest,
     settings: Annotated[Settings, Depends(get_settings)],
-    user: Annotated[User, Depends(require_auth)],
+    user: Annotated[AdminUser, Depends(require_admin)],
     request: Request,
 ) -> BlueskyAuthorizeResponse:
     """Start Bluesky OAuth flow: resolve handle, send PAR, return auth URL."""
@@ -467,7 +467,7 @@ async def bluesky_callback(
 async def mastodon_authorize(
     body: MastodonAuthorizeRequest,
     settings: Annotated[Settings, Depends(get_settings)],
-    user: Annotated[User, Depends(require_auth)],
+    user: Annotated[AdminUser, Depends(require_admin)],
     request: Request,
 ) -> MastodonAuthorizeResponse:
     """Start Mastodon OAuth flow: register app dynamically, return auth URL."""
@@ -656,7 +656,7 @@ async def mastodon_callback(
 @router.post("/x/authorize", response_model=XAuthorizeResponse)
 async def x_authorize(
     settings: Annotated[Settings, Depends(get_settings)],
-    user: Annotated[User, Depends(require_auth)],
+    user: Annotated[AdminUser, Depends(require_admin)],
     request: Request,
 ) -> XAuthorizeResponse:
     """Start X (Twitter) OAuth 2.0 flow with PKCE."""
@@ -798,7 +798,7 @@ async def x_callback(
 @router.post("/facebook/authorize", response_model=FacebookAuthorizeResponse)
 async def facebook_authorize(
     settings: Annotated[Settings, Depends(get_settings)],
-    user: Annotated[User, Depends(require_auth)],
+    user: Annotated[AdminUser, Depends(require_admin)],
     request: Request,
 ) -> FacebookAuthorizeResponse:
     """Start Facebook OAuth flow."""
@@ -974,7 +974,7 @@ async def facebook_select_page(
     body: FacebookSelectPageRequest,
     session: Annotated[AsyncSession, Depends(get_session)],
     settings: Annotated[Settings, Depends(get_settings)],
-    user: Annotated[User, Depends(require_auth)],
+    user: Annotated[AdminUser, Depends(require_admin)],
     request: Request,
 ) -> FacebookSelectPageResponse:
     """Finalize Facebook account by selecting a Page."""
@@ -1024,7 +1024,7 @@ async def facebook_select_page(
 @router.get("/facebook/pages", response_model=FacebookPagesResponse)
 async def facebook_pages(
     state: Annotated[str, Query()],
-    user: Annotated[User, Depends(require_auth)],
+    user: Annotated[AdminUser, Depends(require_admin)],
     request: Request,
 ) -> FacebookPagesResponse:
     """Retrieve available Facebook Pages for selection.

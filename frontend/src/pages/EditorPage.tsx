@@ -17,7 +17,7 @@ import { postUrl } from '@/utils/postUrl'
 import { buildEditorDraftStorageKey, useEditorAutoSave } from '@/hooks/useEditorAutoSave'
 import type { DraftData } from '@/hooks/useEditorAutoSave'
 import { useRenderedHtml } from '@/hooks/useKatex'
-import { useRequireAuth } from '@/hooks/useRequireAuth'
+import { useRequireAdmin } from '@/hooks/useRequireAdmin'
 import CrossPostDialog from '@/components/crosspost/CrossPostDialog'
 import PlatformIcon from '@/components/crosspost/PlatformIcon'
 import LabelInput from '@/components/editor/LabelInput'
@@ -37,7 +37,7 @@ export default function EditorPage() {
   const { '*': filePath } = useParams()
   const navigate = useNavigate()
   const isNew = filePath === undefined || filePath === 'new'
-  const { user, isReady } = useRequireAuth()
+  const { user, isReady } = useRequireAdmin()
   const { mutate } = useSWRConfig()
 
   const [title, setTitle] = useState('')

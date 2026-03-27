@@ -130,7 +130,7 @@ class TestAuthTokenValidation:
 
         # Create a token that expires immediately (negative minutes)
         token = create_access_token(
-            {"sub": "1", "username": "admin", "is_admin": True},
+            {"sub": "1", "username": "admin"},
             "test-secret-key-with-at-least-32-characters",
             expires_minutes=-1,
         )

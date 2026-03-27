@@ -226,7 +226,6 @@ export interface UserResponse {
   username: string
   email: string
   display_name: string | null
-  is_admin: boolean
 }
 
 export interface SearchResult {

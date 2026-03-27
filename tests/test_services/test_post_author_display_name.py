@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import (
 
 from backend.models.base import CacheBase, DurableBase
 from backend.models.post import PostCache
-from backend.models.user import User
+from backend.models.user import AdminUser
 from backend.services.post_service import get_post, list_posts, resolve_author_display_name
 
 if TYPE_CHECKING:
@@ -62,15 +62,14 @@ async def _create_user(
     *,
     username: str,
     display_name: str | None = None,
-) -> User:
+) -> AdminUser:
     """Insert a user row and return it."""
     now = datetime.now(UTC).isoformat()
-    user = User(
+    user = AdminUser(
         username=username,
         email=f"{username}@test.com",
         password_hash="fakehash",
         display_name=display_name,
-        is_admin=False,
         created_at=now,
         updated_at=now,
     )

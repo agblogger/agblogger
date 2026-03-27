@@ -6,9 +6,11 @@ from backend.models.crosspost import CrossPost, SocialAccount
 from backend.models.label import LabelCache, LabelParentCache, PostLabelCache
 from backend.models.post import PostCache, PostsFTS
 from backend.models.sync import SyncManifest
-from backend.models.user import RefreshToken, User
+from backend.models.user import AdminRefreshToken, AdminUser
 
 __all__ = [
+    "AdminRefreshToken",
+    "AdminUser",
     "AnalyticsSettings",
     "CacheBase",
     "CrossPost",
@@ -18,8 +20,6 @@ __all__ = [
     "PostCache",
     "PostLabelCache",
     "PostsFTS",
-    "RefreshToken",
     "SocialAccount",
     "SyncManifest",
-    "User",
 ]

@@ -13,7 +13,7 @@ class TestDecodeAccessToken:
         from backend.services.auth_service import create_access_token
 
         token = create_access_token(
-            {"sub": "1", "username": "admin", "is_admin": True},
+            {"sub": "1", "username": "admin"},
             VALID_SECRET,
         )
         payload = decode_access_token(token, VALID_SECRET)
@@ -24,7 +24,7 @@ class TestDecodeAccessToken:
         from backend.services.auth_service import create_access_token
 
         token = create_access_token(
-            {"sub": "1", "username": "admin", "is_admin": True},
+            {"sub": "1", "username": "admin"},
             VALID_SECRET,
         )
         assert decode_access_token(token, OTHER_SECRET) is None
@@ -37,7 +37,7 @@ class TestDecodeAccessToken:
 
 
 class TestUserIdValidation:
-    """Issue 13: get_current_user should validate user_id before int() conversion."""
+    """Issue 13: get_current_admin should validate user_id before int() conversion."""
 
     async def test_invalid_user_id_in_jwt_returns_none(self) -> None:
         """JWT with non-numeric sub should not crash the server."""
@@ -46,7 +46,7 @@ class TestUserIdValidation:
         # Manually craft a token with a non-numeric sub
         # The create_access_token function sets type=access, so we need to decode
         token = create_access_token(
-            {"sub": "not-a-number", "username": "hacker", "is_admin": False},
+            {"sub": "not-a-number", "username": "hacker"},
             VALID_SECRET,
         )
         payload = decode_access_token(token, VALID_SECRET)

@@ -158,7 +158,7 @@ const postDetail: PostDetail = {
 
 describe('EditorPage', () => {
   beforeEach(() => {
-    mockUser = { id: 1, username: 'jane', email: 'jane@test.com', display_name: null, is_admin: true }
+    mockUser = { id: 1, username: 'jane', email: 'jane@test.com', display_name: null }
     mockFetchPost.mockReset()
     mockFetchPostForEdit.mockReset()
     mockFetchSocialAccounts.mockReset()
@@ -169,7 +169,7 @@ describe('EditorPage', () => {
   })
 
   it('author from display_name', async () => {
-    mockUser = { id: 1, username: 'jane', email: 'j@t.com', display_name: 'Jane Doe', is_admin: false }
+    mockUser = { id: 1, username: 'jane', email: 'j@t.com', display_name: 'Jane Doe' }
     renderEditor('/editor/new')
 
     await waitFor(() => {
@@ -178,7 +178,7 @@ describe('EditorPage', () => {
   })
 
   it('author fallback to username', async () => {
-    mockUser = { id: 1, username: 'jane', email: 'j@t.com', display_name: null, is_admin: false }
+    mockUser = { id: 1, username: 'jane', email: 'j@t.com', display_name: null }
     renderEditor('/editor/new')
 
     await waitFor(() => {
@@ -207,7 +207,7 @@ describe('EditorPage', () => {
 
   it('shows the updated draft state when viewing a post immediately after saving it as draft', async () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
-    mockUser = { id: 1, username: 'jane', email: 'jane@test.com', display_name: null, is_admin: false }
+    mockUser = { id: 1, username: 'jane', email: 'jane@test.com', display_name: null }
     mockFetchPost.mockResolvedValue(postDetail)
     mockFetchPostForEdit.mockResolvedValue(editResponse)
     vi.mocked(updatePost).mockResolvedValue({
@@ -269,7 +269,7 @@ describe('EditorPage', () => {
       modified_at: '2026-03-08 12:00:00+00:00',
       author: 'Admin',
     }
-    mockUser = { id: 1, username: 'jane', email: 'jane@test.com', display_name: null, is_admin: false }
+    mockUser = { id: 1, username: 'jane', email: 'jane@test.com', display_name: null }
     vi.mocked(createPost).mockResolvedValue(createdPost)
     vi.mocked(updatePost).mockResolvedValue({
       ...createdPost,

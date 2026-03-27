@@ -45,7 +45,6 @@ describe('useSocialAccounts', () => {
         username: 'author',
         email: 'author@example.com',
         display_name: 'Author',
-        is_admin: false,
       },
     })
     mockFetchSocialAccounts.mockResolvedValue(sampleAccounts)
@@ -68,7 +67,6 @@ describe('useSocialAccounts', () => {
         username: 'author',
         email: 'author@example.com',
         display_name: 'Author',
-        is_admin: false,
       },
     })
     const fetchError = new Error('Unauthorized')
@@ -102,7 +100,6 @@ describe('useSocialAccounts', () => {
         username: 'author',
         email: 'author@example.com',
         display_name: 'Author',
-        is_admin: false,
       },
     })
     mockFetchSocialAccounts

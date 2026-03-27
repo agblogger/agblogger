@@ -258,7 +258,7 @@ export default function PostPage() {
         disabled={post.is_draft}
       />
 
-      {user?.is_admin === true && post.file_path !== '' && (
+      {!!user && post.file_path !== '' && (
         <CrossPostSection filePath={post.file_path} post={post} />
       )}
 

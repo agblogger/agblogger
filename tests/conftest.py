@@ -271,14 +271,12 @@ async def create_test_user(
     username: str,
     email: str,
     password: str,
-    *,
-    is_admin: bool = False,
 ) -> None:
     """Create a user directly in the database.
 
     Uses the app's session factory to insert the user, bypassing the API layer.
     """
-    from backend.models.user import User
+    from backend.models.user import AdminUser
     from backend.services.auth_service import hash_password
     from backend.services.datetime_service import format_iso, now_utc
 
@@ -288,11 +286,10 @@ async def create_test_user(
     session_factory = app.state.session_factory
     now = format_iso(now_utc())
     async with session_factory() as session:
-        user = User(
+        user = AdminUser(
             username=username,
             email=email,
             password_hash=hash_password(password),
-            is_admin=is_admin,
             created_at=now,
             updated_at=now,
         )

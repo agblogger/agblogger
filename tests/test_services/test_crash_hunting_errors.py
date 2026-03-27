@@ -104,7 +104,7 @@ class TestCrosspostCatchAllExceptions:
             content_manager=mock_cm,
             post_path="posts/test/index.md",
             platforms=["bluesky"],
-            actor=MagicMock(id=1, username="u", display_name="U", is_admin=False),
+            actor=MagicMock(id=1, username="u", display_name="U"),
             site_url="https://example.com",
             secret_key=TEST_SECRET_KEY,
         )
@@ -153,7 +153,7 @@ class TestCrosspostCatchAllExceptions:
             content_manager=mock_cm,
             post_path="posts/test/index.md",
             platforms=["bluesky"],
-            actor=MagicMock(id=1, username="u", display_name="U", is_admin=False),
+            actor=MagicMock(id=1, username="u", display_name="U"),
             site_url="https://example.com",
             secret_key=TEST_SECRET_KEY,
         )

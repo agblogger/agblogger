@@ -378,17 +378,16 @@ class TestUpdateProfileCacheRebuildRevert:
     ) -> None:
         """Demonstrate that rollback after commit does NOT revert changes.
         This is the bug the fix addresses."""
-        from backend.models.user import User
+        from backend.models.user import AdminUser
 
         now = format_iso(now_utc())
 
         # Create a user
         async with session_factory() as s:
-            user = User(
+            user = AdminUser(
                 username="oldname",
                 email="test@example.com",
                 password_hash="hash",
-                is_admin=True,
                 created_at=now,
                 updated_at=now,
             )
@@ -397,7 +396,7 @@ class TestUpdateProfileCacheRebuildRevert:
 
         # Change username and commit
         async with session_factory() as s:
-            result = await s.execute(select(User).where(User.username == "oldname"))
+            result = await s.execute(select(AdminUser).where(AdminUser.username == "oldname"))
             user = result.scalar_one()
             user.username = "newname"
             await s.commit()
@@ -407,7 +406,7 @@ class TestUpdateProfileCacheRebuildRevert:
 
         # Verify the username is still "newname" - rollback was ineffective
         async with session_factory() as s:
-            result = await s.execute(select(User).where(User.username == "newname"))
+            result = await s.execute(select(AdminUser).where(AdminUser.username == "newname"))
             found = result.scalar_one_or_none()
             assert found is not None, (
                 "Rollback after commit should be a no-op; username should still be 'newname'"
@@ -418,17 +417,16 @@ class TestUpdateProfileCacheRebuildRevert:
     ) -> None:
         """The fix uses a fresh session to revert the username
         when cache rebuild fails."""
-        from backend.models.user import User
+        from backend.models.user import AdminUser
 
         now = format_iso(now_utc())
 
         # Create a user
         async with session_factory() as s:
-            user = User(
+            user = AdminUser(
                 username="oldname",
                 email="test2@example.com",
                 password_hash="hash",
-                is_admin=True,
                 created_at=now,
                 updated_at=now,
             )
@@ -438,21 +436,21 @@ class TestUpdateProfileCacheRebuildRevert:
 
         # Change username and commit (simulating what update_profile does)
         async with session_factory() as s:
-            result = await s.execute(select(User).where(User.id == user_id))
+            result = await s.execute(select(AdminUser).where(AdminUser.id == user_id))
             user = result.scalar_one()
             user.username = "newname"
             await s.commit()
 
         # Now use a FRESH session to revert (this is the fix)
         async with session_factory() as revert_session:
-            result = await revert_session.execute(select(User).where(User.id == user_id))
+            result = await revert_session.execute(select(AdminUser).where(AdminUser.id == user_id))
             user = result.scalar_one()
             user.username = "oldname"
             await revert_session.commit()
 
         # Verify the revert worked
         async with session_factory() as s:
-            result = await s.execute(select(User).where(User.id == user_id))
+            result = await s.execute(select(AdminUser).where(AdminUser.id == user_id))
             user = result.scalar_one()
             assert user.username == "oldname", (
                 "Fresh session revert should have restored the original username"

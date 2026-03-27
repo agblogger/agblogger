@@ -7,7 +7,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { Settings, Trash2 } from 'lucide-react'
 
 import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
-import { useRequireAuth } from '@/hooks/useRequireAuth'
+import { useRequireAdmin } from '@/hooks/useRequireAdmin'
 import { fetchLabel, updateLabel, deleteLabel } from '@/api/labels'
 import { HTTPError } from '@/api/client'
 import type { LabelResponse } from '@/api/client'
@@ -31,7 +31,7 @@ function haveSameOrder(left: readonly string[], right: readonly string[]): boole
 export default function LabelSettingsPage() {
   const { labelId } = useParams()
   const navigate = useNavigate()
-  const { isReady } = useRequireAuth({ requireAdmin: true })
+  const { isReady } = useRequireAdmin()
 
   const { data: allLabels = [], isLoading: allLabelsLoading } = useLabels()
 

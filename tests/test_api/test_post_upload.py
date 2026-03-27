@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from backend.config import Settings
-from tests.conftest import create_test_client, create_test_user
+from tests.conftest import create_test_client
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
@@ -235,37 +235,6 @@ class TestPostUpload:
 
 
 class TestAssetUploadAuthorization:
-    @pytest.mark.asyncio
-    async def test_asset_upload_forbidden_for_non_author(self, client: AsyncClient) -> None:
-        """A different user should not be able to upload assets to another user's post."""
-        # Admin creates a post
-        admin_token = await login(client)
-        md_content = "---\ntitle: Admin Post\n---\nBody\n"
-        resp = await client.post(
-            "/api/posts/upload",
-            files={"files": ("post.md", md_content.encode(), "text/markdown")},
-            headers={"Authorization": f"Bearer {admin_token}"},
-        )
-        assert resp.status_code == 201
-        file_path = resp.json()["file_path"]
-
-        # Create another user.
-        await create_test_user(client, "other", "other@test.com", "password1234")
-        resp = await client.post(
-            "/api/auth/token-login",
-            json={"username": "other", "password": "password1234"},
-        )
-        assert resp.status_code == 200
-        other_token = resp.json()["access_token"]
-
-        # Other user tries to upload assets to admin's post
-        resp = await client.post(
-            f"/api/posts/{file_path}/assets",
-            files={"files": ("evil.txt", b"malicious content", "text/plain")},
-            headers={"Authorization": f"Bearer {other_token}"},
-        )
-        assert resp.status_code == 403
-
     @pytest.mark.asyncio
     async def test_asset_upload_allowed_for_author(self, client: AsyncClient) -> None:
         """The post author should be able to upload assets."""

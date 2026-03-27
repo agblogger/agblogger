@@ -2,8 +2,7 @@
 
 Label post_count should only include posts visible to the current user:
 - Unauthenticated: only published posts
-- Authenticated: published posts + own drafts
-- Other authenticated user: published posts + their own drafts (not others')
+- Authenticated admin: published posts + drafts
 """
 
 from __future__ import annotations
@@ -13,7 +12,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from backend.config import Settings
-from tests.conftest import create_test_client, create_test_user
+from tests.conftest import create_test_client
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
@@ -81,11 +80,6 @@ async def _login(client: AsyncClient, username: str, password: str) -> str:
     return resp.json()["access_token"]
 
 
-async def _register_and_login(client: AsyncClient, username: str, email: str, password: str) -> str:
-    await create_test_user(client, username, email, password)
-    return await _login(client, username, password)
-
-
 def _auth_headers(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
@@ -112,18 +106,6 @@ class TestLabelPostCountVisibility:
         python_label = next(lb for lb in labels if lb["id"] == "python")
         assert python_label["post_count"] == 3
 
-    @pytest.mark.asyncio
-    async def test_other_user_does_not_see_others_drafts_in_count(
-        self, client: AsyncClient
-    ) -> None:
-        """A different user should see post_count=2 (only published, not admin's draft)."""
-        token = await _register_and_login(client, "other", "other@test.com", "password1234")
-        resp = await client.get("/api/labels", headers=_auth_headers(token))
-        assert resp.status_code == 200
-        labels = resp.json()
-        python_label = next(lb for lb in labels if lb["id"] == "python")
-        assert python_label["post_count"] == 2
-
 
 class TestSingleLabelPostCountVisibility:
     """GET /api/labels/{id} post_count should also respect visibility."""
@@ -140,13 +122,6 @@ class TestSingleLabelPostCountVisibility:
         resp = await client.get("/api/labels/python", headers=_auth_headers(token))
         assert resp.status_code == 200
         assert resp.json()["post_count"] == 3
-
-    @pytest.mark.asyncio
-    async def test_other_user_single_label(self, client: AsyncClient) -> None:
-        token = await _register_and_login(client, "other2", "other2@test.com", "password1234")
-        resp = await client.get("/api/labels/python", headers=_auth_headers(token))
-        assert resp.status_code == 200
-        assert resp.json()["post_count"] == 2
 
 
 class TestLabelGraphPostCountVisibility:

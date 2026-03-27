@@ -21,7 +21,7 @@ from backend.api.deps import (
 from backend.exceptions import BuiltinPageError
 from backend.filesystem.content_manager import ContentManager
 from backend.filesystem.toml_manager import PageConfig
-from backend.models.user import User
+from backend.models.user import AdminUser
 from backend.schemas.admin import (
     AdminPageConfig,
     AdminPagesResponse,
@@ -61,7 +61,7 @@ _PAGE_ID_ERROR = (
 @router.get("/site", response_model=SiteSettingsResponse)
 async def get_settings(
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
-    _user: Annotated[User, Depends(require_admin)],
+    _user: Annotated[AdminUser, Depends(require_admin)],
 ) -> SiteSettingsResponse:
     """Get current site settings."""
     cfg = get_site_settings(content_manager)
@@ -79,7 +79,7 @@ async def update_settings(
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
     git_service: Annotated[GitService, Depends(get_git_service)],
     content_write_lock: Annotated[AsyncWriteLock, Depends(get_content_write_lock)],
-    _user: Annotated[User, Depends(require_admin)],
+    _user: Annotated[AdminUser, Depends(require_admin)],
 ) -> SiteSettingsResponse:
     """Update site settings."""
     async with content_write_lock:
@@ -104,7 +104,7 @@ async def update_settings(
 @router.get("/pages", response_model=AdminPagesResponse)
 async def list_pages(
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
-    _user: Annotated[User, Depends(require_admin)],
+    _user: Annotated[AdminUser, Depends(require_admin)],
 ) -> AdminPagesResponse:
     """Get all pages with content for admin panel."""
     pages = get_admin_pages(content_manager)
@@ -118,7 +118,7 @@ async def create_page_endpoint(
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
     git_service: Annotated[GitService, Depends(get_git_service)],
     content_write_lock: Annotated[AsyncWriteLock, Depends(get_content_write_lock)],
-    _user: Annotated[User, Depends(require_admin)],
+    _user: Annotated[AdminUser, Depends(require_admin)],
 ) -> AdminPageConfig:
     """Create a new page."""
     async with content_write_lock:
@@ -146,7 +146,7 @@ async def update_order(
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
     git_service: Annotated[GitService, Depends(get_git_service)],
     content_write_lock: Annotated[AsyncWriteLock, Depends(get_content_write_lock)],
-    _user: Annotated[User, Depends(require_admin)],
+    _user: Annotated[AdminUser, Depends(require_admin)],
 ) -> AdminPagesResponse:
     """Update page order."""
     async with content_write_lock:
@@ -169,7 +169,7 @@ async def update_page_endpoint(
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
     git_service: Annotated[GitService, Depends(get_git_service)],
     content_write_lock: Annotated[AsyncWriteLock, Depends(get_content_write_lock)],
-    _user: Annotated[User, Depends(require_admin)],
+    _user: Annotated[AdminUser, Depends(require_admin)],
 ) -> dict[str, str]:
     """Update a page's title and/or content."""
     if not _PAGE_ID_PATTERN.match(page_id):
@@ -193,7 +193,7 @@ async def delete_page_endpoint(
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
     git_service: Annotated[GitService, Depends(get_git_service)],
     content_write_lock: Annotated[AsyncWriteLock, Depends(get_content_write_lock)],
-    _user: Annotated[User, Depends(require_admin)],
+    _user: Annotated[AdminUser, Depends(require_admin)],
     delete_file: bool = Query(default=True),
 ) -> None:
     """Delete a page."""
@@ -221,7 +221,7 @@ async def change_password(
     body: PasswordChange,
     request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
-    user: Annotated[User, Depends(require_admin)],
+    user: Annotated[AdminUser, Depends(require_admin)],
 ) -> dict[str, str | bool]:
     """Change admin password."""
     limiter: InMemoryRateLimiter = request.app.state.rate_limiter

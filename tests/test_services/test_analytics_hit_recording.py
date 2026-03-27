@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
-    from backend.models.user import User
+    from backend.models.user import AdminUser
 
 
 @pytest.fixture
@@ -85,12 +85,12 @@ async def test_record_hit_sends_to_goatcounter(
     assert payload["hits"][0]["ip"] == "1.2.3.4"
 
 
-async def test_record_hit_skips_admin_user(
+async def test_record_hit_skips_authenticated_user(
     session: AsyncSession,
     mock_http_client: MagicMock,
 ) -> None:
-    """Admin users do not generate analytics hits."""
-    mock_user: User = MagicMock(is_admin=True)
+    """Authenticated users (all admin) do not generate analytics hits."""
+    mock_user: AdminUser = MagicMock()
 
     with (
         patch(
@@ -111,34 +111,6 @@ async def test_record_hit_skips_admin_user(
         )
 
     mock_http_client.post.assert_not_called()
-
-
-async def test_record_hit_fires_for_non_admin_user(
-    session: AsyncSession,
-    mock_http_client: MagicMock,
-) -> None:
-    """Non-admin authenticated users still generate analytics hits."""
-    mock_user: User = MagicMock(is_admin=False)
-
-    with (
-        patch(
-            "backend.services.analytics_service._get_http_client",
-            return_value=mock_http_client,
-        ),
-        patch(
-            "backend.services.analytics_service._load_token",
-            return_value="test-token",
-        ),
-    ):
-        await record_hit(
-            session=session,
-            path="/post/hello-world",
-            client_ip="1.2.3.4",
-            user_agent="Mozilla/5.0",
-            user=mock_user,
-        )
-
-    mock_http_client.post.assert_called_once()
 
 
 async def test_record_hit_skips_bots(

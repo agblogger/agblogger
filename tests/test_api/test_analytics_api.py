@@ -21,7 +21,7 @@ from backend.schemas.analytics import (
     TotalStatsResponse,
 )
 from backend.utils.slug import file_path_to_slug
-from tests.conftest import create_test_client, create_test_user
+from tests.conftest import create_test_client
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
@@ -58,17 +58,6 @@ async def _get_admin_token(client: AsyncClient) -> str:
     resp = await client.post(
         "/api/auth/token-login",
         json={"username": "admin", "password": "admin123"},
-    )
-    assert resp.status_code == 200
-    return resp.json()["access_token"]
-
-
-async def _register_and_login(client: AsyncClient, username: str, password: str) -> str:
-    """Create a non-admin user and return their token."""
-    await create_test_user(client, username, f"{username}@example.com", password)
-    resp = await client.post(
-        "/api/auth/token-login",
-        json={"username": username, "password": password},
     )
     assert resp.status_code == 200
     return resp.json()["access_token"]
@@ -116,31 +105,12 @@ class TestAnalyticsAdminAuth:
         assert resp.status_code == 401
 
     @pytest.mark.asyncio
-    async def test_get_settings_non_admin(self, client: AsyncClient) -> None:
-        token = await _register_and_login(client, "regular", "password123")
-        resp = await client.get(
-            "/api/admin/analytics/settings",
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        assert resp.status_code == 403
-
-    @pytest.mark.asyncio
     async def test_put_settings_unauthenticated(self, client: AsyncClient) -> None:
         resp = await client.put(
             "/api/admin/analytics/settings",
             json={"analytics_enabled": False},
         )
         assert resp.status_code == 401
-
-    @pytest.mark.asyncio
-    async def test_put_settings_non_admin(self, client: AsyncClient) -> None:
-        token = await _register_and_login(client, "regular2", "password123")
-        resp = await client.put(
-            "/api/admin/analytics/settings",
-            json={"analytics_enabled": False},
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        assert resp.status_code == 403
 
     @pytest.mark.asyncio
     async def test_get_total_stats_unauthenticated(self, client: AsyncClient) -> None:

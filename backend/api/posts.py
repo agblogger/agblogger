@@ -21,7 +21,7 @@ from backend.api.deps import (
     AsyncWriteLock,
     get_content_manager,
     get_content_write_lock,
-    get_current_user,
+    get_current_admin,
     get_git_service,
     get_session,
     get_session_factory,
@@ -36,7 +36,7 @@ from backend.filesystem.frontmatter import (
 )
 from backend.models.label import PostLabelCache
 from backend.models.post import PostCache
-from backend.models.user import User
+from backend.models.user import AdminUser
 from backend.pandoc.renderer import render_markdown, render_markdown_excerpt, rewrite_relative_urls
 from backend.schemas.post import (
     AssetInfo,
@@ -203,7 +203,7 @@ async def _build_post_detail(
 @router.get("", response_model=PostListResponse)
 async def list_posts_endpoint(
     session: Annotated[AsyncSession, Depends(get_session)],
-    user: Annotated[User | None, Depends(get_current_user)],
+    user: Annotated[AdminUser | None, Depends(get_current_admin)],
     page: int = Query(1, ge=1, le=MAX_SAFE_PAGE),
     per_page: int = Query(20, ge=1, le=100),
     label: str | None = None,
@@ -261,7 +261,7 @@ async def upload_post(
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
     git_service: Annotated[GitService, Depends(get_git_service)],
     content_write_lock: Annotated[AsyncWriteLock, Depends(get_content_write_lock)],
-    user: Annotated[User, Depends(require_admin)],
+    user: Annotated[AdminUser, Depends(require_admin)],
     title: str | None = Query(None),
 ) -> PostDetail:
     """Upload a markdown post (single file or folder with assets).
@@ -421,7 +421,7 @@ async def upload_post(
 async def get_post_for_edit(
     file_path: str,
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
-    _user: Annotated[User, Depends(require_admin)],
+    _user: Annotated[AdminUser, Depends(require_admin)],
 ) -> PostEditResponse:
     """Get structured post data for the editor."""
     post_data = content_manager.read_post(file_path)
@@ -449,7 +449,7 @@ async def upload_assets(
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
     git_service: Annotated[GitService, Depends(get_git_service)],
     content_write_lock: Annotated[AsyncWriteLock, Depends(get_content_write_lock)],
-    _user: Annotated[User, Depends(require_admin)],
+    _user: Annotated[AdminUser, Depends(require_admin)],
 ) -> dict[str, list[str]]:
     """Upload asset files to a post's directory."""
     # Read all upload data before acquiring lock to avoid holding lock during I/O
@@ -512,7 +512,7 @@ async def list_assets(
     file_path: str,
     session: Annotated[AsyncSession, Depends(get_session)],
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
-    _user: Annotated[User, Depends(require_admin)],
+    _user: Annotated[AdminUser, Depends(require_admin)],
 ) -> AssetListResponse:
     """List asset files in a post's directory."""
     stmt = select(PostCache).where(PostCache.file_path == file_path)
@@ -561,7 +561,7 @@ async def delete_asset(
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
     git_service: Annotated[GitService, Depends(get_git_service)],
     content_write_lock: Annotated[AsyncWriteLock, Depends(get_content_write_lock)],
-    _user: Annotated[User, Depends(require_admin)],
+    _user: Annotated[AdminUser, Depends(require_admin)],
 ) -> None:
     """Delete a single asset file from a post's directory."""
     _validate_asset_filename(filename)
@@ -598,7 +598,7 @@ async def rename_asset(
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
     git_service: Annotated[GitService, Depends(get_git_service)],
     content_write_lock: Annotated[AsyncWriteLock, Depends(get_content_write_lock)],
-    _user: Annotated[User, Depends(require_admin)],
+    _user: Annotated[AdminUser, Depends(require_admin)],
 ) -> AssetInfo:
     """Rename an asset file in a post's directory."""
     _validate_asset_filename(filename)
@@ -691,7 +691,7 @@ async def get_post_endpoint(
     request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
     session_factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
-    user: Annotated[User | None, Depends(get_current_user)],
+    user: Annotated[AdminUser | None, Depends(get_current_admin)],
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
 ) -> PostDetail | RedirectResponse:
     """Get a single post by file path or slug.
@@ -744,7 +744,7 @@ def _fire_post_hit(
     request: Request,
     session_factory: async_sessionmaker[AsyncSession],
     post_file_path: str,
-    user: User | None,
+    user: AdminUser | None,
 ) -> None:
     """Fire a background analytics hit for a post view.
 
@@ -776,7 +776,7 @@ async def create_post_endpoint(
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
     git_service: Annotated[GitService, Depends(get_git_service)],
     content_write_lock: Annotated[AsyncWriteLock, Depends(get_content_write_lock)],
-    user: Annotated[User, Depends(require_admin)],
+    user: Annotated[AdminUser, Depends(require_admin)],
 ) -> PostDetail:
     """Create a new post."""
     # Render via Pandoc before acquiring lock (the slow part)
@@ -871,7 +871,7 @@ async def update_post_endpoint(
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
     git_service: Annotated[GitService, Depends(get_git_service)],
     content_write_lock: Annotated[AsyncWriteLock, Depends(get_content_write_lock)],
-    user: Annotated[User, Depends(require_admin)],
+    user: Annotated[AdminUser, Depends(require_admin)],
 ) -> PostDetail:
     """Update an existing post."""
     # Render via Pandoc before acquiring lock (the slow part).
@@ -1079,7 +1079,7 @@ async def delete_post_endpoint(
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
     git_service: Annotated[GitService, Depends(get_git_service)],
     content_write_lock: Annotated[AsyncWriteLock, Depends(get_content_write_lock)],
-    _user: Annotated[User, Depends(require_admin)],
+    _user: Annotated[AdminUser, Depends(require_admin)],
     delete_assets: bool = Query(False),
 ) -> None:
     """Delete a post."""

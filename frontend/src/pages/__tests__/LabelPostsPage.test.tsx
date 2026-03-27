@@ -86,7 +86,7 @@ function renderPage(labelId = 'swe') {
 describe('LabelPostsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockUser = { id: 1, username: 'admin', email: 'a@t.com', display_name: null, is_admin: true }
+    mockUser = { id: 1, username: 'admin', email: 'a@t.com', display_name: null }
   })
 
   it('shows spinner while loading', () => {

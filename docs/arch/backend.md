@@ -54,7 +54,7 @@ This favors correctness and consistency over high write concurrency.
 
 The database uses two separate declarative bases to distinguish durable state from derived cache state:
 
-- **DurableBase** tables (users, tokens, invites, social accounts, cross-posts) are managed by Alembic migrations. Schema changes are applied programmatically during application startup via `alembic upgrade head`. These tables persist across restarts and upgrades.
+- **DurableBase** tables (admin users, admin refresh tokens, social accounts, cross-posts, analytics settings) are managed by Alembic migrations. Schema changes are applied programmatically during application startup via `alembic upgrade head`. These tables persist across restarts and upgrades.
 - **CacheBase** tables (posts cache, labels cache, label associations, sync manifest) are dropped and recreated on every startup. Their content is rebuilt from the filesystem.
 
 This separation means adding a column to a durable table requires an Alembic migration, while cache table schema changes take effect automatically on the next restart.
@@ -89,7 +89,7 @@ The goal is to preserve content, preserve service availability where possible, a
 - `backend/main.py` is the main runtime entry point.
 - `backend/api/` contains the HTTP-facing modules grouped by feature area.
 - `backend/services/` contains the orchestration and business-logic layer, including services for page retrieval and rendering, posts CRUD operations, authentication, cross-posting, sync, analytics, and admin panel business logic.
-- `backend/models/` contains SQLAlchemy ORM models for both durable tables (users, tokens, social accounts, cross-posts, analytics settings) and cache tables (posts, labels, sync manifest).
+- `backend/models/` contains SQLAlchemy ORM models for both durable tables (admin users, admin refresh tokens, social accounts, cross-posts, analytics settings) and cache tables (posts, labels, sync manifest).
 - `backend/schemas/` contains Pydantic request/response schemas that define the API contracts.
 - `backend/filesystem/` contains the canonical content model.
 - `backend/pandoc/server.py` manages the long-lived Pandoc server process used by the application.

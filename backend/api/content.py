@@ -12,10 +12,10 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.deps import get_current_user, get_session, get_settings
+from backend.api.deps import get_current_admin, get_session, get_settings
 from backend.config import Settings
 from backend.models.post import PostCache
-from backend.models.user import User
+from backend.models.user import AdminUser
 from backend.utils.slug import is_directory_post_path
 
 router = APIRouter(prefix="/api/content", tags=["content"])
@@ -75,7 +75,7 @@ def _validate_path(file_path: str, content_dir: Path) -> Path:
 async def _check_draft_access(
     file_path: str,
     session: AsyncSession,
-    user: User | None,
+    user: AdminUser | None,
 ) -> None:
     """Deny access to files inside draft post directories.
 
@@ -130,7 +130,7 @@ async def serve_content_file(
     file_path: str,
     settings: Annotated[Settings, Depends(get_settings)],
     session: Annotated[AsyncSession, Depends(get_session)],
-    user: Annotated[User | None, Depends(get_current_user)],
+    user: Annotated[AdminUser | None, Depends(get_current_admin)],
 ) -> FileResponse:
     """Serve a file from the content directory.
 

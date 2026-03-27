@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from backend.config import Settings
 from backend.filesystem.content_manager import ContentManager
-from backend.models.user import User
+from backend.models.user import AdminUser
 from backend.services.auth_service import decode_access_token
 from backend.services.git_service import GitService
 
@@ -104,11 +104,11 @@ def get_content_write_lock(request: Request) -> AsyncWriteLock:
     )
 
 
-async def get_current_user(
+async def get_current_admin(
     request: Request,
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(security)] = None,
     session: AsyncSession = Depends(get_session),
-) -> User | None:
+) -> AdminUser | None:
     """Get current authenticated user, or None if not authenticated."""
     token_value = (
         credentials.credentials if credentials is not None else request.cookies.get("access_token")
@@ -125,29 +125,17 @@ async def get_current_user(
         return None
     if not isinstance(user_id, (str, int)) or (isinstance(user_id, str) and not user_id.isdigit()):
         return None
-    return await session.get(User, int(user_id))
+    return await session.get(AdminUser, int(user_id))
 
 
-async def require_auth(
-    user: Annotated[User | None, Depends(get_current_user)],
-) -> User:
+async def require_admin(
+    user: Annotated[AdminUser | None, Depends(get_current_admin)],
+) -> AdminUser:
     """Require authentication. Raises 401 if not authenticated."""
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
             headers={"WWW-Authenticate": "Bearer"},
-        )
-    return user
-
-
-async def require_admin(
-    user: Annotated[User, Depends(require_auth)],
-) -> User:
-    """Require admin role. Raises 403 if not admin."""
-    if not user.is_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin access required",
         )
     return user

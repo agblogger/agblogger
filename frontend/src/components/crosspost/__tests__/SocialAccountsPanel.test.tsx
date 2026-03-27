@@ -55,7 +55,6 @@ describe('SocialAccountsPanel', () => {
         username: 'admin',
         email: 'admin@example.com',
         display_name: 'Admin',
-        is_admin: true,
       },
       isLoading: false,
       isLoggingOut: false,

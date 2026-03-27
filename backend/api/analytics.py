@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.deps import get_session, require_admin
 from backend.models.post import PostCache
-from backend.models.user import User
+from backend.models.user import AdminUser
 from backend.schemas.analytics import (
     AnalyticsSettingsResponse,
     AnalyticsSettingsUpdate,
@@ -87,7 +87,7 @@ async def _resolve_public_post_slug(session: AsyncSession, file_path: str) -> st
 @admin_router.get("/settings", response_model=AnalyticsSettingsResponse)
 async def get_settings(
     session: Annotated[AsyncSession, Depends(get_session)],
-    _user: Annotated[User, Depends(require_admin)],
+    _user: Annotated[AdminUser, Depends(require_admin)],
 ) -> AnalyticsSettingsResponse:
     """Get current analytics settings."""
     return await get_analytics_settings(session)
@@ -97,7 +97,7 @@ async def get_settings(
 async def update_settings(
     body: AnalyticsSettingsUpdate,
     session: Annotated[AsyncSession, Depends(get_session)],
-    _user: Annotated[User, Depends(require_admin)],
+    _user: Annotated[AdminUser, Depends(require_admin)],
 ) -> AnalyticsSettingsResponse:
     """Update analytics settings."""
     return await update_analytics_settings(
@@ -110,7 +110,7 @@ async def update_settings(
 @admin_router.get("/stats/total", response_model=TotalStatsResponse)
 async def get_total_stats(
     session: Annotated[AsyncSession, Depends(get_session)],
-    _user: Annotated[User, Depends(require_admin)],
+    _user: Annotated[AdminUser, Depends(require_admin)],
     start: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
     end: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
 ) -> TotalStatsResponse:
@@ -124,7 +124,7 @@ async def get_total_stats(
 @admin_router.get("/stats/hits", response_model=PathHitsResponse)
 async def get_path_hits(
     session: Annotated[AsyncSession, Depends(get_session)],
-    _user: Annotated[User, Depends(require_admin)],
+    _user: Annotated[AdminUser, Depends(require_admin)],
     start: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
     end: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
 ) -> PathHitsResponse:
@@ -139,7 +139,7 @@ async def get_path_hits(
 async def get_path_referrers(
     path_id: Annotated[int, Path(ge=1)],
     session: Annotated[AsyncSession, Depends(get_session)],
-    _user: Annotated[User, Depends(require_admin)],
+    _user: Annotated[AdminUser, Depends(require_admin)],
 ) -> PathReferrersResponse:
     """Get referrer breakdown for a specific path ID."""
     result = await fetch_path_referrers(session, path_id)
@@ -152,7 +152,7 @@ async def get_path_referrers(
 async def get_breakdown(
     category: BreakdownCategory,
     session: Annotated[AsyncSession, Depends(get_session)],
-    _user: Annotated[User, Depends(require_admin)],
+    _user: Annotated[AdminUser, Depends(require_admin)],
     start: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
     end: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
 ) -> BreakdownResponse:

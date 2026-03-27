@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from backend.filesystem.content_manager import ContentManager
-    from backend.models.user import User
+    from backend.models.user import AdminUser
     from backend.schemas.crosspost import SocialAccountCreate
 
 logger = logging.getLogger(__name__)
@@ -116,7 +116,7 @@ async def crosspost(
     content_manager: ContentManager,
     post_path: str,
     platforms: list[str],
-    actor: User,
+    actor: AdminUser,
     site_url: str,
     secret_key: str = "",
     custom_text: str | None = None,
@@ -139,7 +139,7 @@ async def crosspost(
 
     is_draft = cached_post.is_draft if cached_post is not None else post_data.is_draft
     owner_username = cached_post.author if cached_post is not None else post_data.author
-    if is_draft and not actor.is_admin and owner_username != actor.username:
+    if is_draft and owner_username != actor.username:
         msg = f"Post not found: {post_path}"
         raise PostNotFoundError(msg)
 

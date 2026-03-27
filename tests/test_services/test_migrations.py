@@ -14,8 +14,8 @@ class TestAlembicMigration:
     """Verify Alembic creates durable tables on a fresh database."""
 
     DURABLE_TABLES: ClassVar[set[str]] = {
-        "users",
-        "refresh_tokens",
+        "admin_users",
+        "admin_refresh_tokens",
         "social_accounts",
         "cross_posts",
         "analytics_settings",
@@ -146,9 +146,9 @@ class TestCacheTableSetup:
         async with db_engine.begin() as conn:
             await conn.execute(
                 text(
-                    "INSERT INTO users (username, email, password_hash, is_admin,"
+                    "INSERT INTO admin_users (username, email, password_hash,"
                     " created_at, updated_at)"
-                    " VALUES ('testuser', 'test@test.com', 'hash', 1,"
+                    " VALUES ('testuser', 'test@test.com', 'hash',"
                     " '2026-01-01', '2026-01-01')"
                 )
             )
@@ -156,7 +156,7 @@ class TestCacheTableSetup:
         await setup_cache_tables(db_engine)
 
         async with db_engine.connect() as conn:
-            result = await conn.execute(text("SELECT username FROM users"))
+            result = await conn.execute(text("SELECT username FROM admin_users"))
             rows = result.fetchall()
 
         assert len(rows) == 1
@@ -204,8 +204,8 @@ class TestTablePartitionInvariants:
         from backend.models.base import DurableBase
 
         expected = {
-            "users",
-            "refresh_tokens",
+            "admin_users",
+            "admin_refresh_tokens",
             "social_accounts",
             "cross_posts",
             "analytics_settings",

@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from backend.api.deps import require_admin
-from backend.models.user import User
+from backend.models.user import AdminUser
 from backend.pandoc.renderer import RenderError, render_markdown, rewrite_relative_urls
 
 logger = logging.getLogger(__name__)
@@ -33,7 +33,7 @@ class RenderResponse(BaseModel):
 @router.post("/preview", response_model=RenderResponse)
 async def preview(
     body: RenderRequest,
-    _user: Annotated[User, Depends(require_admin)],
+    _user: Annotated[AdminUser, Depends(require_admin)],
 ) -> RenderResponse:
     """Render markdown to HTML for preview."""
     try:

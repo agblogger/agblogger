@@ -11,7 +11,7 @@ from sqlalchemy import func, or_, select, text
 
 from backend.models.label import PostLabelCache
 from backend.models.post import PostCache
-from backend.models.user import User
+from backend.models.user import AdminUser
 from backend.schemas.post import (
     PostDetail,
     PostListResponse,
@@ -27,12 +27,14 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # Shared SQL expression: resolve author display name via LEFT JOIN to users table.
-_resolved_author = func.coalesce(User.display_name, PostCache.author).label("resolved_author")
+_resolved_author = func.coalesce(AdminUser.display_name, PostCache.author).label("resolved_author")
 
 
 def _select_posts_with_author() -> Select[tuple[PostCache, str]]:
     """Base select joining PostCache with resolved author display name."""
-    return select(PostCache, _resolved_author).outerjoin(User, PostCache.author == User.username)
+    return select(PostCache, _resolved_author).outerjoin(
+        AdminUser, PostCache.author == AdminUser.username
+    )
 
 
 _SQLITE_MAX_INTEGER = 2**63 - 1
@@ -44,7 +46,7 @@ async def resolve_author_display_name(session: AsyncSession, username: str | Non
     """Resolve a username to the user's display name, falling back to the raw username."""
     if not username:
         return username
-    stmt = select(User.display_name).where(User.username == username)
+    stmt = select(AdminUser.display_name).where(AdminUser.username == username)
     result = await session.execute(stmt)
     display_name = result.scalar_one_or_none()
     return display_name or username

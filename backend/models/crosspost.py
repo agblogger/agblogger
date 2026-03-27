@@ -11,7 +11,7 @@ from backend.models.base import DurableBase
 from backend.schemas.crosspost import CrossPostStatus
 
 if TYPE_CHECKING:
-    from backend.models.user import User
+    from backend.models.user import AdminUser
 
 
 class SocialAccount(DurableBase):
@@ -21,7 +21,7 @@ class SocialAccount(DurableBase):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+        Integer, ForeignKey("admin_users.id", ondelete="CASCADE"), nullable=False
     )
     platform: Mapped[str] = mapped_column(String, nullable=False)
     account_name: Mapped[str] = mapped_column(String, nullable=False, default="")
@@ -29,7 +29,7 @@ class SocialAccount(DurableBase):
     created_at: Mapped[str] = mapped_column(Text, nullable=False)
     updated_at: Mapped[str] = mapped_column(Text, nullable=False)
 
-    user: Mapped[User] = relationship(back_populates="social_accounts")
+    user: Mapped[AdminUser] = relationship(back_populates="social_accounts")
 
     __table_args__ = (UniqueConstraint("user_id", "platform", "account_name"),)
 
@@ -41,7 +41,7 @@ class CrossPost(DurableBase):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True
+        Integer, ForeignKey("admin_users.id", ondelete="CASCADE"), nullable=True
     )
     post_path: Mapped[str] = mapped_column(Text, nullable=False)
     platform: Mapped[str] = mapped_column(String, nullable=False)
@@ -53,4 +53,4 @@ class CrossPost(DurableBase):
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[str] = mapped_column(Text, nullable=False)
 
-    user: Mapped[User | None] = relationship(back_populates="cross_posts")
+    user: Mapped[AdminUser | None] = relationship(back_populates="cross_posts")

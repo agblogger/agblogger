@@ -82,7 +82,7 @@ class TestCrosspostDecryptFallback:
             content_manager=mock_cm,
             post_path="posts/test/index.md",
             platforms=["bluesky"],
-            actor=MagicMock(id=1, username="tester", display_name="Tester", is_admin=False),
+            actor=MagicMock(id=1, username="tester", display_name="Tester"),
             site_url="https://example.com",
             secret_key=TEST_SECRET_KEY,
         )
@@ -118,7 +118,7 @@ class TestCrosspostDecryptFallback:
             content_manager=mock_cm,
             post_path="posts/test/index.md",
             platforms=["bluesky"],
-            actor=MagicMock(id=1, username="tester", display_name="Tester", is_admin=False),
+            actor=MagicMock(id=1, username="tester", display_name="Tester"),
             site_url="https://example.com",
             secret_key="wrong-key",
         )
@@ -185,7 +185,7 @@ class TestCrosspostTokenRefreshPersistence:
             content_manager=mock_cm,
             post_path="posts/test/index.md",
             platforms=["bluesky"],
-            actor=MagicMock(id=1, username="tester", display_name="Tester", is_admin=False),
+            actor=MagicMock(id=1, username="tester", display_name="Tester"),
             site_url="https://example.com",
             secret_key=TEST_SECRET_KEY,
         )

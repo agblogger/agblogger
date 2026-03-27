@@ -183,7 +183,7 @@ describe('PostPage', () => {
   })
 
   it('shows delete button when authenticated', async () => {
-    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null, is_admin: true }
+    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null }
     mockFetchPost.mockResolvedValue(postDetail)
     renderPostPage()
 
@@ -193,7 +193,7 @@ describe('PostPage', () => {
   })
 
   it('shows confirmation dialog on delete click', async () => {
-    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null, is_admin: true }
+    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null }
     mockFetchPost.mockResolvedValue(postDetail)
     renderPostPage()
 
@@ -208,7 +208,7 @@ describe('PostPage', () => {
   })
 
   it('cancel closes confirmation dialog', async () => {
-    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null, is_admin: true }
+    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null }
     mockFetchPost.mockResolvedValue(postDetail)
     renderPostPage()
 
@@ -223,7 +223,7 @@ describe('PostPage', () => {
   })
 
   it('shows unified single-button confirmation dialog for directory-backed post', async () => {
-    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null, is_admin: true }
+    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null }
     mockFetchPost.mockResolvedValue(draftPost)
     renderPostPage('/post/2026-03-08-draft')
 
@@ -242,7 +242,7 @@ describe('PostPage', () => {
   })
 
   it('confirming delete navigates to home', async () => {
-    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null, is_admin: true }
+    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null }
     mockFetchPost.mockResolvedValue(postDetail)
     mockDeletePost.mockResolvedValue(undefined)
     renderPostPage()
@@ -276,7 +276,7 @@ describe('PostPage', () => {
 
   it('shows error on delete failure', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
-    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null, is_admin: true }
+    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null }
     mockFetchPost.mockResolvedValue(postDetail)
     mockDeletePost.mockRejectedValue(new Error('Network error'))
     renderPostPage()
@@ -296,7 +296,7 @@ describe('PostPage', () => {
   })
 
   it('shows session expired error on 401 delete failure', async () => {
-    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null, is_admin: true }
+    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null }
     mockFetchPost.mockResolvedValue(postDetail)
     mockDeletePost.mockRejectedValue(
       mockHttpError(401),
@@ -378,7 +378,7 @@ describe('PostPage', () => {
   })
 
   it('renders share UI and cross-posting section for admin users', async () => {
-    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null, is_admin: true }
+    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null }
     mockFetchPost.mockResolvedValue(postDetail)
     renderPostPage()
 
@@ -391,7 +391,7 @@ describe('PostPage', () => {
   })
 
   it('shows draft badge and publish button for draft post when authenticated', async () => {
-    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null, is_admin: true }
+    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null }
     mockFetchPost.mockResolvedValue(draftPost)
     renderPostPage('/post/2026-03-08-draft')
 
@@ -411,7 +411,7 @@ describe('PostPage', () => {
   })
 
   it('does not show draft badge or publish button for published post', async () => {
-    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null, is_admin: true }
+    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null }
     mockFetchPost.mockResolvedValue(postDetail)
     renderPostPage()
 
@@ -432,7 +432,7 @@ describe('PostPage', () => {
   })
 
   it('publish button calls update API with is_draft false', async () => {
-    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null, is_admin: true }
+    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null }
     mockFetchPost.mockResolvedValue(draftPost)
     mockFetchPostForEdit.mockResolvedValue({
       file_path: 'posts/2026-03-08-draft/index.md',
@@ -464,7 +464,7 @@ describe('PostPage', () => {
 
   it('shows error message on publish failure', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
-    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null, is_admin: true }
+    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null }
     mockFetchPost.mockResolvedValue(draftPost)
     mockFetchPostForEdit.mockRejectedValue(new Error('Network error'))
     renderPostPage('/post/2026-03-08-draft')
@@ -482,7 +482,7 @@ describe('PostPage', () => {
   })
 
   it('publish button is disabled during API call', async () => {
-    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null, is_admin: true }
+    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null }
     mockFetchPost.mockResolvedValue(draftPost)
     mockFetchPostForEdit.mockImplementation(
       () => new Promise(() => {}),
@@ -499,7 +499,7 @@ describe('PostPage', () => {
     })
   })
   it('shows server detail on 409 publish failure', async () => {
-    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null, is_admin: true }
+    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null }
     mockFetchPost.mockResolvedValue(draftPost)
     mockFetchPostForEdit.mockResolvedValue({
       file_path: 'posts/2026-03-08-draft/index.md',
@@ -530,7 +530,7 @@ describe('PostPage', () => {
   })
 
   it('shows generic error on 500 publish failure', async () => {
-    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null, is_admin: true }
+    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null }
     mockFetchPost.mockResolvedValue(draftPost)
     mockFetchPostForEdit.mockResolvedValue({
       file_path: 'posts/2026-03-08-draft/index.md',
@@ -562,7 +562,7 @@ describe('PostPage', () => {
 
   it('publish error is rendered via AlertBanner with mt-3 spacing class', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
-    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null, is_admin: true }
+    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null }
     mockFetchPost.mockResolvedValue(draftPost)
     mockFetchPostForEdit.mockRejectedValue(new Error('Network error'))
     renderPostPage('/post/2026-03-08-draft')
@@ -667,7 +667,7 @@ describe('PostPage', () => {
 
   it('delete error is rendered via AlertBanner with mb-6 spacing class', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
-    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null, is_admin: true }
+    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null }
     mockFetchPost.mockResolvedValue(postDetail)
     mockDeletePost.mockRejectedValue(new Error('Network error'))
     renderPostPage()

@@ -1,6 +1,6 @@
 """Tests for draft post visibility restrictions.
 
-Draft posts should only be visible to their author. This includes:
+Draft posts should only be visible to the authenticated admin. This includes:
 - Post listings (GET /api/posts)
 - Post detail (GET /api/posts/{path})
 - Post edit (GET /api/posts/{path}/edit)
@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from backend.config import Settings
-from tests.conftest import create_test_client, create_test_user
+from tests.conftest import create_test_client
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
@@ -95,18 +95,12 @@ async def _login(client: AsyncClient, username: str, password: str) -> str:
     return resp.json()["access_token"]
 
 
-async def _register_and_login(client: AsyncClient, username: str, email: str, password: str) -> str:
-    """Create a new user and return access token."""
-    await create_test_user(client, username, email, password)
-    return await _login(client, username, password)
-
-
 def _auth_headers(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
 class TestDraftListingVisibility:
-    """Draft posts should only appear in listings for the author."""
+    """Draft posts should only appear in listings for the authenticated admin."""
 
     @pytest.mark.asyncio
     async def test_draft_not_in_public_listing(self, client: AsyncClient) -> None:
@@ -131,36 +125,14 @@ class TestDraftListingVisibility:
         assert "Admin Draft" in titles
         assert "Draft With Asset" in titles
 
-    @pytest.mark.asyncio
-    async def test_draft_not_in_listing_for_other_user(self, client: AsyncClient) -> None:
-        """A different authenticated user should not see another user's drafts."""
-        token = await _register_and_login(client, "other", "other@test.com", "password1234")
-        resp = await client.get("/api/posts", headers=_auth_headers(token))
-        assert resp.status_code == 200
-        data = resp.json()
-        titles = [p["title"] for p in data["posts"]]
-        assert "Published Post" in titles
-        assert "Admin Draft" not in titles
-        assert "Draft With Asset" not in titles
-
 
 class TestDraftDetailVisibility:
-    """Draft post detail endpoint should restrict access to the author."""
+    """Draft post detail endpoint should restrict access to the authenticated admin."""
 
     @pytest.mark.asyncio
     async def test_draft_get_returns_404_for_unauthenticated(self, client: AsyncClient) -> None:
         """Unauthenticated users get 404 for draft posts."""
         resp = await client.get("/api/posts/posts/admin-draft/index.md")
-        assert resp.status_code == 404
-
-    @pytest.mark.asyncio
-    async def test_draft_get_returns_404_for_wrong_user(self, client: AsyncClient) -> None:
-        """A different authenticated user gets 404 for another user's draft."""
-        token = await _register_and_login(client, "other2", "other2@test.com", "password1234")
-        resp = await client.get(
-            "/api/posts/posts/admin-draft/index.md",
-            headers=_auth_headers(token),
-        )
         assert resp.status_code == 404
 
     @pytest.mark.asyncio
@@ -176,17 +148,7 @@ class TestDraftDetailVisibility:
 
 
 class TestDraftEditVisibility:
-    """Draft post edit endpoint should restrict access to the author."""
-
-    @pytest.mark.asyncio
-    async def test_draft_edit_returns_404_for_wrong_user(self, client: AsyncClient) -> None:
-        """A non-admin authenticated user is forbidden from using draft edit endpoint."""
-        token = await _register_and_login(client, "other3", "other3@test.com", "password1234")
-        resp = await client.get(
-            "/api/posts/posts/admin-draft/index.md/edit",
-            headers=_auth_headers(token),
-        )
-        assert resp.status_code == 403
+    """Draft post edit endpoint should restrict access to the authenticated admin."""
 
     @pytest.mark.asyncio
     async def test_draft_edit_returns_200_for_author(self, client: AsyncClient) -> None:
@@ -201,22 +163,12 @@ class TestDraftEditVisibility:
 
 
 class TestDraftContentFileVisibility:
-    """Content file serving should restrict draft post assets to the author."""
+    """Content file serving should restrict draft post assets to the authenticated admin."""
 
     @pytest.mark.asyncio
     async def test_draft_asset_returns_404_for_unauthenticated(self, client: AsyncClient) -> None:
         """Unauthenticated users get 404 for draft post assets."""
         resp = await client.get("/api/content/posts/draft-with-asset/photo.png")
-        assert resp.status_code == 404
-
-    @pytest.mark.asyncio
-    async def test_draft_asset_returns_404_for_wrong_user(self, client: AsyncClient) -> None:
-        """A different authenticated user gets 404 for draft post assets."""
-        token = await _register_and_login(client, "other4", "other4@test.com", "password1234")
-        resp = await client.get(
-            "/api/content/posts/draft-with-asset/photo.png",
-            headers=_auth_headers(token),
-        )
         assert resp.status_code == 404
 
     @pytest.mark.asyncio
@@ -365,26 +317,6 @@ class TestRenamedDraftRedirectVisibility:
         assert leaked_resp.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_renamed_draft_old_api_path_returns_404_for_wrong_user(
-        self, client: AsyncClient
-    ) -> None:
-        """A different authenticated user must not learn the renamed draft path."""
-        token = await _login(client, "admin", "admin123")
-        original_path, _new_path = await self._create_and_rename_draft(
-            client,
-            _auth_headers(token),
-        )
-        other_token = await _register_and_login(client, "other5", "other5@test.com", "password1234")
-
-        leaked_resp = await client.get(
-            f"/api/posts/{original_path}",
-            headers=_auth_headers(other_token),
-            follow_redirects=False,
-        )
-
-        assert leaked_resp.status_code == 404
-
-    @pytest.mark.asyncio
     async def test_renamed_draft_old_api_path_redirects_for_author(
         self, client: AsyncClient
     ) -> None:
@@ -440,13 +372,3 @@ class TestDraftLabelPostsVisibility:
         titles = [p["title"] for p in resp.json()["posts"]]
         assert "Published Post" in titles
         assert "Admin Draft" in titles
-
-    @pytest.mark.asyncio
-    async def test_draft_not_in_label_posts_for_other_user(self, client: AsyncClient) -> None:
-        """A different user should not see another user's drafts in label posts."""
-        token = await _register_and_login(client, "viewer", "viewer@test.com", "password1234")
-        resp = await client.get("/api/labels/test-label/posts", headers=_auth_headers(token))
-        assert resp.status_code == 200
-        titles = [p["title"] for p in resp.json()["posts"]]
-        assert "Published Post" in titles
-        assert "Admin Draft" not in titles

@@ -135,7 +135,7 @@ describe('AdminPage', () => {
         }
       },
     } as unknown as typeof Intl
-    mockUser = { id: 1, username: 'admin', email: 'a@t.com', display_name: 'Admin', is_admin: true }
+    mockUser = { id: 1, username: 'admin', email: 'a@t.com', display_name: 'Admin' }
     mockIsInitialized = true
   })
   afterEach(() => {
@@ -148,12 +148,6 @@ describe('AdminPage', () => {
     mockUser = null
     renderAdmin()
     expect(mockNavigate).toHaveBeenCalledWith('/login', { replace: true })
-  })
-
-  it('redirects to / when non-admin', () => {
-    mockUser = { id: 1, username: 'user', email: 'u@t.com', display_name: null, is_admin: false }
-    renderAdmin()
-    expect(mockNavigate).toHaveBeenCalledWith('/', { replace: true })
   })
 
   it('returns null while initializing', () => {
@@ -910,7 +904,6 @@ describe('AdminPage', () => {
       username: 'admin',
       email: 'a@t.com',
       display_name: 'New Display Name',
-      is_admin: true,
     })
     const user = userEvent.setup()
     renderAdmin()
@@ -937,7 +930,6 @@ describe('AdminPage', () => {
       username: 'admin',
       email: 'a@t.com',
       display_name: 'New Display Name',
-      is_admin: true,
     })
   })
 

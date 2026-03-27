@@ -185,7 +185,7 @@ describe('TimelinePage', () => {
   })
 
   it('shows "Write your first post" CTA for authenticated user with no posts', async () => {
-    setMockUser({ id: 1, username: 'admin', email: 'a@t.com', display_name: null, is_admin: true })
+    setMockUser({ id: 1, username: 'admin', email: 'a@t.com', display_name: null })
     mockFetchPosts.mockResolvedValue({ ...postsResponse, posts: [], total: 0 })
     renderTimeline()
 
@@ -198,7 +198,7 @@ describe('TimelinePage', () => {
   })
 
   it('re-fetches posts when user logs out', async () => {
-    setMockUser({ id: 1, username: 'admin', email: 'a@t.com', display_name: null, is_admin: true })
+    setMockUser({ id: 1, username: 'admin', email: 'a@t.com', display_name: null })
     const withDraft: PostListResponse = {
       posts: [
         {
@@ -266,7 +266,7 @@ describe('TimelinePage', () => {
   // === Upload buttons ===
 
   it('shows upload buttons when authenticated', async () => {
-    setMockUser({ id: 1, username: 'admin', email: 'a@t.com', display_name: null, is_admin: true })
+    setMockUser({ id: 1, username: 'admin', email: 'a@t.com', display_name: null })
     mockFetchPosts.mockResolvedValue(postsResponse)
     renderTimeline()
 
@@ -312,7 +312,7 @@ describe('TimelinePage', () => {
   // === Upload functionality ===
 
   it('successful upload navigates to post', async () => {
-    setMockUser({ id: 1, username: 'admin', email: 'a@t.com', display_name: null, is_admin: true })
+    setMockUser({ id: 1, username: 'admin', email: 'a@t.com', display_name: null })
     mockFetchPosts.mockResolvedValue(postsResponse)
     mockUploadPost.mockResolvedValue({
       id: 3, file_path: 'posts/uploaded/index.md', title: 'Uploaded', subtitle: null,
@@ -339,7 +339,7 @@ describe('TimelinePage', () => {
   })
 
   it('shows 413 error for large file upload', async () => {
-    setMockUser({ id: 1, username: 'admin', email: 'a@t.com', display_name: null, is_admin: true })
+    setMockUser({ id: 1, username: 'admin', email: 'a@t.com', display_name: null })
     mockFetchPosts.mockResolvedValue(postsResponse)
     mockUploadPost.mockRejectedValue(
       mockHttpError(413),
@@ -359,7 +359,7 @@ describe('TimelinePage', () => {
   })
 
   it('shows title prompt for 422 no_title error', async () => {
-    setMockUser({ id: 1, username: 'admin', email: 'a@t.com', display_name: null, is_admin: true })
+    setMockUser({ id: 1, username: 'admin', email: 'a@t.com', display_name: null })
     mockFetchPosts.mockResolvedValue(postsResponse)
     mockUploadPost.mockRejectedValue(
       mockHttpError(422, JSON.stringify({ detail: 'no_title' })),
@@ -379,7 +379,7 @@ describe('TimelinePage', () => {
   })
 
   it('submits title prompt and uploads', async () => {
-    setMockUser({ id: 1, username: 'admin', email: 'a@t.com', display_name: null, is_admin: true })
+    setMockUser({ id: 1, username: 'admin', email: 'a@t.com', display_name: null })
     mockFetchPosts.mockResolvedValue(postsResponse)
     mockUploadPost
       .mockRejectedValueOnce(
@@ -413,7 +413,7 @@ describe('TimelinePage', () => {
   })
 
   it('cancels title prompt dialog', async () => {
-    setMockUser({ id: 1, username: 'admin', email: 'a@t.com', display_name: null, is_admin: true })
+    setMockUser({ id: 1, username: 'admin', email: 'a@t.com', display_name: null })
     mockFetchPosts.mockResolvedValue(postsResponse)
     mockUploadPost.mockRejectedValue(
       mockHttpError(422, JSON.stringify({ detail: 'no_title' })),
@@ -438,7 +438,7 @@ describe('TimelinePage', () => {
   })
 
   it('shows upload error message', async () => {
-    setMockUser({ id: 1, username: 'admin', email: 'a@t.com', display_name: null, is_admin: true })
+    setMockUser({ id: 1, username: 'admin', email: 'a@t.com', display_name: null })
     mockFetchPosts.mockResolvedValue(postsResponse)
     mockUploadPost.mockRejectedValue(new Error('Network'))
     renderTimeline()
@@ -456,7 +456,7 @@ describe('TimelinePage', () => {
   })
 
   it('shows 401 upload error', async () => {
-    setMockUser({ id: 1, username: 'admin', email: 'a@t.com', display_name: null, is_admin: true })
+    setMockUser({ id: 1, username: 'admin', email: 'a@t.com', display_name: null })
     mockFetchPosts.mockResolvedValue(postsResponse)
     mockUploadPost.mockRejectedValue(
       mockHttpError(401),

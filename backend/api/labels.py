@@ -13,14 +13,14 @@ from backend.api.deps import (
     AsyncWriteLock,
     get_content_manager,
     get_content_write_lock,
-    get_current_user,
+    get_current_admin,
     get_git_service,
     get_session,
     require_admin,
 )
 from backend.filesystem.content_manager import ContentManager
 from backend.filesystem.toml_manager import LabelDef, write_labels_config
-from backend.models.user import User
+from backend.models.user import AdminUser
 from backend.schemas.label import (
     LabelCreate,
     LabelDeleteResponse,
@@ -92,7 +92,7 @@ router = APIRouter(prefix="/api/labels", tags=["labels"])
 @router.get("", response_model=list[LabelResponse])
 async def list_labels(
     session: Annotated[AsyncSession, Depends(get_session)],
-    user: Annotated[User | None, Depends(get_current_user)] = None,
+    user: Annotated[AdminUser | None, Depends(get_current_admin)] = None,
 ) -> list[LabelResponse]:
     """List all labels."""
     draft_owner_username = user.username if user else None
@@ -102,7 +102,7 @@ async def list_labels(
 @router.get("/graph", response_model=LabelGraphResponse)
 async def label_graph(
     session: Annotated[AsyncSession, Depends(get_session)],
-    user: Annotated[User | None, Depends(get_current_user)] = None,
+    user: Annotated[AdminUser | None, Depends(get_current_admin)] = None,
 ) -> LabelGraphResponse:
     """Get the full label DAG for graph visualization."""
     draft_owner_username = user.username if user else None
@@ -116,7 +116,7 @@ async def create_label_endpoint(
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
     git_service: Annotated[GitService, Depends(get_git_service)],
     content_write_lock: Annotated[AsyncWriteLock, Depends(get_content_write_lock)],
-    _user: Annotated[User, Depends(require_admin)],
+    _user: Annotated[AdminUser, Depends(require_admin)],
 ) -> LabelResponse:
     """Create a new label."""
     async with content_write_lock:
@@ -160,7 +160,7 @@ async def update_label_endpoint(
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
     git_service: Annotated[GitService, Depends(get_git_service)],
     content_write_lock: Annotated[AsyncWriteLock, Depends(get_content_write_lock)],
-    _user: Annotated[User, Depends(require_admin)],
+    _user: Annotated[AdminUser, Depends(require_admin)],
 ) -> LabelResponse:
     """Update a label's names and parents."""
     async with content_write_lock:
@@ -208,7 +208,7 @@ async def delete_label_endpoint(
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
     git_service: Annotated[GitService, Depends(get_git_service)],
     content_write_lock: Annotated[AsyncWriteLock, Depends(get_content_write_lock)],
-    _user: Annotated[User, Depends(require_admin)],
+    _user: Annotated[AdminUser, Depends(require_admin)],
 ) -> LabelDeleteResponse:
     """Delete a label."""
     async with content_write_lock:
@@ -241,7 +241,7 @@ async def delete_label_endpoint(
 async def get_label_endpoint(
     label_id: str,
     session: Annotated[AsyncSession, Depends(get_session)],
-    user: Annotated[User | None, Depends(get_current_user)] = None,
+    user: Annotated[AdminUser | None, Depends(get_current_admin)] = None,
 ) -> LabelResponse:
     """Get a single label by ID."""
     draft_owner_username = user.username if user else None
@@ -255,7 +255,7 @@ async def get_label_endpoint(
 async def label_posts(
     label_id: str,
     session: Annotated[AsyncSession, Depends(get_session)],
-    user: Annotated[User | None, Depends(get_current_user)] = None,
+    user: Annotated[AdminUser | None, Depends(get_current_admin)] = None,
     page: int = Query(1, ge=1, le=MAX_SAFE_PAGE),
     per_page: int = Query(20, ge=1, le=100),
 ) -> PostListResponse:

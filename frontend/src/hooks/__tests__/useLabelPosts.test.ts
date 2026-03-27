@@ -87,7 +87,6 @@ describe('useLabelPosts', () => {
         username: 'author',
         email: 'author@example.com',
         display_name: 'Author',
-        is_admin: false,
       },
     })
     mockFetchLabel.mockResolvedValue(mockLabel)

@@ -63,7 +63,7 @@ function renderCreatePage() {
 describe('LabelCreatePage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockUser = { id: 1, username: 'admin', email: 'a@t.com', display_name: null, is_admin: true }
+    mockUser = { id: 1, username: 'admin', email: 'a@t.com', display_name: null }
     mockIsInitialized = true
     mockFetchLabels.mockResolvedValue(allLabels)
     mockUseUnsavedChanges.mockReturnValue({ markSaved: mockMarkSaved })
@@ -74,19 +74,6 @@ describe('LabelCreatePage', () => {
     mockFetchLabels.mockReturnValue(new Promise(() => {}))
     renderCreatePage()
     expect(mockNavigate).toHaveBeenCalledWith('/login', { replace: true })
-  })
-
-  it('redirects to home when the user is not an admin', () => {
-    mockUser = {
-      id: 2,
-      username: 'author',
-      email: 'author@t.com',
-      display_name: null,
-      is_admin: false,
-    }
-    mockFetchLabels.mockReturnValue(new Promise(() => {}))
-    renderCreatePage()
-    expect(mockNavigate).toHaveBeenCalledWith('/', { replace: true })
   })
 
   it('renders the create label form', async () => {

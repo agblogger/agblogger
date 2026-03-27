@@ -47,17 +47,14 @@ Test the full cycle: login sets cookies, authenticated requests include CSRF, re
 Every endpoint that modifies state or accesses user-specific data must declare its authorization requirement via dependency injection:
 
 ```python
-# Read-only, public
-user: Annotated[User | None, Depends(get_current_user)]
+# Read-only, public (may or may not be the admin)
+user: Annotated[AdminUser | None, Depends(get_current_admin)]
 
-# Requires any authenticated user
-user: Annotated[User, Depends(require_auth)]
-
-# Requires admin role
-user: Annotated[User, Depends(require_admin)]
+# Requires admin authentication (every authenticated user is the admin)
+user: Annotated[AdminUser, Depends(require_admin)]
 ```
 
-Do not inline auth checks like `if not user.is_admin: raise ...` inside handlers. Use the dependency chain.
+Use the dependency chain for all authorization checks.
 
 ### Draft visibility
 

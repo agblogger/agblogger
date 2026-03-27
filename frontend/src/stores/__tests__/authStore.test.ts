@@ -26,7 +26,6 @@ const testUser = {
   username: 'admin',
   email: 'admin@test.com',
   display_name: 'Admin',
-  is_admin: true,
 }
 
 describe('authStore', () => {

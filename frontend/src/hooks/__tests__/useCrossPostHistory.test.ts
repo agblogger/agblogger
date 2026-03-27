@@ -53,7 +53,6 @@ describe('useCrossPostHistory', () => {
         username: 'author',
         email: 'author@example.com',
         display_name: 'Author',
-        is_admin: false,
       },
     })
     mockFetchCrossPostHistory.mockResolvedValueOnce(mockHistory)
@@ -71,7 +70,6 @@ describe('useCrossPostHistory', () => {
         username: 'author',
         email: 'author@example.com',
         display_name: 'Author',
-        is_admin: false,
       },
     })
     vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -104,7 +102,6 @@ describe('useCrossPostHistory', () => {
         username: 'author',
         email: 'author@example.com',
         display_name: 'Author',
-        is_admin: false,
       },
     })
     mockFetchCrossPostHistory

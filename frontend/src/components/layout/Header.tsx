@@ -299,16 +299,14 @@ export default function Header() {
                     <PenLine size={14} />
                     <span>Write</span>
                   </Link>
-                  {user.is_admin && (
-                    <Link
-                      to="/admin"
-                      className="p-2 text-muted hover:text-ink transition-colors rounded-lg hover:bg-paper-warm"
-                      aria-label="Admin"
-                      title="Admin panel"
-                    >
-                      <Settings size={18} />
-                    </Link>
-                  )}
+                  <Link
+                    to="/admin"
+                    className="p-2 text-muted hover:text-ink transition-colors rounded-lg hover:bg-paper-warm"
+                    aria-label="Admin"
+                    title="Admin panel"
+                  >
+                    <Settings size={18} />
+                  </Link>
                   <button
                     onClick={() => void handleLogout()}
                     disabled={isLoggingOut}
@@ -451,16 +449,14 @@ export default function Header() {
                   <PenLine size={14} />
                   <span>Write</span>
                 </Link>
-                {user.is_admin && (
-                  <Link
-                    to="/admin"
-                    onClick={closeMobileMenu}
-                    className="p-2 text-muted hover:text-ink transition-colors rounded-lg hover:bg-paper-warm"
-                    aria-label="Admin"
-                  >
-                    <Settings size={18} />
-                  </Link>
-                )}
+                <Link
+                  to="/admin"
+                  onClick={closeMobileMenu}
+                  className="p-2 text-muted hover:text-ink transition-colors rounded-lg hover:bg-paper-warm"
+                  aria-label="Admin"
+                >
+                  <Settings size={18} />
+                </Link>
                 <button
                   onClick={() => { closeMobileMenu(); void handleLogout() }}
                   disabled={isLoggingOut}

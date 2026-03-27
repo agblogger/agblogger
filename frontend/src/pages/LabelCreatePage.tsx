@@ -7,7 +7,7 @@ import { useNavigate } from 'react-router-dom'
 import { Tag } from 'lucide-react'
 
 import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
-import { useRequireAuth } from '@/hooks/useRequireAuth'
+import { useRequireAdmin } from '@/hooks/useRequireAdmin'
 import { createLabel } from '@/api/labels'
 import { HTTPError } from '@/api/client'
 import { useLabels } from '@/hooks/useLabels'
@@ -18,7 +18,7 @@ const LABEL_ID_REGEX = /^[a-z0-9][a-z0-9-]*$/
 
 export default function LabelCreatePage() {
   const navigate = useNavigate()
-  const { isReady } = useRequireAuth({ requireAdmin: true })
+  const { isReady } = useRequireAdmin()
 
   const { data: allLabels = [], error: labelsErr, isLoading } = useLabels()
   const labelsLoadError = labelsErr

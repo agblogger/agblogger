@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Literal
 from pydantic import BaseModel, Field, field_validator
 
 if TYPE_CHECKING:
-    from backend.models.user import User
+    from backend.models.user import AdminUser
 
 _USERNAME_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]*$")
 
@@ -97,15 +97,13 @@ class UserResponse(BaseModel):
     username: str
     email: str
     display_name: str | None = None
-    is_admin: bool = False
 
     @classmethod
-    def from_user(cls, user: User) -> UserResponse:
-        """Build from a User ORM model."""
+    def from_user(cls, user: AdminUser) -> UserResponse:
+        """Build from an AdminUser ORM model."""
         return cls(
             id=user.id,
             username=user.username,
             email=user.email,
             display_name=user.display_name,
-            is_admin=user.is_admin,
         )

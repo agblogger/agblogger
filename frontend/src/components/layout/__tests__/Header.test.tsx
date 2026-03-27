@@ -128,7 +128,7 @@ describe('Header', () => {
   })
 
   it('shows write and logout when authenticated', () => {
-    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null, is_admin: true }
+    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null }
     renderHeader()
     expect(screen.getAllByText('Write').length).toBeGreaterThanOrEqual(1)
     expect(screen.getAllByLabelText('Logout').length).toBeGreaterThanOrEqual(1)
@@ -136,7 +136,7 @@ describe('Header', () => {
   })
 
   it('disables logout button while logout is in progress', () => {
-    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null, is_admin: true }
+    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null }
     mockIsLoggingOut = true
     renderHeader()
     const logoutButtons = screen.getAllByLabelText('Logout')
@@ -144,7 +144,7 @@ describe('Header', () => {
   })
 
   it('logout button has tooltip', () => {
-    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null, is_admin: true }
+    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null }
     renderHeader()
     const logoutButtons = screen.getAllByLabelText('Logout')
     // Desktop logout button has tooltip
@@ -157,7 +157,7 @@ describe('Header', () => {
   })
 
   it('toggles mobile menu on hamburger click', async () => {
-    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null, is_admin: true }
+    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null }
     renderHeader()
 
     const menuButton = screen.getByLabelText('Menu')
@@ -184,19 +184,13 @@ describe('Header', () => {
   })
 
   it('shows admin link for admin user', () => {
-    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null, is_admin: true }
+    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null }
     renderHeader()
     expect(screen.getAllByLabelText('Admin').length).toBeGreaterThanOrEqual(1)
   })
 
-  it('hides admin link for non-admin user', () => {
-    mockUser = { id: 1, username: 'user', email: 'u@b.com', display_name: null, is_admin: false }
-    renderHeader()
-    expect(screen.queryByLabelText('Admin')).not.toBeInTheDocument()
-  })
-
   it('calls logout on logout button click', async () => {
-    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null, is_admin: true }
+    mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null }
     mockLogout.mockResolvedValue(undefined)
     renderHeader()
 

@@ -90,7 +90,7 @@ function renderSettings(labelId = 'swe') {
 describe('LabelSettingsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockUser = { id: 1, username: 'admin', email: 'a@t.com', display_name: null, is_admin: true }
+    mockUser = { id: 1, username: 'admin', email: 'a@t.com', display_name: null }
     mockIsInitialized = true
   })
 
@@ -99,14 +99,6 @@ describe('LabelSettingsPage', () => {
     mockFetchLabels.mockReturnValue(new Promise(() => {}))
     renderSettings()
     expect(mockNavigate).toHaveBeenCalledWith('/login', { replace: true })
-    expect(mockFetchLabel).not.toHaveBeenCalled()
-  })
-
-  it('redirects non-admin users to home', () => {
-    mockUser = { id: 2, username: 'author', email: 'author@t.com', display_name: null, is_admin: false }
-    mockFetchLabels.mockReturnValue(new Promise(() => {}))
-    renderSettings()
-    expect(mockNavigate).toHaveBeenCalledWith('/', { replace: true })
     expect(mockFetchLabel).not.toHaveBeenCalled()
   })
 

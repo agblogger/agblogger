@@ -29,7 +29,7 @@ if TYPE_CHECKING:
     from fastapi import Request
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-    from backend.models.user import User
+    from backend.models.user import AdminUser
 
 logger = logging.getLogger(__name__)
 
@@ -188,7 +188,7 @@ async def record_hit(
     path: str,
     client_ip: str,
     user_agent: str,
-    user: User | None,
+    user: AdminUser | None,
 ) -> None:
     """Record a page view hit to GoatCounter.
 
@@ -203,7 +203,7 @@ async def record_hit(
     - The GoatCounter token is not yet available.
     """
     # Skip admin users — admin browsing should not inflate counts.
-    if user is not None and user.is_admin:
+    if user is not None:
         return
 
     if _crawler_detect.is_crawler(user_agent):
@@ -288,7 +288,7 @@ def fire_background_hit(
     request: Request,
     session_factory: async_sessionmaker[AsyncSession],
     path: str,
-    user: User | None,
+    user: AdminUser | None,
 ) -> None:
     """Schedule a fire-and-forget analytics hit recording task.
 

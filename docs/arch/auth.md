@@ -10,19 +10,18 @@ Passwords are stored as bcrypt hashes. Browser sessions use short-lived JWT acce
 
 ## Authorization Model
 
-Authorization is enforced at the API boundary with a small role model:
+Authorization is enforced at the API boundary with a simple two-level model:
 
 - public readers can access published content
-- authenticated users can perform account-scoped actions
-- admins can mutate shared site content and administrative settings
+- the authenticated admin can perform all actions (content mutation, site administration, cross-posting)
 
-Some content also carries an ownership boundary. Draft content is not public, and user-scoped features such as connected social accounts remain isolated to the owning user even though broader editorial workflows stay admin-led.
+There is only one user: the admin. Every authenticated user is the admin — there is no separate role or multi-user model. Draft content is only visible to the authenticated admin.
 
-Frontend caches for reads whose response depends on the current browser user, including draft-only content and user-scoped account data, are scoped to the current browser user identity so session changes force revalidation instead of reusing stale authorized responses.
+Frontend caches for reads whose response depends on admin authentication, including draft-only content and admin-scoped account data, are scoped to the current browser session, so session changes force revalidation instead of reusing stale authorized responses.
 
 ## Registration Posture
 
-The system is a closed, single-admin deployment. User accounts are managed by the admin. Rate limiting protects authentication endpoints from abuse.
+The system is a closed, single-admin deployment. The admin account is bootstrapped from environment configuration. There is no registration flow. Rate limiting protects authentication endpoints from abuse.
 
 ## Bootstrap
 

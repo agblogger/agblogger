@@ -81,7 +81,6 @@ describe('usePost', () => {
         username: 'author',
         email: 'author@example.com',
         display_name: 'Author',
-        is_admin: false,
       },
     })
     mockFetchPost.mockResolvedValueOnce({

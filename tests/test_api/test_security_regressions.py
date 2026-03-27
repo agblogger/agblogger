@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from backend.config import Settings
-from tests.conftest import create_test_client, create_test_user
+from tests.conftest import create_test_client
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
@@ -101,18 +101,6 @@ async def _login(client: AsyncClient, username: str, password: str) -> str:
 
 class TestSyncAuthorizationBoundary:
     @pytest.mark.asyncio
-    async def test_non_admin_cannot_initialize_sync(self, client: AsyncClient) -> None:
-        await create_test_user(client, "writer", "writer@test.com", "writer-password")
-        token = await _login(client, "writer", "writer-password")
-
-        resp = await client.post(
-            "/api/sync/status",
-            json={"client_manifest": []},
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        assert resp.status_code == 403
-
-    @pytest.mark.asyncio
     async def test_admin_cannot_download_hidden_sync_secret_file(self, client: AsyncClient) -> None:
         token = await _login(client, "admin", "admin123")
 
@@ -169,21 +157,6 @@ class TestRenderedHtmlSanitization:
         assert 'href="javascript:' not in html
 
 
-class TestRenderPreviewAuthorization:
-    @pytest.mark.asyncio
-    async def test_render_preview_rejects_non_admin_users(self, client: AsyncClient) -> None:
-        await create_test_user(client, "writer", "writer@test.com", "writer-password")
-        token = await _login(client, "writer", "writer-password")
-
-        resp = await client.post(
-            "/api/render/preview",
-            json={"markdown": "# Private preview"},
-            headers={"Authorization": f"Bearer {token}"},
-        )
-
-        assert resp.status_code == 403
-
-
 class TestDraftVisibility:
     @pytest.mark.asyncio
     async def test_draft_post_not_publicly_readable(self, client: AsyncClient) -> None:
@@ -213,45 +186,12 @@ class TestDraftVisibility:
         assert auth_resp.json()["is_draft"] is True
 
 
-class TestCrosspostHistoryIsolation:
-    @pytest.mark.asyncio
-    async def test_crosspost_history_isolated_per_user(self, client: AsyncClient) -> None:
-        admin_token = await _login(client, "admin", "admin123")
-        trigger_resp = await client.post(
-            "/api/crosspost/post",
-            json={"post_path": "posts/hello/index.md", "platforms": ["bluesky"]},
-            headers={"Authorization": f"Bearer {admin_token}"},
-        )
-        assert trigger_resp.status_code == 200
-        assert trigger_resp.json()[0]["status"] == "failed"
-
-        client.cookies.clear()
-        await create_test_user(client, "reader", "reader@test.com", "reader-password")
-        reader_token = await _login(client, "reader", "reader-password")
-        history_resp = await client.get(
-            "/api/crosspost/history/posts/hello/index.md",
-            headers={"Authorization": f"Bearer {reader_token}"},
-        )
-        assert history_resp.status_code == 200
-        assert history_resp.json()["items"] == []
-
-
 class TestDraftContentVisibility:
     @pytest.mark.asyncio
     async def test_draft_markdown_returns_404_for_unauthenticated(
         self, client: AsyncClient
     ) -> None:
         resp = await client.get("/api/content/posts/admin-draft/index.md")
-        assert resp.status_code == 404
-
-    @pytest.mark.asyncio
-    async def test_draft_markdown_returns_404_for_wrong_user(self, client: AsyncClient) -> None:
-        await create_test_user(client, "reader2", "reader2@test.com", "reader2-password")
-        reader_token = await _login(client, "reader2", "reader2-password")
-        resp = await client.get(
-            "/api/content/posts/admin-draft/index.md",
-            headers={"Authorization": f"Bearer {reader_token}"},
-        )
         assert resp.status_code == 404
 
     @pytest.mark.asyncio
@@ -263,127 +203,6 @@ class TestDraftContentVisibility:
         )
         assert resp.status_code == 200
         assert b"Top secret draft" in resp.content
-
-
-class TestCrosspostDraftIsolation:
-    @pytest.mark.asyncio
-    async def test_non_author_cannot_crosspost_another_users_draft(
-        self, client: AsyncClient
-    ) -> None:
-        await create_test_user(client, "reader3", "reader3@test.com", "reader3-password")
-        reader_token = await _login(client, "reader3", "reader3-password")
-        resp = await client.post(
-            "/api/crosspost/post",
-            json={"post_path": "posts/admin-draft/index.md", "platforms": ["bluesky"]},
-            headers={"Authorization": f"Bearer {reader_token}"},
-        )
-        assert resp.status_code == 404
-
-
-class TestDraftDisplayNameImpersonation:
-    @pytest.mark.asyncio
-    async def test_matching_authors_display_name_does_not_grant_draft_access(
-        self, client: AsyncClient
-    ) -> None:
-        await create_test_user(client, "imposter", "imposter@test.com", "imposter-password")
-
-        imposter_token = await _login(client, "imposter", "imposter-password")
-        headers = {"Authorization": f"Bearer {imposter_token}"}
-
-        listing_resp = await client.get("/api/posts", headers=headers)
-        assert listing_resp.status_code == 200
-        titles = [post["title"] for post in listing_resp.json()["posts"]]
-        assert "Admin Draft" not in titles
-
-        detail_resp = await client.get("/api/posts/posts/admin-draft/index.md", headers=headers)
-        assert detail_resp.status_code == 404
-
-        content_resp = await client.get("/api/content/posts/admin-draft/index.md", headers=headers)
-        assert content_resp.status_code == 404
-
-        crosspost_resp = await client.post(
-            "/api/crosspost/post",
-            json={"post_path": "posts/admin-draft/index.md", "platforms": ["bluesky"]},
-            headers=headers,
-        )
-        assert crosspost_resp.status_code == 404
-
-
-class TestPostMutationAuthorization:
-    @pytest.mark.asyncio
-    async def test_non_admin_cannot_create_update_delete_posts(self, client: AsyncClient) -> None:
-        await create_test_user(client, "writer2", "writer2@test.com", "writer2-password")
-        token = await _login(client, "writer2", "writer2-password")
-        headers = {"Authorization": f"Bearer {token}"}
-
-        create_resp = await client.post(
-            "/api/posts",
-            json={
-                "title": "Non-admin Create",
-                "body": "nope",
-                "labels": [],
-                "is_draft": False,
-            },
-            headers=headers,
-        )
-        assert create_resp.status_code == 403
-
-        update_resp = await client.put(
-            "/api/posts/posts/hello/index.md",
-            json={
-                "title": "Updated",
-                "body": "changed",
-                "labels": [],
-                "is_draft": False,
-            },
-            headers=headers,
-        )
-        assert update_resp.status_code == 403
-
-        delete_resp = await client.delete("/api/posts/posts/hello/index.md", headers=headers)
-        assert delete_resp.status_code == 403
-
-    @pytest.mark.asyncio
-    async def test_non_admin_cannot_mutate_labels(self, client: AsyncClient) -> None:
-        await create_test_user(client, "writer4", "writer4@test.com", "writer4-password")
-        token_resp = await client.post(
-            "/api/auth/token-login",
-            json={"username": "writer4", "password": "writer4-password"},
-        )
-        token = token_resp.json()["access_token"]
-        headers = {"Authorization": f"Bearer {token}"}
-
-        create_resp = await client.post(
-            "/api/labels",
-            json={"id": "locked-down", "names": ["Locked Down"]},
-            headers=headers,
-        )
-        assert create_resp.status_code == 403
-
-    @pytest.mark.asyncio
-    async def test_non_admin_cannot_upload_posts_or_assets_or_edit_payload(
-        self, client: AsyncClient
-    ) -> None:
-        await create_test_user(client, "writer3", "writer3@test.com", "writer3-password")
-        token = await _login(client, "writer3", "writer3-password")
-        headers = {"Authorization": f"Bearer {token}"}
-
-        upload_resp = await client.post(
-            "/api/posts/upload",
-            files={"files": ("test.md", b"---\ntitle: Upload\n---\nbody", "text/markdown")},
-            headers=headers,
-        )
-        assert upload_resp.status_code == 403
-
-        assets_resp = await client.post(
-            "/api/posts/posts/hello/index.md/assets",
-            files={"files": ("a.txt", b"x", "text/plain")},
-            headers=headers,
-        )
-        assert assets_resp.status_code == 403
-
-        edit_resp = await client.get("/api/posts/posts/hello/index.md/edit", headers=headers)
-        assert edit_resp.status_code == 403
 
 
 class TestAdminPasswordPolicy:

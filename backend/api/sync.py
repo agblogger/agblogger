@@ -24,7 +24,7 @@ from backend.api.deps import (
     require_admin,
 )
 from backend.filesystem.content_manager import ContentManager
-from backend.models.user import User
+from backend.models.user import AdminUser
 from backend.services.git_service import GitService
 from backend.services.sync_service import (
     FileEntry,
@@ -127,7 +127,7 @@ async def sync_status(
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
     git_service: Annotated[GitService, Depends(get_git_service)],
     content_write_lock: Annotated[AsyncWriteLock, Depends(get_content_write_lock)],
-    user: Annotated[User, Depends(require_admin)],
+    user: Annotated[AdminUser, Depends(require_admin)],
 ) -> SyncStatusResponse:
     """Exchange manifests and compute sync plan."""
     client_manifest: dict[str, FileEntry] = {}
@@ -178,7 +178,7 @@ async def sync_status(
 async def sync_download(
     file_path: str,
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
-    user: Annotated[User, Depends(require_admin)],
+    user: Annotated[AdminUser, Depends(require_admin)],
 ) -> FileResponse:
     """Download a file from server to client."""
     full_path = _resolve_safe_path(content_manager.content_dir, file_path)
@@ -194,7 +194,7 @@ async def sync_commit(
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
     git_service: Annotated[GitService, Depends(get_git_service)],
     content_write_lock: Annotated[AsyncWriteLock, Depends(get_content_write_lock)],
-    user: Annotated[User, Depends(require_admin)],
+    user: Annotated[AdminUser, Depends(require_admin)],
     session_factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
     metadata: Annotated[str, Form()] = "{}",
     files: list[UploadFile] | None = File(default=None),
@@ -225,7 +225,7 @@ async def _sync_commit_inner(
     session_factory: async_sessionmaker[AsyncSession],
     content_manager: ContentManager,
     git_service: GitService,
-    user: User,
+    user: AdminUser,
 ) -> SyncCommitResponse:
     """Inner sync commit logic, called under the shared content write lock."""
     content_dir = content_manager.content_dir

@@ -12,10 +12,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from backend.models.base import DurableBase
-from backend.models.user import RefreshToken, User
+from backend.models.user import AdminRefreshToken, AdminUser
 from backend.services.auth_service import (
     ALGORITHM,
-    authenticate_user,
+    authenticate_admin,
     create_access_token,
     create_refresh_token_value,
     create_tokens,
@@ -53,15 +53,13 @@ async def _create_user(
     session: AsyncSession,
     username: str = "testuser",
     password: str = _DEFAULT_PASSWORD,
-    is_admin: bool = False,
-) -> User:
+) -> AdminUser:
     now = format_iso(now_utc())
-    user = User(
+    user = AdminUser(
         username=username,
         email=f"{username}@test.local",
         password_hash=hash_password(password),
         display_name=username,
-        is_admin=is_admin,
         created_at=now,
         updated_at=now,
     )
@@ -101,7 +99,7 @@ class TestVerifyPasswordSafety:
 class TestAccessTokens:
     def test_create_access_token_contains_claims(self, test_settings: Settings) -> None:
         token = create_access_token(
-            {"sub": "42", "username": "alice", "is_admin": True},
+            {"sub": "42", "username": "alice"},
             test_settings.secret_key,
         )
         payload = jwt.decode(
@@ -111,14 +109,13 @@ class TestAccessTokens:
         )
         assert payload["sub"] == "42"
         assert payload["username"] == "alice"
-        assert payload["is_admin"] is True
         assert payload["type"] == "access"
 
     def test_create_access_token_is_not_signed_with_raw_secret(
         self, test_settings: Settings
     ) -> None:
         token = create_access_token(
-            {"sub": "42", "username": "alice", "is_admin": True},
+            {"sub": "42", "username": "alice"},
             test_settings.secret_key,
         )
         with pytest.raises(jwt.InvalidTokenError):
@@ -126,7 +123,7 @@ class TestAccessTokens:
 
     def test_decode_access_token_valid(self, test_settings: Settings) -> None:
         token = create_access_token(
-            {"sub": "1", "username": "bob", "is_admin": False},
+            {"sub": "1", "username": "bob"},
             test_settings.secret_key,
         )
         payload = decode_access_token(token, test_settings.secret_key)
@@ -136,14 +133,14 @@ class TestAccessTokens:
 
     def test_decode_access_token_rejects_expired(self, test_settings: Settings) -> None:
         token = create_access_token(
-            {"sub": "1", "username": "bob", "is_admin": False},
+            {"sub": "1", "username": "bob"},
             test_settings.secret_key,
             expires_minutes=-1,
         )
         assert decode_access_token(token, test_settings.secret_key) is None
 
     def test_decode_access_token_rejects_wrong_type(self, test_settings: Settings) -> None:
-        payload = {"sub": "1", "username": "bob", "is_admin": False, "type": "refresh"}
+        payload = {"sub": "1", "username": "bob", "type": "refresh"}
         token = jwt.encode(payload, test_settings.secret_key, algorithm=ALGORITHM)
         assert decode_access_token(token, test_settings.secret_key) is None
 
@@ -156,17 +153,17 @@ class TestRefreshTokenValue:
 
 
 class TestAuthenticateUser:
-    async def test_authenticate_user_valid(self, session: AsyncSession) -> None:
+    async def test_authenticate_admin_valid(self, session: AsyncSession) -> None:
         await _create_user(session, username="valid", password="pass123")
-        user = await authenticate_user(session, "valid", "pass123")
+        user = await authenticate_admin(session, "valid", "pass123")
         assert user is not None
         assert user.username == "valid"
 
-    async def test_authenticate_user_wrong_password(self, session: AsyncSession) -> None:
+    async def test_authenticate_admin_wrong_password(self, session: AsyncSession) -> None:
         await _create_user(session, username="locked", password="realpass")
-        assert await authenticate_user(session, "locked", "wrongpass") is None
+        assert await authenticate_admin(session, "locked", "wrongpass") is None
 
-    async def test_authenticate_user_missing_user_still_checks_password(
+    async def test_authenticate_admin_missing_user_still_checks_password(
         self, session: AsyncSession, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         calls: list[tuple[str, str]] = []
@@ -180,7 +177,7 @@ class TestAuthenticateUser:
             fake_verify_password,
         )
 
-        assert await authenticate_user(session, "missing-user", "guess123") is None
+        assert await authenticate_admin(session, "missing-user", "guess123") is None
         assert len(calls) == 1
         assert calls[0][0] == "guess123"
 
@@ -197,7 +194,7 @@ class TestTokenLifecycle:
 
         token_hash = hash_token(refresh)
         result = await session.execute(
-            select(RefreshToken).where(RefreshToken.token_hash == token_hash)
+            select(AdminRefreshToken).where(AdminRefreshToken.token_hash == token_hash)
         )
         stored = result.scalar_one_or_none()
         assert stored is not None
@@ -219,13 +216,13 @@ class TestTokenLifecycle:
 
         old_hash = hash_token(original_refresh)
         result = await session.execute(
-            select(RefreshToken).where(RefreshToken.token_hash == old_hash)
+            select(AdminRefreshToken).where(AdminRefreshToken.token_hash == old_hash)
         )
         assert result.scalar_one_or_none() is None
 
         new_hash = hash_token(new_refresh)
         result = await session.execute(
-            select(RefreshToken).where(RefreshToken.token_hash == new_hash)
+            select(AdminRefreshToken).where(AdminRefreshToken.token_hash == new_hash)
         )
         assert result.scalar_one_or_none() is not None
 
@@ -254,7 +251,7 @@ class TestTokenLifecycle:
         # Old token must be gone regardless of concurrency ordering.
         old_hash = hash_token(original_refresh)
         result = await session.execute(
-            select(RefreshToken).where(RefreshToken.token_hash == old_hash)
+            select(AdminRefreshToken).where(AdminRefreshToken.token_hash == old_hash)
         )
         assert result.scalar_one_or_none() is None
 
@@ -295,7 +292,7 @@ class TestEnsureAdminUser:
         test_settings.admin_display_name = "Jane Doe"
         await ensure_admin_user(session, test_settings)
 
-        stmt = select(User).where(User.username == test_settings.admin_username)
+        stmt = select(AdminUser).where(AdminUser.username == test_settings.admin_username)
         result = await session.execute(stmt)
         admin = result.scalar_one()
         assert admin.display_name == "Jane Doe"
@@ -308,7 +305,7 @@ class TestEnsureAdminUser:
         test_settings.admin_display_name = ""
         await ensure_admin_user(session, test_settings)
 
-        stmt = select(User).where(User.username == test_settings.admin_username)
+        stmt = select(AdminUser).where(AdminUser.username == test_settings.admin_username)
         result = await session.execute(stmt)
         admin = result.scalar_one()
         assert admin.display_name == test_settings.admin_username
@@ -321,7 +318,7 @@ class TestEnsureAdminUser:
         test_settings.admin_display_name = "   "
         await ensure_admin_user(session, test_settings)
 
-        stmt = select(User).where(User.username == test_settings.admin_username)
+        stmt = select(AdminUser).where(AdminUser.username == test_settings.admin_username)
         result = await session.execute(stmt)
         admin = result.scalar_one()
         assert admin.display_name == test_settings.admin_username
@@ -338,7 +335,7 @@ class TestEnsureAdminUser:
         test_settings.admin_password = "new_password_123"
         await ensure_admin_user(session, test_settings)
 
-        stmt = select(User).where(User.username == test_settings.admin_username)
+        stmt = select(AdminUser).where(AdminUser.username == test_settings.admin_username)
         result = await session.execute(stmt)
         admin = result.scalar_one()
         assert verify_password("new_password_123", admin.password_hash)
@@ -351,7 +348,7 @@ class TestEnsureAdminUser:
         """Re-running bootstrap with same password should not rehash."""
         await ensure_admin_user(session, test_settings)
 
-        stmt = select(User).where(User.username == test_settings.admin_username)
+        stmt = select(AdminUser).where(AdminUser.username == test_settings.admin_username)
         result = await session.execute(stmt)
         admin = result.scalar_one()
         original_hash = admin.password_hash
@@ -371,7 +368,7 @@ class TestEnsureAdminUser:
         test_settings.admin_display_name = "New Name"
         await ensure_admin_user(session, test_settings)
 
-        stmt = select(User).where(User.username == test_settings.admin_username)
+        stmt = select(AdminUser).where(AdminUser.username == test_settings.admin_username)
         result = await session.execute(stmt)
         admin = result.scalar_one()
         assert admin.display_name == "New Name"
@@ -411,7 +408,7 @@ class TestEnsureAdminUser:
         test_settings.admin_password = "first_password"
         await ensure_admin_user(session, test_settings)
 
-        stmt = select(User).where(User.username == test_settings.admin_username)
+        stmt = select(AdminUser).where(AdminUser.username == test_settings.admin_username)
         result = await session.execute(stmt)
         admin = result.scalar_one()
         created_at = admin.created_at
@@ -429,7 +426,7 @@ class TestEnsureAdminUser:
         """updated_at must not change when ensure_admin_user runs with nothing to sync."""
         await ensure_admin_user(session, test_settings)
 
-        stmt = select(User).where(User.username == test_settings.admin_username)
+        stmt = select(AdminUser).where(AdminUser.username == test_settings.admin_username)
         result = await session.execute(stmt)
         admin = result.scalar_one()
         original_updated_at = admin.updated_at

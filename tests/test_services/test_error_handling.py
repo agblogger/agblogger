@@ -610,7 +610,6 @@ class TestCrosspostRaisesPostNotFoundError:
         mock_session = AsyncMock()
         mock_user = MagicMock()
         mock_user.id = 1
-        mock_user.is_admin = True
         mock_user.display_name = "Admin"
         mock_user.username = "admin"
 
@@ -629,7 +628,7 @@ class TestCrosspostRaisesPostNotFoundError:
     async def test_crosspost_raises_post_not_found_for_draft_by_non_author(
         self, tmp_path: Path
     ) -> None:
-        """crosspost() should raise PostNotFoundError for draft posts not visible to non-admin."""
+        """crosspost() should raise PostNotFoundError for draft posts not visible to non-author."""
         from backend.exceptions import PostNotFoundError
         from backend.services.crosspost_service import crosspost
 
@@ -648,7 +647,6 @@ class TestCrosspostRaisesPostNotFoundError:
         mock_session = AsyncMock()
         mock_user = MagicMock()
         mock_user.id = 2
-        mock_user.is_admin = False
         mock_user.display_name = "NotTheAuthor"
         mock_user.username = "notauthor"
 
@@ -691,19 +689,25 @@ class TestCrosspostErrorMessageLeakage:
         mock_account.account_name = "test"
         mock_account.updated_at = None
 
+        mock_cached_post = MagicMock()
+        mock_cached_post.is_draft = False
+        mock_cached_post.author = "admin"
+
+        mock_post_result = MagicMock()
+        mock_post_result.scalar_one_or_none.return_value = mock_cached_post
+
         mock_scalars = MagicMock()
         mock_scalars.all.return_value = [mock_account]
-        mock_execute_result = MagicMock()
-        mock_execute_result.scalars.return_value = mock_scalars
+        mock_account_result = MagicMock()
+        mock_account_result.scalars.return_value = mock_scalars
 
         mock_session = AsyncMock()
-        mock_session.execute.return_value = mock_execute_result
+        mock_session.execute.side_effect = [mock_post_result, mock_account_result]
         # session.add() is synchronous in SQLAlchemy
         mock_session.add = MagicMock()
 
         mock_user = MagicMock()
         mock_user.id = 1
-        mock_user.is_admin = True
         mock_user.display_name = "Admin"
         mock_user.username = "admin"
 

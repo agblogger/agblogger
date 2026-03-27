@@ -65,7 +65,7 @@ export default function LabelsPage() {
             />
           </div>
           {viewToggle}
-          {user?.is_admin === true && (
+          {!!user && (
             <Link
               to="/labels/new"
               className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium
@@ -165,7 +165,7 @@ function LabelListView({ search }: { search: string }) {
             )}
           </div>
 
-          {user?.is_admin === true && (
+          {!!user && (
             <Link
               to={`/labels/${label.id}/settings`}
               className="relative z-10 pointer-events-auto mt-3 inline-flex items-center

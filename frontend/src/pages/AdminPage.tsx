@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { Settings } from 'lucide-react'
 
-import { useRequireAuth } from '@/hooks/useRequireAuth'
+import { useRequireAdmin } from '@/hooks/useRequireAdmin'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import BackLink from '@/components/BackLink'
 import { HTTPError } from '@/api/client'
@@ -31,7 +31,7 @@ const EMPTY_SITE_SETTINGS: AdminSiteSettings = { title: '', description: '', tim
 
 export default function AdminPage() {
   const location = useLocation()
-  const { isReady } = useRequireAuth({ requireAdmin: true })
+  const { isReady } = useRequireAdmin()
   const tabParam = new URLSearchParams(location.search).get('tab')
   const initialTab: AdminTabKey =
     tabParam !== null && VALID_TAB_KEYS.has(tabParam as AdminTabKey)

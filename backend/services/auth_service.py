@@ -13,7 +13,7 @@ import jwt
 from jwt import InvalidTokenError
 from sqlalchemy import delete, select
 
-from backend.models.user import RefreshToken, User
+from backend.models.user import AdminRefreshToken, AdminUser
 from backend.services.datetime_service import format_iso, now_utc
 from backend.services.key_derivation import derive_access_token_key
 
@@ -74,9 +74,11 @@ def decode_access_token(token: str, secret_key: str) -> dict[str, Any] | None:
         return None
 
 
-async def authenticate_user(session: AsyncSession, username: str, password: str) -> User | None:
+async def authenticate_admin(
+    session: AsyncSession, username: str, password: str
+) -> AdminUser | None:
     """Authenticate a user by username and password."""
-    stmt = select(User).where(User.username == username)
+    stmt = select(AdminUser).where(AdminUser.username == username)
     result = await session.execute(stmt)
     user = result.scalar_one_or_none()
     if user is None:
@@ -88,10 +90,12 @@ async def authenticate_user(session: AsyncSession, username: str, password: str)
     return user
 
 
-async def create_tokens(session: AsyncSession, user: User, settings: Settings) -> tuple[str, str]:
+async def create_tokens(
+    session: AsyncSession, user: AdminUser, settings: Settings
+) -> tuple[str, str]:
     """Create access and refresh token pair for a user."""
     access_token = create_access_token(
-        {"sub": str(user.id), "username": user.username, "is_admin": user.is_admin},
+        {"sub": str(user.id), "username": user.username},
         settings.secret_key,
         settings.access_token_expire_minutes,
     )
@@ -101,7 +105,7 @@ async def create_tokens(session: AsyncSession, user: User, settings: Settings) -
     now = now_utc()
     expires = now + timedelta(days=settings.refresh_token_expire_days)
 
-    refresh_token = RefreshToken(
+    refresh_token = AdminRefreshToken(
         user_id=user.id,
         token_hash=token_hash,
         expires_at=format_iso(expires),
@@ -121,7 +125,7 @@ async def refresh_tokens(
     Implements token rotation: old refresh token is revoked.
     """
     token_h = hash_token(refresh_token_value)
-    stmt = select(RefreshToken).where(RefreshToken.token_hash == token_h)
+    stmt = select(AdminRefreshToken).where(AdminRefreshToken.token_hash == token_h)
     result = await session.execute(stmt)
     stored_token = result.scalar_one_or_none()
 
@@ -130,19 +134,23 @@ async def refresh_tokens(
 
     expires = _parse_iso_datetime(stored_token.expires_at)
     if expires is None:
-        await session.execute(delete(RefreshToken).where(RefreshToken.id == stored_token.id))
+        await session.execute(
+            delete(AdminRefreshToken).where(AdminRefreshToken.id == stored_token.id)
+        )
         await session.commit()
         return None
     if expires < now_utc():
-        await session.execute(delete(RefreshToken).where(RefreshToken.id == stored_token.id))
+        await session.execute(
+            delete(AdminRefreshToken).where(AdminRefreshToken.id == stored_token.id)
+        )
         await session.commit()
         return None
 
     # Single-use guarantee under concurrency: only one caller can consume the token.
     delete_result = await session.execute(
-        delete(RefreshToken).where(
-            RefreshToken.id == stored_token.id,
-            RefreshToken.token_hash == token_h,
+        delete(AdminRefreshToken).where(
+            AdminRefreshToken.id == stored_token.id,
+            AdminRefreshToken.token_hash == token_h,
         )
     )
     if (getattr(delete_result, "rowcount", 0) or 0) != 1:
@@ -152,7 +160,7 @@ async def refresh_tokens(
         )
         return None
 
-    user = await session.get(User, stored_token.user_id)
+    user = await session.get(AdminUser, stored_token.user_id)
     if user is None:
         await session.commit()
         return None
@@ -163,7 +171,7 @@ async def refresh_tokens(
 async def revoke_refresh_token(session: AsyncSession, refresh_token_value: str) -> bool:
     """Revoke a refresh token. Returns True if a token was revoked."""
     token_h = hash_token(refresh_token_value)
-    stmt = select(RefreshToken).where(RefreshToken.token_hash == token_h)
+    stmt = select(AdminRefreshToken).where(AdminRefreshToken.token_hash == token_h)
     result = await session.execute(stmt)
     token = result.scalar_one_or_none()
     if token is None:
@@ -179,7 +187,7 @@ async def revoke_user_credentials(session: AsyncSession, user_id: int) -> None:
 
     Caller must commit the session after calling this function.
     """
-    await session.execute(delete(RefreshToken).where(RefreshToken.user_id == user_id))
+    await session.execute(delete(AdminRefreshToken).where(AdminRefreshToken.user_id == user_id))
 
 
 def _parse_iso_datetime(value: str) -> datetime | None:
@@ -203,18 +211,17 @@ async def ensure_admin_user(session: AsyncSession, settings: Settings) -> None:
     ``ADMIN_USERNAME`` is changed, a new admin account is created alongside
     the old one rather than the existing account being renamed.
     """
-    stmt = select(User).where(User.username == settings.admin_username)
+    stmt = select(AdminUser).where(AdminUser.username == settings.admin_username)
     result = await session.execute(stmt)
     existing = result.scalar_one_or_none()
 
     if existing is None:
         now = format_iso(now_utc())
-        admin = User(
+        admin = AdminUser(
             username=settings.admin_username,
             email=f"{settings.admin_username}@localhost",
             password_hash=hash_password(settings.admin_password),
             display_name=settings.admin_display_name.strip() or settings.admin_username,
-            is_admin=True,
             created_at=now,
             updated_at=now,
         )

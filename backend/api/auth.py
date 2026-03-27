@@ -15,15 +15,15 @@ from backend.api.deps import (
     AsyncWriteLock,
     get_content_manager,
     get_content_write_lock,
-    get_current_user,
+    get_current_admin,
     get_session,
     get_session_factory,
     get_settings,
-    require_auth,
+    require_admin,
 )
 from backend.config import Settings
 from backend.filesystem.content_manager import ContentManager
-from backend.models.user import User
+from backend.models.user import AdminUser
 from backend.schemas.auth import (
     CsrfTokenResponse,
     LoginRequest,
@@ -35,7 +35,7 @@ from backend.schemas.auth import (
     UserResponse,
 )
 from backend.services.auth_service import (
-    authenticate_user,
+    authenticate_admin,
     create_access_token,
     create_tokens,
     refresh_tokens,
@@ -170,7 +170,7 @@ async def _authenticate_login_request(
     request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
     settings: Annotated[Settings, Depends(get_settings)],
-) -> User:
+) -> AdminUser:
     """Authenticate a login request with shared rate-limiting."""
     limiter: InMemoryRateLimiter = request.app.state.rate_limiter
     client_key = f"login:{_get_client_ip(request)}:{body.username.lower()}"
@@ -182,7 +182,7 @@ async def _authenticate_login_request(
         "Too many failed login attempts",
     )
 
-    user = await authenticate_user(session, body.username, body.password)
+    user = await authenticate_admin(session, body.username, body.password)
     if user is None:
         _record_failure_and_check(
             limiter,
@@ -230,7 +230,7 @@ async def token_login(
     user = await _authenticate_login_request(body, request, session, settings)
     return TokenResponse(
         access_token=create_access_token(
-            {"sub": str(user.id), "username": user.username, "is_admin": user.is_admin},
+            {"sub": str(user.id), "username": user.username},
             settings.secret_key,
             settings.access_token_expire_minutes,
         )
@@ -319,7 +319,7 @@ async def get_csrf_token(
 
 @router.get("/me", response_model=UserResponse)
 async def me(
-    user: Annotated[User | None, Depends(get_current_user)],
+    user: Annotated[AdminUser | None, Depends(get_current_admin)],
 ) -> UserResponse:
     """Get current user info."""
     if user is None:
@@ -354,7 +354,7 @@ def _update_author_in_posts(
 async def update_profile(
     body: ProfileUpdate,
     session: Annotated[AsyncSession, Depends(get_session)],
-    user: Annotated[User, Depends(require_auth)],
+    user: Annotated[AdminUser, Depends(require_admin)],
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
     content_write_lock: Annotated[AsyncWriteLock, Depends(get_content_write_lock)],
     session_factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
@@ -373,7 +373,8 @@ async def update_profile(
     old_username = user.username
 
     if body.username is not None and body.username != user.username:
-        existing = await session.execute(select(User).where(User.username == body.username))
+        stmt = select(AdminUser).where(AdminUser.username == body.username)
+        existing = await session.execute(stmt)
         if existing.scalar_one_or_none() is not None:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -447,7 +448,7 @@ async def update_profile(
                 try:
                     async with session_factory() as revert_session:
                         result = await revert_session.execute(
-                            select(User).where(User.id == user.id)
+                            select(AdminUser).where(AdminUser.id == user.id)
                         )
                         db_user = result.scalar_one()
                         db_user.username = old_username
