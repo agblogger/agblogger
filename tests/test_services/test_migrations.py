@@ -7,7 +7,24 @@ from typing import TYPE_CHECKING, ClassVar
 from sqlalchemy import inspect, text
 
 if TYPE_CHECKING:
+    from sqlalchemy import Connection
     from sqlalchemy.ext.asyncio import AsyncEngine
+
+
+async def _upgrade_durable_migrations(db_engine: AsyncEngine, revision: str) -> None:
+    """Run durable Alembic migrations to a specific revision."""
+    from alembic import command
+    from alembic.config import Config
+
+    alembic_cfg = Config()
+    alembic_cfg.set_main_option("script_location", "backend/migrations")
+
+    def _do_upgrade(sync_conn: Connection) -> None:
+        alembic_cfg.attributes["connection"] = sync_conn
+        command.upgrade(alembic_cfg, revision)
+
+    async with db_engine.begin() as conn:
+        await conn.run_sync(_do_upgrade)
 
 
 class TestAlembicMigration:
@@ -256,6 +273,105 @@ class TestMigrationForeignKeyTargets:
             f"admin_refresh_tokens.user_id FK points to '{user_id_fks[0][2]}',"
             " expected 'admin_users'"
         )
+
+
+class TestLegacyUserMigration:
+    """Verify migration from the legacy multi-user schema preserves auth boundaries."""
+
+    async def test_upgrade_removes_non_admin_users_and_their_dependent_data(
+        self,
+        db_engine: AsyncEngine,
+    ) -> None:
+        """Upgrading to the single-admin schema must not promote legacy non-admin users."""
+        await _upgrade_durable_migrations(db_engine, "b5d91f3e7a02")
+
+        async with db_engine.begin() as conn:
+            await conn.execute(
+                text(
+                    "INSERT INTO users "
+                    "("
+                    "id, username, email, password_hash, display_name, "
+                    "is_admin, created_at, updated_at"
+                    ") "
+                    "VALUES "
+                    "("
+                    "1, 'admin', 'admin@example.com', 'hash-1', 'Admin', "
+                    "1, '2026-01-01', '2026-01-01'"
+                    "), "
+                    "("
+                    "2, 'member', 'member@example.com', 'hash-2', 'Member', "
+                    "0, '2026-01-01', '2026-01-01'"
+                    ")"
+                )
+            )
+            await conn.execute(
+                text(
+                    "INSERT INTO refresh_tokens "
+                    "(id, user_id, token_hash, expires_at, created_at) "
+                    "VALUES "
+                    "(1, 1, 'admin-token', '2027-01-01', '2026-01-01'), "
+                    "(2, 2, 'member-token', '2027-01-01', '2026-01-01')"
+                )
+            )
+            await conn.execute(
+                text(
+                    "INSERT INTO social_accounts "
+                    "(id, user_id, platform, account_name, credentials, created_at, updated_at) "
+                    "VALUES "
+                    "(1, 2, 'mastodon', 'member@example.social', '{}', '2026-01-01', '2026-01-01')"
+                )
+            )
+            await conn.execute(
+                text(
+                    "INSERT INTO cross_posts "
+                    "("
+                    "id, user_id, post_path, platform, platform_id, "
+                    "status, posted_at, error, created_at"
+                    ") "
+                    "VALUES "
+                    "("
+                    "1, 2, 'posts/member-post', 'mastodon', 'abc123', "
+                    "'posted', NULL, NULL, '2026-01-01'"
+                    ")"
+                )
+            )
+
+        await _upgrade_durable_migrations(db_engine, "head")
+
+        async with db_engine.connect() as conn:
+            admin_users = (
+                (await conn.execute(text("SELECT id, username FROM admin_users ORDER BY id")))
+                .tuples()
+                .all()
+            )
+            admin_refresh_tokens = (
+                (
+                    await conn.execute(
+                        text("SELECT user_id, token_hash FROM admin_refresh_tokens ORDER BY id")
+                    )
+                )
+                .tuples()
+                .all()
+            )
+            social_accounts = (
+                (
+                    await conn.execute(
+                        text("SELECT user_id, account_name FROM social_accounts ORDER BY id")
+                    )
+                )
+                .tuples()
+                .all()
+            )
+            cross_posts = (
+                (await conn.execute(text("SELECT user_id, post_path FROM cross_posts ORDER BY id")))
+                .tuples()
+                .all()
+            )
+
+        assert admin_users == [(1, "admin")]
+        assert admin_refresh_tokens == [(1, "admin-token")]
+        assert social_accounts == []
+        assert cross_posts == []
 
 
 class TestTablePartitionInvariants:

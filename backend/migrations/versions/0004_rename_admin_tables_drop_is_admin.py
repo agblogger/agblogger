@@ -60,6 +60,26 @@ def _cross_posts_table(user_table: str) -> sa.Table:
 
 
 def upgrade() -> None:
+    # Preserve the old authorization boundary by pruning legacy non-admin users
+    # before every remaining row becomes an admin_user. Delete dependent rows
+    # explicitly instead of relying on SQLite cascade behavior during migration.
+    op.execute(
+        sa.text(
+            "DELETE FROM refresh_tokens WHERE user_id IN (SELECT id FROM users WHERE is_admin = 0)"
+        )
+    )
+    op.execute(
+        sa.text(
+            "DELETE FROM social_accounts WHERE user_id IN (SELECT id FROM users WHERE is_admin = 0)"
+        )
+    )
+    op.execute(
+        sa.text(
+            "DELETE FROM cross_posts WHERE user_id IN (SELECT id FROM users WHERE is_admin = 0)"
+        )
+    )
+    op.execute(sa.text("DELETE FROM users WHERE is_admin = 0"))
+
     # Drop the is_admin column first (every authenticated user is the admin).
     with op.batch_alter_table("users") as batch_op:
         batch_op.drop_column("is_admin")
