@@ -321,7 +321,7 @@ async def get_csrf_token(
 async def me(
     user: Annotated[AdminUser | None, Depends(get_current_admin)],
 ) -> UserResponse:
-    """Get current user info."""
+    """Get current admin info."""
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

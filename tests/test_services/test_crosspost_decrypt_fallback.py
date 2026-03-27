@@ -201,6 +201,52 @@ class TestCrosspostTokenRefreshPersistence:
         assert stored["refresh_token"] == "new_rt"
 
 
+class TestCrosspostDraftBlocking:
+    async def test_crosspost_draft_raises_value_error(self, session):
+        """Crossposting a draft post must raise ValueError, not PostNotFoundError."""
+        mock_cm = MagicMock()
+        mock_cm.read_post.return_value = MagicMock(
+            title="Draft Post", content="content", labels=[], is_draft=True
+        )
+        mock_cm.get_plain_excerpt.return_value = "excerpt"
+
+        with pytest.raises(ValueError, match="Cannot cross-post a draft post"):
+            await crosspost(
+                session=session,
+                content_manager=mock_cm,
+                post_path="posts/my-draft/index.md",
+                platforms=["bluesky"],
+                actor=MagicMock(id=1, username="tester", display_name="Tester"),
+                site_url="https://example.com",
+                secret_key=TEST_SECRET_KEY,
+            )
+
+    async def test_crosspost_draft_does_not_raise_post_not_found(self, session):
+        """Crossposting a draft post must NOT raise PostNotFoundError."""
+        from backend.exceptions import PostNotFoundError
+
+        mock_cm = MagicMock()
+        mock_cm.read_post.return_value = MagicMock(
+            title="Draft Post", content="content", labels=[], is_draft=True
+        )
+        mock_cm.get_plain_excerpt.return_value = "excerpt"
+
+        with pytest.raises(Exception) as exc_info:
+            await crosspost(
+                session=session,
+                content_manager=mock_cm,
+                post_path="posts/my-draft/index.md",
+                platforms=["bluesky"],
+                actor=MagicMock(id=1, username="tester", display_name="Tester"),
+                site_url="https://example.com",
+                secret_key=TEST_SECRET_KEY,
+            )
+
+        assert not isinstance(exc_info.value, PostNotFoundError), (
+            "Draft blocking must not raise PostNotFoundError; post exists but is a draft"
+        )
+
+
 class TestDuplicateAccountError:
     async def test_create_duplicate_account_raises_duplicate_error(self, session):
         """Creating an account with the same user/platform/name raises DuplicateAccountError."""

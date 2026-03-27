@@ -68,7 +68,7 @@ class LogoutRequest(BaseModel):
 
 
 class ProfileUpdate(BaseModel):
-    """Request to update the current user's profile."""
+    """Request to update the admin's profile."""
 
     username: str | None = Field(default=None, min_length=3, max_length=50)
     display_name: str | None = Field(default=None, max_length=100)

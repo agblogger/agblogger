@@ -625,11 +625,8 @@ class TestCrosspostRaisesPostNotFoundError:
             )
 
     @pytest.mark.asyncio
-    async def test_crosspost_raises_post_not_found_for_draft_by_non_author(
-        self, tmp_path: Path
-    ) -> None:
-        """crosspost() should raise PostNotFoundError for draft posts not visible to non-author."""
-        from backend.exceptions import PostNotFoundError
+    async def test_crosspost_raises_value_error_for_draft(self, tmp_path: Path) -> None:
+        """crosspost() should raise ValueError for draft posts."""
         from backend.services.crosspost_service import crosspost
 
         cm = ContentManager(content_dir=tmp_path)
@@ -650,7 +647,7 @@ class TestCrosspostRaisesPostNotFoundError:
         mock_user.display_name = "NotTheAuthor"
         mock_user.username = "notauthor"
 
-        with pytest.raises(PostNotFoundError):
+        with pytest.raises(ValueError, match="Cannot cross-post a draft post"):
             await crosspost(
                 session=mock_session,
                 content_manager=cm,
@@ -672,7 +669,6 @@ class TestCrosspostDraftAuthSingleAdmin:
     @pytest.mark.asyncio
     async def test_crosspost_rejects_own_draft(self, tmp_path: Path) -> None:
         """Draft posts must never be crossposted, even by their author."""
-        from backend.exceptions import PostNotFoundError
         from backend.services.crosspost_service import crosspost
 
         cm = ContentManager(content_dir=tmp_path)
@@ -694,7 +690,7 @@ class TestCrosspostDraftAuthSingleAdmin:
         mock_actor.display_name = "Admin"
         mock_actor.username = "admin"
 
-        with pytest.raises(PostNotFoundError):
+        with pytest.raises(ValueError, match="Cannot cross-post a draft post"):
             await crosspost(
                 session=mock_session,
                 content_manager=cm,
@@ -708,7 +704,6 @@ class TestCrosspostDraftAuthSingleAdmin:
     @pytest.mark.asyncio
     async def test_crosspost_rejects_other_users_draft(self, tmp_path: Path) -> None:
         """Draft posts by another author must also be rejected."""
-        from backend.exceptions import PostNotFoundError
         from backend.services.crosspost_service import crosspost
 
         cm = ContentManager(content_dir=tmp_path)
@@ -730,7 +725,7 @@ class TestCrosspostDraftAuthSingleAdmin:
         mock_actor.display_name = "Admin"
         mock_actor.username = "admin"
 
-        with pytest.raises(PostNotFoundError):
+        with pytest.raises(ValueError, match="Cannot cross-post a draft post"):
             await crosspost(
                 session=mock_session,
                 content_manager=cm,

@@ -18,7 +18,7 @@ The backend serves both the JSON API and the built frontend, so browser clients 
 ## Architecture and Design Decisions
 
 - **Filesystem is the source of truth**: posts, pages, labels, and site settings are stored as regular files so content stays inspectable, portable, and easy to back up. Posts use directory-backed content units so a post's body and related assets live together.
-- **SQLite as a derived cache**: the database accelerates queries and search but is rebuilt from canonical files on startup and refreshed incrementally on writes. The database also holds durable state that has no filesystem backing: user accounts and credentials, auth tokens (refresh tokens), connected social accounts (encrypted OAuth credentials), and cross-post history.
+- **SQLite as a derived cache**: the database accelerates queries and search but is rebuilt from canonical files on startup and refreshed incrementally on writes. The database also holds durable state that has no filesystem backing: admin account and credentials, auth tokens (refresh tokens), connected social accounts (encrypted OAuth credentials), and cross-post history.
 - **Backend-owned mutation boundary**: rendering, sanitization, authorization, and write coordination are enforced on the server. Content-changing operations share coordinated write handling so filesystem updates, cache refreshes, and versioning stay consistent.
 - **Long-lived Pandoc renderer**: markdown rendering runs through a shared Pandoc server process rather than spawning per-request subprocesses.
 - **Adapters at the edges**: sync, cross-posting, and CLI tooling extend the core content model instead of redefining it.

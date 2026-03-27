@@ -144,3 +144,89 @@ class TestToDateInclusivity:
         titles = [p.title for p in result.posts]
         assert "Before" in titles
         assert "After" not in titles
+
+
+class TestFromDateFiltering:
+    """from_date correctly excludes posts created before the given date/time."""
+
+    @pytest.mark.asyncio
+    async def test_bare_date_from_date_excludes_earlier_posts(self, session: AsyncSession) -> None:
+        """Posts before from_date must be excluded; posts on or after must be included."""
+        await _add_post(
+            session,
+            file_path="posts/earlier/index.md",
+            title="Earlier",
+            created_at=datetime(2024, 6, 14, 23, 59, 59, tzinfo=UTC),
+        )
+        await _add_post(
+            session,
+            file_path="posts/on-date/index.md",
+            title="On Date",
+            created_at=datetime(2024, 6, 15, 0, 0, 0, tzinfo=UTC),
+        )
+        await _add_post(
+            session,
+            file_path="posts/later/index.md",
+            title="Later",
+            created_at=datetime(2024, 6, 16, 10, 0, 0, tzinfo=UTC),
+        )
+        await session.commit()
+
+        result = await list_posts(session, from_date="2024-06-15")
+        titles = [p.title for p in result.posts]
+        assert "Earlier" not in titles
+        assert "On Date" in titles
+        assert "Later" in titles
+
+    @pytest.mark.asyncio
+    async def test_iso_datetime_from_date_uses_exact_time(self, session: AsyncSession) -> None:
+        """A full ISO datetime from_date must use the exact timestamp boundary."""
+        await _add_post(
+            session,
+            file_path="posts/before-boundary/index.md",
+            title="Before Boundary",
+            created_at=datetime(2024, 6, 15, 11, 59, 59, tzinfo=UTC),
+        )
+        await _add_post(
+            session,
+            file_path="posts/after-boundary/index.md",
+            title="After Boundary",
+            created_at=datetime(2024, 6, 15, 12, 0, 1, tzinfo=UTC),
+        )
+        await session.commit()
+
+        result = await list_posts(session, from_date="2024-06-15T12:00:00+00:00")
+        titles = [p.title for p in result.posts]
+        assert "Before Boundary" not in titles
+        assert "After Boundary" in titles
+
+    @pytest.mark.asyncio
+    async def test_from_date_combined_with_to_date_returns_range(
+        self, session: AsyncSession
+    ) -> None:
+        """Combining from_date and to_date must return only posts within the range."""
+        await _add_post(
+            session,
+            file_path="posts/too-early/index.md",
+            title="Too Early",
+            created_at=datetime(2024, 6, 14, 12, 0, 0, tzinfo=UTC),
+        )
+        await _add_post(
+            session,
+            file_path="posts/in-range/index.md",
+            title="In Range",
+            created_at=datetime(2024, 6, 20, 12, 0, 0, tzinfo=UTC),
+        )
+        await _add_post(
+            session,
+            file_path="posts/too-late/index.md",
+            title="Too Late",
+            created_at=datetime(2024, 6, 26, 12, 0, 0, tzinfo=UTC),
+        )
+        await session.commit()
+
+        result = await list_posts(session, from_date="2024-06-15", to_date="2024-06-25")
+        titles = [p.title for p in result.posts]
+        assert "Too Early" not in titles
+        assert "In Range" in titles
+        assert "Too Late" not in titles

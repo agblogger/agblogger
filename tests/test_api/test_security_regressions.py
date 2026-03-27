@@ -497,6 +497,28 @@ class TestSharedIsTrustedFunction:
             "10.0.0.2", ["127.0.0.1"]
         )
 
+
+class TestRemovedEndpoints:
+    """Regression tests that verify removed endpoints stay removed.
+
+    These catch accidental reintroduction of endpoints that must not exist,
+    such as an open user-registration route.
+    """
+
+    @pytest.mark.asyncio
+    async def test_register_endpoint_does_not_exist(self, client: AsyncClient) -> None:
+        """POST /api/auth/register must return 404 or 405.
+
+        The application has a single admin identity; there is no user-registration
+        flow. If this endpoint reappears it would allow an attacker to create
+        arbitrary accounts.
+        """
+        resp = await client.post(
+            "/api/auth/register",
+            json={"username": "attacker", "password": "password123", "email": "a@b.com"},
+        )
+        assert resp.status_code in {404, 405}
+
     def test_middleware_uses_shared_function(self) -> None:
         """_ProxyHeadersMiddleware._is_trusted should delegate to the shared function."""
         from backend.main import _ProxyHeadersMiddleware

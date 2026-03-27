@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 import jwt
 import pytest
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from backend.models.base import DurableBase
@@ -455,14 +456,14 @@ class TestEnsureAdminUser:
     ) -> None:
         """A corrupted password_hash on an existing admin should not crash ensure_admin_user.
 
-        When verify_password or hash_password raises an unexpected exception, the error must
+        When verify_password raises ValueError (e.g. bad hash format), the error must
         be logged and the sync skipped — the server must never crash on startup.
         """
         await ensure_admin_user(session, test_settings)
 
-        # Simulate verify_password raising (e.g. due to an unforeseen bcrypt error).
+        # Simulate verify_password raising ValueError (bad hash format — bcrypt known failure mode).
         def _raise_on_verify(plain: str, hashed: str) -> bool:
-            raise RuntimeError("bcrypt internal error — simulated corruption")
+            raise ValueError("bcrypt bad hash format — simulated corruption")
 
         monkeypatch.setattr("backend.services.auth_service.verify_password", _raise_on_verify)
 
@@ -588,3 +589,184 @@ class TestEnsureAdminUser:
             )
         )
         assert list(refresh_result.scalars().all()) == []
+
+
+# ---------------------------------------------------------------------------
+# C1: Narrow bare except on password sync
+# ---------------------------------------------------------------------------
+
+
+class TestEnsureAdminUserPasswordSyncExceptions:
+    """ensure_admin_user must narrow exception handling on password sync."""
+
+    @pytest.mark.asyncio
+    async def test_value_error_in_verify_password_is_caught_and_logged(
+        self,
+        session: AsyncSession,
+        test_settings: Settings,
+        caplog: pytest.LogCaptureFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """ValueError from verify_password must be caught, logged, and not crash."""
+        await ensure_admin_user(session, test_settings)
+
+        def _raise_value_error(plain: str, hashed: str) -> bool:
+            raise ValueError("bad hash format")
+
+        monkeypatch.setattr("backend.services.auth_service.verify_password", _raise_value_error)
+
+        with caplog.at_level(logging.ERROR, logger="backend.services.auth_service"):
+            # Must not raise
+            await ensure_admin_user(session, test_settings)
+
+        assert any("password" in record.message.lower() for record in caplog.records)
+
+    @pytest.mark.asyncio
+    async def test_runtime_error_in_verify_password_propagates(
+        self,
+        session: AsyncSession,
+        test_settings: Settings,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """RuntimeError from verify_password must NOT be silently swallowed."""
+        await ensure_admin_user(session, test_settings)
+
+        def _raise_runtime_error(plain: str, hashed: str) -> bool:
+            raise RuntimeError("unexpected native library failure")
+
+        monkeypatch.setattr("backend.services.auth_service.verify_password", _raise_runtime_error)
+
+        with pytest.raises(RuntimeError, match="unexpected native library failure"):
+            await ensure_admin_user(session, test_settings)
+
+
+# ---------------------------------------------------------------------------
+# I5: Add logging for unparseable expires_at
+# ---------------------------------------------------------------------------
+
+
+class TestRefreshTokensUnparseableExpiresAt:
+    """refresh_tokens must warn when expires_at is unparseable."""
+
+    @pytest.mark.asyncio
+    async def test_unparseable_expires_at_logs_warning(
+        self,
+        session: AsyncSession,
+        test_settings: Settings,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A stored token with an unparseable expires_at must trigger a warning log."""
+        user = await _create_user(session, username="expires-user")
+        # Insert a refresh token with a bad expires_at directly
+        from backend.services.auth_service import create_refresh_token_value, hash_token
+
+        token_value = create_refresh_token_value()
+        token_hash = hash_token(token_value)
+        now = format_iso(now_utc())
+        bad_token = AdminRefreshToken(
+            user_id=user.id,
+            token_hash=token_hash,
+            expires_at="not-a-date",
+            created_at=now,
+        )
+        session.add(bad_token)
+        await session.commit()
+
+        with caplog.at_level(logging.WARNING, logger="backend.services.auth_service"):
+            result = await refresh_tokens(session, token_value, test_settings)
+
+        assert result is None
+        warning_records = [
+            r
+            for r in caplog.records
+            if r.levelno == logging.WARNING and "unparseable" in r.message.lower()
+        ]
+        assert len(warning_records) >= 1
+
+
+# ---------------------------------------------------------------------------
+# S1: Log InvalidKeyError at error level
+# ---------------------------------------------------------------------------
+
+
+class TestDecodeAccessTokenInvalidKeyError:
+    """InvalidKeyError must be logged at ERROR level, not WARNING."""
+
+    def test_invalid_key_error_logged_at_error_level(
+        self,
+        test_settings: Settings,
+        caplog: pytest.LogCaptureFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A token that triggers InvalidKeyError must produce an ERROR-level log."""
+        # Simulate jwt.decode raising InvalidKeyError (server misconfiguration scenario)
+        token = create_access_token({"sub": "1", "username": "alice"}, test_settings.secret_key)
+
+        def _raise_invalid_key(*args: object, **kwargs: object) -> dict[str, object]:
+            raise jwt.InvalidKeyError("key mismatch — simulated misconfiguration")
+
+        monkeypatch.setattr(jwt, "decode", _raise_invalid_key)
+
+        with caplog.at_level(logging.DEBUG, logger="backend.services.auth_service"):
+            result = decode_access_token(token, test_settings.secret_key)
+
+        assert result is None
+        error_records = [
+            r
+            for r in caplog.records
+            if r.levelno == logging.ERROR and "signing key" in r.message.lower()
+        ]
+        assert len(error_records) >= 1
+
+
+# ---------------------------------------------------------------------------
+# S2: Contextual error handling for _collapse_admin_identities
+# ---------------------------------------------------------------------------
+
+
+class TestCollapseAdminIdentitiesErrorHandling:
+    """ensure_admin_user must log and re-raise exceptions from _collapse_admin_identities."""
+
+    @pytest.mark.asyncio
+    async def test_integrity_error_is_logged_and_reraised(
+        self,
+        session: AsyncSession,
+        test_settings: Settings,
+        caplog: pytest.LogCaptureFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """IntegrityError from _collapse_admin_identities is logged and re-raised."""
+        # Create a stale admin so the collapse path is taken
+        stale_admin = await _create_user(session, username="stale-for-collapse")
+        # Create the configured admin separately so there are two admins
+        configured_admin = await _create_user(
+            session,
+            username=test_settings.admin_username,
+            password=test_settings.admin_password,
+        )
+        assert stale_admin.id != configured_admin.id
+
+        import backend.services.auth_service as auth_mod
+
+        async def _raise_integrity_error(
+            _session: AsyncSession,
+            *,
+            target: AdminUser,
+            stale_admins: list[AdminUser],
+        ) -> None:
+            raise IntegrityError("simulated", {}, Exception())
+
+        monkeypatch.setattr(auth_mod, "_collapse_admin_identities", _raise_integrity_error)
+
+        with (
+            caplog.at_level(logging.ERROR, logger="backend.services.auth_service"),
+            pytest.raises(IntegrityError),
+        ):
+            await ensure_admin_user(session, test_settings)
+
+        error_records = [
+            r
+            for r in caplog.records
+            if r.levelno == logging.ERROR and "collapse" in r.message.lower()
+        ]
+        assert len(error_records) >= 1

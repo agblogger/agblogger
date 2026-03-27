@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, ClassVar
 from sqlalchemy import inspect, text
 
 if TYPE_CHECKING:
-    from sqlalchemy import Connection
     from sqlalchemy.ext.asyncio import AsyncEngine
 
 
@@ -19,7 +18,7 @@ async def _upgrade_durable_migrations(db_engine: AsyncEngine, revision: str) -> 
     alembic_cfg = Config()
     alembic_cfg.set_main_option("script_location", "backend/migrations")
 
-    def _do_upgrade(sync_conn: Connection) -> None:
+    def _do_upgrade(sync_conn: object) -> None:
         alembic_cfg.attributes["connection"] = sync_conn
         command.upgrade(alembic_cfg, revision)
 
@@ -392,6 +391,258 @@ class TestLegacyUserMigration:
         assert admin_refresh_tokens == [(1, "admin-token")]
         assert social_accounts == []
         assert cross_posts == []
+
+
+class TestMigration0004Downgrade:
+    """Verify migration 0004 downgrade restores the legacy schema correctly."""
+
+    async def test_downgrade_restores_users_table(
+        self,
+        db_engine: AsyncEngine,
+    ) -> None:
+        """After downgrading 0004, table 'users' must exist (renamed back from admin_users)."""
+        from alembic import command
+        from alembic.config import Config
+
+        alembic_cfg = Config()
+        alembic_cfg.set_main_option("script_location", "backend/migrations")
+
+        def _do_upgrade(sync_conn: object) -> None:
+            alembic_cfg.attributes["connection"] = sync_conn
+            command.upgrade(alembic_cfg, "head")
+
+        def _do_downgrade(sync_conn: object) -> None:
+            alembic_cfg.attributes["connection"] = sync_conn
+            command.downgrade(alembic_cfg, "b5d91f3e7a02")
+
+        async with db_engine.begin() as conn:
+            await conn.run_sync(_do_upgrade)
+
+        async with db_engine.begin() as conn:
+            await conn.run_sync(_do_downgrade)
+
+        async with db_engine.connect() as conn:
+            table_names = await conn.run_sync(
+                lambda sync_conn: set(inspect(sync_conn).get_table_names())
+            )
+
+        assert "users" in table_names
+        assert "admin_users" not in table_names
+
+    async def test_downgrade_restores_refresh_tokens_table(
+        self,
+        db_engine: AsyncEngine,
+    ) -> None:
+        """After downgrading 0004, table 'refresh_tokens' must exist."""
+        from alembic import command
+        from alembic.config import Config
+
+        alembic_cfg = Config()
+        alembic_cfg.set_main_option("script_location", "backend/migrations")
+
+        def _do_upgrade(sync_conn: object) -> None:
+            alembic_cfg.attributes["connection"] = sync_conn
+            command.upgrade(alembic_cfg, "head")
+
+        def _do_downgrade(sync_conn: object) -> None:
+            alembic_cfg.attributes["connection"] = sync_conn
+            command.downgrade(alembic_cfg, "b5d91f3e7a02")
+
+        async with db_engine.begin() as conn:
+            await conn.run_sync(_do_upgrade)
+
+        async with db_engine.begin() as conn:
+            await conn.run_sync(_do_downgrade)
+
+        async with db_engine.connect() as conn:
+            table_names = await conn.run_sync(
+                lambda sync_conn: set(inspect(sync_conn).get_table_names())
+            )
+
+        assert "refresh_tokens" in table_names
+        assert "admin_refresh_tokens" not in table_names
+
+    async def test_downgrade_restores_is_admin_column(
+        self,
+        db_engine: AsyncEngine,
+    ) -> None:
+        """After downgrading 0004, 'is_admin' column must exist in 'users' table."""
+        from alembic import command
+        from alembic.config import Config
+
+        alembic_cfg = Config()
+        alembic_cfg.set_main_option("script_location", "backend/migrations")
+
+        def _do_upgrade(sync_conn: object) -> None:
+            alembic_cfg.attributes["connection"] = sync_conn
+            command.upgrade(alembic_cfg, "head")
+
+        def _do_downgrade(sync_conn: object) -> None:
+            alembic_cfg.attributes["connection"] = sync_conn
+            command.downgrade(alembic_cfg, "b5d91f3e7a02")
+
+        async with db_engine.begin() as conn:
+            await conn.run_sync(_do_upgrade)
+
+        async with db_engine.begin() as conn:
+            await conn.run_sync(_do_downgrade)
+
+        async with db_engine.connect() as conn:
+            col_names = await conn.run_sync(
+                lambda sync_conn: {col["name"] for col in inspect(sync_conn).get_columns("users")}
+            )
+
+        assert "is_admin" in col_names
+
+    async def test_downgrade_sets_existing_rows_is_admin_to_1(
+        self,
+        db_engine: AsyncEngine,
+    ) -> None:
+        """After downgrading 0004, existing rows in 'users' must have is_admin = 1."""
+        from alembic import command
+        from alembic.config import Config
+
+        alembic_cfg = Config()
+        alembic_cfg.set_main_option("script_location", "backend/migrations")
+
+        def _do_upgrade(sync_conn: object) -> None:
+            alembic_cfg.attributes["connection"] = sync_conn
+            command.upgrade(alembic_cfg, "head")
+
+        def _do_downgrade(sync_conn: object) -> None:
+            alembic_cfg.attributes["connection"] = sync_conn
+            command.downgrade(alembic_cfg, "b5d91f3e7a02")
+
+        async with db_engine.begin() as conn:
+            await conn.run_sync(_do_upgrade)
+            # Insert a user in the post-upgrade (admin_users) schema
+            await conn.execute(
+                text(
+                    "INSERT INTO admin_users"
+                    " (username, email, password_hash, created_at, updated_at)"
+                    " VALUES ('admin', 'admin@example.com', 'hash',"
+                    " '2026-01-01', '2026-01-01')"
+                )
+            )
+
+        async with db_engine.begin() as conn:
+            await conn.run_sync(_do_downgrade)
+
+        async with db_engine.connect() as conn:
+            rows = (await conn.execute(text("SELECT is_admin FROM users"))).fetchall()
+
+        assert len(rows) == 1
+        assert rows[0][0] == 1, f"Expected is_admin=1, got {rows[0][0]}"
+
+    async def test_downgrade_is_admin_server_default_is_0(
+        self,
+        db_engine: AsyncEngine,
+    ) -> None:
+        """After downgrading 0004, inserting a new row without is_admin must default to 0."""
+        from alembic import command
+        from alembic.config import Config
+
+        alembic_cfg = Config()
+        alembic_cfg.set_main_option("script_location", "backend/migrations")
+
+        def _do_upgrade(sync_conn: object) -> None:
+            alembic_cfg.attributes["connection"] = sync_conn
+            command.upgrade(alembic_cfg, "head")
+
+        def _do_downgrade(sync_conn: object) -> None:
+            alembic_cfg.attributes["connection"] = sync_conn
+            command.downgrade(alembic_cfg, "b5d91f3e7a02")
+
+        async with db_engine.begin() as conn:
+            await conn.run_sync(_do_upgrade)
+
+        async with db_engine.begin() as conn:
+            await conn.run_sync(_do_downgrade)
+
+        async with db_engine.begin() as conn:
+            # Insert a new row without specifying is_admin — should default to 0
+            await conn.execute(
+                text(
+                    "INSERT INTO users (username, email, password_hash, created_at, updated_at)"
+                    " VALUES ('newuser', 'new@example.com', 'hash2', '2026-01-01', '2026-01-01')"
+                )
+            )
+
+        async with db_engine.connect() as conn:
+            rows = (
+                await conn.execute(text("SELECT is_admin FROM users WHERE username = 'newuser'"))
+            ).fetchall()
+
+        assert len(rows) == 1
+        assert rows[0][0] == 0, f"Expected is_admin default=0, got {rows[0][0]}"
+
+    async def test_downgrade_social_accounts_fk_points_to_users(
+        self,
+        db_engine: AsyncEngine,
+    ) -> None:
+        """After downgrading 0004, social_accounts FK must reference 'users'."""
+        from alembic import command
+        from alembic.config import Config
+
+        alembic_cfg = Config()
+        alembic_cfg.set_main_option("script_location", "backend/migrations")
+
+        def _do_upgrade(sync_conn: object) -> None:
+            alembic_cfg.attributes["connection"] = sync_conn
+            command.upgrade(alembic_cfg, "head")
+
+        def _do_downgrade(sync_conn: object) -> None:
+            alembic_cfg.attributes["connection"] = sync_conn
+            command.downgrade(alembic_cfg, "b5d91f3e7a02")
+
+        async with db_engine.begin() as conn:
+            await conn.run_sync(_do_upgrade)
+
+        async with db_engine.begin() as conn:
+            await conn.run_sync(_do_downgrade)
+
+        async with db_engine.connect() as conn:
+            rows = (await conn.execute(text("PRAGMA foreign_key_list(social_accounts)"))).fetchall()
+
+        user_id_fks = [row for row in rows if row[3] == "user_id"]
+        assert len(user_id_fks) == 1, f"Expected exactly one FK on user_id, got {user_id_fks}"
+        assert user_id_fks[0][2] == "users", (
+            f"social_accounts.user_id FK points to '{user_id_fks[0][2]}', expected 'users'"
+        )
+
+    async def test_downgrade_cross_posts_fk_points_to_users(
+        self,
+        db_engine: AsyncEngine,
+    ) -> None:
+        """After downgrading 0004, cross_posts FK must reference 'users'."""
+        from alembic import command
+        from alembic.config import Config
+
+        alembic_cfg = Config()
+        alembic_cfg.set_main_option("script_location", "backend/migrations")
+
+        def _do_upgrade(sync_conn: object) -> None:
+            alembic_cfg.attributes["connection"] = sync_conn
+            command.upgrade(alembic_cfg, "head")
+
+        def _do_downgrade(sync_conn: object) -> None:
+            alembic_cfg.attributes["connection"] = sync_conn
+            command.downgrade(alembic_cfg, "b5d91f3e7a02")
+
+        async with db_engine.begin() as conn:
+            await conn.run_sync(_do_upgrade)
+
+        async with db_engine.begin() as conn:
+            await conn.run_sync(_do_downgrade)
+
+        async with db_engine.connect() as conn:
+            rows = (await conn.execute(text("PRAGMA foreign_key_list(cross_posts)"))).fetchall()
+
+        user_id_fks = [row for row in rows if row[3] == "user_id"]
+        assert len(user_id_fks) == 1, f"Expected exactly one FK on user_id, got {user_id_fks}"
+        assert user_id_fks[0][2] == "users", (
+            f"cross_posts.user_id FK points to '{user_id_fks[0][2]}', expected 'users'"
+        )
 
 
 class TestTablePartitionInvariants:

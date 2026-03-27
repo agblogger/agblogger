@@ -13,15 +13,15 @@ The authentication and authorization implementation is thorough and follows secu
 
 ### Authentication
 
-- **Cookie hardening** (`backend/api/auth.py:74-80`): HttpOnly, SameSite=Strict, Secure (outside debug). Correctly implemented.
-- **CSRF protection** (`backend/main.py:454-484`): Stateless CSRF tokens bound to access tokens, enforced on all unsafe methods to `/api/`, with timing-safe comparison via `secrets.compare_digest`.
-- **Rate limiting** (`backend/api/auth.py:188-213`): Login and refresh endpoints are rate-limited per client IP + username.
-- **Timing-safe auth** (`backend/services/auth_service.py:83-85`): Dummy bcrypt hash check for non-existent users prevents username enumeration via timing side channels.
-- **Refresh token rotation** (`backend/services/auth_service.py:142-154`): One-time-use with atomic DELETE for race-condition protection under concurrency.
+- **Cookie hardening** (`_set_auth_cookies()` in `backend/api/auth.py`): HttpOnly, SameSite=Strict, Secure (outside debug). Correctly implemented.
+- **CSRF protection** (`csrf_protection()` middleware in `backend/main.py`): Stateless CSRF tokens bound to access tokens, enforced on all unsafe methods to `/api/`, with timing-safe comparison via `secrets.compare_digest`.
+- **Rate limiting** (`_authenticate_login_request()` in `backend/api/auth.py`): Login and refresh endpoints are rate-limited per client IP + username.
+- **Timing-safe auth** (`authenticate_admin()` in `backend/services/auth_service.py`): Dummy bcrypt hash check for non-existent users prevents username enumeration via timing side channels.
+- **Refresh token rotation** (`refresh_tokens()` in `backend/services/auth_service.py`): One-time-use with atomic DELETE for race-condition protection under concurrency.
 - **Credential hashing**: Refresh tokens stored as one-way hashes (SHA-256 for tokens, bcrypt for passwords).
-- **Origin enforcement** (`backend/api/auth.py:126-141`): Browser login validates Origin/Referer against allowed origins.
-- **Token-login separation** (`backend/api/auth.py:144-150`): Browser-originated requests blocked from Bearer token login endpoint.
-- **Session revocation on password change** (`backend/api/admin.py:246`): All refresh tokens revoked when password is changed.
+- **Origin enforcement** (`_enforce_login_origin()` in `backend/api/auth.py`): Browser login validates Origin/Referer against allowed origins.
+- **Token-login separation** (`_reject_browser_originated_token_login()` in `backend/api/auth.py`): Browser-originated requests blocked from Bearer token login endpoint.
+- **Session revocation on password change** (`change_password()` in `backend/api/admin.py`): All refresh tokens revoked when password is changed.
 
 ### Authorization
 
@@ -91,19 +91,13 @@ Drafts are correctly hidden from public users across all read paths:
 
 ## Minor Observations (Not Vulnerabilities)
 
-### 1. `GET /api/labels/{id}/posts` doesn't pass `draft_owner_username`
-
-**Location:** `backend/api/labels.py:254-265`
-
-This endpoint does not inject `get_current_admin` and doesn't pass `draft_owner_username` to `get_posts_by_label`. As a result, even the admin can't see their own draft posts when filtering by label. This is a **feature gap**, not a security issue -- drafts are hidden (conservative default), they're just also hidden from the admin on this specific endpoint.
-
-### 2. OAuth callbacks lack session authentication
+### 1. OAuth callbacks lack session authentication
 
 **Location:** `backend/api/crosspost.py:364`, `573`, `708`, `847`
 
 The OAuth callbacks from providers (Bluesky, Mastodon, X, Facebook) don't verify the current browser session matches `pending["user_id"]`. This is standard OAuth design -- the state parameter serves as the anti-forgery token, and PKCE binds the code exchange. The Facebook `select-page` and `pages` endpoints do verify `pending["user_id"] != user.id`, which is an additional check for the interactive step.
 
-### 3. Health endpoint exposes version
+### 2. Health endpoint exposes version
 
 **Location:** `backend/api/health.py:41`
 

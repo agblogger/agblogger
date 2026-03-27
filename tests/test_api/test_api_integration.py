@@ -1604,6 +1604,92 @@ class TestSearch:
         assert created_file_path in file_paths
 
 
+class TestSubtitleRoundtrip:
+    """Subtitle create/update roundtrip through the REST API."""
+
+    @pytest.mark.asyncio
+    async def test_subtitle_create_read_update_roundtrip(self, client: AsyncClient) -> None:
+        """Create a post with a subtitle, read it back, update the subtitle, verify again."""
+        login_resp = await client.post(
+            "/api/auth/token-login",
+            json={"username": "admin", "password": "admin123"},
+        )
+        token = login_resp.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # 1. Create a post with a subtitle.
+        create_resp = await client.post(
+            "/api/posts",
+            json={
+                "title": "Subtitle Roundtrip Post",
+                "subtitle": "Original subtitle",
+                "body": "Body content for subtitle roundtrip test.\n",
+                "labels": [],
+                "is_draft": False,
+            },
+            headers=headers,
+        )
+        assert create_resp.status_code == 201
+        file_path = create_resp.json()["file_path"]
+
+        # 2. Read the post back and verify subtitle is present and matches.
+        get_resp = await client.get(f"/api/posts/{file_path}")
+        assert get_resp.status_code == 200
+        post_data = get_resp.json()
+        assert post_data["subtitle"] == "Original subtitle"
+
+        # 3. Update the post with a different subtitle.
+        update_resp = await client.put(
+            f"/api/posts/{file_path}",
+            json={
+                "title": "Subtitle Roundtrip Post",
+                "subtitle": "Updated subtitle",
+                "body": "Body content for subtitle roundtrip test.\n",
+                "labels": [],
+                "is_draft": False,
+            },
+            headers=headers,
+        )
+        assert update_resp.status_code == 200
+        assert update_resp.json()["subtitle"] == "Updated subtitle"
+
+        # 4. Read back again and assert the new subtitle.
+        get_resp2 = await client.get(f"/api/posts/{file_path}")
+        assert get_resp2.status_code == 200
+        assert get_resp2.json()["subtitle"] == "Updated subtitle"
+
+    @pytest.mark.asyncio
+    async def test_subtitle_appears_in_list_endpoint(self, client: AsyncClient) -> None:
+        """Subtitle must be present in the list endpoint response for a created post."""
+        login_resp = await client.post(
+            "/api/auth/token-login",
+            json={"username": "admin", "password": "admin123"},
+        )
+        token = login_resp.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        create_resp = await client.post(
+            "/api/posts",
+            json={
+                "title": "Listed Subtitle Post",
+                "subtitle": "Visible in list",
+                "body": "This post subtitle should be visible in the list response.\n",
+                "labels": [],
+                "is_draft": False,
+            },
+            headers=headers,
+        )
+        assert create_resp.status_code == 201
+        file_path = create_resp.json()["file_path"]
+
+        list_resp = await client.get("/api/posts")
+        assert list_resp.status_code == 200
+        posts = list_resp.json()["posts"]
+        matching = [p for p in posts if p["file_path"] == file_path]
+        assert len(matching) == 1
+        assert matching[0]["subtitle"] == "Visible in list"
+
+
 class TestSyncCycleWarnings:
     @pytest.mark.asyncio
     async def test_sync_commit_returns_cycle_warnings(self, client: AsyncClient) -> None:

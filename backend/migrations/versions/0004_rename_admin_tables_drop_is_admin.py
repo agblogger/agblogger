@@ -126,6 +126,9 @@ def downgrade() -> None:
     ):
         pass
 
-    # Re-add the is_admin column.
+    # Re-add the is_admin column. New rows default to 0 (non-admin). The UPDATE
+    # below sets every existing row to 1 because all rows that survived to this
+    # revision were admin users (non-admins were pruned during the upgrade step).
     with op.batch_alter_table("users") as batch_op:
-        batch_op.add_column(sa.Column("is_admin", sa.Boolean(), nullable=False, server_default="1"))
+        batch_op.add_column(sa.Column("is_admin", sa.Boolean(), nullable=False, server_default="0"))
+    op.execute("UPDATE users SET is_admin = 1")

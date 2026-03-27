@@ -1,4 +1,4 @@
-"""Authentication service: JWT tokens and password hashing."""
+"""Authentication service: admin identity, credentials, JWT tokens, and refresh lifecycle."""
 
 from __future__ import annotations
 
@@ -73,6 +73,9 @@ def decode_access_token(token: str, secret_key: str) -> dict[str, Any] | None:
     except jwt.ExpiredSignatureError:
         logger.debug("Access token expired")
         return None
+    except jwt.InvalidKeyError:
+        logger.error("Access token signing key mismatch — check SECRET_KEY configuration")
+        return None
     except InvalidTokenError:
         logger.warning("Invalid access token", exc_info=True)
         return None
@@ -97,7 +100,7 @@ async def authenticate_admin(
 async def create_tokens(
     session: AsyncSession, user: AdminUser, settings: Settings
 ) -> tuple[str, str]:
-    """Create access and refresh token pair for a user."""
+    """Create access and refresh token pair for the admin."""
     access_token = create_access_token(
         {"sub": str(user.id), "username": user.username},
         settings.secret_key,
@@ -138,6 +141,11 @@ async def refresh_tokens(
 
     expires = _parse_iso_datetime(stored_token.expires_at)
     if expires is None:
+        logger.warning(
+            "Refresh token id=%s has unparseable expires_at %r, treating as expired",
+            stored_token.id,
+            stored_token.expires_at,
+        )
         await session.execute(
             delete(AdminRefreshToken).where(AdminRefreshToken.id == stored_token.id)
         )
@@ -308,7 +316,7 @@ async def ensure_admin_user(session: AsyncSession, settings: Settings) -> None:
             logger.info("Admin password updated to match ADMIN_PASSWORD environment variable")
             dirty = True
             refresh_token_user_ids_to_revoke.add(existing.id)
-    except Exception:
+    except ValueError, OSError:
         logger.error(
             "Failed to verify or update admin password hash — skipping password sync."
             " Fix the stored hash or restart with a clean database.",
@@ -330,9 +338,16 @@ async def ensure_admin_user(session: AsyncSession, settings: Settings) -> None:
             len(stale_admins),
             existing.id,
         )
-        await _collapse_admin_identities(session, target=existing, stale_admins=stale_admins)
-        refresh_token_user_ids_to_revoke.update(admin.id for admin in stale_admins)
-        refresh_token_user_ids_to_revoke.add(existing.id)
+        try:
+            await _collapse_admin_identities(session, target=existing, stale_admins=stale_admins)
+            refresh_token_user_ids_to_revoke.update(admin.id for admin in stale_admins)
+            refresh_token_user_ids_to_revoke.add(existing.id)
+        except Exception:
+            logger.error(
+                "Failed to collapse stale admin identities during startup",
+                exc_info=True,
+            )
+            raise
 
     if refresh_token_user_ids_to_revoke:
         await session.execute(

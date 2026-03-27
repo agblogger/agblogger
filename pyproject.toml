@@ -15,8 +15,6 @@ dependencies = [
     "sqlalchemy[asyncio]>=2.0",
     "aiosqlite>=0.21",
     "alembic>=1.15",
-
-
     # YAML / front matter
     "pyyaml>=6.0",
     "python-frontmatter>=1.1",
@@ -24,7 +22,7 @@ dependencies = [
     "tomli-w>=1.1",
     # Auth
     "pyjwt>=2.12",
-    "cryptography>=45.0",
+    "cryptography>=46.0.6",
     "bcrypt>=4.0",
     # Validation & settings
     "pydantic[email]>=2.10",
@@ -51,9 +49,9 @@ dev = [
     "mypy>=1.14",
     "basedpyright>=1.29",
     "deptry>=0.24",
-    "import-linter>=2.4",
+    "import-linter>=2.7",
     "pip-audit>=2.9",
-    "semgrep==1.152.0",
+    "semgrep>=1.152",
     "vulture==2.14",
     "types-PyYAML>=6.0",
     "pre-commit>=4.1",

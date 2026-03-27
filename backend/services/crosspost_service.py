@@ -139,8 +139,8 @@ async def crosspost(
 
     is_draft = cached_post.is_draft if cached_post is not None else post_data.is_draft
     if is_draft:
-        msg = f"Post not found: {post_path}"
-        raise PostNotFoundError(msg)
+        msg = "Cannot cross-post a draft post"
+        raise ValueError(msg)
 
     # Build the post URL
     slug = file_path_to_slug(post_path)
