@@ -53,7 +53,7 @@ Each target is fail-fast, and the default full gate `just check` runs `check-sta
   - Config: `frontend/eslint.config.js` extends `typescript-eslint` `strictTypeChecked`, `eslint-plugin-react-hooks`, and `eslint-plugin-react-refresh`.
 - `npm run lint:deps` (`dependency-cruiser --config .dependency-cruiser.cjs src`)
   - Frontend module-boundary checks.
-  - Current rules in `frontend/.dependency-cruiser.cjs`: no circular dependencies in `src`, and no runtime source imports from frontend test modules.
+  - Current rules in `frontend/.dependency-cruiser.cjs`: no circular dependencies in `src`; no runtime source imports from frontend test modules; `api/` cannot depend on UI, hooks, pages, or stores; `utils/` is a leaf layer; `stores/` cannot depend on hooks, components, or pages; `hooks/` cannot depend on components or pages; `components/` cannot depend on pages; and pages can only be imported by the app/router layer rather than lower layers.
 - `npm run lint:unused` (`knip --config knip.json --include dependencies,unlisted,unresolved`)
   - Dependency hygiene for the frontend package.
   - Config: `frontend/knip.json` scans `src/**/*.{ts,tsx}` and ignores a short allowlist of intentionally retained packages such as font packages and Stryker tooling.

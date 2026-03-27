@@ -14,14 +14,14 @@ Admin-only management routes are also guarded client-side before rendering workf
 
 Frontend state is deliberately small and split into two categories:
 
-- **server-backed state** such as the current user, site configuration, and resource data — managed by SWR hooks for automatic caching, deduplication, and revalidation
+- **server-backed state** such as the current user, site configuration, and resource data — primarily managed by SWR hooks for automatic caching, deduplication, and revalidation
 - **client UI state** such as theme selection and shared panel behavior — managed by Zustand stores
 
-SWR owns server data fetching and caching; Zustand coordinates session, config, and UI-only concerns. The browser is not treated as the long-term source of truth for content or identity.
+SWR handles most server data fetching and caching; Zustand coordinates session, config, and UI-only concerns. The browser is not treated as the long-term source of truth for content or identity.
 
 ## Data Fetching
 
-Read-only data fetching uses dedicated SWR hooks for each resource. Write operations use direct API calls. Components with debounced search and paginated/filtered fetches use manual `useEffect`+`useState` patterns, as do mutation-only components.
+Read-only data fetching usually uses dedicated SWR hooks for each resource. Write operations use direct API calls. Components with debounced search and paginated/filtered fetches use manual `useEffect`+`useState` patterns, as do mutation-only components.
 
 ## API Integration
 
