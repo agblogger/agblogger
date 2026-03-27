@@ -457,13 +457,17 @@ class TestOldPasswordAfterChange:
 
 
 class TestGetCurrentAdminLogging:
-    """get_current_admin must log differentiated messages for different auth failure modes."""
+    """get_current_admin must log differentiated messages for different auth failure modes.
+
+    Logging is handled by decode_access_token in the auth service layer — the deps
+    layer must NOT duplicate these log entries with a redundant pre-decode.
+    """
 
     @pytest.mark.asyncio
-    async def test_expired_token_logs_debug(
+    async def test_expired_token_logs_debug_exactly_once(
         self, client: AsyncClient, caplog: pytest.LogCaptureFixture
     ) -> None:
-        """An expired access token should produce a DEBUG log about expiry."""
+        """An expired access token should produce exactly one DEBUG log about expiry."""
         from backend.services.auth_service import create_access_token
 
         expired_token = create_access_token(
@@ -471,7 +475,7 @@ class TestGetCurrentAdminLogging:
             "test-secret-key-with-at-least-32-characters",
             expires_minutes=-1,
         )
-        with caplog.at_level(logging.DEBUG, logger="backend.api.deps"):
+        with caplog.at_level(logging.DEBUG):
             resp = await client.get(
                 "/api/auth/me",
                 headers={"Authorization": f"Bearer {expired_token}"},
@@ -482,14 +486,14 @@ class TestGetCurrentAdminLogging:
             for r in caplog.records
             if r.levelno == logging.DEBUG and "expired" in r.message.lower()
         ]
-        assert len(debug_records) >= 1
+        assert len(debug_records) == 1
 
     @pytest.mark.asyncio
-    async def test_invalid_token_logs_warning(
+    async def test_invalid_token_logs_warning_exactly_once(
         self, client: AsyncClient, caplog: pytest.LogCaptureFixture
     ) -> None:
-        """A malformed/invalid access token should produce a WARNING log."""
-        with caplog.at_level(logging.DEBUG, logger="backend.api.deps"):
+        """A malformed/invalid access token should produce exactly one WARNING log."""
+        with caplog.at_level(logging.DEBUG):
             resp = await client.get(
                 "/api/auth/me",
                 headers={"Authorization": "Bearer not-a-valid-jwt-token"},
@@ -500,7 +504,7 @@ class TestGetCurrentAdminLogging:
             for r in caplog.records
             if r.levelno == logging.WARNING and "invalid" in r.message.lower()
         ]
-        assert len(warning_records) >= 1
+        assert len(warning_records) == 1
 
     @pytest.mark.asyncio
     async def test_token_with_missing_sub_logs_warning(

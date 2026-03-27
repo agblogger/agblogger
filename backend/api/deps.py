@@ -121,23 +121,6 @@ async def get_current_admin(
 
     settings: Settings = request.app.state.settings
 
-    # Differentiate expired vs invalid/malformed tokens for logging.
-    # decode_access_token handles its own logging (DEBUG for expired, WARNING for invalid),
-    # but get_current_admin also catches the specific JWT exceptions to log at the deps level.
-    import jwt as pyjwt
-
-    from backend.services.key_derivation import derive_access_token_key
-
-    try:
-        signing_key = derive_access_token_key(settings.secret_key)
-        pyjwt.decode(token_value, signing_key, algorithms=["HS256"])
-    except pyjwt.ExpiredSignatureError:
-        logger.debug("Access token expired")
-        return None
-    except pyjwt.InvalidTokenError:
-        logger.warning("Invalid access token")
-        return None
-
     payload = decode_access_token(token_value, settings.secret_key)
     if payload is None:
         return None

@@ -118,6 +118,9 @@ async def list_posts(
     if to_date:
         try:
             to_dt = parse_datetime(to_date)
+            # Bare dates (no time component) should be inclusive of the entire day.
+            if "T" not in to_date and " " not in to_date.strip():
+                to_dt = to_dt.replace(hour=23, minute=59, second=59, microsecond=999999)
             stmt = stmt.where(PostCache.created_at <= to_dt)
         except ValueError:
             logger.warning("Failed to parse 'to' date %r", to_date, exc_info=True)

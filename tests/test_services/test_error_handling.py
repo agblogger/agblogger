@@ -662,6 +662,86 @@ class TestCrosspostRaisesPostNotFoundError:
             )
 
 
+class TestCrosspostDraftAuthSingleAdmin:
+    """Regression: draft posts must never be crossposted.
+
+    Crossposting an unpublished draft to social media would leak unreleased content.
+    The guard must reject all draft crosspost attempts regardless of who the author is.
+    """
+
+    @pytest.mark.asyncio
+    async def test_crosspost_rejects_own_draft(self, tmp_path: Path) -> None:
+        """Draft posts must never be crossposted, even by their author."""
+        from backend.exceptions import PostNotFoundError
+        from backend.services.crosspost_service import crosspost
+
+        cm = ContentManager(content_dir=tmp_path)
+        (tmp_path / "index.toml").write_text('[site]\ntitle = "Test"')
+        (tmp_path / "labels.toml").write_text("[labels]")
+        posts_dir = tmp_path / "posts"
+        posts_dir.mkdir(exist_ok=True)
+        draft_post = posts_dir / "my-draft"
+        draft_post.mkdir()
+        (draft_post / "index.md").write_text(
+            "---\ntitle: My Draft\ndraft: true\nauthor: admin\n"
+            "created_at: 2026-02-02 22:21:29+00\n---\nDraft by admin.\n"
+        )
+
+        mock_session = AsyncMock()
+        mock_session.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=lambda: None))
+        mock_actor = MagicMock()
+        mock_actor.id = 1
+        mock_actor.display_name = "Admin"
+        mock_actor.username = "admin"
+
+        with pytest.raises(PostNotFoundError):
+            await crosspost(
+                session=mock_session,
+                content_manager=cm,
+                post_path="posts/my-draft/index.md",
+                platforms=["bluesky"],
+                actor=mock_actor,
+                site_url="http://localhost",
+                secret_key="test-key",
+            )
+
+    @pytest.mark.asyncio
+    async def test_crosspost_rejects_other_users_draft(self, tmp_path: Path) -> None:
+        """Draft posts by another author must also be rejected."""
+        from backend.exceptions import PostNotFoundError
+        from backend.services.crosspost_service import crosspost
+
+        cm = ContentManager(content_dir=tmp_path)
+        (tmp_path / "index.toml").write_text('[site]\ntitle = "Test"')
+        (tmp_path / "labels.toml").write_text("[labels]")
+        posts_dir = tmp_path / "posts"
+        posts_dir.mkdir(exist_ok=True)
+        draft_post = posts_dir / "other-draft"
+        draft_post.mkdir()
+        (draft_post / "index.md").write_text(
+            "---\ntitle: Other Draft\ndraft: true\nauthor: original-author\n"
+            "created_at: 2026-02-02 22:21:29+00\n---\nDraft by someone else.\n"
+        )
+
+        mock_session = AsyncMock()
+        mock_session.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=lambda: None))
+        mock_actor = MagicMock()
+        mock_actor.id = 1
+        mock_actor.display_name = "Admin"
+        mock_actor.username = "admin"
+
+        with pytest.raises(PostNotFoundError):
+            await crosspost(
+                session=mock_session,
+                content_manager=cm,
+                post_path="posts/other-draft/index.md",
+                platforms=["bluesky"],
+                actor=mock_actor,
+                site_url="http://localhost",
+                secret_key="test-key",
+            )
+
+
 class TestCrosspostErrorMessageLeakage:
     """CrossPostResult.error uses generic message, not str(exc)."""
 
