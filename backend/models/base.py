@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from sqlalchemy.orm import DeclarativeBase
+
+if TYPE_CHECKING:
+    from sqlalchemy import Table
 
 
 class DurableBase(DeclarativeBase):
@@ -18,3 +23,12 @@ class CacheBase(DeclarativeBase):
     Tables: posts_cache, labels_cache, label_parents_cache,
     post_labels_cache, sync_manifest, posts_fts.
     """
+
+
+def cache_non_virtual_tables() -> list[Table]:
+    """Return cache tables that SQLAlchemy should manage directly."""
+    return [
+        table
+        for table in CacheBase.metadata.sorted_tables
+        if not table.info.get("is_virtual", False)
+    ]

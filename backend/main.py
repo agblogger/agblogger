@@ -37,7 +37,8 @@ from backend.api.sync import router as sync_router
 from backend.config import Settings, sqlite_database_path
 from backend.database import create_engine
 from backend.filesystem.content_manager import ContentManager
-from backend.models.base import CacheBase
+from backend.models.base import CacheBase, cache_non_virtual_tables
+from backend.models.post import FTS_CREATE_SQL
 from backend.services.csrf_service import validate_csrf_token
 from backend.services.rate_limit_service import InMemoryRateLimiter
 from backend.services.upload_limits import get_multipart_body_limit
@@ -155,15 +156,15 @@ async def setup_cache_tables(engine: AsyncEngine) -> None:
         # Drop posts_fts first (FTS5 virtual table that SQLAlchemy cannot
         # correctly drop/recreate via metadata.drop_all/create_all).
         await conn.execute(text("DROP TABLE IF EXISTS posts_fts"))
-        await conn.run_sync(CacheBase.metadata.drop_all)
-        await conn.run_sync(CacheBase.metadata.create_all)
-        # Recreate FTS5 virtual table (not managed by ORM).
-        await conn.execute(
-            text(
-                "CREATE VIRTUAL TABLE IF NOT EXISTS posts_fts USING fts5("
-                "title, content, content='posts_cache', content_rowid='id')"
-            )
+        cache_tables = cache_non_virtual_tables()
+        await conn.run_sync(
+            lambda sync_conn: CacheBase.metadata.drop_all(sync_conn, tables=cache_tables)
         )
+        await conn.run_sync(
+            lambda sync_conn: CacheBase.metadata.create_all(sync_conn, tables=cache_tables)
+        )
+        # Recreate FTS5 virtual table (not managed by ORM).
+        await conn.execute(FTS_CREATE_SQL)
 
 
 @asynccontextmanager

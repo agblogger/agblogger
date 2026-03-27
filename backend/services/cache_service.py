@@ -9,8 +9,9 @@ from typing import TYPE_CHECKING
 from sqlalchemy import delete, text
 
 from backend.filesystem.content_manager import ContentManager, hash_content
+from backend.models.base import CacheBase, DurableBase, cache_non_virtual_tables
 from backend.models.label import LabelCache, LabelParentCache, PostLabelCache
-from backend.models.post import FTS_INSERT_SQL, PostCache
+from backend.models.post import FTS_CREATE_SQL, FTS_INSERT_SQL, PostCache
 from backend.pandoc.renderer import render_markdown, render_markdown_excerpt, rewrite_relative_urls
 from backend.services.dag import break_cycles
 from backend.services.label_service import ensure_label_cache_entry
@@ -41,12 +42,7 @@ async def rebuild_cache(
 
         # Drop and recreate FTS table
         await session.execute(text("DROP TABLE IF EXISTS posts_fts"))
-        await session.execute(
-            text(
-                "CREATE VIRTUAL TABLE IF NOT EXISTS posts_fts USING fts5("
-                "title, subtitle, content, content='posts_cache', content_rowid='id')"
-            )
-        )
+        await session.execute(FTS_CREATE_SQL)
 
         # Load labels from config
         labels_config = content_manager.labels
@@ -153,17 +149,16 @@ async def ensure_tables(session: AsyncSession) -> None:
     stamp the alembic_version table.  Production startup uses
     run_durable_migrations() + setup_cache_tables() instead.
     """
-    from backend.models.base import CacheBase, DurableBase
-
     conn = await session.connection()
     await conn.run_sync(DurableBase.metadata.create_all)
-    await conn.run_sync(CacheBase.metadata.create_all)
-
-    # Create FTS table
-    await session.execute(
-        text(
-            "CREATE VIRTUAL TABLE IF NOT EXISTS posts_fts USING fts5("
-            "title, subtitle, content, content='posts_cache', content_rowid='id')"
+    cache_tables = cache_non_virtual_tables()
+    await conn.run_sync(
+        lambda sync_conn: CacheBase.metadata.create_all(
+            sync_conn,
+            tables=cache_tables,
         )
     )
+
+    # Create FTS table
+    await session.execute(FTS_CREATE_SQL)
     await session.commit()

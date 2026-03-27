@@ -57,6 +57,11 @@ class PostsFTS(CacheBase):
     content: Mapped[str] = mapped_column(Text)
 
 
+FTS_CREATE_SQL = text(
+    "CREATE VIRTUAL TABLE IF NOT EXISTS posts_fts USING fts5("
+    "title, subtitle, content, content='posts_cache', content_rowid='id')"
+)
+
 FTS_INSERT_SQL = text(
     "INSERT INTO posts_fts(rowid, title, subtitle, content) "
     "VALUES (:rowid, :title, :subtitle, :content)"

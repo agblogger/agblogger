@@ -151,6 +151,26 @@ class TestCacheTableSetup:
         }
         assert expected_cache.issubset(table_names)
 
+    async def test_setup_cache_tables_creates_posts_fts_with_subtitle_column(
+        self,
+        db_engine: AsyncEngine,
+    ) -> None:
+        """setup_cache_tables should recreate posts_fts as the expected FTS5 schema."""
+        from backend.main import run_durable_migrations, setup_cache_tables
+
+        await run_durable_migrations(db_engine)
+        await setup_cache_tables(db_engine)
+
+        async with db_engine.connect() as conn:
+            result = await conn.execute(
+                text("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'posts_fts'")
+            )
+            create_sql = result.scalar_one()
+
+        assert create_sql is not None
+        assert "CREATE VIRTUAL TABLE" in create_sql
+        assert "title, subtitle, content" in create_sql
+
     async def test_setup_cache_tables_preserves_durable_data(
         self,
         db_engine: AsyncEngine,
