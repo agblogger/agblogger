@@ -13,7 +13,7 @@ from backend.filesystem.frontmatter import (
     serialize_post,
     strip_leading_heading,
 )
-from backend.services.datetime_service import now_utc
+from backend.utils.datetime import now_utc
 
 
 class TestRecognizedFields:

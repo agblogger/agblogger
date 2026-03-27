@@ -24,7 +24,7 @@ from backend.filesystem.content_manager import ContentManager
 from backend.filesystem.toml_manager import parse_site_config
 from backend.models.base import CacheBase, DurableBase
 from backend.models.post import PostCache
-from backend.services.datetime_service import format_iso, now_utc
+from backend.utils.datetime import format_iso, now_utc
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator

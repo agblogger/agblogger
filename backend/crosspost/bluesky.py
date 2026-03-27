@@ -22,7 +22,7 @@ from backend.crosspost.atproto_oauth import create_dpop_proof
 from backend.crosspost.base import CrossPostContent, CrossPostResult
 from backend.crosspost.http_utils import get_str_field, parse_json_object
 from backend.crosspost.ssrf import ssrf_safe_client
-from backend.services.datetime_service import now_utc
+from backend.utils.datetime import now_utc
 
 logger = logging.getLogger(__name__)
 

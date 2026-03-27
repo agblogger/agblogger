@@ -1,4 +1,4 @@
-"""Datetime parsing: lax input -> strict output."""
+"""Shared low-level datetime helpers used across backend layers."""
 
 from __future__ import annotations
 
@@ -12,19 +12,7 @@ STRICT_FORMAT = "%Y-%m-%d %H:%M:%S.%f%z"
 
 
 def parse_datetime(value: str | datetime, fallback_tz: str = "UTC") -> datetime:
-    """Parse a lax datetime string into a strict timezone-aware datetime.
-
-    Accepts various formats:
-    - 2026-02-02 22:21:29.975359+00
-    - 2026-02-02 22:21:29+00
-    - 2026-02-02 22:21+00
-    - 2026-02-02 22:21
-    - 2026-02-02
-    - ISO 8601 variants with T separator
-
-    Missing timezone falls back to fallback_tz.
-    Missing time components default to zeros.
-    """
+    """Parse a lax datetime string into a strict timezone-aware datetime."""
     if isinstance(value, datetime):
         if value.tzinfo is None:
             tz = pendulum.timezone(fallback_tz)
@@ -42,15 +30,11 @@ def parse_datetime(value: str | datetime, fallback_tz: str = "UTC") -> datetime:
     if not isinstance(parsed, pendulum.Date):
         msg = f"Cannot parse date from: {value_str}"
         raise ValueError(msg)
-    # pendulum.parse returns Date for date-only strings
     return pendulum.datetime(parsed.year, parsed.month, parsed.day, tz=fallback_tz)
 
 
 def format_datetime(dt: datetime) -> str:
-    """Format a datetime to the strict output format.
-
-    Output: YYYY-MM-DD HH:MM:SS.ffffff+HH:MM
-    """
+    """Format a datetime to the strict output format."""
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=UTC)
     return dt.strftime(STRICT_FORMAT)

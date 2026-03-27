@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from backend.services.datetime_service import format_datetime, now_utc, parse_datetime
+from backend.utils.datetime import format_datetime, now_utc, parse_datetime
 
 
 class TestDatetimeParsing:

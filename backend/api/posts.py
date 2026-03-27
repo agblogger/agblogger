@@ -49,7 +49,6 @@ from backend.schemas.post import (
     SearchResult,
 )
 from backend.services.analytics_service import fire_background_hit
-from backend.services.datetime_service import format_iso, now_utc
 from backend.services.git_service import GitService
 from backend.services.label_service import ensure_label_cache_entry
 from backend.services.post_service import (
@@ -60,6 +59,7 @@ from backend.services.post_service import (
     search_posts,
 )
 from backend.services.slug_service import generate_post_path, generate_post_slug
+from backend.utils.datetime import format_iso, now_utc
 from backend.utils.slug import file_path_to_slug, resolve_slug_candidates
 
 logger = logging.getLogger(__name__)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import deque
 
-from backend.services.datetime_service import now_utc
+from backend.utils.datetime import now_utc
 
 
 class InMemoryRateLimiter:

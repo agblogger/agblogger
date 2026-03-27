@@ -27,8 +27,8 @@ from backend.services.auth_service import (
     refresh_tokens,
     verify_password,
 )
-from backend.services.datetime_service import format_iso, now_utc
 from backend.services.key_derivation import derive_access_token_key
+from backend.utils.datetime import format_iso, now_utc
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine

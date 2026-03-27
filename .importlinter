@@ -14,3 +14,70 @@ source_modules =
     backend.pandoc
 forbidden_modules =
     backend.api
+
+[importlinter:contract:filesystem-must-not-depend-on-higher-layers]
+name = Filesystem layer must not depend on higher backend layers
+type = forbidden
+source_modules =
+    backend.filesystem
+forbidden_modules =
+    backend.api
+    backend.services
+    backend.models
+    backend.schemas
+    backend.crosspost
+    backend.sync
+    backend.pandoc
+
+[importlinter:contract:schemas-must-remain-transport-only]
+name = Schemas must remain transport-only
+type = forbidden
+source_modules =
+    backend.schemas
+forbidden_modules =
+    backend.api
+    backend.services
+    backend.filesystem
+    backend.models
+    backend.crosspost
+    backend.sync
+    backend.pandoc
+
+[importlinter:contract:models-must-not-depend-on-application-layers]
+name = Models must not depend on application layers
+type = forbidden
+source_modules =
+    backend.models
+forbidden_modules =
+    backend.api
+    backend.services
+    backend.filesystem
+    backend.pandoc
+
+[importlinter:contract:pandoc-must-remain-isolated]
+name = Pandoc layer must remain isolated
+type = forbidden
+source_modules =
+    backend.pandoc
+forbidden_modules =
+    backend.api
+    backend.services
+    backend.filesystem
+    backend.models
+    backend.schemas
+    backend.crosspost
+    backend.sync
+
+[importlinter:contract:crosspost-adapters-must-not-depend-on-app-layers]
+name = Cross-post adapters must not depend on API or content layers
+type = forbidden
+source_modules =
+    backend.crosspost
+forbidden_modules =
+    backend.api
+    backend.services
+    backend.filesystem
+    backend.models
+    backend.schemas
+    backend.pandoc
+    backend.sync

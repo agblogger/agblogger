@@ -18,7 +18,7 @@ from backend.schemas.post import (
     PostSummary,
     SearchResult,
 )
-from backend.services.datetime_service import format_iso, parse_datetime
+from backend.utils.datetime import format_iso, parse_datetime
 
 if TYPE_CHECKING:
     from sqlalchemy import Select

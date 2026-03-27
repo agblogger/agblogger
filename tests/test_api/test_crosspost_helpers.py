@@ -104,7 +104,7 @@ class TestUpsertSocialAccountSavepoint:
         """
         from backend.api.crosspost import _upsert_social_account
         from backend.schemas.crosspost import SocialAccountCreate
-        from backend.services.datetime_service import format_datetime, now_utc
+        from backend.utils.datetime import format_datetime, now_utc
 
         # Insert an account directly so we can verify it survives the race.
         now = format_datetime(now_utc())

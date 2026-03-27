@@ -42,9 +42,9 @@ from backend.services.admin_service import (
     update_site_settings,
 )
 from backend.services.auth_service import hash_password, revoke_user_credentials, verify_password
-from backend.services.datetime_service import format_iso, now_utc
 from backend.services.git_service import GitService
 from backend.services.rate_limit_service import InMemoryRateLimiter
+from backend.utils.datetime import format_iso, now_utc
 
 logger = logging.getLogger(__name__)
 

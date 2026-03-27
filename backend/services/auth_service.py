@@ -15,8 +15,8 @@ from sqlalchemy import delete, select
 
 from backend.models.crosspost import CrossPost, SocialAccount
 from backend.models.user import AdminRefreshToken, AdminUser
-from backend.services.datetime_service import format_iso, now_utc
 from backend.services.key_derivation import derive_access_token_key
+from backend.utils.datetime import format_iso, now_utc
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession

@@ -6,7 +6,7 @@ import re
 import unicodedata
 from typing import TYPE_CHECKING
 
-from backend.services.datetime_service import now_utc
+from backend.utils.datetime import now_utc
 
 if TYPE_CHECKING:
     from pathlib import Path

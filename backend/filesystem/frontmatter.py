@@ -9,7 +9,7 @@ from typing import Any, NotRequired, TypedDict
 
 import frontmatter
 
-from backend.services.datetime_service import format_datetime, parse_datetime
+from backend.utils.datetime import format_datetime, now_utc, parse_datetime
 
 RECOGNIZED_FIELDS: frozenset[str] = frozenset(
     {
@@ -140,8 +140,6 @@ def parse_post(
         else:
             created_at = parse_datetime(str(raw_created), fallback_tz=fallback_tz)
     else:
-        from backend.services.datetime_service import now_utc
-
         created_at = now_utc()
 
     # Parse modified_at

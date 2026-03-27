@@ -12,8 +12,8 @@ from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
 from backend.filesystem.frontmatter import RECOGNIZED_FIELDS
-from backend.services.datetime_service import format_datetime
 from backend.services.sync_service import FileEntry, merge_frontmatter, normalize_post_frontmatter
+from backend.utils.datetime import format_datetime
 
 if TYPE_CHECKING:
     from pathlib import Path

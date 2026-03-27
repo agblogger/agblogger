@@ -3,12 +3,9 @@
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
-
-if TYPE_CHECKING:
-    from backend.models.user import AdminUser
 
 _USERNAME_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]*$")
 
@@ -99,8 +96,8 @@ class UserResponse(BaseModel):
     display_name: str | None = None
 
     @classmethod
-    def from_user(cls, user: AdminUser) -> UserResponse:
-        """Build from an AdminUser ORM model."""
+    def from_user(cls, user: Any) -> UserResponse:
+        """Build from an object matching the admin-user shape."""
         return cls(
             id=user.id,
             username=user.username,

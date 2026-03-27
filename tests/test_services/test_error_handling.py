@@ -19,7 +19,7 @@ from backend.filesystem.toml_manager import (
     write_labels_config,
     write_site_config,
 )
-from backend.services.datetime_service import parse_datetime
+from backend.utils.datetime import parse_datetime
 
 
 class TestParseDatetimeParserError:

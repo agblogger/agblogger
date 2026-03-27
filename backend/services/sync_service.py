@@ -20,7 +20,7 @@ from sqlalchemy import delete, select
 
 from backend.filesystem.frontmatter import RECOGNIZED_FIELDS, extract_title, strip_leading_heading
 from backend.models.sync import SyncManifest
-from backend.services.datetime_service import format_datetime, format_iso, now_utc, parse_datetime
+from backend.utils.datetime import format_datetime, format_iso, now_utc, parse_datetime
 from backend.utils.slug import is_directory_post_path
 
 logger = logging.getLogger(__name__)

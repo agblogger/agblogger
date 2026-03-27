@@ -25,7 +25,13 @@ Each target is fail-fast, and the default full gate `just check` runs `check-sta
   - Config: `[tool.deptry]` and `[tool.deptry.per_rule_ignores]` in `pyproject.toml`.
 - `uv run lint-imports`
   - Import-boundary enforcement via `.importlinter`.
-  - Current contract: `backend.services`, `backend.filesystem`, `backend.models`, `backend.schemas`, `backend.crosspost`, `backend.sync`, and `backend.pandoc` must not import `backend.api`.
+  - Current contracts:
+    - `backend.services`, `backend.filesystem`, `backend.models`, `backend.schemas`, `backend.crosspost`, `backend.sync`, and `backend.pandoc` must not import `backend.api`.
+    - `backend.filesystem` must not import `backend.services`, `backend.models`, `backend.schemas`, `backend.crosspost`, `backend.sync`, or `backend.pandoc`.
+    - `backend.schemas` must not import `backend.services`, `backend.filesystem`, `backend.models`, `backend.crosspost`, `backend.sync`, or `backend.pandoc`.
+    - `backend.models` must not import `backend.services`, `backend.filesystem`, or `backend.pandoc`.
+    - `backend.pandoc` must not import `backend.services`, `backend.filesystem`, `backend.models`, `backend.schemas`, `backend.crosspost`, or `backend.sync`.
+    - `backend.crosspost` must not import `backend.services`, `backend.filesystem`, `backend.models`, `backend.schemas`, `backend.pandoc`, or `backend.sync`.
 - `uv run ruff check backend/ cli/ tests/`
   - Python linting and security/style checks.
   - Config: `[tool.ruff]` and `[tool.ruff.lint]` in `pyproject.toml`.

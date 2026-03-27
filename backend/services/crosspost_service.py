@@ -17,7 +17,7 @@ from backend.models.crosspost import CrossPost, SocialAccount
 from backend.models.post import PostCache
 from backend.schemas.crosspost import CrossPostStatus
 from backend.services.crypto_service import decrypt_value, encrypt_value
-from backend.services.datetime_service import format_datetime, now_utc
+from backend.utils.datetime import format_datetime, now_utc
 from backend.utils.slug import file_path_to_slug
 
 if TYPE_CHECKING:

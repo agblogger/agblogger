@@ -17,7 +17,7 @@ from backend.services.crosspost_service import (
     crosspost,
 )
 from backend.services.crypto_service import decrypt_value, encrypt_value
-from backend.services.datetime_service import format_datetime, now_utc
+from backend.utils.datetime import format_datetime, now_utc
 from tests.conftest import TEST_SECRET_KEY
 
 if TYPE_CHECKING:

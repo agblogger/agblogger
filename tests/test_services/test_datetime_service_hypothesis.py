@@ -8,7 +8,7 @@ from datetime import UTC, date, datetime, timedelta, timezone
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
-from backend.services.datetime_service import (
+from backend.utils.datetime import (
     format_datetime,
     format_iso,
     parse_datetime,

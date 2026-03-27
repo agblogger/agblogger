@@ -278,7 +278,7 @@ async def create_test_user(
     """
     from backend.models.user import AdminUser
     from backend.services.auth_service import hash_password
-    from backend.services.datetime_service import format_iso, now_utc
+    from backend.utils.datetime import format_iso, now_utc
 
     transport = client._transport
     app = getattr(transport, "app", None)

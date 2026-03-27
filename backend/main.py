@@ -813,8 +813,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         # Post view: /post/<slug> → serve SPA HTML with OG tags
         from backend.models.post import PostCache
-        from backend.services.datetime_service import format_iso
         from backend.services.opengraph_service import inject_og_tags, strip_html_tags
+        from backend.utils.datetime import format_iso
 
         frontend_dir_path: Path = request.app.state.settings.frontend_dir
         index_path = frontend_dir_path / "index.html"

@@ -42,8 +42,8 @@ from backend.services.auth_service import (
     revoke_refresh_token,
 )
 from backend.services.csrf_service import create_csrf_token
-from backend.services.datetime_service import format_iso, now_utc
 from backend.services.rate_limit_service import InMemoryRateLimiter
+from backend.utils.datetime import format_iso, now_utc
 
 logger = logging.getLogger(__name__)
 

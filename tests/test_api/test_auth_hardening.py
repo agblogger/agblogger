@@ -516,8 +516,8 @@ class TestGetCurrentAdminLogging:
         import jwt as pyjwt
 
         from backend.services.auth_service import ALGORITHM
-        from backend.services.datetime_service import now_utc
         from backend.services.key_derivation import derive_access_token_key
+        from backend.utils.datetime import now_utc
 
         secret = "test-secret-key-with-at-least-32-characters"
         signing_key = derive_access_token_key(secret)

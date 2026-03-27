@@ -22,10 +22,10 @@ from backend.models.crosspost import SocialAccount
 from backend.models.label import LabelCache, LabelParentCache
 from backend.services.crosspost_service import crosspost
 from backend.services.crypto_service import encrypt_value
-from backend.services.datetime_service import format_datetime, now_utc
 from backend.services.git_service import GitService
 from backend.services.label_service import update_label
 from backend.services.sync_service import merge_post_file
+from backend.utils.datetime import format_datetime, now_utc
 from tests.conftest import TEST_SECRET_KEY
 
 if TYPE_CHECKING:
