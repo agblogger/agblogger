@@ -1,111 +1,108 @@
-# Static Analysis Run By `just check-static`
+# Static Analysis and Related Quality Gates
 
-`just check-static` runs these targets:
+`just check-static` is the repository's static-only gate. It runs, in order:
 
 - `check-backend-static`
 - `check-frontend-static`
 - `check-vulture`
 - `check-trivy`
 
-All checks are fail-fast and CI-blocking.
+Each target is fail-fast, and the default full gate `just check` runs `check-static` before the test suites.
 
 ## Backend (`check-backend-static`)
 
-- `mypy backend/ cli/ tests/`
-  - Purpose: strict Python type checking.
-  - Scope: backend, CLI, tests.
-- `basedpyright backend/ cli/`
-  - Purpose: second Python type-checker pass to catch issues mypy may miss.
-  - Scope: backend, CLI runtime code.
-- `deptry .`
-  - Purpose: dependency declaration hygiene (missing/unused/misplaced deps).
-  - Scope: Python project dependency graph.
-- `lint-imports`
-  - Purpose: architecture import-boundary enforcement.
-  - Scope: Python module dependency contracts.
-- `ruff check backend/ cli/ tests/`
-  - Purpose: linting (correctness, style, security ruleset, simplifications).
-  - Scope: backend, CLI, tests.
-- `ruff format --check backend/ cli/ tests/`
-  - Purpose: format compliance gate.
-  - Scope: backend, CLI, tests.
-- `uv export --format requirements.txt --no-dev --no-emit-project --frozen ...` then `uv run pip-audit --progress-spinner off --requirement ...`
-  - Purpose: known-vulnerability scan of the locked Python runtime dependency set that ships with the application.
-  - Scope: `uv.lock` exported without dev dependencies and without the editable local project entry, so dev-only tools do not affect the backend production audit.
+`check-backend-static` runs these commands:
+
+- `uv run mypy backend/ cli/ tests/`
+  - Strict Python type checking driven by `[tool.mypy]` in `pyproject.toml`.
+  - Scope: backend, CLI, and tests.
+- `uv run basedpyright backend/ cli/`
+  - Second type-checking pass using BasedPyright.
+  - Scope: backend and CLI runtime code only.
+  - Config: `[tool.basedpyright]` in `pyproject.toml` uses `typeCheckingMode = "standard"` and excludes `.venv` plus `backend/migrations`.
+- `uv run deptry .`
+  - Dependency declaration hygiene for the Python project.
+  - Config: `[tool.deptry]` and `[tool.deptry.per_rule_ignores]` in `pyproject.toml`.
+- `uv run lint-imports`
+  - Import-boundary enforcement via `.importlinter`.
+  - Current contract: `backend.services`, `backend.filesystem`, `backend.models`, `backend.schemas`, `backend.crosspost`, `backend.sync`, and `backend.pandoc` must not import `backend.api`.
+- `uv run ruff check backend/ cli/ tests/`
+  - Python linting and security/style checks.
+  - Config: `[tool.ruff]` and `[tool.ruff.lint]` in `pyproject.toml`.
+- `uv run ruff format --check backend/ cli/ tests/`
+  - Formatting compliance check for Python code.
+- `uv export --format requirements.txt --no-dev --no-emit-project --frozen -o "$requirements_file"` then `uv run pip-audit --progress-spinner off --requirement "$requirements_file"`
+  - Audits the locked runtime Python dependency set, not the dev toolchain.
+  - The export omits dev dependencies and omits the editable local project itself, so the audit reflects shipped runtime dependencies from `uv.lock`.
 
 ## Frontend (`check-frontend-static`)
 
+`check-frontend-static` runs these commands from `frontend/`:
+
 - `npm run typecheck` (`tsc -b --noEmit`)
-  - Purpose: TypeScript type checking.
-  - Scope: frontend source.
+  - TypeScript type checking for the SPA.
+  - Config: `frontend/tsconfig.app.json` is strict and enables checks such as `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, `noUnusedLocals`, `noUnusedParameters`, and `noImplicitReturns`.
 - `npm run lint` (`eslint .`)
-  - Purpose: linting for TS/React correctness and code quality.
-  - Scope: frontend source.
+  - Type-aware ESLint over TypeScript/React code.
+  - Config: `frontend/eslint.config.js` extends `typescript-eslint` `strictTypeChecked`, `eslint-plugin-react-hooks`, and `eslint-plugin-react-refresh`.
 - `npm run lint:deps` (`dependency-cruiser --config .dependency-cruiser.cjs src`)
-  - Purpose: dependency graph and module-boundary checks.
-  - Scope: `frontend/src`.
-- `npm run lint:unused` (`knip ...`)
-  - Purpose: unused/unlisted/unresolved dependency checks.
-  - Scope: frontend project + dependency declarations.
+  - Frontend module-boundary checks.
+  - Current rules in `frontend/.dependency-cruiser.cjs`: no circular dependencies in `src`, and no runtime source imports from frontend test modules.
+- `npm run lint:unused` (`knip --config knip.json --include dependencies,unlisted,unresolved`)
+  - Dependency hygiene for the frontend package.
+  - Config: `frontend/knip.json` scans `src/**/*.{ts,tsx}` and ignores a short allowlist of intentionally retained packages such as font packages and Stryker tooling.
 - `npm run audit` (`npm audit --audit-level=high --omit=dev`)
-  - Purpose: known-vulnerability scan of production npm dependencies.
-  - Scope: frontend production dependency tree.
+  - Audits production npm dependencies only.
 
 ## Dead-Code Analysis (`check-vulture`)
 
-- `vulture backend cli --exclude "backend/migrations" --min-confidence 80`
-- Purpose: detect likely dead/unused Python code in runtime modules.
-- Scope: backend and CLI runtime code.
+- Command: `uv run vulture backend cli --exclude "backend/migrations" --min-confidence 80 --ignore-names "readline"`
+- Purpose: detect likely unused Python runtime code.
+- Scope: `backend/` and `cli/`, excluding migrations.
+- Note: `readline` is explicitly ignored because the deployment CLI imports it for side effects.
 
-## Trivy Security Scan (`check-trivy`)
+## Trivy Repository Scan (`check-trivy`)
 
-- `trivy fs -q --scanners vuln,misconfig,secret,license --exit-code 1 .`
-  - Purpose: broad repository security scan in one pass (vulnerabilities, misconfigurations, secrets, and license findings).
-  - Scope: repository filesystem, constrained by `trivy.yaml` skip rules.
-  - Severity policy: configured in `trivy.yaml` (`UNKNOWN`, `MEDIUM`, `HIGH`, `CRITICAL`; `LOW` suppressed).
+- Command: `trivy fs -q --scanners vuln,misconfig,secret,license --exit-code 1 .`
+- Purpose: broad filesystem scan for vulnerabilities, misconfigurations, secrets, and license findings.
+- Scope: repository filesystem subject to `trivy.yaml` skip rules.
+- Severity policy: `trivy.yaml` enables `UNKNOWN`, `MEDIUM`, `HIGH`, and `CRITICAL`; `LOW` is intentionally suppressed.
+- License policy: `trivy.yaml` ignores `OFL-1.1`.
 
-## Related Test Gates
+## What `just check` Adds
 
-Tests are intentionally split out from static analysis:
+Tests are intentionally separate from static analysis:
 
-- `just test` runs both test suites (`test-backend`, `test-frontend`)
-  - Optional coverage: `just test coverage=true`
-- `just test-backend` supports optional coverage: `just test-backend coverage=true`
-- `just test-frontend` supports optional coverage: `just test-frontend coverage=true`
-- `just check` runs `just check-static` first, then `just test` with coverage enforcement
+- `just test` runs `test-backend` and `test-frontend`
+- `just test-backend coverage=true` adds backend/CLI coverage reporting
+- `just test-frontend coverage=true` runs Vitest with coverage
+- `just check` runs `just check-static` first, then `just test coverage=true`
 
-This keeps static analysis and runtime verification available separately while preserving a single full gate.
+This keeps static analysis available as a fast standalone gate while preserving a single full validation command.
 
-## Extra Security Gates
+## Extra and Noisy Gates
 
-These are intentionally separate from `just check` and `just check-static`:
+These checks are intentionally outside `just check-static` and `just check`:
 
-- `just check-audit-full`
-  - Runs `npm audit` in `frontend/`.
-  - Includes development dependencies (unlike `npm run audit`, which uses `--audit-level=high --omit=dev`).
-- `just check-codeql`
-  - Rebuilds CodeQL databases and runs CodeQL analysis for Python and JavaScript.
-- `just checkov`
-  - Runs `checkov -f Dockerfile -f docker-compose.yml` via `uv run --with checkov`.
-  - Scope: infrastructure-as-code checks for the repository Dockerfile and Compose manifest.
-- `just check-gitleaks`
-  - Runs `gitleaks detect --source . --no-banner` with repo config that excludes `tests/`.
-  - Scope: repository secret scan over git-tracked content outside backend test fixtures.
-- `just check-gitleaks-full`
-  - Runs `gitleaks detect --source . --no-banner --verbose` with an explicit temporary config that extends Gitleaks' built-in default rules, bypassing the repo `.gitleaks.toml`.
-  - Scope: full repository secret scan, including `tests/`; kept outside the default extra gate because test fixtures intentionally contain fake secrets.
-- `just check-snyk`
-  - Runs `snyk code test`.
-  - Scope: repository source code SAST via Snyk Code.
-  - Test code is excluded via the repo-root `.snyk` policy (`tests/**`, frontend `__tests__`, and `*.test.ts(x)` files).
 - `just check-extra`
-  - Runs extra checks not covered by `just check`: `check-audit-full` + `checkov` + `check-gitleaks` + `check-codeql` + `check-semgrep` + `test-backend-slow` + `snyk test frontend`.
+  - Runs `check-audit-full`, `checkov`, `check-gitleaks`, `check-codeql`, `check-semgrep`, `test-backend-slow`, and `check-snyk-deps`.
+- `just check-audit-full`
+  - Runs `npm audit` in `frontend/` without `--omit=dev`, so development dependencies are included.
+- `just checkov`
+  - Runs `uv run --with checkov checkov -f Dockerfile -f docker-compose.yml`.
+- `just check-gitleaks`
+  - Runs `gitleaks detect --source . --no-banner` using the repository config, which excludes `tests/`.
+- `just check-gitleaks-full`
+  - Runs a full Gitleaks scan with a temporary config extending the built-in defaults, including `tests/`.
+- `just check-codeql`
+  - Rebuilds and analyzes CodeQL databases for Python and JavaScript/TypeScript.
 - `just check-semgrep`
-  - Runs `semgrep scan` with rulesets: `p/ci`, `p/security-audit`, `p/secrets`, `p/owasp-top-ten`, `p/python`, `p/typescript`, `p/dockerfile`, `p/docker-compose`, `p/supply-chain`, `p/trailofbits`, and `.semgrep.yml` (local project rules).
-  - Excludes `typescript.react.security.audit.react-dangerouslysetinnerhtml.react-dangerouslysetinnerhtml` rule.
-  - Scope: `backend/`, `cli/`, `frontend/src/`, `Dockerfile`, `docker-compose.yml` (tests and frontend test files excluded).
-  - Purpose: SAST and security-pattern detection.
+  - Runs `uv run semgrep scan` with remote rulesets `p/ci`, `p/security-audit`, `p/secrets`, `p/owasp-top-ten`, `p/python`, `p/typescript`, `p/dockerfile`, `p/docker-compose`, `p/supply-chain`, `p/trailofbits`, plus the local `.semgrep.yml`.
+  - Scope: `backend/`, `cli/`, `frontend/src/`, `Dockerfile`, and `docker-compose.yml`.
+  - Exclusions: `tests`, frontend `__tests__`, and frontend `*.test.ts(x)` files.
+- `just check-snyk-deps`
+  - Runs `snyk test frontend` for frontend dependency scanning.
+- `just check-snyk`
+  - Runs `snyk code test` for repository source-code analysis.
 - `just check-noisy`
-  - Runs `check-snyk` and `check-gitleaks-full` sequentially, even if the first one reports issues.
-  - Returns a failing exit status if either scan reports issues.
-  - Intended for noisier/offline-unfriendly scans kept outside the default quality gate.
+  - Runs `check-snyk` and `check-gitleaks-full` sequentially and preserves a failing status if either reports issues.
