@@ -6,8 +6,6 @@ import re
 import unicodedata
 from typing import TYPE_CHECKING
 
-from backend.utils.datetime import now_utc
-
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -57,24 +55,48 @@ def generate_post_slug(title: str) -> str:
     return text
 
 
-def generate_post_path(title: str, posts_dir: Path) -> Path:
+def generate_post_path(
+    title: str,
+    posts_dir: Path,
+    current_dir: Path | None = None,
+) -> Path:
     """Generate a unique post directory path.
 
-    Creates a path of the form: posts_dir / YYYY-MM-DD-{slug} / index.md
+    Creates a path of the form: posts_dir / {slug} / index.md.
     If the directory already exists, appends -2, -3, etc.
+
+    When *current_dir* is provided, that directory is treated as reusable so
+    callers can resolve the canonical path for an existing post without
+    spuriously colliding with its current location.
     """
     slug = generate_post_slug(title)
-    today = now_utc().date().isoformat()
-    base_name = f"{today}-{slug}"
+    return _resolve_unique_post_path(slug, posts_dir, current_dir=current_dir)
 
-    dir_path = posts_dir / base_name
-    if not dir_path.exists():
+
+def _resolve_unique_post_path(
+    slug: str,
+    posts_dir: Path,
+    current_dir: Path | None = None,
+) -> Path:
+    """Resolve a unique canonical post path for *slug* within *posts_dir*.
+
+    When *current_dir* is provided, that directory is treated as reusable so
+    callers can ask for the canonical path of an existing post without forcing
+    a spurious collision suffix.
+    """
+    dir_path = posts_dir / slug
+    if _is_available_directory(dir_path, current_dir):
         return dir_path / "index.md"
 
     counter = 2
     while counter <= _MAX_SLUG_COLLISION:
-        candidate = posts_dir / f"{base_name}-{counter}"
-        if not candidate.exists():
+        candidate = posts_dir / f"{slug}-{counter}"
+        if _is_available_directory(candidate, current_dir):
             return candidate / "index.md"
         counter += 1
-    raise ValueError(f"Too many slug collisions for '{base_name}' (>{_MAX_SLUG_COLLISION})")
+    raise ValueError(f"Too many slug collisions for '{slug}' (>{_MAX_SLUG_COLLISION})")
+
+
+def _is_available_directory(candidate: Path, current_dir: Path | None) -> bool:
+    """Return True when *candidate* can be used as the canonical post directory."""
+    return candidate == current_dir or not candidate.exists()

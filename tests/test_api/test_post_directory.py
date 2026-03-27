@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from typing import TYPE_CHECKING
 
 import pytest
@@ -74,8 +73,7 @@ class TestPostDirectoryCreation:
         # Path should be in posts/ directory and end with /index.md
         assert data["file_path"].startswith("posts/")
         assert data["file_path"].endswith("/index.md")
-        # Path should contain a date-slug pattern
-        assert re.search(r"\d{4}-\d{2}-\d{2}-my-first-post", data["file_path"])
+        assert data["file_path"] == "posts/my-first-post/index.md"
 
     @pytest.mark.asyncio
     async def test_collision_handling_same_title(self, client: AsyncClient) -> None:

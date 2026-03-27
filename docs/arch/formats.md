@@ -19,7 +19,7 @@ Posts are stored as directory-backed content units so each post keeps its markdo
 Example:
 
 ```text
-content/posts/2026-03-01-example-post/
+content/posts/example-post/
 ├── index.md
 └── diagram.png
 ```

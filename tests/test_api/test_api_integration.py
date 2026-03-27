@@ -1096,16 +1096,17 @@ class TestPostCRUD:
             headers=headers,
         )
         assert update_resp.status_code == 200
+        updated_file_path = update_resp.json()["file_path"]
 
         new_label_resp = await client.get("/api/posts", params={"labels": "cache-update"})
         assert new_label_resp.status_code == 200
         new_label_paths = [post["file_path"] for post in new_label_resp.json()["posts"]]
-        assert "posts/hello/index.md" in new_label_paths
+        assert updated_file_path in new_label_paths
 
         old_label_resp = await client.get("/api/posts", params={"labels": "swe"})
         assert old_label_resp.status_code == 200
         old_label_paths = [post["file_path"] for post in old_label_resp.json()["posts"]]
-        assert "posts/hello/index.md" not in old_label_paths
+        assert updated_file_path not in old_label_paths
 
 
 class TestLabelCRUD:
@@ -1523,11 +1524,12 @@ class TestSearch:
             headers={"Authorization": f"Bearer {token}"},
         )
         assert update_resp.status_code == 200
+        updated_file_path = update_resp.json()["file_path"]
 
         search_resp = await client.get("/api/posts/search", params={"q": "uniquekeyupdate654"})
         assert search_resp.status_code == 200
         file_paths = [result["file_path"] for result in search_resp.json()]
-        assert "posts/hello/index.md" in file_paths
+        assert updated_file_path in file_paths
 
     @pytest.mark.asyncio
     async def test_search_special_characters(self, client: AsyncClient) -> None:

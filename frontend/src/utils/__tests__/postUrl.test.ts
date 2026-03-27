@@ -5,7 +5,7 @@ import { filePathToSlug, postUrl } from '../postUrl'
 
 describe('filePathToSlug', () => {
   it('strips posts/ prefix and /index.md suffix from directory-backed post', () => {
-    expect(filePathToSlug('posts/2026-03-23-my-post/index.md')).toBe('2026-03-23-my-post')
+    expect(filePathToSlug('posts/my-post/index.md')).toBe('my-post')
   })
 
   it('returns bare slug unchanged (idempotent)', () => {
@@ -24,8 +24,8 @@ describe('filePathToSlug', () => {
     expect(filePathToSlug('posts/2026/recap/index.md')).toBe('2026/recap')
   })
 
-  it('returns bare slug with date prefix unchanged', () => {
-    expect(filePathToSlug('2026-03-23-my-post')).toBe('2026-03-23-my-post')
+  it('returns bare slug unchanged', () => {
+    expect(filePathToSlug('my-post')).toBe('my-post')
   })
 
   describe('console.warn for posts/-prefixed path with .md but not /index.md', () => {

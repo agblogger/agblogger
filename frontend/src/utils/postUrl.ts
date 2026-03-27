@@ -2,8 +2,8 @@
  * Extract a URL-friendly slug from a file_path.
  *
  * The backend always emits one of these canonical formats:
- *   "posts/2026-03-23-my-post/index.md" → "2026-03-23-my-post"
- *   "2026-03-23-my-post"                → "2026-03-23-my-post" (idempotent, bare slug)
+ *   "posts/my-post/index.md" → "my-post"
+ *   "my-post"                → "my-post" (idempotent, bare slug)
  *
  * Defensive edge cases handled (not emitted by backend, logged with a warning):
  *   "posts/my-post.md" — flat-file format; backend raises ValueError for this

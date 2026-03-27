@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-import re
 import shutil
 from pathlib import Path as FilePath
 from typing import Annotated, Literal
@@ -58,7 +57,7 @@ from backend.services.post_service import (
     resolve_author_display_name,
     search_posts,
 )
-from backend.services.slug_service import generate_post_path, generate_post_slug
+from backend.services.slug_service import generate_post_path
 from backend.utils.datetime import format_iso, now_utc
 from backend.utils.slug import file_path_to_slug, resolve_slug_candidates
 
@@ -926,40 +925,24 @@ async def update_post_endpoint(
         old_dir: FilePath | None = None
         new_dir: FilePath | None = None
 
-        new_slug = generate_post_slug(title)
-        old_dir_name = FilePath(file_path).parent.name
-        date_prefix_match = re.match(r"^(\d{4}-\d{2}-\d{2})-(.+)$", old_dir_name)
-        if date_prefix_match:
-            date_prefix = date_prefix_match.group(1)
-            old_slug = date_prefix_match.group(2)
-            if new_slug != old_slug:
-                old_dir = content_manager.content_dir / FilePath(file_path).parent
-                posts_parent = old_dir.parent
-                new_dir_name = f"{date_prefix}-{new_slug}"
-                new_dir = posts_parent / new_dir_name
+        old_dir = content_manager.content_dir / FilePath(file_path).parent
+        posts_dir = old_dir.parent
+        try:
+            target_post_path = generate_post_path(title, posts_dir, current_dir=old_dir)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=500,
+                detail="Too many directory name collisions",
+            ) from exc
 
-                # Handle collision: append -2, -3, etc.
-                if new_dir.exists():
-                    counter = 2
-                    while counter <= 1000:
-                        candidate = posts_parent / f"{new_dir_name}-{counter}"
-                        if not candidate.exists():
-                            new_dir = candidate
-                            break
-                        counter += 1
-                    else:
-                        raise HTTPException(
-                            status_code=500,
-                            detail="Too many directory name collisions",
-                        )
+        new_file_path = str(target_post_path.relative_to(content_manager.content_dir))
+        if new_file_path != file_path:
+            new_dir = target_post_path.parent
 
-                new_file_path = str((new_dir / "index.md").relative_to(content_manager.content_dir))
-
-                # Rewrite URLs with new path (reuse already-rendered HTML)
-                new_rendered_excerpt = rewrite_relative_urls(raw_rendered_excerpt, new_file_path)
-                new_rendered_html = rewrite_relative_urls(raw_rendered_html, new_file_path)
-
-                needs_rename = True
+            # Rewrite URLs with new path (reuse already-rendered HTML)
+            new_rendered_excerpt = rewrite_relative_urls(raw_rendered_excerpt, new_file_path)
+            new_rendered_html = rewrite_relative_urls(raw_rendered_html, new_file_path)
+            needs_rename = True
 
         previous_title = existing.title
         previous_subtitle = existing.subtitle or ""
@@ -996,7 +979,9 @@ async def update_post_endpoint(
         # Perform the rename after write succeeds. Symlink failure is non-fatal:
         # the rename is the critical operation; a missing backward-compat symlink
         # only affects old bookmarked URLs, not application correctness.
-        if needs_rename and old_dir is not None and new_dir is not None:
+        if needs_rename:
+            if new_dir is None:
+                raise RuntimeError("Missing rename target for post update")
             try:
                 shutil.move(str(old_dir), str(new_dir))
             except OSError as exc:
@@ -1028,19 +1013,22 @@ async def update_post_endpoint(
             await session.commit()
         except (OperationalError, IntegrityError) as exc:
             logger.error("DB commit failed for post update %s: %s", file_path, exc)
-            if needs_rename and new_dir is not None and old_dir is not None and new_dir.exists():
-                try:
-                    # Remove the backward-compat symlink at old_dir if it was created
-                    if old_dir.is_symlink():
-                        old_dir.unlink()
-                    shutil.move(str(new_dir), str(old_dir))
-                except OSError as mv_exc:
-                    logger.error(
-                        "Failed to rollback directory rename %s -> %s: %s",
-                        new_dir,
-                        old_dir,
-                        mv_exc,
-                    )
+            if needs_rename:
+                if new_dir is None:
+                    raise RuntimeError("Missing rename target for post update") from exc
+                if new_dir.exists():
+                    try:
+                        # Remove the backward-compat symlink at old_dir if it was created
+                        if old_dir.is_symlink():
+                            old_dir.unlink()
+                        shutil.move(str(new_dir), str(old_dir))
+                    except OSError as mv_exc:
+                        logger.error(
+                            "Failed to rollback directory rename %s -> %s: %s",
+                            new_dir,
+                            old_dir,
+                            mv_exc,
+                        )
             raise
         await session.refresh(existing)
         set_git_warning(
