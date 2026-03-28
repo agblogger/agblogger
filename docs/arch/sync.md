@@ -34,7 +34,7 @@ Git supports sync by preserving history and providing merge context, but it does
 
 ## Client Boundary
 
-The sync client is a separate CLI companion that uses the same authenticated API boundary as the browser and other clients. It authenticates via interactive username/password login (token-login endpoint) and does not bypass the application by reading or writing server files directly.
+The sync client is a separate CLI companion that uses the same authenticated API boundary as the browser and other clients. It authenticates via interactive username/password session login, carries the CSRF token required for unsafe cookie-authenticated requests, refreshes its session when access tokens expire during long runs, and does not bypass the application by reading or writing server files directly.
 
 ## Code Entry Points
 

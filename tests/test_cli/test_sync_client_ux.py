@@ -255,134 +255,113 @@ class TestSyncConfirmationIntegration:
 
 
 class TestLoginInteractive:
-    def _mock_client(
-        self,
-        *,
-        status_code: int = 200,
-        json_data: dict[str, Any] | None = None,
-        side_effect: Exception | None = None,
-        json_side_effect: Exception | None = None,
-    ) -> MagicMock:
-        mock = MagicMock()
-        if side_effect:
-            mock.post.side_effect = side_effect
-        else:
-            resp = MagicMock(status_code=status_code)
-            if json_side_effect:
-                resp.json.side_effect = json_side_effect
-            else:
-                resp.json.return_value = json_data or {"access_token": "tok"}
-            mock.post.return_value = resp
-        return mock
-
     def test_successful_login(self) -> None:
-        mock = self._mock_client(json_data={"access_token": "my-token"})
-        with (
-            patch("cli.sync_client.httpx.Client", return_value=mock),
-            patch("getpass.getpass", return_value="pass"),
-        ):
-            token = login_interactive(
-                "https://example.com", cli_username="admin", config_username=None
-            )
-        assert token == "my-token"
+        mock_client = MagicMock()
+        with patch("getpass.getpass", return_value="pass"):
+            login_interactive(mock_client, cli_username="admin", config_username=None)
+        mock_client.login.assert_called_once_with("admin", "pass")
 
     def test_401_invalid_credentials(self, capsys: pytest.CaptureFixture[str]) -> None:
-        mock = self._mock_client(status_code=401)
+        request = httpx.Request("POST", "https://example.com/api/auth/login")
+        response = httpx.Response(status_code=401, request=request)
+        mock_client = MagicMock()
+        mock_client.login.side_effect = httpx.HTTPStatusError(
+            "Unauthorized",
+            request=request,
+            response=response,
+        )
         with (
-            patch("cli.sync_client.httpx.Client", return_value=mock),
             patch("getpass.getpass", return_value="wrong"),
             pytest.raises(SystemExit),
         ):
-            login_interactive("https://example.com", cli_username="admin", config_username=None)
+            login_interactive(mock_client, cli_username="admin", config_username=None)
         captured = capsys.readouterr()
         assert "Invalid username or password" in captured.out
 
     def test_connection_error(self, capsys: pytest.CaptureFixture[str]) -> None:
-        mock = self._mock_client(side_effect=httpx.ConnectError("refused"))
+        mock_client = MagicMock()
+        mock_client.login.side_effect = httpx.ConnectError("refused")
         with (
-            patch("cli.sync_client.httpx.Client", return_value=mock),
             patch("getpass.getpass", return_value="pass"),
             pytest.raises(SystemExit),
         ):
-            login_interactive("https://example.com", cli_username="admin", config_username=None)
+            login_interactive(mock_client, cli_username="admin", config_username=None)
         captured = capsys.readouterr()
         assert "Could not connect" in captured.out
 
     def test_timeout_error(self, capsys: pytest.CaptureFixture[str]) -> None:
-        mock = self._mock_client(side_effect=httpx.TimeoutException("timed out"))
+        mock_client = MagicMock()
+        mock_client.login.side_effect = httpx.TimeoutException("timed out")
         with (
-            patch("cli.sync_client.httpx.Client", return_value=mock),
             patch("getpass.getpass", return_value="pass"),
             pytest.raises(SystemExit),
         ):
-            login_interactive("https://example.com", cli_username="admin", config_username=None)
+            login_interactive(mock_client, cli_username="admin", config_username=None)
         captured = capsys.readouterr()
         assert "timed out" in captured.out.lower()
 
     def test_prompts_username_when_not_provided(self) -> None:
-        mock = self._mock_client()
+        mock_client = MagicMock()
         with (
-            patch("cli.sync_client.httpx.Client", return_value=mock),
             patch("builtins.input", return_value="prompted-user") as mock_input,
             patch("getpass.getpass", return_value="pass"),
         ):
-            login_interactive("https://example.com", cli_username=None, config_username=None)
+            login_interactive(mock_client, cli_username=None, config_username=None)
         mock_input.assert_called_once_with("Username: ")
 
     def test_cli_username_over_config(self) -> None:
-        mock = self._mock_client()
-        with (
-            patch("cli.sync_client.httpx.Client", return_value=mock),
-            patch("getpass.getpass", return_value="pass"),
-        ):
-            login_interactive(
-                "https://example.com", cli_username="cli-user", config_username="cfg-user"
-            )
-        call_json = mock.post.call_args[1]["json"]
-        assert call_json["username"] == "cli-user"
+        mock_client = MagicMock()
+        with patch("getpass.getpass", return_value="pass"):
+            login_interactive(mock_client, cli_username="cli-user", config_username="cfg-user")
+        mock_client.login.assert_called_once_with("cli-user", "pass")
 
     def test_config_username_over_prompt(self) -> None:
-        mock = self._mock_client()
+        mock_client = MagicMock()
         with (
-            patch("cli.sync_client.httpx.Client", return_value=mock),
             patch("builtins.input") as mock_input,
             patch("getpass.getpass", return_value="pass"),
         ):
-            login_interactive("https://example.com", cli_username=None, config_username="cfg-user")
+            login_interactive(mock_client, cli_username=None, config_username="cfg-user")
         mock_input.assert_not_called()
 
     def test_missing_access_token_key_exits(self, capsys: pytest.CaptureFixture[str]) -> None:
-        mock = self._mock_client(json_data={"token": "something"})
+        mock_client = MagicMock()
+        mock_client.login.side_effect = ValueError("Server response missing csrf token")
         with (
-            patch("cli.sync_client.httpx.Client", return_value=mock),
             patch("getpass.getpass", return_value="pass"),
             pytest.raises(SystemExit) as exc_info,
         ):
-            login_interactive("https://example.com", cli_username="admin", config_username=None)
+            login_interactive(mock_client, cli_username="admin", config_username=None)
         assert exc_info.value.code == 1
         captured = capsys.readouterr()
         assert "Error" in captured.out
 
     def test_invalid_json_response_exits(self, capsys: pytest.CaptureFixture[str]) -> None:
-        mock = self._mock_client(json_side_effect=ValueError("not json"))
+        mock_client = MagicMock()
+        mock_client.login.side_effect = ValueError("Server returned invalid response")
         with (
-            patch("cli.sync_client.httpx.Client", return_value=mock),
             patch("getpass.getpass", return_value="pass"),
             pytest.raises(SystemExit) as exc_info,
         ):
-            login_interactive("https://example.com", cli_username="admin", config_username=None)
+            login_interactive(mock_client, cli_username="admin", config_username=None)
         assert exc_info.value.code == 1
         captured = capsys.readouterr()
         assert "Error" in captured.out
 
     def test_500_status_exits_with_error(self, capsys: pytest.CaptureFixture[str]) -> None:
-        mock = self._mock_client(status_code=500)
+        request = httpx.Request("POST", "https://example.com/api/auth/login")
+        response = httpx.Response(status_code=500, request=request)
+        mock_client = MagicMock()
+        mock_client.login.side_effect = httpx.HTTPStatusError(
+            "Server Error",
+            request=request,
+            response=response,
+        )
         with (
-            patch("cli.sync_client.httpx.Client", return_value=mock),
             patch("getpass.getpass", return_value="pass"),
             pytest.raises(SystemExit) as exc_info,
         ):
-            login_interactive("https://example.com", cli_username="admin", config_username=None)
+            login_interactive(mock_client, cli_username="admin", config_username=None)
         assert exc_info.value.code == 1
         captured = capsys.readouterr()
         assert "500" in captured.out

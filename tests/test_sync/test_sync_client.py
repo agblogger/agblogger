@@ -39,18 +39,32 @@ class _DummyResponse:
 
 
 class _RecordingHttpClient:
-    def __init__(self, responses: dict[str, _DummyResponse] | None = None) -> None:
+    def __init__(
+        self,
+        responses: dict[str, _DummyResponse | list[_DummyResponse]] | None = None,
+    ) -> None:
         self.post_calls: list[tuple[str, dict[str, Any]]] = []
         self.get_calls: list[tuple[str, dict[str, Any]]] = []
-        self._responses = responses or {}
+        self._responses: dict[str, list[_DummyResponse]] = {}
+        for url, response in (responses or {}).items():
+            if isinstance(response, list):
+                self._responses[url] = list(response)
+            else:
+                self._responses[url] = [response]
+
+    def _next_response(self, url: str) -> _DummyResponse:
+        responses = self._responses.get(url)
+        if not responses:
+            return _DummyResponse()
+        return responses.pop(0)
 
     def post(self, url: str, **kwargs: Any) -> _DummyResponse:
         self.post_calls.append((url, kwargs))
-        return self._responses.get(url, _DummyResponse())
+        return self._next_response(url)
 
     def get(self, url: str, **kwargs: Any) -> _DummyResponse:
         self.get_calls.append((url, kwargs))
-        return self._responses.get(url, _DummyResponse())
+        return self._next_response(url)
 
     def close(self) -> None:
         return None
@@ -58,9 +72,9 @@ class _RecordingHttpClient:
 
 def _build_sync_client(
     content_dir: Path,
-    responses: dict[str, _DummyResponse] | None = None,
+    responses: dict[str, _DummyResponse | list[_DummyResponse]] | None = None,
 ) -> tuple[SyncClient, _RecordingHttpClient]:
-    client = SyncClient("http://example.com", content_dir, "test-token")
+    client = SyncClient("http://example.com", content_dir)
     http_client = _RecordingHttpClient(responses)
     client.client = http_client  # type: ignore[assignment]
     return client, http_client
@@ -80,6 +94,44 @@ class TestSyncClientStatus:
         monkeypatch.setattr(sync_client, "scan_local_files", lambda _: {})
         client.status()
         assert any(url == "/api/sync/status" for url, _ in http_client.post_calls)
+
+    def test_status_refreshes_session_after_401(self, tmp_path: Path, monkeypatch: Any) -> None:
+        content_dir = tmp_path / "content"
+        content_dir.mkdir()
+        expected_plan: dict[str, Any] = {
+            "to_upload": [],
+            "to_download": [],
+            "to_delete_local": [],
+            "to_delete_remote": [],
+            "conflicts": [],
+        }
+        client, http_client = _build_sync_client(
+            content_dir,
+            responses={
+                "/api/sync/status": [
+                    _DummyResponse(status_code=401),
+                    _DummyResponse(json_data=expected_plan),
+                ],
+                "/api/auth/refresh": _DummyResponse(json_data={"csrf_token": "fresh-csrf"}),
+            },
+        )
+        client._csrf_token = "stale-csrf"
+
+        monkeypatch.setattr(sync_client, "scan_local_files", lambda _: {})
+
+        assert client.status() == expected_plan
+        assert http_client.post_calls[0] == (
+            "/api/sync/status",
+            {"json": {"client_manifest": []}, "headers": {"X-CSRF-Token": "stale-csrf"}},
+        )
+        assert http_client.post_calls[1] == (
+            "/api/auth/refresh",
+            {"json": {}, "headers": {"X-CSRF-Token": "stale-csrf"}},
+        )
+        assert http_client.post_calls[2] == (
+            "/api/sync/status",
+            {"json": {"client_manifest": []}, "headers": {"X-CSRF-Token": "fresh-csrf"}},
+        )
 
 
 class TestSyncClientSync:

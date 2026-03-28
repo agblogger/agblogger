@@ -24,6 +24,7 @@ except ImportError:
 MANIFEST_FILE = ".agblogger-manifest.json"
 CONFIG_FILE = ".agblogger.json"
 _LOCALHOST_HOSTS = {"localhost", "127.0.0.1", "::1"}
+_UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
 
 @dataclass
@@ -180,50 +181,34 @@ def confirm_sync(plan: dict[str, Any]) -> bool:
 
 
 def login_interactive(
-    server_url: str,
+    client: SyncClient,
     *,
     cli_username: str | None,
     config_username: str | None,
-) -> str:
-    """Interactively authenticate and return an access token."""
+) -> None:
+    """Interactively authenticate and persist a refreshable session on the client."""
     username = cli_username or config_username
     if not username:
         username = input("Username: ")
     password = getpass.getpass("Password: ")
 
     try:
-        client = httpx.Client(base_url=server_url, timeout=30.0)
-        try:
-            resp = client.post(
-                "/api/auth/token-login",
-                json={"username": username, "password": password},
-            )
-        finally:
-            client.close()
+        client.login(username, password)
     except httpx.ConnectError:
-        print(f"Error: Could not connect to server at {server_url}")
+        print(f"Error: Could not connect to server at {client.server_url}")
         sys.exit(1)
     except httpx.TimeoutException:
-        print(f"Error: Connection to {server_url} timed out")
+        print(f"Error: Connection to {client.server_url} timed out")
         sys.exit(1)
-
-    if resp.status_code == 401:
-        print("Error: Invalid username or password")
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 401:
+            print("Error: Invalid username or password")
+            sys.exit(1)
+        print(f"Error: Login failed (HTTP {exc.response.status_code})")
         sys.exit(1)
-    if resp.status_code != 200:
-        print(f"Error: Login failed (HTTP {resp.status_code})")
+    except ValueError as exc:
+        print(f"Error: {exc}")
         sys.exit(1)
-
-    try:
-        data = resp.json()
-    except ValueError, UnicodeDecodeError:
-        print("Error: Server returned invalid response")
-        sys.exit(1)
-    if "access_token" not in data:
-        print("Error: Server response missing access token")
-        sys.exit(1)
-    result: str = data["access_token"]
-    return result
 
 
 # ── Sync client ──────────────────────────────────────────────────────
@@ -232,14 +217,18 @@ def login_interactive(
 class SyncClient:
     """Client for syncing with AgBlogger server."""
 
-    def __init__(self, server_url: str, content_dir: Path, token: str) -> None:
+    def __init__(self, server_url: str, content_dir: Path, token: str | None = None) -> None:
         self.server_url = server_url.rstrip("/")
         self.content_dir = content_dir
+        headers: dict[str, str] | None = None
+        if token is not None:
+            headers = {"Authorization": f"Bearer {token}"}
         self.client = httpx.Client(
             base_url=self.server_url,
-            headers={"Authorization": f"Bearer {token}"},
+            headers=headers,
             timeout=60.0,
         )
+        self._csrf_token: str | None = None
 
     def close(self) -> None:
         """Close the HTTP client."""
@@ -251,15 +240,107 @@ class SyncClient:
     def __exit__(self, *args: object) -> None:
         self.close()
 
-    def login(self, username: str, password: str) -> str:
-        """Login and return access token."""
-        resp = self.client.post(
-            "/api/auth/token-login",
+    def _call(
+        self,
+        method: str,
+        url: str,
+        **kwargs: Any,
+    ) -> httpx.Response:
+        if method == "GET":
+            return self.client.get(url, **kwargs)
+        if method == "POST":
+            return self.client.post(url, **kwargs)
+        if method == "PUT":
+            return self.client.put(url, **kwargs)
+        if method == "PATCH":
+            return self.client.patch(url, **kwargs)
+        if method == "DELETE":
+            return self.client.delete(url, **kwargs)
+        raise ValueError(f"Unsupported HTTP method: {method}")
+
+    def _build_headers(
+        self,
+        method: str,
+        headers: dict[str, str] | None = None,
+    ) -> dict[str, str]:
+        request_headers = dict(headers or {})
+        has_authorization = any(name.lower() == "authorization" for name in request_headers)
+        csrf_token = getattr(self, "_csrf_token", None)
+        if method in _UNSAFE_METHODS and csrf_token is not None and not has_authorization:
+            request_headers["X-CSRF-Token"] = csrf_token
+        return request_headers
+
+    def _refresh_session(self) -> bool:
+        csrf_token = getattr(self, "_csrf_token", None)
+        if csrf_token is None:
+            return False
+
+        try:
+            resp = self._call(
+                "POST",
+                "/api/auth/refresh",
+                json={},
+                headers={"X-CSRF-Token": csrf_token},
+            )
+        except httpx.TransportError:
+            return False
+        if resp.status_code != 200:
+            return False
+
+        try:
+            data = resp.json()
+        except ValueError:
+            return False
+
+        csrf_token = data.get("csrf_token")
+        if not isinstance(csrf_token, str) or not csrf_token:
+            return False
+
+        self._csrf_token = csrf_token
+        return True
+
+    def _request(
+        self,
+        method: str,
+        url: str,
+        *,
+        retry_on_401: bool = True,
+        headers: dict[str, str] | None = None,
+        **kwargs: Any,
+    ) -> httpx.Response:
+        request_headers = self._build_headers(method, headers)
+        resp = self._call(method, url, headers=request_headers or None, **kwargs)
+        if (
+            resp.status_code == 401
+            and retry_on_401
+            and getattr(self, "_csrf_token", None) is not None
+            and url not in {"/api/auth/login", "/api/auth/refresh"}
+            and self._refresh_session()
+        ):
+            retry_headers = self._build_headers(method, headers)
+            return self._call(method, url, headers=retry_headers or None, **kwargs)
+        return resp
+
+    def login(self, username: str, password: str) -> None:
+        """Login and persist a session-backed CSRF token for follow-up requests."""
+        resp = self._call(
+            "POST",
+            "/api/auth/login",
             json={"username": username, "password": password},
         )
         resp.raise_for_status()
-        result: str = resp.json()["access_token"]
-        return result
+        try:
+            data = resp.json()
+        except ValueError as exc:
+            raise ValueError("Server returned invalid response") from exc
+
+        csrf_token = data.get("csrf_token")
+        if not isinstance(csrf_token, str) or not csrf_token:
+            raise ValueError("Server response missing csrf token")
+
+        self._csrf_token = csrf_token
+        if "Authorization" in self.client.headers:
+            del self.client.headers["Authorization"]
 
     def _get_last_sync_commit(self) -> str | None:
         """Get the commit hash from the last sync."""
@@ -279,7 +360,8 @@ class SyncClient:
         local_files = scan_local_files(self.content_dir)
         manifest = [asdict(e) for e in local_files.values()]
 
-        resp = self.client.post(
+        resp = self._request(
+            "POST",
             "/api/sync/status",
             json={"client_manifest": manifest},
         )
@@ -294,7 +376,7 @@ class SyncClient:
             print(f"  Skip (path traversal): {file_path}")
             return False
         try:
-            resp = self.client.get(f"/api/sync/download/{file_path}")
+            resp = self._request("GET", f"/api/sync/download/{file_path}")
             resp.raise_for_status()
         except httpx.HTTPStatusError as exc:
             print(f"  ERROR: Failed to download {file_path} (HTTP {exc.response.status_code})")
@@ -393,7 +475,8 @@ class SyncClient:
             print(f"  Upload: {fp}")
 
         try:
-            resp = self.client.post(
+            resp = self._request(
+                "POST",
                 "/api/sync/commit",
                 data={"metadata": metadata},
                 files=files_to_send if files_to_send else None,
@@ -523,14 +606,13 @@ def main() -> None:
         sys.exit(1)
 
     # Authenticate interactively
-    token = login_interactive(
-        server_url,
-        cli_username=args.username,
-        config_username=config.get("username"),
-    )
-
     try:
-        with SyncClient(server_url, content_dir, token) as client:
+        with SyncClient(server_url, content_dir) as client:
+            login_interactive(
+                client,
+                cli_username=args.username,
+                config_username=config.get("username"),
+            )
             if args.command == "status":
                 plan = client.status()
                 print("Sync Status:")

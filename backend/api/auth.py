@@ -400,9 +400,7 @@ async def update_profile(
                     old_username,
                 )
             except OSError as revert_exc:
-                logger.error(
-                    "Failed to revert author in posts: %s", revert_exc, exc_info=True
-                )
+                logger.error("Failed to revert author in posts: %s", revert_exc, exc_info=True)
                 revert_ok = False
 
             # The user change was already committed, so session.rollback()
@@ -416,9 +414,7 @@ async def update_profile(
                     db_user.username = old_username
                     await revert_session.commit()
             except Exception as db_revert_exc:
-                logger.error(
-                    "Failed to revert username in DB: %s", db_revert_exc, exc_info=True
-                )
+                logger.error("Failed to revert username in DB: %s", db_revert_exc, exc_info=True)
                 revert_ok = False
 
             return revert_ok

@@ -414,10 +414,10 @@ async def ensure_admin_user(
             )
         except OSError:
             logger.error(
-                "Failed to update author in posts during admin bootstrap username sync",
+                "Failed to update author in posts during admin bootstrap username sync; "
+                "continuing startup with partial content repair",
                 exc_info=True,
             )
-            raise
 
     if stale_admins:
         logger.warning(

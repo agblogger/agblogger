@@ -732,6 +732,47 @@ class TestEnsureAdminUser:
         assert len(result.posts) == 1
         assert result.posts[0].author == "admin"
 
+    @pytest.mark.asyncio
+    async def test_author_rewrite_oserror_is_logged_without_aborting_bootstrap(
+        self,
+        session: AsyncSession,
+        tmp_content_dir: Path,
+        test_settings: Settings,
+        caplog: pytest.LogCaptureFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Localized post rewrite failures must not take startup down."""
+        await _create_user(
+            session,
+            username="stale-admin",
+            password="stale-password",
+        )
+        content_manager = ContentManager(tmp_content_dir)
+
+        def _raise_oserror(
+            _content_manager: ContentManager,
+            old_username: str,
+            new_username: str,
+        ) -> int:
+            assert old_username == "stale-admin"
+            assert new_username == test_settings.admin_username
+            raise OSError("read-only file")
+
+        monkeypatch.setattr("backend.services.auth_service.update_author_in_posts", _raise_oserror)
+
+        with caplog.at_level(logging.ERROR, logger="backend.services.auth_service"):
+            await ensure_admin_user(session, test_settings, content_manager=content_manager)
+
+        result = await session.execute(select(AdminUser).order_by(AdminUser.id))
+        admins = list(result.scalars().all())
+        assert len(admins) == 1
+        assert admins[0].username == test_settings.admin_username
+        assert any(
+            "Failed to update author in posts during admin bootstrap username sync"
+            in record.message
+            for record in caplog.records
+        )
+
 
 # ---------------------------------------------------------------------------
 # C1: Narrow bare except on password sync

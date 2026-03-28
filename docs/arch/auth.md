@@ -2,11 +2,11 @@
 
 ## Identity Model
 
-AgBlogger uses cookie-based browser sessions for the web UI and short-lived bearer tokens for CLI and automation workflows (via the token-login endpoint).
+AgBlogger uses cookie-based sessions for the web UI and for the interactive sync CLI. Browser clients and the sync CLI both rely on refresh-token rotation to survive access-token expiry. The token-login endpoint still exists for non-browser automation that needs an explicit short-lived bearer token.
 
 ## Credential Boundaries
 
-Passwords are stored as bcrypt hashes. Browser sessions use short-lived JWT access tokens with server-managed refresh token rotation. The token-login endpoint issues short-lived bearer tokens for non-browser clients such as the sync CLI.
+Passwords are stored as bcrypt hashes. Session-based clients use short-lived JWT access tokens with server-managed refresh token rotation and a CSRF token derived from the current access token. The token-login endpoint issues short-lived bearer tokens for non-browser automation clients that manage their own reauthentication.
 
 ## Authorization Model
 
