@@ -270,12 +270,14 @@ def update_author_in_posts(
 
     Returns the number of posts successfully updated.
 
-    Individual write failures are logged at ERROR level but do not abort
-    processing — remaining posts are always attempted.
+    Individual write failures are logged at ERROR level, processing continues
+    for remaining posts, and an ``OSError`` is raised after the scan if any
+    write failed so callers can abort or roll back durable identity changes.
     """
     posts = content_manager.scan_posts()
     updated = 0
     failed = 0
+    first_error: OSError | None = None
     for post in posts:
         if post.author == old_username:
             post.author = new_username
@@ -284,17 +286,19 @@ def update_author_in_posts(
                 updated += 1
             except OSError as exc:
                 failed += 1
+                if first_error is None:
+                    first_error = exc
                 logger.error(
                     "Failed to update author in post file %s: %s",
                     post.file_path,
                     exc,
                 )
     if failed:
+        message = f"Author update completed with errors: {updated} updated, {failed} failed"
         logger.error(
-            "Author update completed with errors: %d updated, %d failed",
-            updated,
-            failed,
+            message,
         )
+        raise OSError(message) from first_error
     return updated
 
 
@@ -376,28 +380,40 @@ async def ensure_admin_user(
         existing.display_name = target_display
         dirty = True
 
+    usernames_to_rewrite: list[str] = []
+    if previous_username is not None and previous_username != settings.admin_username:
+        usernames_to_rewrite.append(previous_username)
+    for stale_admin in stale_admins:
+        if (
+            stale_admin.username != settings.admin_username
+            and stale_admin.username not in usernames_to_rewrite
+        ):
+            usernames_to_rewrite.append(stale_admin.username)
+
     if identity_changed:
         dirty = True
         refresh_token_user_ids_to_revoke.add(existing.id)
 
-        if content_manager is not None and previous_username is not None:
-            try:
-                updated_posts = await asyncio.to_thread(
+    if content_manager is not None and usernames_to_rewrite:
+        try:
+            total_updated = 0
+            for stale_username in usernames_to_rewrite:
+                total_updated += await asyncio.to_thread(
                     update_author_in_posts,
                     content_manager,
-                    previous_username,
+                    stale_username,
                     settings.admin_username,
                 )
-                logger.info(
-                    "Updated author in %d post(s) during admin bootstrap username sync",
-                    updated_posts,
-                )
-            except OSError:
-                logger.error(
-                    "Failed to update author in posts during admin bootstrap username sync",
-                    exc_info=True,
-                )
-                raise
+            logger.info(
+                "Updated author in %d post(s) during admin bootstrap username sync",
+                total_updated,
+            )
+        except OSError:
+            logger.error(
+                "Failed to update author in posts during admin bootstrap username sync",
+                exc_info=True,
+            )
+            raise
 
     if stale_admins:
         logger.warning(

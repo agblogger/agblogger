@@ -261,3 +261,26 @@ class TestProfileUpdateAtomicity:
         content = post_path.read_text()
         assert "author: admin" in content
         assert "author: newname" not in content
+
+    async def test_username_reverted_when_author_rewrite_fails(self, client: AsyncClient) -> None:
+        """A post-author rewrite failure must revert the already-committed username change."""
+        token = await _login(client)
+
+        with patch(
+            "backend.api.auth.update_author_in_posts",
+            side_effect=OSError("disk full"),
+        ):
+            resp = await client.patch(
+                "/api/auth/me",
+                json={"username": "newname"},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+
+        assert resp.status_code == 500
+
+        me_resp = await client.get(
+            "/api/auth/me",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert me_resp.status_code == 200
+        assert me_resp.json()["username"] == "admin"

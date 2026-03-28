@@ -23,6 +23,8 @@ Frontend caches for reads whose response depends on admin authentication, includ
 
 AgBlogger is a closed, single-admin deployment with no registration flow. The admin account is bootstrapped from environment configuration during startup, and durable auth state is converged to a single live admin identity before the app begins serving requests.
 
+When startup converges stale admin rows or a profile rename changes the admin username, canonical markdown post authorship is rewritten on disk before the derived cache is rebuilt. Those rewrites are fail-closed: partial filesystem write failures abort startup/profile convergence instead of silently leaving mixed old and new admin usernames in canonical content.
+
 ## Code Entry Points
 
 - `backend/api/auth.py` exposes the authentication and account-management endpoints.

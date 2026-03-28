@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 from typing import TYPE_CHECKING
 
 import pytest
@@ -246,6 +247,39 @@ class TestPostRename:
         # No symlink created
         old_dir = app_settings.content_dir / original_path
         assert not old_dir.parent.is_symlink()
+
+    @pytest.mark.asyncio
+    async def test_no_rename_when_collision_suffix_is_already_stable(
+        self, client: AsyncClient, app_settings: Settings
+    ) -> None:
+        """Routine edits must not drop an existing collision suffix when the slug is unchanged."""
+        token = await _login(client)
+        headers = {"Authorization": f"Bearer {token}"}
+
+        first = await _create_post(client, token, "My Post")
+        second = await _create_post(client, token, "My Post")
+        original_path = second["file_path"]
+        assert original_path.endswith("/index.md")
+        assert "-2/index.md" in original_path
+
+        first_dir = (app_settings.content_dir / first["file_path"]).parent
+        shutil.rmtree(first_dir)
+
+        resp = await client.put(
+            f"/api/posts/{original_path}",
+            json={
+                "title": "My Post",
+                "body": "Updated content.\n",
+                "labels": [],
+                "is_draft": False,
+            },
+            headers=headers,
+        )
+
+        assert resp.status_code == 200
+        assert resp.json()["file_path"] == original_path
+        assert (app_settings.content_dir / original_path).exists()
+        assert not (app_settings.content_dir / "posts" / "my-post" / "index.md").exists()
 
     @pytest.mark.asyncio
     async def test_old_url_works_via_symlink(

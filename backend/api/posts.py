@@ -57,7 +57,7 @@ from backend.services.post_service import (
     resolve_author_display_name,
     search_posts,
 )
-from backend.services.slug_service import date_slug_prefix, generate_post_path
+from backend.services.slug_service import date_slug_prefix, generate_post_path, generate_post_slug
 from backend.utils.datetime import format_iso, now_utc
 from backend.utils.slug import file_path_to_slug, resolve_slug_candidates
 
@@ -925,30 +925,31 @@ async def update_post_endpoint(
         old_dir: FilePath | None = None
         new_dir: FilePath | None = None
 
-        old_dir = content_manager.content_dir / FilePath(file_path).parent
-        posts_dir = old_dir.parent
-        slug_prefix = date_slug_prefix(old_dir.name)
-        try:
-            target_post_path = generate_post_path(
-                title,
-                posts_dir,
-                current_dir=old_dir,
-                slug_prefix=slug_prefix,
-            )
-        except ValueError as exc:
-            raise HTTPException(
-                status_code=500,
-                detail="Too many directory name collisions",
-            ) from exc
+        if generate_post_slug(title) != generate_post_slug(existing.title):
+            old_dir = content_manager.content_dir / FilePath(file_path).parent
+            posts_dir = old_dir.parent
+            slug_prefix = date_slug_prefix(old_dir.name)
+            try:
+                target_post_path = generate_post_path(
+                    title,
+                    posts_dir,
+                    current_dir=old_dir,
+                    slug_prefix=slug_prefix,
+                )
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=500,
+                    detail="Too many directory name collisions",
+                ) from exc
 
-        new_file_path = str(target_post_path.relative_to(content_manager.content_dir))
-        if new_file_path != file_path:
-            new_dir = target_post_path.parent
+            new_file_path = str(target_post_path.relative_to(content_manager.content_dir))
+            if new_file_path != file_path:
+                new_dir = target_post_path.parent
 
-            # Rewrite URLs with new path (reuse already-rendered HTML)
-            new_rendered_excerpt = rewrite_relative_urls(raw_rendered_excerpt, new_file_path)
-            new_rendered_html = rewrite_relative_urls(raw_rendered_html, new_file_path)
-            needs_rename = True
+                # Rewrite URLs with new path (reuse already-rendered HTML)
+                new_rendered_excerpt = rewrite_relative_urls(raw_rendered_excerpt, new_file_path)
+                new_rendered_html = rewrite_relative_urls(raw_rendered_html, new_file_path)
+                needs_rename = True
 
         previous_title = existing.title
         previous_subtitle = existing.subtitle or ""
@@ -1020,7 +1021,7 @@ async def update_post_endpoint(
         except (OperationalError, IntegrityError) as exc:
             logger.error("DB commit failed for post update %s: %s", file_path, exc)
             if needs_rename:
-                if new_dir is None:
+                if new_dir is None or old_dir is None:
                     raise RuntimeError("Missing rename target for post update") from exc
                 if new_dir.exists():
                     try:

@@ -665,6 +665,72 @@ class TestEnsureAdminUser:
         )
         assert list(refresh_result.scalars().all()) == []
 
+    @pytest.mark.asyncio
+    async def test_rewrites_existing_post_authors_for_stale_admin_rows(
+        self,
+        session: AsyncSession,
+        db_session_factory: async_sessionmaker[AsyncSession],
+        tmp_content_dir: Path,
+        test_settings: Settings,
+    ) -> None:
+        """Configured-admin bootstrap must rewrite posts authored by stale admin rows."""
+        from backend.services.cache_service import ensure_tables, rebuild_cache
+        from backend.services.post_service import list_posts
+
+        configured_admin = await _create_user(
+            session,
+            username=test_settings.admin_username,
+            password="configured-password",
+        )
+        await _create_user(
+            session,
+            username="stale-admin",
+            password="stale-password",
+        )
+        assert configured_admin.username == test_settings.admin_username
+
+        post_path = tmp_content_dir / "posts" / "stale-post" / "index.md"
+        post_path.parent.mkdir(parents=True, exist_ok=True)
+        post_path.write_text(
+            "---\n"
+            "title: Stale Post\n"
+            "author: stale-admin\n"
+            "created_at: 2026-01-01 12:00:00+00:00\n"
+            "modified_at: 2026-01-01 12:00:00+00:00\n"
+            "---\n"
+            "Hello\n",
+            encoding="utf-8",
+        )
+
+        await ensure_tables(session)
+        content_manager = ContentManager(tmp_content_dir)
+
+        async def _stub_render(markdown: str) -> str:
+            return f"<p>{markdown}</p>"
+
+        with (
+            patch("backend.services.cache_service.render_markdown", side_effect=_stub_render),
+            patch(
+                "backend.services.cache_service.render_markdown_excerpt",
+                side_effect=_stub_render,
+            ),
+        ):
+            await ensure_admin_user(session, test_settings, content_manager=content_manager)
+            await rebuild_cache(db_session_factory, content_manager)
+
+        content = post_path.read_text(encoding="utf-8")
+        assert "author: admin" in content
+        assert "author: stale-admin" not in content
+
+        admin_result = await session.execute(select(AdminUser).order_by(AdminUser.id))
+        admins = list(admin_result.scalars().all())
+        assert len(admins) == 1
+        assert admins[0].id == configured_admin.id
+
+        result = await list_posts(session)
+        assert len(result.posts) == 1
+        assert result.posts[0].author == "admin"
+
 
 # ---------------------------------------------------------------------------
 # C1: Narrow bare except on password sync
@@ -994,14 +1060,14 @@ class TestCollapseAdminIdentities:
 
 
 class TestUpdateAuthorInPostsPartialFailure:
-    """update_author_in_posts continues past individual write failures and logs them."""
+    """update_author_in_posts must surface partial failure after attempting all writes."""
 
     def test_individual_write_failure_is_logged_and_processing_continues(
         self,
         tmp_content_dir: Path,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
-        """A single OSError during write_post is logged per-file; remaining posts are processed."""
+        """A single write failure must be logged, remaining posts attempted, and the call fail."""
         posts_dir = tmp_content_dir / "posts"
 
         for slug in ("post-a", "post-b", "post-c"):
@@ -1026,20 +1092,33 @@ class TestUpdateAuthorInPostsPartialFailure:
 
         content_manager.write_post = _failing_write
 
-        with caplog.at_level(logging.ERROR, logger="backend.services.auth_service"):
-            result = update_author_in_posts(content_manager, "oldname", "newname")
+        with (
+            caplog.at_level(logging.ERROR, logger="backend.services.auth_service"),
+            pytest.raises(OSError, match="Author update completed with errors"),
+        ):
+            update_author_in_posts(content_manager, "oldname", "newname")
 
         assert call_count == 3
         error_records = [r for r in caplog.records if r.levelno >= logging.ERROR]
         assert len(error_records) >= 1
-        assert result == 2
 
-    def test_all_writes_fail_returns_zero(
+        updated_authors = 0
+        stale_authors = 0
+        for slug in ("post-a", "post-b", "post-c"):
+            content = (posts_dir / slug / "index.md").read_text(encoding="utf-8")
+            if "author: newname" in content:
+                updated_authors += 1
+            if "author: oldname" in content:
+                stale_authors += 1
+        assert updated_authors == 2
+        assert stale_authors == 1
+
+    def test_all_writes_fail_raises_oserror(
         self,
         tmp_content_dir: Path,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
-        """When all write_post calls fail, errors are logged and result is 0."""
+        """When all writes fail, the helper must raise so callers can abort or roll back."""
         posts_dir = tmp_content_dir / "posts"
         post_dir = posts_dir / "mypost"
         post_dir.mkdir(parents=True, exist_ok=True)
@@ -1055,8 +1134,12 @@ class TestUpdateAuthorInPostsPartialFailure:
 
         content_manager.write_post = _always_fails
 
-        with caplog.at_level(logging.ERROR, logger="backend.services.auth_service"):
-            result = update_author_in_posts(content_manager, "oldname", "newname")
+        with (
+            caplog.at_level(logging.ERROR, logger="backend.services.auth_service"),
+            pytest.raises(OSError, match="Author update completed with errors"),
+        ):
+            update_author_in_posts(content_manager, "oldname", "newname")
 
         assert any(r.levelno >= logging.ERROR for r in caplog.records)
-        assert result == 0
+        content = (post_dir / "index.md").read_text(encoding="utf-8")
+        assert "author: oldname" in content
