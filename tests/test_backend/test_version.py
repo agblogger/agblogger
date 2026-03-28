@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from backend.version import _resolve_version
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def test_resolve_version_with_build_file(tmp_path: Path) -> None:

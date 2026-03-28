@@ -219,7 +219,7 @@ def test_justfile_exposes_release_recipe() -> None:
     justfile = Path(__file__).resolve().parents[2] / "justfile"
     content = justfile.read_text(encoding="utf-8")
 
-    assert 'release level:\n    uv run agblogger-release "{{ level }}"' in content
+    assert 'release level: stamp-build\n    uv run agblogger-release "{{ level }}"' in content
 
 
 # ── T1: Release error path tests ────────────────────────────────────

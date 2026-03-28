@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import contextlib
 import sys
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from cli.version import get_cli_version
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def test_cli_version_with_build_file(tmp_path: Path, monkeypatch) -> None:
