@@ -34,7 +34,7 @@ describe('useLabelGraph', () => {
       user: null,
       isLoading: false,
       isLoggingOut: false,
-      isInitialized: false,
+      isInitialized: true,
       error: null,
     })
   })
@@ -91,5 +91,36 @@ describe('useLabelGraph', () => {
     })
 
     expect(mockFetchLabelGraph).toHaveBeenCalledTimes(2)
+  })
+
+  it('waits for auth initialization before fetching an auth-sensitive graph', async () => {
+    useAuthStore.setState({
+      user: null,
+      isLoading: false,
+      isLoggingOut: false,
+      isInitialized: false,
+      error: null,
+    })
+    mockFetchLabelGraph.mockResolvedValueOnce(mockGraph)
+
+    const { result } = renderHook(() => useLabelGraph(), { wrapper })
+
+    expect(mockFetchLabelGraph).not.toHaveBeenCalled()
+    expect(result.current.data).toBeUndefined()
+
+    act(() => {
+      useAuthStore.setState({
+        user: {
+          id: 1,
+          username: 'admin',
+          email: 'admin@example.com',
+          display_name: 'Admin',
+        },
+        isInitialized: true,
+      })
+    })
+
+    await waitFor(() => expect(result.current.data).toEqual(mockGraph))
+    expect(mockFetchLabelGraph).toHaveBeenCalledOnce()
   })
 })

@@ -22,6 +22,7 @@ SWR handles most server data fetching and caching; Zustand coordinates session, 
 ## Data Fetching
 
 Read-only data fetching usually uses dedicated SWR hooks for each resource. Write operations use direct API calls. Components with debounced search and paginated/filtered fetches use manual `useEffect`+`useState` patterns, as do mutation-only components.
+Auth-sensitive reads whose payload can change once the admin session is known wait for auth initialization before the first request, then scope cache keys by the current browser session so they avoid duplicate public-then-admin fetches while still revalidating on login/logout.
 
 ## API Integration
 

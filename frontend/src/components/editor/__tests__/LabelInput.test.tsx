@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { SWRConfig } from 'swr'
 
 import { fetchLabels, createLabel } from '@/api/labels'
+import { useAuthStore } from '@/stores/authStore'
 import { HTTPError } from '@/test/MockHTTPError'
 import type { LabelResponse } from '@/api/client'
 
@@ -47,6 +48,13 @@ describe('LabelInput', () => {
     mockFetchLabels.mockReset()
     mockCreateLabel.mockReset()
     mockFetchLabels.mockResolvedValue(sampleLabels)
+    useAuthStore.setState({
+      user: null,
+      isLoading: false,
+      isLoggingOut: false,
+      isInitialized: true,
+      error: null,
+    })
   })
 
   it('loads and shows labels in dropdown on focus', async () => {

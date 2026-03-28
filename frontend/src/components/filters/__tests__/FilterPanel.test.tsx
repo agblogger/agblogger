@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { SWRConfig } from 'swr'
 
 import type { LabelResponse } from '@/api/client'
+import { useAuthStore } from '@/stores/authStore'
 import FilterPanel, { EMPTY_FILTER, type FilterState } from '../FilterPanel'
 
 let mockPanelState: 'closed' | 'open' | 'closing' = 'closed'
@@ -54,6 +55,13 @@ describe('FilterPanel', () => {
     vi.clearAllMocks()
     mockFetchLabels.mockResolvedValue(allLabels)
     mockPanelState = 'closed'
+    useAuthStore.setState({
+      user: null,
+      isLoading: false,
+      isLoggingOut: false,
+      isInitialized: true,
+      error: null,
+    })
   })
 
   it('does not render a toggle button', async () => {

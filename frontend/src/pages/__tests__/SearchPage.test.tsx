@@ -43,7 +43,7 @@ describe('SearchPage', () => {
       user: null,
       isLoading: false,
       isLoggingOut: false,
-      isInitialized: false,
+      isInitialized: true,
       error: null,
     })
   })
@@ -231,5 +231,39 @@ describe('SearchPage', () => {
     expect(mockSearchPosts).toHaveBeenCalledTimes(2)
     expect(mockSearchPosts).toHaveBeenNthCalledWith(1, 'draft', 20, expect.any(AbortSignal))
     expect(mockSearchPosts).toHaveBeenNthCalledWith(2, 'draft', 20, expect.any(AbortSignal))
+  })
+
+  it('waits for auth initialization before running an auth-sensitive search', async () => {
+    useAuthStore.setState({
+      user: null,
+      isLoading: false,
+      isLoggingOut: false,
+      isInitialized: false,
+      error: null,
+    })
+    mockSearchPosts.mockResolvedValue(mockResults)
+
+    renderSearch('react')
+
+    expect(mockSearchPosts).not.toHaveBeenCalled()
+
+    act(() => {
+      useAuthStore.setState({
+        user: {
+          id: 1,
+          username: 'admin',
+          email: 'admin@example.com',
+          display_name: 'Admin',
+        },
+        isInitialized: true,
+      })
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText('Hello World')).toBeInTheDocument()
+    })
+
+    expect(mockSearchPosts).toHaveBeenCalledOnce()
+    expect(mockSearchPosts).toHaveBeenCalledWith('react', 20, expect.any(AbortSignal))
   })
 })

@@ -114,8 +114,8 @@ vi.mock('@dagrejs/dagre', () => {
 let mockUser: UserResponse | null = null
 
 vi.mock('@/stores/authStore', () => ({
-  useAuthStore: (selector: (s: { user: UserResponse | null }) => unknown) =>
-    selector({ user: mockUser }),
+  useAuthStore: (selector: (s: { user: UserResponse | null; isInitialized: boolean }) => unknown) =>
+    selector({ user: mockUser, isInitialized: true }),
 }))
 
 const mockNavigate = vi.fn()

@@ -38,7 +38,7 @@ describe('useLabels', () => {
       user: null,
       isLoading: false,
       isLoggingOut: false,
-      isInitialized: false,
+      isInitialized: true,
       error: null,
     })
   })
@@ -143,5 +143,41 @@ describe('useLabels', () => {
     })
 
     expect(mockFetchLabels).toHaveBeenCalledTimes(2)
+  })
+
+  it('waits for auth initialization before fetching an auth-sensitive label list', async () => {
+    useAuthStore.setState({
+      user: null,
+      isLoading: false,
+      isLoggingOut: false,
+      isInitialized: false,
+      error: null,
+    })
+    mockFetchLabels.mockResolvedValue(sampleLabels)
+
+    const { result } = renderHook(() => useLabels(), {
+      wrapper: SWRTestWrapper,
+    })
+
+    expect(mockFetchLabels).not.toHaveBeenCalled()
+    expect(result.current.data).toBeUndefined()
+
+    act(() => {
+      useAuthStore.setState({
+        user: {
+          id: 1,
+          username: 'admin',
+          email: 'admin@example.com',
+          display_name: 'Admin',
+        },
+        isInitialized: true,
+      })
+    })
+
+    await waitFor(() => {
+      expect(result.current.data).toEqual(sampleLabels)
+    })
+
+    expect(mockFetchLabels).toHaveBeenCalledOnce()
   })
 })

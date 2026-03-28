@@ -18,6 +18,8 @@ Authorization is enforced at the API boundary with a simple two-level model:
 There is only one user: the admin. Every authenticated user is the admin — there is no separate role or multi-user model. Draft content is only visible to the authenticated admin.
 
 Frontend caches for reads whose response depends on admin authentication, including draft-only content and admin-scoped account data, are scoped to the current browser session, so session changes force revalidation instead of reusing stale authorized responses.
+Those auth-sensitive client reads also wait for auth initialization before issuing their first request so the SPA does not fetch a public variant and then immediately refetch the admin variant during session hydration.
+Backend read endpoints whose payload changes when admin authentication is present also mark responses as auth-sensitive at the HTTP layer (`Vary: Cookie, Authorization`, plus `Cache-Control: private, no-store` for authenticated variants) so draft-bearing JSON is not shared by intermediaries.
 
 ## Admin Bootstrap
 

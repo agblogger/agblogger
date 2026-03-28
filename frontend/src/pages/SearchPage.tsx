@@ -11,6 +11,7 @@ import { postUrl } from '@/utils/postUrl'
 export default function SearchPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const query = searchParams.get('q') ?? ''
+  const isAuthInitialized = useAuthStore((state) => state.isInitialized)
   const userId = useAuthStore((state) => state.user?.id ?? null)
   const [inputValue, setInputValue] = useState(query)
   const [results, setResults] = useState<SearchResult[]>([])
@@ -34,6 +35,9 @@ export default function SearchPage() {
       setResults([])
       setError(null)
       setLoading(false)
+      return
+    }
+    if (!isAuthInitialized) {
       return
     }
     const controller = new AbortController()
@@ -62,7 +66,7 @@ export default function SearchPage() {
     return () => {
       controller.abort()
     }
-  }, [query, userId])
+  }, [query, userId, isAuthInitialized])
 
   return (
     <div className="animate-fade-in">
