@@ -1,0 +1,70 @@
+name: Build CLI binaries
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build-cli:
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            os: linux
+            arch: amd64
+            archive: tar.gz
+          - runner: macos-latest
+            os: darwin
+            arch: arm64
+            archive: zip
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Install just
+        uses: extractions/setup-just@v3
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Build CLI binary
+        run: just build-cli
+
+      - name: Package binary
+        run: |
+          VERSION="${{ github.event.release.tag_name }}"
+          VERSION="${VERSION#v}"
+          BINARY_NAME="agblogger-${VERSION}"
+          ARCHIVE_NAME="agblogger-${VERSION}-${{ matrix.os }}-${{ matrix.arch }}"
+
+          mv dist/cli/agblogger "dist/cli/${BINARY_NAME}"
+
+          if [ "${{ matrix.archive }}" = "tar.gz" ]; then
+            tar czf "dist/cli/${ARCHIVE_NAME}.tar.gz" -C dist/cli "${BINARY_NAME}"
+          else
+            cd dist/cli && zip "${ARCHIVE_NAME}.zip" "${BINARY_NAME}"
+          fi
+
+      - name: Upload to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ github.event.release.tag_name }}"
+          VERSION="${VERSION#v}"
+          ARCHIVE_NAME="agblogger-${VERSION}-${{ matrix.os }}-${{ matrix.arch }}.${{ matrix.archive }}"
+          gh release upload "${{ github.event.release.tag_name }}" "dist/cli/${ARCHIVE_NAME}" --clobber
