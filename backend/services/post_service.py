@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Shared SQL expression: resolve author display name via LEFT JOIN to users table.
+# Shared SQL expression: resolve author display name via LEFT JOIN to admin_users table.
 _resolved_author = func.coalesce(AdminUser.display_name, PostCache.author).label("resolved_author")
 
 
@@ -300,20 +300,22 @@ async def search_posts(session: AsyncSession, query: str, *, limit: int = 20) ->
     rows = result.all()
     results: list[SearchResult] = []
     for r in rows:
-        created_at_val = r[5]
+        mapping = r._mapping
+        created_at_val = mapping["created_at"]
         if isinstance(created_at_val, datetime):
             created_at_str = format_iso(created_at_val)
         else:
             created_at_str = str(created_at_val)
+        rank_val = mapping["rank"]
         results.append(
             SearchResult(
-                id=r[0],
-                file_path=r[1],
-                title=r[2],
-                subtitle=r[3],
-                rendered_excerpt=r[4],
+                id=mapping["id"],
+                file_path=mapping["file_path"],
+                title=mapping["title"],
+                subtitle=mapping["subtitle"],
+                rendered_excerpt=mapping["rendered_excerpt"],
                 created_at=created_at_str,
-                rank=float(r[6]) if r[6] else 0.0,
+                rank=float(rank_val) if rank_val else 0.0,
             )
         )
     return results

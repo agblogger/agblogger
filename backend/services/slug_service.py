@@ -64,7 +64,8 @@ def generate_post_path(
 ) -> Path:
     """Generate a unique post directory path.
 
-    Creates a path of the form: posts_dir / {slug} / index.md.
+    Creates a path of the form: posts_dir / {slug_prefix}{slug} / index.md.
+    When *slug_prefix* is empty, reduces to posts_dir / {slug} / index.md.
     If the directory already exists, appends -2, -3, etc.
 
     When *current_dir* is provided, that directory is treated as reusable so

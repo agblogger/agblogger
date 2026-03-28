@@ -76,7 +76,11 @@ def decode_access_token(token: str, secret_key: str) -> dict[str, Any] | None:
         logger.debug("Access token expired")
         return None
     except jwt.InvalidKeyError:
-        logger.error("Access token signing key mismatch — check SECRET_KEY configuration")
+        logger.error(
+            "Access token validation failed due to invalid signing key — "
+            "check SECRET_KEY server configuration",
+            exc_info=True,
+        )
         return None
     except InvalidTokenError:
         logger.warning("Invalid access token", exc_info=True)
@@ -192,8 +196,8 @@ async def revoke_refresh_token(session: AsyncSession, refresh_token_value: str) 
     return True
 
 
-async def revoke_user_credentials(session: AsyncSession, user_id: int) -> None:
-    """Revoke all refresh tokens for a user.
+async def revoke_admin_credentials(session: AsyncSession, user_id: int) -> None:
+    """Revoke all refresh tokens for the admin.
 
     Caller must commit the session after calling this function.
     """
@@ -262,14 +266,35 @@ def update_author_in_posts(
     old_username: str,
     new_username: str,
 ) -> int:
-    """Rewrite canonical post authors from ``old_username`` to ``new_username``."""
+    """Rewrite canonical post authors from ``old_username`` to ``new_username``.
+
+    Returns the number of posts successfully updated.
+
+    Individual write failures are logged at ERROR level but do not abort
+    processing — remaining posts are always attempted.
+    """
     posts = content_manager.scan_posts()
     updated = 0
+    failed = 0
     for post in posts:
         if post.author == old_username:
             post.author = new_username
-            content_manager.write_post(post.file_path, post)
-            updated += 1
+            try:
+                content_manager.write_post(post.file_path, post)
+                updated += 1
+            except OSError as exc:
+                failed += 1
+                logger.error(
+                    "Failed to update author in post file %s: %s",
+                    post.file_path,
+                    exc,
+                )
+    if failed:
+        logger.error(
+            "Author update completed with errors: %d updated, %d failed",
+            updated,
+            failed,
+        )
     return updated
 
 

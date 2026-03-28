@@ -1605,6 +1605,38 @@ class TestSearch:
         file_paths = [r["file_path"] for r in results]
         assert created_file_path in file_paths
 
+    @pytest.mark.asyncio
+    async def test_search_result_fields_are_correct(self, client: AsyncClient) -> None:
+        """Search results must return correct values for all SearchResult fields."""
+        resp = await client.get("/api/posts/search", params={"q": "Hello"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) >= 1
+
+        hello = next((r for r in data if "Hello" in r["title"]), None)
+        assert hello is not None, "Expected to find Hello World post in search results"
+
+        assert isinstance(hello["id"], int)
+        assert hello["file_path"] == "posts/hello/index.md"
+        assert hello["title"] == "Hello World"
+        assert isinstance(hello["created_at"], str)
+        assert len(hello["created_at"]) > 0
+        assert isinstance(hello["rank"], float)
+
+    @pytest.mark.asyncio
+    async def test_search_result_includes_rendered_excerpt(self, client: AsyncClient) -> None:
+        """The rendered_excerpt field must be populated when the post has body content."""
+        resp = await client.get("/api/posts/search", params={"q": "content"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) >= 1
+
+        hello = next((r for r in data if "Hello" in r["title"]), None)
+        assert hello is not None
+        assert hello["rendered_excerpt"] is not None
+        assert isinstance(hello["rendered_excerpt"], str)
+        assert len(hello["rendered_excerpt"]) > 0
+
 
 class TestSubtitleRoundtrip:
     """Subtitle create/update roundtrip through the REST API."""

@@ -36,10 +36,10 @@ Drafts are correctly hidden from public users across all read paths:
 
 | Path | Mechanism | Location |
 |------|-----------|----------|
-| `GET /api/posts` (list) | `draft_owner_username` filter: shows published + admin's own drafts | `post_service.py:96-107` |
-| `GET /api/posts/{path}` (detail) | Author-match check, returns `None` for non-authors | `post_service.py:263` |
+| `GET /api/posts` (list) | `include_drafts` filter: shows all posts (drafts + published) when admin is authenticated | `post_service.py:89-99` |
+| `GET /api/posts/{path}` (detail) | `include_drafts` check, returns `None` for unauthenticated access | `post_service.py:260` |
 | `GET /api/posts/search` | SQL filter `is_draft = 0` in FTS query | `post_service.py:297` |
-| `GET /api/labels/{id}/posts` | Calls `list_posts` without `draft_owner_username` -> hides all drafts | `post_service.py:323-329` |
+| `GET /api/labels/{id}/posts` | Calls `list_posts` without `include_drafts` -> hides all drafts | `post_service.py:322-338` |
 | `GET /api/content/{path}` | `_check_draft_access` returns 404 for non-author access to draft files | `content.py:75-125` |
 | `GET /api/analytics/views/{path}` | Only resolves published posts (`is_draft.is_(False)`) | `analytics.py:72-74` |
 | `GET /api/labels` (post counts) | Post counts filtered by draft visibility | `label_service.py:80-85` |

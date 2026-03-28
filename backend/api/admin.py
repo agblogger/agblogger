@@ -41,7 +41,7 @@ from backend.services.admin_service import (
     update_page_order,
     update_site_settings,
 )
-from backend.services.auth_service import hash_password, revoke_user_credentials, verify_password
+from backend.services.auth_service import hash_password, revoke_admin_credentials, verify_password
 from backend.services.git_service import GitService
 from backend.services.rate_limit_service import InMemoryRateLimiter
 from backend.utils.datetime import format_iso, now_utc
@@ -243,7 +243,7 @@ async def change_password(
     limiter.clear(rate_key)
     user.password_hash = hash_password(body.new_password)
     user.updated_at = format_iso(now_utc())
-    await revoke_user_credentials(session, user.id)
+    await revoke_admin_credentials(session, user.id)
     session.add(user)
     await session.commit()
     return {"status": "ok", "sessions_revoked": True}

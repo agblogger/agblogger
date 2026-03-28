@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from typing import TYPE_CHECKING
+from unittest.mock import patch
 
 import jwt
 import pytest
@@ -12,10 +13,14 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from backend.filesystem.content_manager import ContentManager
 from backend.models.base import DurableBase
+from backend.models.crosspost import CrossPost, SocialAccount
 from backend.models.user import AdminRefreshToken, AdminUser
+from backend.schemas.crosspost import CrossPostStatus
 from backend.services.auth_service import (
     ALGORITHM,
+    _collapse_admin_identities,
     authenticate_admin,
     create_access_token,
     create_refresh_token_value,
@@ -25,15 +30,19 @@ from backend.services.auth_service import (
     hash_password,
     hash_token,
     refresh_tokens,
+    update_author_in_posts,
     verify_password,
 )
 from backend.services.key_derivation import derive_access_token_key
 from backend.utils.datetime import format_iso, now_utc
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from sqlalchemy.ext.asyncio import AsyncEngine
 
     from backend.config import Settings
+    from backend.filesystem.frontmatter import PostData
 
 
 @pytest.fixture
@@ -838,3 +847,216 @@ class TestCollapseAdminIdentitiesErrorHandling:
             if r.levelno == logging.ERROR and "collapse" in r.message.lower()
         ]
         assert len(error_records) >= 1
+
+
+class TestDecodeAccessTokenInvalidKey:
+    """decode_access_token must handle InvalidKeyError (SECRET_KEY misconfiguration)."""
+
+    def test_invalid_key_error_returns_none(self, test_settings: Settings) -> None:
+        """InvalidKeyError must return None rather than propagating."""
+        token = create_access_token(
+            {"sub": "1", "username": "alice"},
+            test_settings.secret_key,
+        )
+        with patch("backend.services.auth_service.jwt.decode") as mock_decode:
+            mock_decode.side_effect = jwt.InvalidKeyError("key mismatch")
+            result = decode_access_token(token, test_settings.secret_key)
+
+        assert result is None
+
+    def test_invalid_key_error_logs_at_error_level(
+        self, test_settings: Settings, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """InvalidKeyError must be logged at ERROR level with a config-related message."""
+        token = create_access_token(
+            {"sub": "1", "username": "alice"},
+            test_settings.secret_key,
+        )
+        with patch("backend.services.auth_service.jwt.decode") as mock_decode:
+            mock_decode.side_effect = jwt.InvalidKeyError("key mismatch")
+            with caplog.at_level(logging.ERROR, logger="backend.services.auth_service"):
+                decode_access_token(token, test_settings.secret_key)
+
+        error_records = [r for r in caplog.records if r.levelno >= logging.ERROR]
+        assert len(error_records) >= 1
+        combined_message = " ".join(r.message for r in error_records).lower()
+        assert "key" in combined_message
+
+
+class TestCollapseAdminIdentities:
+    """Tests for _collapse_admin_identities social account and cross-post migration."""
+
+    @pytest.fixture
+    async def _tables(self, db_engine: AsyncEngine) -> None:
+        async with db_engine.begin() as conn:
+            await conn.run_sync(DurableBase.metadata.create_all)
+
+    @pytest.fixture
+    async def session(self, db_session: AsyncSession, _tables: None) -> AsyncSession:
+        return db_session
+
+    async def _make_admin(self, session: AsyncSession, username: str) -> AdminUser:
+        now = format_iso(now_utc())
+        user = AdminUser(
+            username=username,
+            email=f"{username}@test.local",
+            password_hash=hash_password("pw"),
+            display_name=username,
+            created_at=now,
+            updated_at=now,
+        )
+        session.add(user)
+        await session.flush()
+        await session.refresh(user)
+        return user
+
+    async def _make_social_account(
+        self, session: AsyncSession, user: AdminUser, platform: str, account_name: str = ""
+    ) -> SocialAccount:
+        now = format_iso(now_utc())
+        sa = SocialAccount(
+            user_id=user.id,
+            platform=platform,
+            account_name=account_name,
+            credentials="{}",
+            created_at=now,
+            updated_at=now,
+        )
+        session.add(sa)
+        await session.flush()
+        await session.refresh(sa)
+        return sa
+
+    async def _make_cross_post(
+        self, session: AsyncSession, user: AdminUser, post_path: str, platform: str
+    ) -> CrossPost:
+        now = format_iso(now_utc())
+        cp = CrossPost(
+            user_id=user.id,
+            post_path=post_path,
+            platform=platform,
+            status=CrossPostStatus.POSTED,
+            created_at=now,
+        )
+        session.add(cp)
+        await session.flush()
+        await session.refresh(cp)
+        return cp
+
+    @pytest.mark.asyncio
+    async def test_social_accounts_reassigned_from_stale_to_target(
+        self, session: AsyncSession
+    ) -> None:
+        """Social accounts on stale admin rows are reassigned to the target admin."""
+        target = await self._make_admin(session, "target-admin")
+        stale = await self._make_admin(session, "stale-admin")
+        sa = await self._make_social_account(session, stale, "bluesky", "stale@bsky")
+
+        await _collapse_admin_identities(session, target=target, stale_admins=[stale])
+        await session.refresh(sa)
+
+        assert sa.user_id == target.id
+
+    @pytest.mark.asyncio
+    async def test_duplicate_social_account_is_dropped(self, session: AsyncSession) -> None:
+        """A social account that duplicates one already on the target is dropped (not moved)."""
+        target = await self._make_admin(session, "target-dup")
+        stale = await self._make_admin(session, "stale-dup")
+
+        await self._make_social_account(session, target, "mastodon", "shared@mastodon")
+        stale_sa = await self._make_social_account(session, stale, "mastodon", "shared@mastodon")
+
+        await _collapse_admin_identities(session, target=target, stale_admins=[stale])
+
+        result = await session.execute(select(SocialAccount).where(SocialAccount.id == stale_sa.id))
+        assert result.scalar_one_or_none() is None
+
+        result = await session.execute(
+            select(SocialAccount).where(
+                SocialAccount.user_id == target.id,
+                SocialAccount.platform == "mastodon",
+                SocialAccount.account_name == "shared@mastodon",
+            )
+        )
+        assert result.scalar_one_or_none() is not None
+
+    @pytest.mark.asyncio
+    async def test_cross_posts_reassigned_from_stale_to_target(self, session: AsyncSession) -> None:
+        """CrossPost records on stale admin rows are reassigned to the target admin."""
+        target = await self._make_admin(session, "target-cp")
+        stale = await self._make_admin(session, "stale-cp")
+        cp = await self._make_cross_post(session, stale, "posts/2026-01-01-test", "bluesky")
+
+        await _collapse_admin_identities(session, target=target, stale_admins=[stale])
+        await session.refresh(cp)
+
+        assert cp.user_id == target.id
+
+
+class TestUpdateAuthorInPostsPartialFailure:
+    """update_author_in_posts continues past individual write failures and logs them."""
+
+    def test_individual_write_failure_is_logged_and_processing_continues(
+        self,
+        tmp_content_dir: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A single OSError during write_post is logged per-file; remaining posts are processed."""
+        posts_dir = tmp_content_dir / "posts"
+
+        for slug in ("post-a", "post-b", "post-c"):
+            post_dir = posts_dir / slug
+            post_dir.mkdir(parents=True, exist_ok=True)
+            (post_dir / "index.md").write_text(
+                f"---\ntitle: {slug}\nauthor: oldname\n"
+                "created_at: 2026-01-01\nmodified_at: 2026-01-01\n---\nbody\n"
+            )
+
+        content_manager = ContentManager(content_dir=tmp_content_dir)
+
+        call_count = 0
+        original_write = content_manager.write_post
+
+        def _failing_write(rel_path: str, post_data: PostData) -> None:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 2:
+                raise OSError("disk full")
+            original_write(rel_path, post_data)
+
+        content_manager.write_post = _failing_write
+
+        with caplog.at_level(logging.ERROR, logger="backend.services.auth_service"):
+            result = update_author_in_posts(content_manager, "oldname", "newname")
+
+        assert call_count == 3
+        error_records = [r for r in caplog.records if r.levelno >= logging.ERROR]
+        assert len(error_records) >= 1
+        assert result == 2
+
+    def test_all_writes_fail_returns_zero(
+        self,
+        tmp_content_dir: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """When all write_post calls fail, errors are logged and result is 0."""
+        posts_dir = tmp_content_dir / "posts"
+        post_dir = posts_dir / "mypost"
+        post_dir.mkdir(parents=True, exist_ok=True)
+        (post_dir / "index.md").write_text(
+            "---\ntitle: My Post\nauthor: oldname\n"
+            "created_at: 2026-01-01\nmodified_at: 2026-01-01\n---\nbody\n"
+        )
+
+        content_manager = ContentManager(content_dir=tmp_content_dir)
+
+        def _always_fails(rel_path: str, post_data: PostData) -> None:
+            raise OSError("permission denied")
+
+        content_manager.write_post = _always_fails
+
+        with caplog.at_level(logging.ERROR, logger="backend.services.auth_service"):
+            result = update_author_in_posts(content_manager, "oldname", "newname")
+
+        assert any(r.levelno >= logging.ERROR for r in caplog.records)
+        assert result == 0

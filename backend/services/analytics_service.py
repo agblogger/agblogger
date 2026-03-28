@@ -202,7 +202,7 @@ async def record_hit(
     - Analytics are disabled in settings.
     - The GoatCounter token is not yet available.
     """
-    # Skip admin users — admin browsing should not inflate counts.
+    # Skip authenticated admin — admin browsing should not inflate counts.
     if user is not None:
         return
 

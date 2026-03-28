@@ -692,3 +692,159 @@ class TestTablePartitionInvariants:
                 assert fk.column.table.name not in cache_names, (
                     f"Durable table {table.name} has FK to cache table {fk.column.table.name}"
                 )
+
+
+class TestMigration0003Downgrade:
+    """Verify migration 0003 downgrade recreates personal_access_tokens and invite_codes."""
+
+    async def _upgrade_and_downgrade(self, db_engine: AsyncEngine) -> None:
+        """Run upgrade to head then downgrade to before 0003."""
+        from alembic import command
+        from alembic.config import Config
+
+        alembic_cfg = Config()
+        alembic_cfg.set_main_option("script_location", "backend/migrations")
+
+        def _do_upgrade(sync_conn: object) -> None:
+            alembic_cfg.attributes["connection"] = sync_conn
+            command.upgrade(alembic_cfg, "head")
+
+        def _do_downgrade(sync_conn: object) -> None:
+            alembic_cfg.attributes["connection"] = sync_conn
+            command.downgrade(alembic_cfg, "a3c72e8d4f01")
+
+        async with db_engine.begin() as conn:
+            await conn.run_sync(_do_upgrade)
+        async with db_engine.begin() as conn:
+            await conn.run_sync(_do_downgrade)
+
+    async def test_downgrade_0003_recreates_personal_access_tokens(
+        self, db_engine: AsyncEngine
+    ) -> None:
+        """After downgrading through 0003, personal_access_tokens table must exist."""
+        await self._upgrade_and_downgrade(db_engine)
+
+        async with db_engine.connect() as conn:
+            table_names = await conn.run_sync(lambda sc: set(inspect(sc).get_table_names()))
+        assert "personal_access_tokens" in table_names
+
+    async def test_downgrade_0003_recreates_invite_codes(self, db_engine: AsyncEngine) -> None:
+        """After downgrading through 0003, invite_codes table must exist."""
+        await self._upgrade_and_downgrade(db_engine)
+
+        async with db_engine.connect() as conn:
+            table_names = await conn.run_sync(lambda sc: set(inspect(sc).get_table_names()))
+        assert "invite_codes" in table_names
+
+    async def test_downgrade_0003_personal_access_tokens_correct_columns(
+        self, db_engine: AsyncEngine
+    ) -> None:
+        """After downgrading through 0003, personal_access_tokens must have correct columns."""
+        await self._upgrade_and_downgrade(db_engine)
+
+        async with db_engine.connect() as conn:
+            col_names = await conn.run_sync(
+                lambda sc: {
+                    col["name"] for col in inspect(sc).get_columns("personal_access_tokens")
+                }
+            )
+
+        expected = {
+            "id",
+            "user_id",
+            "name",
+            "token_hash",
+            "created_at",
+            "expires_at",
+            "last_used_at",
+            "revoked_at",
+        }
+        assert col_names == expected
+
+    async def test_downgrade_0003_invite_codes_correct_columns(
+        self, db_engine: AsyncEngine
+    ) -> None:
+        """After downgrading through 0003, invite_codes must have correct columns."""
+        await self._upgrade_and_downgrade(db_engine)
+
+        async with db_engine.connect() as conn:
+            col_names = await conn.run_sync(
+                lambda sc: {col["name"] for col in inspect(sc).get_columns("invite_codes")}
+            )
+
+        expected = {
+            "id",
+            "code_hash",
+            "created_by_user_id",
+            "used_by_user_id",
+            "created_at",
+            "expires_at",
+            "used_at",
+        }
+        assert col_names == expected
+
+    async def test_downgrade_0003_personal_access_tokens_fk_to_users(
+        self, db_engine: AsyncEngine
+    ) -> None:
+        """After downgrading through 0003, personal_access_tokens FK must reference users."""
+        await self._upgrade_and_downgrade(db_engine)
+
+        async with db_engine.connect() as conn:
+            rows = (
+                await conn.execute(text("PRAGMA foreign_key_list(personal_access_tokens)"))
+            ).fetchall()
+
+        user_id_fks = [row for row in rows if row[3] == "user_id"]
+        assert len(user_id_fks) == 1
+        assert user_id_fks[0][2] == "users"
+
+    async def test_downgrade_0003_invite_codes_fks_to_users(self, db_engine: AsyncEngine) -> None:
+        """After downgrading through 0003, invite_codes FKs must reference users."""
+        await self._upgrade_and_downgrade(db_engine)
+
+        async with db_engine.connect() as conn:
+            rows = (await conn.execute(text("PRAGMA foreign_key_list(invite_codes)"))).fetchall()
+
+        fk_tables = {row[2] for row in rows}
+        assert fk_tables == {"users"}
+
+    async def test_downgrade_0003_tables_are_functional(self, db_engine: AsyncEngine) -> None:
+        """After downgrading through 0003, can insert rows into recreated tables."""
+        await self._upgrade_and_downgrade(db_engine)
+
+        async with db_engine.begin() as conn:
+            await conn.execute(
+                text(
+                    "INSERT INTO users (id, username, email, password_hash, is_admin,"
+                    " created_at, updated_at)"
+                    " VALUES (1, 'admin', 'admin@example.com', 'hash', 1,"
+                    " '2026-01-01', '2026-01-01')"
+                )
+            )
+            await conn.execute(
+                text(
+                    "INSERT INTO personal_access_tokens"
+                    " (user_id, name, token_hash, created_at)"
+                    " VALUES (1, 'cli-token', 'hashed-token-value', '2026-01-01')"
+                )
+            )
+            await conn.execute(
+                text(
+                    "INSERT INTO invite_codes"
+                    " (code_hash, created_by_user_id, created_at, expires_at)"
+                    " VALUES ('code-hash', 1, '2026-01-01', '2027-01-01')"
+                )
+            )
+
+        async with db_engine.connect() as conn:
+            pat_rows = (
+                await conn.execute(text("SELECT name FROM personal_access_tokens"))
+            ).fetchall()
+            invite_rows = (
+                await conn.execute(text("SELECT code_hash FROM invite_codes"))
+            ).fetchall()
+
+        assert len(pat_rows) == 1
+        assert pat_rows[0][0] == "cli-token"
+        assert len(invite_rows) == 1
+        assert invite_rows[0][0] == "code-hash"

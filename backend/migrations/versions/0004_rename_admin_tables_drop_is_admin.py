@@ -7,10 +7,13 @@ Create Date: 2026-03-27 00:00:00.000000
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 import sqlalchemy as sa
 from alembic import op
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -63,22 +66,27 @@ def upgrade() -> None:
     # Preserve the old authorization boundary by pruning legacy non-admin users
     # before every remaining row becomes an admin_user. Delete dependent rows
     # explicitly instead of relying on SQLite cascade behavior during migration.
-    op.execute(
+    conn = op.get_bind()
+    result = conn.execute(
         sa.text(
             "DELETE FROM refresh_tokens WHERE user_id IN (SELECT id FROM users WHERE is_admin = 0)"
         )
     )
-    op.execute(
+    logger.info("Pruned %d refresh token(s) from non-admin users", result.rowcount)
+    result = conn.execute(
         sa.text(
             "DELETE FROM social_accounts WHERE user_id IN (SELECT id FROM users WHERE is_admin = 0)"
         )
     )
-    op.execute(
+    logger.info("Pruned %d social account(s) from non-admin users", result.rowcount)
+    result = conn.execute(
         sa.text(
             "DELETE FROM cross_posts WHERE user_id IN (SELECT id FROM users WHERE is_admin = 0)"
         )
     )
-    op.execute(sa.text("DELETE FROM users WHERE is_admin = 0"))
+    logger.info("Pruned %d cross post(s) from non-admin users", result.rowcount)
+    result = conn.execute(sa.text("DELETE FROM users WHERE is_admin = 0"))
+    logger.info("Pruned %d non-admin user(s)", result.rowcount)
 
     # Drop the is_admin column first (every authenticated user is the admin).
     with op.batch_alter_table("users") as batch_op:
