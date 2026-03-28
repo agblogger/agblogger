@@ -143,3 +143,33 @@ class TestLabelGraphPostCountVisibility:
         nodes = resp.json()["nodes"]
         python_node = next(n for n in nodes if n["id"] == "python")
         assert python_node["post_count"] == 3
+
+
+class TestAuthSensitiveLabelCacheHeaders:
+    """Auth-sensitive label responses must not be shared or stored by caches."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("path", "params"),
+        [
+            ("/api/labels", None),
+            ("/api/labels/graph", None),
+            ("/api/labels/python", None),
+            ("/api/labels/python/posts", None),
+        ],
+    )
+    async def test_authenticated_label_reads_set_private_cache_headers(
+        self,
+        client: AsyncClient,
+        path: str,
+        params: dict[str, str] | None,
+    ) -> None:
+        token = await _login(client, "admin", "admin123")
+
+        resp = await client.get(path, params=params, headers=_auth_headers(token))
+
+        assert resp.status_code == 200
+        assert resp.headers["cache-control"] == "private, no-store"
+        vary_values = {value.strip().lower() for value in resp.headers["vary"].split(",")}
+        assert "authorization" in vary_values
+        assert "cookie" in vary_values

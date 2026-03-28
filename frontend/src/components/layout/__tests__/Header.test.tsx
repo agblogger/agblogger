@@ -702,5 +702,44 @@ describe('Header', () => {
         expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
       })
     })
+
+    it('hides stale live search results when auth state changes externally', async () => {
+      mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null }
+      mockSearchPosts
+        .mockResolvedValueOnce([
+          {
+            id: 99,
+            file_path: 'posts/draft-secret/index.md',
+            title: 'Draft Secret',
+            subtitle: null,
+            rendered_excerpt: null,
+            created_at: '2026-03-01 12:00:00+00:00',
+            rank: 1,
+          },
+        ])
+        .mockResolvedValueOnce([])
+
+      const view = renderHeader()
+      await userEvent.click(screen.getByLabelText('Search'))
+      await userEvent.type(screen.getByPlaceholderText('Search posts...'), 'draft')
+
+      await waitFor(() => {
+        expect(screen.getByRole('option', { name: /draft secret/i })).toBeInTheDocument()
+      })
+
+      mockUser = null
+      view.rerender(
+        <MemoryRouter initialEntries={['/']}>
+          <Header />
+          <LocationDisplay />
+        </MemoryRouter>,
+      )
+
+      await waitFor(() => {
+        expect(screen.queryByRole('option', { name: /draft secret/i })).not.toBeInTheDocument()
+      })
+      expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+      expect(mockSearchPosts).toHaveBeenCalledTimes(1)
+    })
   })
 })

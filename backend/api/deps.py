@@ -23,6 +23,27 @@ logger = logging.getLogger(__name__)
 security = HTTPBearer(auto_error=False)
 
 
+def _append_vary_headers(response: Response, *header_names: str) -> None:
+    """Append response Vary values without duplicating case-insensitive names."""
+    existing = [
+        value.strip() for value in response.headers.get("Vary", "").split(",") if value.strip()
+    ]
+    existing_lower = {value.lower() for value in existing}
+    for name in header_names:
+        if name.lower() not in existing_lower:
+            existing.append(name)
+            existing_lower.add(name.lower())
+    if existing:
+        response.headers["Vary"] = ", ".join(existing)
+
+
+def mark_auth_sensitive_read(response: Response, *, is_authenticated: bool) -> None:
+    """Mark a response as varying on auth and non-storable when auth changes its body."""
+    _append_vary_headers(response, "Cookie", "Authorization")
+    if is_authenticated:
+        response.headers["Cache-Control"] = "private, no-store"
+
+
 def set_git_warning(response: Response, commit_hash: str | None) -> None:
     """Set X-Git-Warning header when a git commit was expected but failed."""
     if commit_hash is None:

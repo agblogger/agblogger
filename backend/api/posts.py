@@ -24,6 +24,7 @@ from backend.api.deps import (
     get_git_service,
     get_session,
     get_session_factory,
+    mark_auth_sensitive_read,
     require_admin,
     set_git_warning,
 )
@@ -192,6 +193,7 @@ async def _build_post_detail(
 
 @router.get("", response_model=PostListResponse)
 async def list_posts_endpoint(
+    response: Response,
     session: Annotated[AsyncSession, Depends(get_session)],
     user: Annotated[AdminUser | None, Depends(get_current_admin)],
     page: int = Query(1, ge=1, le=MAX_SAFE_PAGE),
@@ -208,6 +210,7 @@ async def list_posts_endpoint(
 ) -> PostListResponse:
     """List posts with pagination and filtering."""
     label_list = labels.split(",") if labels else None
+    mark_auth_sensitive_read(response, is_authenticated=user is not None)
     try:
         return await list_posts(
             session,
@@ -230,12 +233,14 @@ async def list_posts_endpoint(
 
 @router.get("/search", response_model=list[SearchResult])
 async def search_endpoint(
+    response: Response,
     session: Annotated[AsyncSession, Depends(get_session)],
     user: Annotated[AdminUser | None, Depends(get_current_admin)],
     q: str = Query(..., min_length=1),
     limit: int = Query(20, ge=1, le=100),
 ) -> list[SearchResult]:
     """Full-text search for posts."""
+    mark_auth_sensitive_read(response, is_authenticated=user is not None)
     return await search_posts(session, q, limit=limit, include_drafts=user is not None)
 
 

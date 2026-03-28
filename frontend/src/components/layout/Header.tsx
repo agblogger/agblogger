@@ -15,6 +15,7 @@ export default function Header() {
   const navigate = useNavigate()
   const config = useSiteStore((s) => s.config)
   const user = useAuthStore((s) => s.user)
+  const userId = useAuthStore((s) => s.user?.id ?? null)
   const logout = useAuthStore((s) => s.logout)
   const isLoggingOut = useAuthStore((s) => s.isLoggingOut)
   const theme = useThemeStore((s) => s.theme)
@@ -28,11 +29,14 @@ export default function Header() {
   const closeSearchRef = useRef<HTMLButtonElement>(null)
   const [dropdownResults, setDropdownResults] = useState<SearchResult[]>([])
   const [dropdownOpen, setDropdownOpen] = useState(false)
+  const [dropdownScopeKey, setDropdownScopeKey] = useState(() => String(userId ?? 'anon'))
   const [highlightIndex, setHighlightIndex] = useState(-1)
   const [dropdownError, setDropdownError] = useState<string | null>(null)
   const [searchLoading, setSearchLoading] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const authScopeKey = String(userId ?? 'anon')
+  const isDropdownVisible = dropdownOpen && dropdownScopeKey === authScopeKey
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -53,6 +57,7 @@ export default function Header() {
     if (abortRef.current !== null) abortRef.current.abort()
 
     if (query.trim().length < 2) {
+      setDropdownScopeKey(authScopeKey)
       setDropdownResults([])
       setDropdownOpen(false)
       setDropdownError(null)
@@ -61,6 +66,7 @@ export default function Header() {
       return
     }
 
+    setDropdownScopeKey(authScopeKey)
     setSearchLoading(true)
     setDropdownOpen(true)
     setDropdownError(null)
@@ -88,7 +94,7 @@ export default function Header() {
           setDropdownOpen(true)
         })
     }, 300)
-  }, [])
+  }, [authScopeKey])
 
   useEffect(() => {
     return () => {
@@ -167,14 +173,14 @@ export default function Header() {
                     }}
                     onKeyDown={(e) => {
                       if (e.key === 'Escape') {
-                        if (dropdownOpen) {
-                          dismissDropdown()
-                        } else {
-                          closeSearch()
-                        }
-                        return
+                      if (dropdownOpen) {
+                        dismissDropdown()
+                      } else {
+                        closeSearch()
                       }
-                      if (!dropdownOpen || dropdownResults.length === 0) return
+                      return
+                    }
+                      if (!isDropdownVisible || dropdownResults.length === 0) return
 
                       if (e.key === 'ArrowDown') {
                         e.preventDefault()
@@ -199,7 +205,7 @@ export default function Header() {
                     aria-label="Search posts"
                     autoFocus
                     role="combobox"
-                    aria-expanded={dropdownOpen}
+                    aria-expanded={isDropdownVisible}
                     aria-controls="search-results-listbox"
                     aria-activedescendant={highlightIndex >= 0 ? `search-result-${highlightIndex}` : undefined}
                     aria-autocomplete="list"
@@ -227,7 +233,7 @@ export default function Header() {
                     <X size={16} />
                   </button>
                 </form>
-                {dropdownOpen && (
+                {isDropdownVisible && (
                   <SearchDropdown
                     results={dropdownResults}
                     query={searchQuery}

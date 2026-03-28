@@ -150,3 +150,28 @@ class TestSearchDraftVisibility:
         file_paths = [r["file_path"] for r in resp.json()]
         assert pub_path in file_paths
         assert draft_path in file_paths
+
+    @pytest.mark.asyncio
+    async def test_authenticated_search_sets_private_cache_headers(
+        self, client: AsyncClient
+    ) -> None:
+        """Authenticated draft-inclusive search responses must not be cacheable."""
+        token = await _login(client)
+        await _create_post(
+            client,
+            token,
+            title="Draft uniquecacheheaderword",
+            is_draft=True,
+        )
+
+        resp = await client.get(
+            "/api/posts/search",
+            params={"q": "uniquecacheheaderword"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert resp.status_code == 200
+        assert resp.headers["cache-control"] == "private, no-store"
+        vary_values = {value.strip().lower() for value in resp.headers["vary"].split(",")}
+        assert "authorization" in vary_values
+        assert "cookie" in vary_values

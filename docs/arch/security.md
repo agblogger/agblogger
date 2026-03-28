@@ -35,6 +35,7 @@ External providers are treated as untrusted systems. Their credentials are prote
 ## Runtime Hardening
 
 Production hardening combines application and deployment controls: startup validation of critical security settings, controlled proxy and host boundaries, hardened HTTP behavior, and container-oriented deployment practices that minimize exposed surface area.
+Auth-sensitive read responses that can include admin-only draft data are also isolated at the HTTP layer with auth-aware cache headers so shared intermediaries do not replay them across sessions.
 
 ## Verification Strategy
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,6 +16,7 @@ from backend.api.deps import (
     get_current_admin,
     get_git_service,
     get_session,
+    mark_auth_sensitive_read,
     require_admin,
 )
 from backend.filesystem.content_manager import ContentManager
@@ -91,19 +92,23 @@ router = APIRouter(prefix="/api/labels", tags=["labels"])
 
 @router.get("", response_model=list[LabelResponse])
 async def list_labels(
+    response: Response,
     session: Annotated[AsyncSession, Depends(get_session)],
     user: Annotated[AdminUser | None, Depends(get_current_admin)] = None,
 ) -> list[LabelResponse]:
     """List all labels."""
+    mark_auth_sensitive_read(response, is_authenticated=user is not None)
     return await get_all_labels(session, include_drafts=user is not None)
 
 
 @router.get("/graph", response_model=LabelGraphResponse)
 async def label_graph(
+    response: Response,
     session: Annotated[AsyncSession, Depends(get_session)],
     user: Annotated[AdminUser | None, Depends(get_current_admin)] = None,
 ) -> LabelGraphResponse:
     """Get the full label DAG for graph visualization."""
+    mark_auth_sensitive_read(response, is_authenticated=user is not None)
     return await get_label_graph(session, include_drafts=user is not None)
 
 
@@ -238,10 +243,12 @@ async def delete_label_endpoint(
 @router.get("/{label_id}", response_model=LabelResponse)
 async def get_label_endpoint(
     label_id: str,
+    response: Response,
     session: Annotated[AsyncSession, Depends(get_session)],
     user: Annotated[AdminUser | None, Depends(get_current_admin)] = None,
 ) -> LabelResponse:
     """Get a single label by ID."""
+    mark_auth_sensitive_read(response, is_authenticated=user is not None)
     label = await get_label(session, label_id, include_drafts=user is not None)
     if label is None:
         raise HTTPException(status_code=404, detail="Label not found")
@@ -251,6 +258,7 @@ async def get_label_endpoint(
 @router.get("/{label_id}/posts", response_model=PostListResponse)
 async def label_posts(
     label_id: str,
+    response: Response,
     session: Annotated[AsyncSession, Depends(get_session)],
     user: Annotated[AdminUser | None, Depends(get_current_admin)] = None,
     page: int = Query(1, ge=1, le=MAX_SAFE_PAGE),
@@ -258,6 +266,7 @@ async def label_posts(
 ) -> PostListResponse:
     """Get posts for a specific label (exact match only)."""
     include_drafts = user is not None
+    mark_auth_sensitive_read(response, is_authenticated=include_drafts)
     label = await get_label(session, label_id, include_drafts=include_drafts)
     if label is None:
         raise HTTPException(status_code=404, detail="Label not found")
