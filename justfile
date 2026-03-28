@@ -443,8 +443,12 @@ build:
     uv sync
     @echo "\n✓ Production build complete (frontend/dist/)"
 
+# Write the current git commit hash to BUILD (writes empty file if git is unavailable)
+stamp-build:
+    @git rev-parse --short HEAD > BUILD 2>/dev/null || touch BUILD
+
 # Build standalone CLI executable for the current platform
-build-cli:
+build-cli: stamp-build
     uv run pyinstaller \
         --onefile \
         --name agblogger \
@@ -470,10 +474,10 @@ install prefix="$HOME/.local": build-cli
 
 # ── Deployment ──────────────────────────────────────────────
 
-deploy:
+deploy: stamp-build
     uv run agblogger-deploy
 
-release level:
+release level: stamp-build
     uv run agblogger-release "{{ level }}"
 
 # ── Development server ──────────────────────────────────────────────
