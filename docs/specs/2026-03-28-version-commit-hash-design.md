@@ -20,16 +20,16 @@ Single line, no prefix, no newline decoration beyond a trailing `\n`. Added to `
 
 ```just
 stamp-build:
-    git rev-parse --short HEAD > BUILD 2>/dev/null || true
+    git rev-parse --short HEAD > BUILD 2>/dev/null || touch BUILD
 ```
 
-If git is not available or the working directory is not a repo, the recipe silently does nothing — BUILD is not created. Declared as a dependency of `build-cli`, `deploy`, and `release`. This means all build and release paths automatically stamp the commit hash before producing artifacts. No other build path needs to invoke git or write the BUILD file independently.
+If git is not available or the working directory is not a repo, the recipe silently creates an empty BUILD file. This ensures downstream consumers (PyInstaller `--add-data`) always find the file. Version resolution ignores empty BUILD content and returns the bare version. Declared as a dependency of `build-cli`, `deploy`, and `release`. This means all build and release paths automatically stamp the commit hash before producing artifacts. No other build path needs to invoke git or write the BUILD file independently.
 
 ### Version string format
 
 When BUILD is present: `0.1.0+a1b2c3d`
 
-When BUILD is absent (e.g., running from source in dev without stamping): `0.1.0`
+When BUILD is absent (e.g., running from source in dev without stamping, deploying from non-git-version source dir): `0.1.0`
 
 No git fallback. No dirty flag. If BUILD doesn't exist, silently return the bare version from VERSION. Nothing in the version resolution path ever fails due to a missing BUILD file or missing git — graceful degradation to bare version is the only behavior.
 
