@@ -248,7 +248,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
         try:
             async with session_factory() as session:
-                await ensure_admin_user(session, settings)
+                await ensure_admin_user(session, settings, content_manager=content_manager)
         except Exception as exc:
             logger.critical("Failed to ensure admin user: %s", exc)
             raise

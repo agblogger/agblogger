@@ -226,7 +226,7 @@ async def create_test_client(settings: Settings) -> AsyncGenerator[AsyncClient]:
         app.state.facebook_oauth_state = OAuthStateStore(ttl_seconds=600)
 
         async with session_factory() as session:
-            await ensure_admin_user(session, settings)
+            await ensure_admin_user(session, settings, content_manager=content_manager)
 
         test_port = 13100 + os.getpid() % 900
         if not _pandoc_server_broken:

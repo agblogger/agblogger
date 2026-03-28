@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 import secrets
@@ -22,6 +23,7 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from backend.config import Settings
+    from backend.filesystem.content_manager import ContentManager
 
 logger = logging.getLogger(__name__)
 
@@ -255,7 +257,28 @@ async def _collapse_admin_identities(
         await session.delete(admin)
 
 
-async def ensure_admin_user(session: AsyncSession, settings: Settings) -> None:
+def update_author_in_posts(
+    content_manager: ContentManager,
+    old_username: str,
+    new_username: str,
+) -> int:
+    """Rewrite canonical post authors from ``old_username`` to ``new_username``."""
+    posts = content_manager.scan_posts()
+    updated = 0
+    for post in posts:
+        if post.author == old_username:
+            post.author = new_username
+            content_manager.write_post(post.file_path, post)
+            updated += 1
+    return updated
+
+
+async def ensure_admin_user(
+    session: AsyncSession,
+    settings: Settings,
+    *,
+    content_manager: ContentManager | None = None,
+) -> None:
     """Create or update the admin user to match environment configuration.
 
     On first run the admin is created.  On subsequent runs the password and
@@ -264,7 +287,9 @@ async def ensure_admin_user(session: AsyncSession, settings: Settings) -> None:
 
     Startup also enforces the single-admin invariant. If stale admin rows are
     present from older configurations, the durable auth state is collapsed to
-    the configured admin identity and stale refresh tokens are revoked.
+    the configured admin identity, stale refresh tokens are revoked, and when
+    the configured username changes any canonical post authorship metadata is
+    rewritten before the normal cache rebuild.
     """
     stmt = select(AdminUser).order_by(AdminUser.id.asc())
     result = await session.execute(stmt)
@@ -273,12 +298,14 @@ async def ensure_admin_user(session: AsyncSession, settings: Settings) -> None:
     existing = next((admin for admin in admins if admin.username == settings.admin_username), None)
     stale_admins: list[AdminUser] = []
     identity_changed = False
+    previous_username: str | None = None
 
     if existing is None:
         if admins:
             existing = admins[0]
             stale_admins = admins[1:]
             if existing.username != settings.admin_username:
+                previous_username = existing.username
                 logger.warning(
                     "Renaming admin id=%s from %r to configured username %r",
                     existing.id,
@@ -327,6 +354,25 @@ async def ensure_admin_user(session: AsyncSession, settings: Settings) -> None:
     if identity_changed:
         dirty = True
         refresh_token_user_ids_to_revoke.add(existing.id)
+
+        if content_manager is not None and previous_username is not None:
+            try:
+                updated_posts = await asyncio.to_thread(
+                    update_author_in_posts,
+                    content_manager,
+                    previous_username,
+                    settings.admin_username,
+                )
+                logger.info(
+                    "Updated author in %d post(s) during admin bootstrap username sync",
+                    updated_posts,
+                )
+            except OSError:
+                logger.error(
+                    "Failed to update author in posts during admin bootstrap username sync",
+                    exc_info=True,
+                )
+                raise
 
     if stale_admins:
         logger.warning(

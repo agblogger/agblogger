@@ -40,6 +40,7 @@ from backend.services.auth_service import (
     create_tokens,
     refresh_tokens,
     revoke_refresh_token,
+    update_author_in_posts,
 )
 from backend.services.csrf_service import create_csrf_token
 from backend.services.rate_limit_service import InMemoryRateLimiter
@@ -330,26 +331,6 @@ async def me(
     return UserResponse.from_user(user)
 
 
-def _update_author_in_posts(
-    content_manager: ContentManager,
-    old_username: str,
-    new_username: str,
-) -> int:
-    """Update the author field in all markdown files that match old_username.
-
-    Performs synchronous filesystem I/O for each matching post.
-    Returns the number of posts updated.
-    """
-    posts = content_manager.scan_posts()
-    updated = 0
-    for post in posts:
-        if post.author == old_username:
-            post.author = new_username
-            content_manager.write_post(post.file_path, post)
-            updated += 1
-    return updated
-
-
 @router.patch("/me", response_model=UserResponse)
 async def update_profile(
     body: ProfileUpdate,
@@ -415,7 +396,7 @@ async def update_profile(
         async with content_write_lock:
             try:
                 count = await asyncio.to_thread(
-                    _update_author_in_posts,
+                    update_author_in_posts,
                     content_manager,
                     old_username,
                     new_username,
@@ -436,7 +417,7 @@ async def update_profile(
                 logger.error("Cache rebuild failed after author update, reverting files: %s", exc)
                 try:
                     await asyncio.to_thread(
-                        _update_author_in_posts,
+                        update_author_in_posts,
                         content_manager,
                         new_username,
                         old_username,

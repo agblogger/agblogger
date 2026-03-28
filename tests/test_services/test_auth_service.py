@@ -548,6 +548,72 @@ class TestEnsureAdminUser:
         assert refresh_result.scalar_one_or_none() is None
 
     @pytest.mark.asyncio
+    async def test_rewrites_existing_post_authors_when_startup_username_changes(
+        self,
+        session: AsyncSession,
+        db_session_factory: async_sessionmaker[AsyncSession],
+        tmp_content_dir,
+        test_settings: Settings,
+    ) -> None:
+        """Startup username sync must rewrite canonical post authors before cache rebuild."""
+        from unittest.mock import patch
+
+        from backend.filesystem.content_manager import ContentManager
+        from backend.services.cache_service import ensure_tables, rebuild_cache
+        from backend.services.post_service import list_posts
+
+        def _write_post(post_path) -> None:
+            post_path.parent.mkdir(parents=True, exist_ok=True)
+            post_path.write_text(
+                "---\n"
+                "title: Legacy Post\n"
+                "author: legacy-admin\n"
+                "created_at: 2026-01-01 12:00:00+00:00\n"
+                "modified_at: 2026-01-01 12:00:00+00:00\n"
+                "---\n"
+                "Hello\n",
+                encoding="utf-8",
+            )
+
+        legacy_admin = await _create_user(
+            session,
+            username="legacy-admin",
+            password="legacy-password",
+        )
+        assert legacy_admin.username == "legacy-admin"
+
+        post_path = tmp_content_dir / "posts" / "legacy-post" / "index.md"
+        _write_post(post_path)
+
+        test_settings.admin_username = "configured-admin"
+        test_settings.admin_password = "configured-password"
+        test_settings.admin_display_name = "Configured Admin"
+
+        await ensure_tables(session)
+        content_manager = ContentManager(tmp_content_dir)
+
+        async def _stub_render(markdown: str) -> str:
+            return f"<p>{markdown}</p>"
+
+        with (
+            patch("backend.services.cache_service.render_markdown", side_effect=_stub_render),
+            patch(
+                "backend.services.cache_service.render_markdown_excerpt",
+                side_effect=_stub_render,
+            ),
+        ):
+            await ensure_admin_user(session, test_settings, content_manager=content_manager)
+            await rebuild_cache(db_session_factory, content_manager)
+
+        content = post_path.read_text(encoding="utf-8")
+        assert "author: configured-admin" in content
+        assert "author: legacy-admin" not in content
+
+        result = await list_posts(session)
+        assert len(result.posts) == 1
+        assert result.posts[0].author == "Configured Admin"
+
+    @pytest.mark.asyncio
     async def test_collapses_duplicate_admin_rows_to_single_configured_identity(
         self, session: AsyncSession, test_settings: Settings
     ) -> None:
