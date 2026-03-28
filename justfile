@@ -464,6 +464,8 @@ build-cli: stamp-build
         --exclude-module pydoc \
         --exclude-module multiprocessing \
         --exclude-module sqlite3 \
+        --add-data "VERSION:." \
+        --add-data "BUILD:." \
         cli/sync_client.py
 
 # Install the CLI client to prefix/bin (default: ~/.local/bin)
