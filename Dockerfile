@@ -55,7 +55,7 @@ COPY backend/migrations ./backend/migrations
 COPY --from=frontend-build /app/frontend/dist ./frontend/dist
 
 # Copy version file for runtime version detection
-COPY VERSION ./
+COPY VERSION BUILD* ./
 
 # Create data directories
 RUN mkdir -p /data/content /data/db && chown -R agblogger:agblogger /data
