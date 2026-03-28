@@ -10,12 +10,15 @@ import type { SearchResult } from '@/api/client'
 import SearchDropdown from '@/components/search/SearchDropdown'
 import { postUrl } from '@/utils/postUrl'
 
+const PENDING_AUTH_SCOPE_KEY = '__pending_auth__'
+
 export default function Header() {
   const location = useLocation()
   const navigate = useNavigate()
   const config = useSiteStore((s) => s.config)
   const user = useAuthStore((s) => s.user)
   const userId = useAuthStore((s) => s.user?.id ?? null)
+  const isAuthInitialized = useAuthStore((s) => s.isInitialized)
   const logout = useAuthStore((s) => s.logout)
   const isLoggingOut = useAuthStore((s) => s.isLoggingOut)
   const theme = useThemeStore((s) => s.theme)
@@ -36,7 +39,9 @@ export default function Header() {
   const abortRef = useRef<AbortController | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const authScopeKey = String(userId ?? 'anon')
-  const isDropdownVisible = dropdownOpen && dropdownScopeKey === authScopeKey
+  const isDropdownVisible =
+    dropdownOpen &&
+    (dropdownScopeKey === authScopeKey || dropdownScopeKey === PENDING_AUTH_SCOPE_KEY)
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -66,11 +71,18 @@ export default function Header() {
       return
     }
 
-    setDropdownScopeKey(authScopeKey)
     setSearchLoading(true)
     setDropdownOpen(true)
     setDropdownError(null)
     setDropdownResults([])
+    setHighlightIndex(-1)
+
+    if (!isAuthInitialized) {
+      setDropdownScopeKey(PENDING_AUTH_SCOPE_KEY)
+      return
+    }
+
+    setDropdownScopeKey(authScopeKey)
     debounceRef.current = setTimeout(() => {
       const controller = new AbortController()
       abortRef.current = controller
@@ -92,9 +104,24 @@ export default function Header() {
           setDropdownResults([])
           setSearchLoading(false)
           setDropdownOpen(true)
+          setHighlightIndex(-1)
         })
     }, 300)
-  }, [authScopeKey])
+  }, [authScopeKey, isAuthInitialized])
+
+  useEffect(() => {
+    if (!isAuthInitialized) return
+    if (!dropdownOpen) return
+    if (dropdownScopeKey !== PENDING_AUTH_SCOPE_KEY) return
+    if (searchQuery.trim().length < 2) return
+
+    const retryId = window.setTimeout(() => {
+      doSearch(searchQuery)
+    }, 0)
+    return () => {
+      window.clearTimeout(retryId)
+    }
+  }, [doSearch, dropdownOpen, dropdownScopeKey, isAuthInitialized, searchQuery])
 
   useEffect(() => {
     return () => {

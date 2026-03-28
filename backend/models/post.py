@@ -1,4 +1,4 @@
-"""Post cache models."""
+"""Post cache models and FTS table DDL."""
 
 from __future__ import annotations
 
@@ -41,22 +41,9 @@ class PostCache(CacheBase):
     )
 
 
-class PostsFTS(CacheBase):
-    """Full-text search virtual table for posts.
-
-    Created manually via raw SQL because SQLAlchemy's create_all cannot
-    produce the CREATE VIRTUAL TABLE statement required by FTS5.
-    """
-
-    __tablename__ = "posts_fts"
-    __table_args__ = {"info": {"is_virtual": True}}
-
-    rowid: Mapped[int] = mapped_column(Integer, primary_key=True)
-    title: Mapped[str] = mapped_column(Text)
-    subtitle: Mapped[str] = mapped_column(Text)
-    content: Mapped[str] = mapped_column(Text)
-
-
+# posts_fts intentionally stays out of ORM metadata. SQLAlchemy would emit a
+# plain CREATE TABLE statement during generic metadata.create_all() calls,
+# which breaks the FTS5-only MATCH/rank behavior we need here.
 FTS_CREATE_SQL = text(
     "CREATE VIRTUAL TABLE IF NOT EXISTS posts_fts USING fts5("
     "title, subtitle, content, content='posts_cache', content_rowid='id')"

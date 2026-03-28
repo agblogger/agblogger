@@ -21,6 +21,7 @@ const siteConfig: SiteConfigResponse = {
 }
 
 let mockUser: UserResponse | null = null
+let mockIsInitialized = true
 let mockIsLoggingOut = false
 const mockLogout = vi.fn()
 let mockTheme: 'light' | 'dark' = 'light'
@@ -37,10 +38,16 @@ vi.mock('@/stores/siteStore', () => ({
 vi.mock('@/stores/authStore', () => ({
   useAuthStore: (selector: (s: {
     user: UserResponse | null
+    isInitialized: boolean
     logout: () => Promise<void>
     isLoggingOut: boolean
   }) => unknown) =>
-    selector({ user: mockUser, logout: mockLogout, isLoggingOut: mockIsLoggingOut }),
+    selector({
+      user: mockUser,
+      isInitialized: mockIsInitialized,
+      logout: mockLogout,
+      isLoggingOut: mockIsLoggingOut,
+    }),
 }))
 
 vi.mock('@/stores/themeStore', () => ({
@@ -93,6 +100,7 @@ function renderHeader(path = '/') {
 describe('Header', () => {
   beforeEach(() => {
     mockUser = null
+    mockIsInitialized = true
     mockIsLoggingOut = false
     mockTheme = 'light'
     mockPanelState = 'closed'
@@ -740,6 +748,51 @@ describe('Header', () => {
       })
       expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
       expect(mockSearchPosts).toHaveBeenCalledTimes(1)
+    })
+
+    it('keeps the dropdown usable when auth finishes bootstrapping after typing', async () => {
+      vi.useFakeTimers()
+      mockIsInitialized = false
+      mockSearchPosts.mockResolvedValueOnce([
+        {
+          id: 99,
+          file_path: 'posts/draft-secret/index.md',
+          title: 'Draft Secret',
+          subtitle: null,
+          rendered_excerpt: null,
+          created_at: '2026-03-01 12:00:00+00:00',
+          rank: 1,
+        },
+      ])
+
+      const view = renderHeader()
+      fireEvent.click(screen.getByLabelText('Search'))
+      fireEvent.change(screen.getByPlaceholderText('Search posts...'), { target: { value: 'draft' } })
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300)
+      })
+
+      expect(mockSearchPosts).not.toHaveBeenCalled()
+
+      mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null }
+      mockIsInitialized = true
+      view.rerender(
+        <MemoryRouter initialEntries={['/']}>
+          <Header />
+          <LocationDisplay />
+        </MemoryRouter>,
+      )
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300)
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+
+      expect(screen.getByRole('option', { name: /draft secret/i })).toBeInTheDocument()
+      expect(mockSearchPosts).toHaveBeenCalledWith('draft', 5, expect.any(AbortSignal))
+      expect(screen.getByRole('listbox')).toBeInTheDocument()
     })
   })
 })

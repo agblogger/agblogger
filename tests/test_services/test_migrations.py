@@ -662,7 +662,7 @@ class TestTablePartitionInvariants:
         assert set(DurableBase.metadata.tables.keys()) == expected
 
     async def test_cache_tables_match_expected_set(self) -> None:
-        """CacheBase.metadata must contain exactly the expected tables."""
+        """CacheBase.metadata must contain only ORM-managed cache tables."""
         from backend.models.base import CacheBase
 
         expected = {
@@ -671,7 +671,6 @@ class TestTablePartitionInvariants:
             "label_parents_cache",
             "post_labels_cache",
             "sync_manifest",
-            "posts_fts",
         }
         assert set(CacheBase.metadata.tables.keys()) == expected
 
