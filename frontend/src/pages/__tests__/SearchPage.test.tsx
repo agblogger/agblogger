@@ -1,10 +1,11 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import { searchPosts } from '@/api/posts'
 import type { SearchResult } from '@/api/client'
+import { useAuthStore } from '@/stores/authStore'
 
 vi.mock('@/api/posts', () => ({
   searchPosts: vi.fn(),
@@ -38,6 +39,13 @@ const mockResults: SearchResult[] = [
 describe('SearchPage', () => {
   beforeEach(() => {
     mockSearchPosts.mockReset()
+    useAuthStore.setState({
+      user: null,
+      isLoading: false,
+      isLoggingOut: false,
+      isInitialized: false,
+      error: null,
+    })
   })
 
   it('no query shows placeholder', () => {
@@ -180,5 +188,48 @@ describe('SearchPage', () => {
     await waitFor(() => {
       expect(screen.getByText(/2 results for/)).toBeInTheDocument()
     })
+  })
+
+  it('re-fetches and clears draft-only results after logout', async () => {
+    useAuthStore.setState({
+      user: {
+        id: 1,
+        username: 'admin',
+        email: 'admin@example.com',
+        display_name: 'Admin',
+      },
+    })
+    mockSearchPosts
+      .mockResolvedValueOnce([
+        {
+          id: 9,
+          file_path: 'posts/draft-note/index.md',
+          title: 'Draft Note',
+          subtitle: null,
+          rendered_excerpt: '<p>Only for admins</p>',
+          created_at: '2026-02-03 12:00:00+00:00',
+          rank: 1.0,
+        },
+      ])
+      .mockResolvedValueOnce([])
+
+    renderSearch('draft')
+
+    await waitFor(() => {
+      expect(screen.getByText('Draft Note')).toBeInTheDocument()
+    })
+
+    act(() => {
+      useAuthStore.setState({ user: null })
+    })
+
+    await waitFor(() => {
+      expect(screen.queryByText('Draft Note')).not.toBeInTheDocument()
+      expect(screen.getByText(/No results found for/)).toBeInTheDocument()
+    })
+
+    expect(mockSearchPosts).toHaveBeenCalledTimes(2)
+    expect(mockSearchPosts).toHaveBeenNthCalledWith(1, 'draft', 20, expect.any(AbortSignal))
+    expect(mockSearchPosts).toHaveBeenNthCalledWith(2, 'draft', 20, expect.any(AbortSignal))
   })
 })

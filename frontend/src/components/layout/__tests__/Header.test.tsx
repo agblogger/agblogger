@@ -681,5 +681,26 @@ describe('Header', () => {
 
       expect(screen.getByTestId('location-display')).toHaveTextContent('/search?q=helloz')
     })
+
+    it('clears live search UI on logout', async () => {
+      mockUser = { id: 1, username: 'admin', email: 'a@b.com', display_name: null }
+      mockLogout.mockResolvedValue(undefined)
+      mockSearchPosts.mockResolvedValue(results)
+
+      renderHeader()
+      await userEvent.click(screen.getByLabelText('Search'))
+      await userEvent.type(screen.getByPlaceholderText('Search posts...'), 'hello')
+
+      await waitFor(() => {
+        expect(screen.getByRole('listbox')).toBeInTheDocument()
+      })
+
+      await userEvent.click(screen.getAllByLabelText('Logout')[0]!)
+
+      await waitFor(() => {
+        expect(screen.queryByPlaceholderText('Search posts...')).not.toBeInTheDocument()
+        expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+      })
+    })
   })
 })

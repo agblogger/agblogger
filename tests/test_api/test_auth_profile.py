@@ -285,11 +285,10 @@ class TestProfileUpdateAtomicity:
         assert me_resp.status_code == 200
         assert me_resp.json()["username"] == "admin"
 
-    async def test_500_detail_mentions_rollback_failure_when_revert_and_rebuild_both_fail(
+    async def test_500_detail_hides_internal_rollback_failure_when_revert_and_rebuild_both_fail(
         self, client: AsyncClient
     ) -> None:
-        """When rebuild_cache fails and the revert also fails, the 500 detail must warn that
-        rollback also failed and manual intervention is needed."""
+        """Server-side rollback failures must not leak internal repair details to clients."""
         token = await _login(client)
 
         # forward call (old->new) succeeds; revert call (new->old) raises OSError
@@ -320,14 +319,12 @@ class TestProfileUpdateAtomicity:
             )
 
         assert resp.status_code == 500
-        detail = resp.json()["detail"].lower()
-        assert "manual intervention" in detail or "rollback" in detail
+        assert resp.json()["detail"] == "Failed to update profile"
 
-    async def test_500_detail_mentions_rollback_failure_when_author_rewrite_and_revert_both_fail(
+    async def test_500_detail_hides_internal_failure_when_rewrite_and_revert_both_fail(
         self, client: AsyncClient
     ) -> None:
-        """When the forward author rewrite fails and the revert also fails, the 500 detail must
-        warn that rollback also failed and manual intervention is needed."""
+        """Filesystem rollback failures must not leak internal repair details to clients."""
         token = await _login(client)
 
         # first call (forward rewrite) fails; second call (revert) also fails
@@ -349,5 +346,4 @@ class TestProfileUpdateAtomicity:
             )
 
         assert resp.status_code == 500
-        detail = resp.json()["detail"].lower()
-        assert "manual intervention" in detail or "rollback" in detail
+        assert resp.json()["detail"] == "Failed to update profile"

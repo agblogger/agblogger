@@ -4,12 +4,14 @@ import { Search } from 'lucide-react'
 import { searchPosts } from '@/api/posts'
 import type { SearchResult } from '@/api/client'
 import { useRenderedHtml } from '@/hooks/useKatex'
+import { useAuthStore } from '@/stores/authStore'
 import { formatRelativeDate } from '@/utils/date'
 import { postUrl } from '@/utils/postUrl'
 
 export default function SearchPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const query = searchParams.get('q') ?? ''
+  const userId = useAuthStore((state) => state.user?.id ?? null)
   const [inputValue, setInputValue] = useState(query)
   const [results, setResults] = useState<SearchResult[]>([])
   const [loading, setLoading] = useState(false)
@@ -31,22 +33,36 @@ export default function SearchPage() {
     if (!query.trim()) {
       setResults([])
       setError(null)
+      setLoading(false)
       return
     }
+    const controller = new AbortController()
     void (async () => {
       setLoading(true)
+      setResults([])
       setError(null)
       try {
-        const r = await searchPosts(query)
+        const r = await searchPosts(query, 20, controller.signal)
         setResults(r)
       } catch (err) {
+        if (
+          (err instanceof Error && err.name === 'AbortError') ||
+          (err instanceof DOMException && err.name === 'AbortError')
+        ) {
+          return
+        }
         console.error('Search failed:', err)
         setError('Search failed. Please try again.')
       } finally {
-        setLoading(false)
+        if (!controller.signal.aborted) {
+          setLoading(false)
+        }
       }
     })()
-  }, [query])
+    return () => {
+      controller.abort()
+    }
+  }, [query, userId])
 
   return (
     <div className="animate-fade-in">

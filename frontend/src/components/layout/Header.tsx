@@ -137,6 +137,7 @@ export default function Header() {
   }
 
   async function handleLogout() {
+    closeSearch()
     await logout()
   }
 

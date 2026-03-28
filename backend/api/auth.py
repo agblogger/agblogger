@@ -439,24 +439,22 @@ async def update_profile(
                     exc,
                 )
                 revert_ok = await _revert_committed_username_change()
-                detail = (
-                    "Failed to update author in post files; "
-                    "automatic rollback also failed — manual intervention required"
-                    if not revert_ok
-                    else "Failed to update author in post files"
-                )
-                raise HTTPException(status_code=500, detail=detail) from exc
+                if not revert_ok:
+                    logger.error(
+                        "Profile update rollback failed after author rewrite error; "
+                        "manual intervention required"
+                    )
+                raise HTTPException(status_code=500, detail="Failed to update profile") from exc
             try:
                 await rebuild_cache(session_factory, content_manager)
             except Exception as exc:
                 logger.error("Cache rebuild failed after author update, reverting files: %s", exc)
                 revert_ok = await _revert_committed_username_change()
-                detail = (
-                    "Failed to update author; "
-                    "automatic rollback also failed — manual intervention required"
-                    if not revert_ok
-                    else "Failed to update author"
-                )
-                raise HTTPException(status_code=500, detail=detail) from exc
+                if not revert_ok:
+                    logger.error(
+                        "Profile update rollback failed after cache rebuild error; "
+                        "manual intervention required"
+                    )
+                raise HTTPException(status_code=500, detail="Failed to update profile") from exc
 
     return UserResponse.from_user(user)

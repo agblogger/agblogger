@@ -1,8 +1,9 @@
-import { renderHook, waitFor, render } from '@testing-library/react'
+import { renderHook, waitFor, render, act } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createElement } from 'react'
 import type { LabelResponse } from '@/api/client'
 import { SWRTestWrapper } from '@/test/swrWrapper'
+import { useAuthStore } from '@/stores/authStore'
 
 const mockFetchLabels = vi.fn()
 vi.mock('@/api/labels', () => ({
@@ -33,6 +34,13 @@ const sampleLabels: LabelResponse[] = [
 describe('useLabels', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    useAuthStore.setState({
+      user: null,
+      isLoading: false,
+      isLoggingOut: false,
+      isInitialized: false,
+      error: null,
+    })
   })
 
   it('returns labels on success', async () => {
@@ -93,5 +101,47 @@ describe('useLabels', () => {
     expect(r1Data).toEqual(sampleLabels)
     expect(r2Data).toEqual(sampleLabels)
     expect(mockFetchLabels).toHaveBeenCalledOnce()
+  })
+
+  it('revalidates with a separate cache entry after logout', async () => {
+    useAuthStore.setState({
+      user: {
+        id: 1,
+        username: 'admin',
+        email: 'admin@example.com',
+        display_name: 'Admin',
+      },
+    })
+    mockFetchLabels
+      .mockResolvedValueOnce([
+        ...sampleLabels,
+        {
+          id: 'draft-only',
+          names: ['Draft Only'],
+          is_implicit: false,
+          parents: [],
+          children: [],
+          post_count: 1,
+        },
+      ])
+      .mockResolvedValueOnce(sampleLabels)
+
+    const { result } = renderHook(() => useLabels(), {
+      wrapper: SWRTestWrapper,
+    })
+
+    await waitFor(() => {
+      expect(result.current.data).toHaveLength(3)
+    })
+
+    act(() => {
+      useAuthStore.setState({ user: null })
+    })
+
+    await waitFor(() => {
+      expect(result.current.data).toEqual(sampleLabels)
+    })
+
+    expect(mockFetchLabels).toHaveBeenCalledTimes(2)
   })
 })
