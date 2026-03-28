@@ -15,6 +15,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+from cli.version import get_cli_version
+
 try:
     import httpx
 except ImportError:
@@ -554,6 +556,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         prog="agblogger",
         description="Sync local content with AgBlogger server",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {get_cli_version()}",
     )
     parser.add_argument("--dir", "-d", default=".", help="Content directory (default: current)")
     parser.add_argument("--server", "-s", help="Server URL")
