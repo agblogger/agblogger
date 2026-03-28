@@ -3,9 +3,16 @@ import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
 import type { UserResponse } from '@/api/client'
 
+type AdminGuardResult =
+  | { isReady: false; user: null }
+  | { isReady: true; user: UserResponse }
+
 /**
  * Redirects to /login when not authenticated as the admin and returns the current auth state
  * so the caller can render a guard.
+ *
+ * The return type is a discriminated union: after checking `if (!isReady) return null`,
+ * TypeScript narrows `user` to `UserResponse` (non-null) automatically.
  *
  * Usage:
  * ```ts
@@ -15,10 +22,7 @@ import type { UserResponse } from '@/api/client'
  * // user is guaranteed non-null past this point
  * ```
  */
-export function useRequireAdmin(): {
-  user: UserResponse | null
-  isReady: boolean
-} {
+export function useRequireAdmin(): AdminGuardResult {
   const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
   const isInitialized = useAuthStore((s) => s.isInitialized)
@@ -30,7 +34,8 @@ export function useRequireAdmin(): {
     }
   }, [user, isInitialized, navigate])
 
-  const isReady = isInitialized && user !== null
-
-  return { user, isReady }
+  if (isInitialized && user !== null) {
+    return { user, isReady: true }
+  }
+  return { user: null, isReady: false }
 }

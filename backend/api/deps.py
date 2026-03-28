@@ -12,6 +12,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from backend.config import Settings
+from backend.exceptions import InternalServerError
 from backend.filesystem.content_manager import ContentManager
 from backend.models.user import AdminUser
 from backend.services.auth_service import decode_access_token
@@ -121,7 +122,13 @@ async def get_current_admin(
 
     settings: Settings = request.app.state.settings
 
-    payload = decode_access_token(token_value, settings.secret_key)
+    try:
+        payload = decode_access_token(token_value, settings.secret_key)
+    except InternalServerError:
+        # Already logged at ERROR in decode_access_token.
+        # For optional-auth callers we degrade to "not authenticated"
+        # rather than surfacing a 500 on public endpoints.
+        return None
     if payload is None:
         return None
     user_id = payload.get("sub")

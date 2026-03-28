@@ -284,3 +284,70 @@ class TestProfileUpdateAtomicity:
         )
         assert me_resp.status_code == 200
         assert me_resp.json()["username"] == "admin"
+
+    async def test_500_detail_mentions_rollback_failure_when_revert_and_rebuild_both_fail(
+        self, client: AsyncClient
+    ) -> None:
+        """When rebuild_cache fails and the revert also fails, the 500 detail must warn that
+        rollback also failed and manual intervention is needed."""
+        token = await _login(client)
+
+        # forward call (old->new) succeeds; revert call (new->old) raises OSError
+        call_count = 0
+
+        def update_author_side_effect(*args: object, **kwargs: object) -> int:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return 0  # forward rewrite succeeds
+            raise OSError("disk full on revert")  # revert fails
+
+        with (
+            patch(
+                "backend.api.auth.update_author_in_posts",
+                side_effect=update_author_side_effect,
+            ),
+            patch(
+                "backend.services.cache_service.rebuild_cache",
+                new_callable=AsyncMock,
+                side_effect=RuntimeError("cache boom"),
+            ),
+        ):
+            resp = await client.patch(
+                "/api/auth/me",
+                json={"username": "newname"},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+
+        assert resp.status_code == 500
+        detail = resp.json()["detail"].lower()
+        assert "manual intervention" in detail or "rollback" in detail
+
+    async def test_500_detail_mentions_rollback_failure_when_author_rewrite_and_revert_both_fail(
+        self, client: AsyncClient
+    ) -> None:
+        """When the forward author rewrite fails and the revert also fails, the 500 detail must
+        warn that rollback also failed and manual intervention is needed."""
+        token = await _login(client)
+
+        # first call (forward rewrite) fails; second call (revert) also fails
+        call_count = 0
+
+        def update_author_side_effect(*args: object, **kwargs: object) -> int:
+            nonlocal call_count
+            call_count += 1
+            raise OSError(f"disk full on call {call_count}")
+
+        with patch(
+            "backend.api.auth.update_author_in_posts",
+            side_effect=update_author_side_effect,
+        ):
+            resp = await client.patch(
+                "/api/auth/me",
+                json={"username": "newname"},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+
+        assert resp.status_code == 500
+        detail = resp.json()["detail"].lower()
+        assert "manual intervention" in detail or "rollback" in detail

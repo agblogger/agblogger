@@ -14,6 +14,7 @@ import jwt
 from jwt import InvalidTokenError
 from sqlalchemy import delete, select
 
+from backend.exceptions import InternalServerError
 from backend.models.crosspost import CrossPost, SocialAccount
 from backend.models.user import AdminRefreshToken, AdminUser
 from backend.services.key_derivation import derive_access_token_key
@@ -75,13 +76,15 @@ def decode_access_token(token: str, secret_key: str) -> dict[str, Any] | None:
     except jwt.ExpiredSignatureError:
         logger.debug("Access token expired")
         return None
-    except jwt.InvalidKeyError:
+    except jwt.InvalidKeyError as exc:
         logger.error(
             "Access token validation failed due to invalid signing key — "
             "check SECRET_KEY server configuration",
             exc_info=True,
         )
-        return None
+        raise InternalServerError(
+            "Access token signing key is invalid — check SECRET_KEY server configuration"
+        ) from exc
     except InvalidTokenError:
         logger.warning("Invalid access token", exc_info=True)
         return None
@@ -310,9 +313,10 @@ async def ensure_admin_user(
 ) -> None:
     """Create or update the admin user to match environment configuration.
 
-    On first run the admin is created.  On subsequent runs the password and
-    display name are synced with the environment variables so that changing
-    ``ADMIN_PASSWORD`` or ``ADMIN_DISPLAY_NAME`` takes effect on next restart.
+    On first run the admin is created.  On subsequent runs the password, display
+    name, and username are synced with the environment variables so that changing
+    ``ADMIN_USERNAME``, ``ADMIN_PASSWORD``, or ``ADMIN_DISPLAY_NAME`` takes effect
+    on next restart.
 
     Startup also enforces the single-admin invariant. If stale admin rows are
     present from older configurations, the durable auth state is collapsed to
@@ -426,7 +430,7 @@ async def ensure_admin_user(
             refresh_token_user_ids_to_revoke.update(admin.id for admin in stale_admins)
             refresh_token_user_ids_to_revoke.add(existing.id)
         except Exception:
-            logger.error(
+            logger.critical(
                 "Failed to collapse stale admin identities during startup",
                 exc_info=True,
             )

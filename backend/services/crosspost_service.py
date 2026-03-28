@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 
 from backend.crosspost.base import CrossPostContent, CrossPostResult
 from backend.crosspost.registry import get_poster, list_platforms
-from backend.exceptions import InternalServerError, PostNotFoundError
+from backend.exceptions import CrossPostValidationError, InternalServerError, PostNotFoundError
 from backend.models.crosspost import CrossPost, SocialAccount
 from backend.models.post import PostCache
 from backend.schemas.crosspost import CrossPostStatus
@@ -55,7 +55,7 @@ async def create_social_account(
     available = list_platforms()
     if data.platform not in available:
         msg = f"Unsupported platform: {data.platform!r}"
-        raise ValueError(msg)
+        raise CrossPostValidationError(msg)
 
     now = format_datetime(now_utc())
     encrypted_creds = encrypt_value(json.dumps(data.credentials), secret_key)
@@ -140,7 +140,7 @@ async def crosspost(
     is_draft = cached_post.is_draft if cached_post is not None else post_data.is_draft
     if is_draft:
         msg = "Cannot cross-post a draft post"
-        raise ValueError(msg)
+        raise CrossPostValidationError(msg)
 
     # Build the post URL
     slug = file_path_to_slug(post_path)

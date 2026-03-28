@@ -30,6 +30,15 @@ class BuiltinPageError(ValueError):
     """Raised when attempting to modify a built-in page (timeline, labels)."""
 
 
+class CrossPostValidationError(ValueError):
+    """Raised when a cross-posting request violates a business rule.
+
+    Examples: attempting to cross-post a draft post, missing required fields.
+    Inherits from ``ValueError`` so existing broad ``ValueError`` handlers
+    remain compatible while the API can now catch this specific type.
+    """
+
+
 class ExternalServiceError(RuntimeError):
     """Raised when an external service (OAuth, HTTP API) fails.
 

@@ -235,19 +235,14 @@ class TestGetLabelDescendantsBatch:
 async def post_db_engine(tmp_path: Path) -> AsyncGenerator[AsyncEngine]:
     """In-memory SQLite engine with all tables for post_service tests."""
     db_path = tmp_path / "test_label_list_posts.db"
-    from sqlalchemy import text
+    from backend.models.post import FTS_CREATE_SQL
 
     eng = create_async_engine(f"sqlite+aiosqlite:///{db_path}", echo=False)
     async with eng.begin() as conn:
         await conn.run_sync(DurableBase.metadata.create_all)
         await conn.run_sync(CacheBase.metadata.create_all)
     async with eng.begin() as conn:
-        await conn.execute(
-            text(
-                "CREATE VIRTUAL TABLE IF NOT EXISTS posts_fts USING fts5("
-                "title, content, content='posts_cache', content_rowid='id')"
-            )
-        )
+        await conn.execute(FTS_CREATE_SQL)
     yield eng
     await eng.dispose()
 

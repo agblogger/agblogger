@@ -22,7 +22,7 @@ from backend.api.deps import (
 )
 from backend.config import Settings
 from backend.crosspost.bluesky_oauth_state import OAuthStateStore, OAuthUserLimitError
-from backend.exceptions import PostNotFoundError
+from backend.exceptions import CrossPostValidationError, PostNotFoundError
 from backend.filesystem.content_manager import ContentManager
 from backend.models.user import AdminUser
 from backend.schemas.crosspost import (
@@ -153,7 +153,7 @@ async def create_account_endpoint(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
         ) from exc
-    except ValueError as exc:
+    except CrossPostValidationError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
@@ -229,7 +229,7 @@ async def crosspost_endpoint(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Post not found",
         ) from None
-    except ValueError as exc:
+    except CrossPostValidationError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),

@@ -340,7 +340,7 @@ async def update_profile(
     content_write_lock: Annotated[AsyncWriteLock, Depends(get_content_write_lock)],
     session_factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
 ) -> UserResponse:
-    """Update current user's profile (username, display name).
+    """Update the admin's profile (username, display name).
 
     Username changes also update the author field in all markdown files
     on disk and trigger a full cache rebuild.
@@ -389,7 +389,9 @@ async def update_profile(
     if needs_file_update:
         new_username = user.username
 
-        async def _revert_committed_username_change() -> None:
+        async def _revert_committed_username_change() -> bool:
+            """Attempt to revert a committed username change. Returns True if fully successful."""
+            revert_ok = True
             try:
                 await asyncio.to_thread(
                     update_author_in_posts,
@@ -398,7 +400,10 @@ async def update_profile(
                     old_username,
                 )
             except OSError as revert_exc:
-                logger.error("Failed to revert author in posts: %s", revert_exc)
+                logger.error(
+                    "Failed to revert author in posts: %s", revert_exc, exc_info=True
+                )
+                revert_ok = False
 
             # The user change was already committed, so session.rollback()
             # is a no-op. Use a fresh session to revert the username.
@@ -411,7 +416,12 @@ async def update_profile(
                     db_user.username = old_username
                     await revert_session.commit()
             except Exception as db_revert_exc:
-                logger.error("Failed to revert username in DB: %s", db_revert_exc)
+                logger.error(
+                    "Failed to revert username in DB: %s", db_revert_exc, exc_info=True
+                )
+                revert_ok = False
+
+            return revert_ok
 
         logger.info(
             "Username change: %s -> %s, updating author in posts",
@@ -432,19 +442,25 @@ async def update_profile(
                     "Failed to update author in posts: %s",
                     exc,
                 )
-                await _revert_committed_username_change()
-                raise HTTPException(
-                    status_code=500,
-                    detail="Failed to update author in post files",
-                ) from exc
+                revert_ok = await _revert_committed_username_change()
+                detail = (
+                    "Failed to update author in post files; "
+                    "automatic rollback also failed — manual intervention required"
+                    if not revert_ok
+                    else "Failed to update author in post files"
+                )
+                raise HTTPException(status_code=500, detail=detail) from exc
             try:
                 await rebuild_cache(session_factory, content_manager)
             except Exception as exc:
                 logger.error("Cache rebuild failed after author update, reverting files: %s", exc)
-                await _revert_committed_username_change()
-                raise HTTPException(
-                    status_code=500,
-                    detail="Failed to update author",
-                ) from exc
+                revert_ok = await _revert_committed_username_change()
+                detail = (
+                    "Failed to update author; "
+                    "automatic rollback also failed — manual intervention required"
+                    if not revert_ok
+                    else "Failed to update author"
+                )
+                raise HTTPException(status_code=500, detail=detail) from exc
 
     return UserResponse.from_user(user)

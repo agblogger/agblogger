@@ -10,7 +10,6 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import pytest
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -18,7 +17,7 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from backend.models.base import CacheBase, DurableBase
-from backend.models.post import PostCache
+from backend.models.post import FTS_CREATE_SQL, PostCache
 from backend.services.post_service import list_posts
 
 if TYPE_CHECKING:
@@ -36,12 +35,7 @@ async def engine(tmp_path: Path) -> AsyncGenerator[AsyncEngine]:
         await conn.run_sync(DurableBase.metadata.create_all)
         await conn.run_sync(CacheBase.metadata.create_all)
     async with eng.begin() as conn:
-        await conn.execute(
-            text(
-                "CREATE VIRTUAL TABLE IF NOT EXISTS posts_fts USING fts5("
-                "title, content, content='posts_cache', content_rowid='id')"
-            )
-        )
+        await conn.execute(FTS_CREATE_SQL)
     yield eng
     await eng.dispose()
 

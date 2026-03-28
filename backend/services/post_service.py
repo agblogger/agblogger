@@ -278,24 +278,46 @@ async def get_post(
     )
 
 
-async def search_posts(session: AsyncSession, query: str, *, limit: int = 20) -> list[SearchResult]:
-    """Full-text search for posts."""
+async def search_posts(
+    session: AsyncSession,
+    query: str,
+    *,
+    limit: int = 20,
+    include_drafts: bool = False,
+) -> list[SearchResult]:
+    """Full-text search for posts.
+
+    When *include_drafts* is True, draft posts are included in results (for
+    authenticated admins).  The default (False) returns only published posts,
+    matching the behaviour of all other listing endpoints.
+    """
     # Build FTS5 query with prefix matching: each word becomes "word"* so that
     # e.g. "test" matches "testing". Double-quote wrapping escapes special chars.
     terms = query.split()
     if not terms:
         return []
     safe_query = " ".join('"' + t.replace('"', '""') + '"*' for t in terms if t)
-    stmt = text("""
-        SELECT p.id, p.file_path, p.title, p.subtitle, p.rendered_excerpt, p.created_at,
-               rank
-        FROM posts_fts fts
-        JOIN posts_cache p ON fts.rowid = p.id
-        WHERE posts_fts MATCH :query
-        AND p.is_draft = 0
-        ORDER BY rank
-        LIMIT :limit
-    """)
+    if include_drafts:
+        stmt = text("""
+            SELECT p.id, p.file_path, p.title, p.subtitle, p.rendered_excerpt, p.created_at,
+                   rank
+            FROM posts_fts fts
+            JOIN posts_cache p ON fts.rowid = p.id
+            WHERE posts_fts MATCH :query
+            ORDER BY rank
+            LIMIT :limit
+        """)
+    else:
+        stmt = text("""
+            SELECT p.id, p.file_path, p.title, p.subtitle, p.rendered_excerpt, p.created_at,
+                   rank
+            FROM posts_fts fts
+            JOIN posts_cache p ON fts.rowid = p.id
+            WHERE posts_fts MATCH :query
+            AND p.is_draft = 0
+            ORDER BY rank
+            LIMIT :limit
+        """)
     result = await session.execute(stmt, {"query": safe_query, "limit": limit})
     rows = result.all()
     results: list[SearchResult] = []

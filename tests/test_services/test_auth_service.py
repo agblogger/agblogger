@@ -13,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from backend.exceptions import InternalServerError
 from backend.filesystem.content_manager import ContentManager
 from backend.models.base import DurableBase
 from backend.models.crosspost import CrossPost, SocialAccount
@@ -833,15 +834,15 @@ class TestRefreshTokensUnparseableExpiresAt:
 
 
 class TestDecodeAccessTokenInvalidKeyError:
-    """InvalidKeyError must be logged at ERROR level, not WARNING."""
+    """InvalidKeyError must raise InternalServerError and be logged at ERROR level."""
 
-    def test_invalid_key_error_logged_at_error_level(
+    def test_invalid_key_error_raises_and_logs_at_error_level(
         self,
         test_settings: Settings,
         caplog: pytest.LogCaptureFixture,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """A token that triggers InvalidKeyError must produce an ERROR-level log."""
+        """A token that triggers InvalidKeyError must raise InternalServerError and log at ERROR."""
         # Simulate jwt.decode raising InvalidKeyError (server misconfiguration scenario)
         token = create_access_token({"sub": "1", "username": "alice"}, test_settings.secret_key)
 
@@ -850,10 +851,12 @@ class TestDecodeAccessTokenInvalidKeyError:
 
         monkeypatch.setattr(jwt, "decode", _raise_invalid_key)
 
-        with caplog.at_level(logging.DEBUG, logger="backend.services.auth_service"):
-            result = decode_access_token(token, test_settings.secret_key)
+        with (
+            caplog.at_level(logging.DEBUG, logger="backend.services.auth_service"),
+            pytest.raises(InternalServerError),
+        ):
+            decode_access_token(token, test_settings.secret_key)
 
-        assert result is None
         error_records = [
             r
             for r in caplog.records
@@ -902,51 +905,53 @@ class TestCollapseAdminIdentitiesErrorHandling:
         monkeypatch.setattr(auth_mod, "_collapse_admin_identities", _raise_integrity_error)
 
         with (
-            caplog.at_level(logging.ERROR, logger="backend.services.auth_service"),
+            caplog.at_level(logging.CRITICAL, logger="backend.services.auth_service"),
             pytest.raises(IntegrityError),
         ):
             await ensure_admin_user(session, test_settings)
 
-        error_records = [
+        critical_records = [
             r
             for r in caplog.records
-            if r.levelno == logging.ERROR and "collapse" in r.message.lower()
+            if r.levelno == logging.CRITICAL and "collapse" in r.message.lower()
         ]
-        assert len(error_records) >= 1
+        assert len(critical_records) >= 1
 
 
 class TestDecodeAccessTokenInvalidKey:
-    """decode_access_token must handle InvalidKeyError (SECRET_KEY misconfiguration)."""
+    """decode_access_token raises InternalServerError on jwt.InvalidKeyError (S-02)."""
 
-    def test_invalid_key_error_returns_none(self, test_settings: Settings) -> None:
-        """InvalidKeyError must return None rather than propagating."""
+    def test_invalid_key_error_raises_internal_server_error(self, test_settings: Settings) -> None:
+        """InvalidKeyError must raise InternalServerError, not silently return None."""
         token = create_access_token(
             {"sub": "1", "username": "alice"},
             test_settings.secret_key,
         )
         with patch("backend.services.auth_service.jwt.decode") as mock_decode:
             mock_decode.side_effect = jwt.InvalidKeyError("key mismatch")
-            result = decode_access_token(token, test_settings.secret_key)
-
-        assert result is None
-
-    def test_invalid_key_error_logs_at_error_level(
-        self, test_settings: Settings, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        """InvalidKeyError must be logged at ERROR level with a config-related message."""
-        token = create_access_token(
-            {"sub": "1", "username": "alice"},
-            test_settings.secret_key,
-        )
-        with patch("backend.services.auth_service.jwt.decode") as mock_decode:
-            mock_decode.side_effect = jwt.InvalidKeyError("key mismatch")
-            with caplog.at_level(logging.ERROR, logger="backend.services.auth_service"):
+            with pytest.raises(InternalServerError):
                 decode_access_token(token, test_settings.secret_key)
 
-        error_records = [r for r in caplog.records if r.levelno >= logging.ERROR]
+    def test_invalid_key_error_logged_at_error_with_secret_key_hint(
+        self, test_settings: Settings, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """InvalidKeyError must be logged at ERROR level mentioning SECRET_KEY."""
+        token = create_access_token(
+            {"sub": "1", "username": "alice"},
+            test_settings.secret_key,
+        )
+        with (
+            patch("backend.services.auth_service.jwt.decode") as mock_decode,
+            caplog.at_level(logging.ERROR, logger="backend.services.auth_service"),
+            pytest.raises(InternalServerError),
+        ):
+            mock_decode.side_effect = jwt.InvalidKeyError("key mismatch")
+            decode_access_token(token, test_settings.secret_key)
+
+        error_records = [
+            r for r in caplog.records if r.levelno == logging.ERROR and "SECRET_KEY" in r.message
+        ]
         assert len(error_records) >= 1
-        combined_message = " ".join(r.message for r in error_records).lower()
-        assert "key" in combined_message
 
 
 class TestCollapseAdminIdentities:

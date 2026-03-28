@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from sqlalchemy import select, text
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -23,7 +23,7 @@ from sqlalchemy.ext.asyncio import (
 from backend.filesystem.content_manager import ContentManager
 from backend.filesystem.toml_manager import parse_site_config
 from backend.models.base import CacheBase, DurableBase
-from backend.models.post import PostCache
+from backend.models.post import FTS_CREATE_SQL, PostCache
 from backend.utils.datetime import format_iso, now_utc
 
 if TYPE_CHECKING:
@@ -43,12 +43,7 @@ async def async_engine() -> AsyncGenerator[object]:
         await conn.run_sync(CacheBase.metadata.create_all)
         await conn.run_sync(DurableBase.metadata.create_all)
         # Create FTS5 virtual table manually
-        await conn.execute(
-            text(
-                "CREATE VIRTUAL TABLE IF NOT EXISTS posts_fts "
-                "USING fts5(title, content, content='', content_rowid='rowid')"
-            )
-        )
+        await conn.execute(FTS_CREATE_SQL)
     yield engine
     await engine.dispose()
 

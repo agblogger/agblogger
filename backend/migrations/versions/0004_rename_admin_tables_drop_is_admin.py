@@ -112,15 +112,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Recreate tables with FK constraints pointing back to admin_users (current name)
-    # so the batch recreation uses the correct source schema. The target FK in
-    # copy_from must match the table name that exists *now*, but we want to
-    # switch the FK to "users" which will exist after the rename below. SQLite
-    # ALTER TABLE RENAME will update references automatically, so we point the FK
-    # back to admin_users (still exists), then rename.
-    #
-    # However, we must rename first so that the FK target "users" exists when
-    # the batch recreates the table. So: rename tables first, then recreate.
+    # Rename tables back to their pre-upgrade names first, then recreate
+    # social_accounts and cross_posts via batch_alter_table so their FK
+    # constraints explicitly reference the restored "users" table.
     op.rename_table("admin_refresh_tokens", "refresh_tokens")
     op.rename_table("admin_users", "users")
 

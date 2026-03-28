@@ -5,7 +5,7 @@ from __future__ import annotations
 import base64
 import hashlib
 from typing import TYPE_CHECKING
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from backend.api.crosspost import _generate_pkce_pair, _store_pending_oauth_state
 from backend.crosspost.bluesky_oauth_state import OAuthStateStore
+from backend.exceptions import CrossPostValidationError
 from backend.models.base import DurableBase
 from backend.models.crosspost import SocialAccount
 from backend.services.crosspost_service import DuplicateAccountError, get_social_accounts
@@ -183,3 +184,66 @@ class TestUpsertSocialAccountSavepoint:
         assert any(a.id == account_id for a in remaining), (
             "Account was permanently deleted despite race condition — savepoint not in effect"
         )
+
+
+class TestCrosspostDraftRaisesSpecificException:
+    """S-05: crosspost service raises CrossPostValidationError for draft posts, not ValueError."""
+
+    @pytest.mark.asyncio
+    async def test_crosspost_draft_raises_crosspost_validation_error(self) -> None:
+        """crosspost() must raise CrossPostValidationError (not bare ValueError) for drafts."""
+        from backend.services.crosspost_service import crosspost
+
+        mock_cm = MagicMock()
+        mock_cm.read_post.return_value = MagicMock(
+            title="Draft Post", content="content", labels=[], is_draft=True
+        )
+        mock_cm.get_plain_excerpt.return_value = "excerpt"
+        mock_session = AsyncMock()
+        mock_session.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=lambda: None))
+
+        with pytest.raises(CrossPostValidationError, match="Cannot cross-post a draft post"):
+            await crosspost(
+                session=mock_session,
+                content_manager=mock_cm,
+                post_path="posts/my-draft/index.md",
+                platforms=["bluesky"],
+                actor=MagicMock(id=1, username="admin", display_name="Admin"),
+                site_url="https://example.com",
+                secret_key="test-secret-key-with-at-least-32-characters",
+            )
+
+    def test_crosspost_validation_error_is_subclass_of_value_error(self) -> None:
+        """CrossPostValidationError must be a subclass of ValueError for backward compat."""
+        assert issubclass(CrossPostValidationError, ValueError)
+
+    @pytest.mark.asyncio
+    async def test_crosspost_api_returns_400_for_draft(self) -> None:
+        """The API layer maps CrossPostValidationError to HTTP 400."""
+        from backend.api.crosspost import crosspost_endpoint
+        from backend.schemas.crosspost import CrossPostRequest
+
+        mock_session = AsyncMock()
+        mock_settings = MagicMock()
+        mock_settings.secret_key = "test-secret-key-with-at-least-32-characters"
+        mock_settings.site_url = "https://example.com"
+        mock_user = MagicMock()
+
+        with patch(
+            "backend.api.crosspost.crosspost",
+            new_callable=AsyncMock,
+            side_effect=CrossPostValidationError("Cannot cross-post a draft post"),
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                await crosspost_endpoint(
+                    body=CrossPostRequest(
+                        post_path="posts/draft/index.md",
+                        platforms=["bluesky"],
+                    ),
+                    session=mock_session,
+                    user=mock_user,
+                    settings=mock_settings,
+                    content_manager=MagicMock(),
+                )
+            assert exc_info.value.status_code == 400
+            assert "Cannot cross-post a draft post" in exc_info.value.detail

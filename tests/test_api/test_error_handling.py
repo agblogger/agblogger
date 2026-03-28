@@ -675,8 +675,12 @@ class TestCrosspostPostNotFound:
         assert resp.json()["detail"] == "Post not found"
 
     @pytest.mark.asyncio
-    async def test_crosspost_value_error_returns_400(self, client: AsyncClient) -> None:
-        """Plain ValueError (not PostNotFoundError) should still return 400."""
+    async def test_crosspost_generic_value_error_falls_through_to_global_handler(
+        self, client: AsyncClient
+    ) -> None:
+        """Generic ValueError (not CrossPostValidationError) falls through to the
+        global ValueError handler which returns 422 with a generic message, preventing
+        internal detail leakage."""
         token = await login(client)
         with patch(
             "backend.api.crosspost.crosspost",
@@ -691,7 +695,8 @@ class TestCrosspostPostNotFound:
                 },
                 headers={"Authorization": f"Bearer {token}"},
             )
-        assert resp.status_code == 400
+        assert resp.status_code == 422
+        assert resp.json()["detail"] == "Invalid value"
 
 
 class TestConnectionErrorHandler:
@@ -1455,10 +1460,9 @@ class TestMissingServiceDependencies:
     @pytest.mark.asyncio
     async def test_missing_content_manager_returns_503(self, tmp_path: Path) -> None:
         """When content_manager is not on app.state, endpoints return 503."""
-        from sqlalchemy import text
-
         from backend.database import create_engine as create_db_engine
         from backend.models.base import CacheBase, DurableBase
+        from backend.models.post import FTS_CREATE_SQL
 
         settings = Settings(
             secret_key="test-secret-key-min-32-characters-long",
@@ -1477,12 +1481,7 @@ class TestMissingServiceDependencies:
             await conn.run_sync(DurableBase.metadata.create_all)
             await conn.run_sync(CacheBase.metadata.create_all)
         async with session_factory() as session:
-            await session.execute(
-                text(
-                    "CREATE VIRTUAL TABLE IF NOT EXISTS posts_fts USING fts5("
-                    "title, content, content='posts_cache', content_rowid='id')"
-                )
-            )
+            await session.execute(FTS_CREATE_SQL)
             await session.commit()
 
         from backend.services.auth_service import ensure_admin_user
@@ -1512,10 +1511,9 @@ class TestMissingServiceDependencies:
     @pytest.mark.asyncio
     async def test_missing_git_service_returns_503(self, tmp_path: Path) -> None:
         """When git_service is not on app.state, endpoints return 503."""
-        from sqlalchemy import text
-
         from backend.database import create_engine as create_db_engine
         from backend.models.base import CacheBase, DurableBase
+        from backend.models.post import FTS_CREATE_SQL
 
         settings = Settings(
             secret_key="test-secret-key-min-32-characters-long",
@@ -1536,12 +1534,7 @@ class TestMissingServiceDependencies:
             await conn.run_sync(DurableBase.metadata.create_all)
             await conn.run_sync(CacheBase.metadata.create_all)
         async with session_factory() as session:
-            await session.execute(
-                text(
-                    "CREATE VIRTUAL TABLE IF NOT EXISTS posts_fts USING fts5("
-                    "title, content, content='posts_cache', content_rowid='id')"
-                )
-            )
+            await session.execute(FTS_CREATE_SQL)
             await session.commit()
 
         from backend.filesystem.content_manager import ContentManager

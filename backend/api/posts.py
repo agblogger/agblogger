@@ -140,6 +140,7 @@ async def _delete_post_fts(
             "FTS delete failed for post %d (will be cleaned up on next cache rebuild): %s",
             post_id,
             exc,
+            exc_info=True,
         )
 
 
@@ -230,11 +231,12 @@ async def list_posts_endpoint(
 @router.get("/search", response_model=list[SearchResult])
 async def search_endpoint(
     session: Annotated[AsyncSession, Depends(get_session)],
+    user: Annotated[AdminUser | None, Depends(get_current_admin)],
     q: str = Query(..., min_length=1),
     limit: int = Query(20, ge=1, le=100),
 ) -> list[SearchResult]:
     """Full-text search for posts."""
-    return await search_posts(session, q, limit=limit)
+    return await search_posts(session, q, limit=limit, include_drafts=user is not None)
 
 
 _MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10 MB per file

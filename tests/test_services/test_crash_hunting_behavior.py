@@ -305,14 +305,16 @@ class TestDuplicateAccountErrorNotSwallowed:
         body = resp.json()
         assert "already exists" in body["detail"].lower()
 
-    async def test_regular_value_error_still_returns_400(self, client: AsyncClient) -> None:
-        """Plain ValueError from create_social_account should still return 400."""
+    async def test_crosspost_validation_error_returns_400(self, client: AsyncClient) -> None:
+        """CrossPostValidationError from create_social_account returns 400."""
+        from backend.exceptions import CrossPostValidationError
+
         headers = await _login(client)
 
         with patch(
             "backend.api.crosspost.create_social_account",
             new_callable=AsyncMock,
-            side_effect=ValueError("Unsupported platform: 'tiktok'"),
+            side_effect=CrossPostValidationError("Unsupported platform: 'tiktok'"),
         ):
             resp = await client.post(
                 "/api/crosspost/accounts",
