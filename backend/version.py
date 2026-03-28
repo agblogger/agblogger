@@ -7,12 +7,23 @@ from importlib.metadata import version as package_version
 from pathlib import Path
 
 
+def _resolve_version(base_dir: Path) -> str:
+    """Build version string from VERSION and optional BUILD file under *base_dir*."""
+    version = (base_dir / "VERSION").read_text(encoding="utf-8").strip()
+    build_path = base_dir / "BUILD"
+    if build_path.exists():
+        commit = build_path.read_text(encoding="utf-8").strip()
+        if commit:
+            return f"{version}+{commit}"
+    return version
+
+
 @lru_cache(maxsize=1)
 def get_version() -> str:
     """Return the application version (cached for process lifetime)."""
-    version_path = Path(__file__).resolve().parents[1] / "VERSION"
-    if version_path.exists():
-        return version_path.read_text(encoding="utf-8").strip()
+    repo_root = Path(__file__).resolve().parents[1]
+    if (repo_root / "VERSION").exists():
+        return _resolve_version(repo_root)
 
     for dist_name in ("agblogger-server", "agblogger"):
         with suppress(PackageNotFoundError):
