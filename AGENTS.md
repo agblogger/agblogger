@@ -6,7 +6,7 @@ AgBlogger is a markdown-first blogging platform where markdown files with YAML f
 
 **IMPORTANT** Read @docs/arch/index.md for architecture overview. **ALWAYS** read ALL files under docs/arch/ that are relevant to your current task. Read other files in docs/arch/ when you need deeper understanding of application architecture. Update docs/arch/*.md (all relevant files) whenever architecture changes – always keep these files up-to-date with the codebase.
 
-The primary purpose of architecture docs in docs/arch/*.md is to provide agents with a quick but comprehensive overview of the system's architecture and the codebase. Treat the docs as an onboarding guide. When updating, do not add unnecessary brittle implementation details, but do include info on where to find relevant codebase references. Be succinct, not verbose. Provide architectural overview, not mechanism details.
+The primary purpose of architecture docs in docs/arch/*.md is to provide agents with a quick but comprehensive overview of the system's architecture and the codebase. Treat the docs as an onboarding guide. When updating, do not add brittle implementation details, but do include info on where to find relevant codebase references. Be succinct, not verbose. Provide architectural overview, not mechanism details. Match the existing writing style.
 
 ## Build, Test, and Development Commands
 
