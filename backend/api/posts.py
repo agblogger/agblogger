@@ -568,6 +568,7 @@ async def delete_asset(
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
     git_service: Annotated[GitService, Depends(get_git_service)],
     content_write_lock: Annotated[AsyncWriteLock, Depends(get_content_write_lock)],
+    content_size_tracker: Annotated[ContentSizeTracker, Depends(get_content_size_tracker)],
     _user: Annotated[AdminUser, Depends(require_admin)],
 ) -> None:
     """Delete a single asset file from a post's directory."""
@@ -583,11 +584,14 @@ async def delete_asset(
         if not asset_path.is_file():
             raise HTTPException(status_code=404, detail="Asset not found")
 
+        asset_size = asset_path.stat().st_size
         try:
             asset_path.unlink()
         except OSError as exc:
             logger.error("Failed to delete asset %s: %s", asset_path, exc)
             raise HTTPException(status_code=500, detail="Failed to delete asset") from exc
+
+        content_size_tracker.adjust(-asset_size)
 
         set_git_warning(
             response,
@@ -878,6 +882,7 @@ async def update_post_endpoint(
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
     git_service: Annotated[GitService, Depends(get_git_service)],
     content_write_lock: Annotated[AsyncWriteLock, Depends(get_content_write_lock)],
+    content_size_tracker: Annotated[ContentSizeTracker, Depends(get_content_size_tracker)],
     user: Annotated[AdminUser, Depends(require_admin)],
 ) -> PostDetail:
     """Update an existing post."""
@@ -995,6 +1000,13 @@ async def update_post_endpoint(
             old_content=previous_content,
         )
 
+        old_post_path = content_manager.content_dir / file_path
+        old_size = old_post_path.stat().st_size if old_post_path.exists() else 0
+        new_serialized_size = len(serialized.encode("utf-8"))
+        edit_delta = new_serialized_size - old_size
+        if edit_delta > 0 and not content_size_tracker.check(edit_delta):
+            raise HTTPException(status_code=413, detail="Storage limit reached")
+
         try:
             content_manager.write_post(file_path, post_data)
         except OSError as exc:
@@ -1056,6 +1068,9 @@ async def update_post_endpoint(
                             mv_exc,
                         )
             raise
+        final_path = new_file_path if needs_rename else file_path
+        new_size = (content_manager.content_dir / final_path).stat().st_size
+        content_size_tracker.adjust(new_size - old_size)
         await session.refresh(existing)
         set_git_warning(
             response,
@@ -1082,6 +1097,7 @@ async def delete_post_endpoint(
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
     git_service: Annotated[GitService, Depends(get_git_service)],
     content_write_lock: Annotated[AsyncWriteLock, Depends(get_content_write_lock)],
+    content_size_tracker: Annotated[ContentSizeTracker, Depends(get_content_size_tracker)],
     _user: Annotated[AdminUser, Depends(require_admin)],
     delete_assets: bool = Query(False),
 ) -> None:
@@ -1113,6 +1129,16 @@ async def delete_post_endpoint(
         await session.delete(existing)
         await session.commit()
 
+        # Compute size to free before deletion so the tracker stays accurate.
+        post_dir = (content_manager.content_dir / file_path).parent
+        if should_delete_assets and post_dir.is_dir():
+            dir_size = sum(
+                f.stat().st_size for f in post_dir.rglob("*") if f.is_file() and not f.is_symlink()
+            )
+        else:
+            full_path = content_manager.content_dir / file_path
+            dir_size = full_path.stat().st_size if full_path.exists() else 0
+
         # Delete the file after DB commit. If this fails, the DB is already
         # correct and the next cache rebuild will clean up any stale references.
         try:
@@ -1120,6 +1146,7 @@ async def delete_post_endpoint(
                 file_path,
                 delete_assets=should_delete_assets,
             )
+            content_size_tracker.adjust(-dir_size)
         except OSError as exc:
             logger.warning(
                 "Failed to delete post file %s after DB commit "

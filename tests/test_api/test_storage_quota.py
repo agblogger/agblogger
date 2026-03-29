@@ -112,9 +112,7 @@ async def client_with_post(
 
 class TestAssetUploadQuota:
     @pytest.mark.asyncio
-    async def test_asset_upload_within_quota_succeeds(
-        self, client_with_post: AsyncClient
-    ) -> None:
+    async def test_asset_upload_within_quota_succeeds(self, client_with_post: AsyncClient) -> None:
         token = await _login(client_with_post)
         resp = await client_with_post.post(
             f"/api/posts/{POST_PATH}/assets",
@@ -135,3 +133,44 @@ class TestAssetUploadQuota:
         )
         assert resp.status_code == 413
         assert resp.json()["detail"] == "Storage limit reached"
+
+
+class TestDeleteFreesQuota:
+    @pytest.mark.asyncio
+    async def test_delete_post_frees_space_for_new_upload(
+        self,
+        client_with_post: AsyncClient,
+    ) -> None:
+        token = await _login(client_with_post)
+        # Upload an asset that fills the quota leaving only ~3 500 bytes free
+        # (quota=50 000; git init overhead is ~26-27 KB; 20 000 B asset ~= 46 500 B total)
+        resp = await client_with_post.post(
+            f"/api/posts/{POST_PATH}/assets",
+            files=[("files", ("big.bin", b"x" * 20_000, "application/octet-stream"))],
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+
+        # A further 5 000-byte upload should now be rejected (quota nearly exhausted)
+        md_big = b"---\ntitle: Too Big\n---\n\n" + b"x" * 5_000
+        resp = await client_with_post.post(
+            "/api/posts/upload",
+            files=[("files", ("index.md", md_big, "text/markdown"))],
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 413
+
+        # Delete the post (frees the post directory and its assets)
+        resp = await client_with_post.delete(
+            f"/api/posts/{POST_PATH}?delete_assets=true",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 204
+
+        # Now the same 5 000-byte upload should succeed since space was freed
+        resp = await client_with_post.post(
+            "/api/posts/upload",
+            files=[("files", ("index.md", md_big, "text/markdown"))],
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 201
