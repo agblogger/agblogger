@@ -109,10 +109,11 @@ interface HtmlField {
 }
 
 interface ListHtmlField {
-  path: string        // dot path to array in JSON, e.g. 'posts' or 'posts.posts'
-  key: string         // JSON field to match against data-id, e.g. 'id'
-  field: string       // target field per item, e.g. 'rendered_excerpt'
-  selector: string    // CSS selector for content marker, e.g. '[data-excerpt]'
+  path: string            // dot path to array in JSON, e.g. 'posts' or 'posts.posts'
+  key: string             // JSON field to match against item id attribute, e.g. 'id'
+  field: string           // target field per item, e.g. 'rendered_excerpt'
+  itemSelector: string    // CSS selector for list items, e.g. '[data-id]'
+  contentSelector: string // CSS selector for content marker within item, e.g. '[data-excerpt]'
 }
 
 interface PreloadSpec {
@@ -136,14 +137,14 @@ const preloaded = readPreloaded<PageResponse>({
 
 // TimelinePage.tsx
 const preloaded = readPreloaded<PostListResponse>({
-  listHtml: { path: 'posts', key: 'id',
-              field: 'rendered_excerpt', selector: '[data-excerpt]' }
+  listHtml: { path: 'posts', key: 'id', field: 'rendered_excerpt',
+              itemSelector: '[data-id]', contentSelector: '[data-excerpt]' }
 })
 
 // useLabelPosts.ts
 const preloaded = readPreloaded<LabelPostsData>({
-  listHtml: { path: 'posts.posts', key: 'id',
-              field: 'rendered_excerpt', selector: '[data-excerpt]' }
+  listHtml: { path: 'posts.posts', key: 'id', field: 'rendered_excerpt',
+              itemSelector: '[data-id]', contentSelector: '[data-excerpt]' }
 })
 ```
 

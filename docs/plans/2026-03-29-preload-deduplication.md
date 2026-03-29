@@ -722,7 +722,8 @@ describe('readPreloaded', () => {
         path: 'posts',
         key: 'id',
         field: 'rendered_excerpt',
-        selector: '[data-excerpt]',
+        itemSelector: '[data-id]',
+        contentSelector: '[data-excerpt]',
       },
     })
 
@@ -770,7 +771,8 @@ describe('readPreloaded', () => {
         path: 'posts.posts',
         key: 'id',
         field: 'rendered_excerpt',
-        selector: '[data-excerpt]',
+        itemSelector: '[data-id]',
+        contentSelector: '[data-excerpt]',
       },
     })
 
@@ -805,7 +807,8 @@ describe('readPreloaded', () => {
         path: 'posts',
         key: 'id',
         field: 'rendered_excerpt',
-        selector: '[data-excerpt]',
+        itemSelector: '[data-id]',
+        contentSelector: '[data-excerpt]',
       },
     })
 
@@ -847,7 +850,8 @@ export interface ListHtmlField {
   path: string
   key: string
   field: string
-  selector: string
+  itemSelector: string
+  contentSelector: string
 }
 
 export interface PreloadSpec {
@@ -866,8 +870,9 @@ export function readPreloaded<T>(spec: PreloadSpec): T | null {
   }
 
   if (spec.listHtml !== undefined) {
-    const { path, key, field, selector } = spec.listHtml
-    const htmlMap = readPreloadedHtmlMap('[data-id]', 'data-id', selector)
+    const { path, key, field, itemSelector, contentSelector } = spec.listHtml
+    const idAttr = itemSelector.replace(/^\[|\]$/g, '')
+    const htmlMap = readPreloadedHtmlMap(itemSelector, idAttr, contentSelector)
 
     const segments = path.split('.')
     let target: unknown = meta
@@ -985,7 +990,8 @@ With:
 import { readPreloaded } from '@/utils/preload'
 
 let preloadedTimeline = readPreloaded<PostListResponse>({
-  listHtml: { path: 'posts', key: 'id', field: 'rendered_excerpt', selector: '[data-excerpt]' },
+  listHtml: { path: 'posts', key: 'id', field: 'rendered_excerpt',
+              itemSelector: '[data-id]', contentSelector: '[data-excerpt]' },
 })
 ```
 
@@ -1010,7 +1016,8 @@ const preloaded = readPreloaded<LabelPostsData>({
     path: 'posts.posts',
     key: 'id',
     field: 'rendered_excerpt',
-    selector: '[data-excerpt]',
+    itemSelector: '[data-id]',
+    contentSelector: '[data-excerpt]',
   },
 })
 
