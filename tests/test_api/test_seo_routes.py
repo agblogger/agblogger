@@ -153,6 +153,11 @@ class TestPageSeo:
     async def test_preload_data_present(self, client: AsyncClient) -> None:
         resp = await client.get("/page/about")
         assert "__initial_data__" in resp.text
+        assert '"rendered_html"' not in resp.text
+
+    async def test_rendered_body_has_data_content_marker(self, client: AsyncClient) -> None:
+        resp = await client.get("/page/about")
+        assert "data-content" in resp.text
 
     async def test_unknown_page_returns_plain_html(self, client: AsyncClient) -> None:
         resp = await client.get("/page/nonexistent")

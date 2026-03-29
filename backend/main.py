@@ -1068,13 +1068,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         rendered_body = None
         if page.rendered_html:
             rendered_body = (
-                f"<article><h1>{html_mod.escape(page.title)}</h1>{page.rendered_html}</article>"
+                f"<article><h1>{html_mod.escape(page.title)}</h1>"
+                f"<div data-content>{page.rendered_html}</div></article>"
             )
 
         preload_data = {
             "id": page.id,
             "title": page.title,
-            "rendered_html": page.rendered_html,
         }
 
         ctx = SeoContext(
