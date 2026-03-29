@@ -171,9 +171,9 @@ describe('readPreloaded', () => {
     const root = document.getElementById('root')!
     root.innerHTML = '<article><h1>Post</h1><div data-content><p>Body HTML</p></div></article>'
 
-    const result = readPreloaded<{ id: number; title: string; rendered_html: string }>({
+    const result = readPreloaded({
       html: { field: 'rendered_html', selector: '[data-content]' },
-    })
+    }) as { id: number; title: string; rendered_html: string } | null
 
     expect(result).toEqual({ id: 1, title: 'Post', rendered_html: '<p>Body HTML</p>' })
   })
@@ -186,9 +186,9 @@ describe('readPreloaded', () => {
     script.textContent = JSON.stringify(meta)
     document.body.appendChild(script)
 
-    const result = readPreloaded<{ id: number; title: string; rendered_html: string }>({
+    const result = readPreloaded({
       html: { field: 'rendered_html', selector: '[data-content]' },
-    })
+    }) as { id: number; title: string; rendered_html: string } | null
 
     expect(result).toEqual({ id: 1, title: 'Post', rendered_html: '' })
   })
@@ -214,10 +214,7 @@ describe('readPreloaded', () => {
       '<li data-id="2"><div data-excerpt><p>Excerpt two</p></div></li>' +
       '</ul>'
 
-    const result = readPreloaded<{
-      posts: { id: number; title: string; rendered_excerpt: string }[]
-      total: number
-    }>({
+    const result = readPreloaded({
       listHtml: {
         path: 'posts',
         key: 'id',
@@ -225,7 +222,7 @@ describe('readPreloaded', () => {
         itemSelector: '[data-id]',
         contentSelector: '[data-excerpt]',
       },
-    })
+    }) as { posts: { id: number; title: string; rendered_excerpt: string }[]; total: number } | null
 
     expect(result).toEqual({
       posts: [
@@ -260,13 +257,7 @@ describe('readPreloaded', () => {
       '<li data-id="2"><div data-excerpt><p>Two</p></div></li>' +
       '</ul>'
 
-    const result = readPreloaded<{
-      label: { id: string; names: string[] }
-      posts: {
-        posts: { id: number; title: string; rendered_excerpt: string }[]
-        total: number
-      }
-    }>({
+    const result = readPreloaded({
       listHtml: {
         path: 'posts.posts',
         key: 'id',
@@ -274,10 +265,16 @@ describe('readPreloaded', () => {
         itemSelector: '[data-id]',
         contentSelector: '[data-excerpt]',
       },
-    })
+    }) as {
+      label: { id: string; names: string[] }
+      posts: {
+        posts: { id: number; title: string; rendered_excerpt: string }[]
+        total: number
+      }
+    } | null
 
-    expect(result!.posts.posts[0].rendered_excerpt).toBe('<p>One</p>')
-    expect(result!.posts.posts[1].rendered_excerpt).toBe('<p>Two</p>')
+    expect(result!.posts.posts[0]!.rendered_excerpt).toBe('<p>One</p>')
+    expect(result!.posts.posts[1]!.rendered_excerpt).toBe('<p>Two</p>')
     expect(result!.label.id).toBe('python')
   })
 
@@ -299,10 +296,7 @@ describe('readPreloaded', () => {
     root.innerHTML =
       '<ul><li data-id="1"><div data-excerpt><p>One</p></div></li></ul>'
 
-    const result = readPreloaded<{
-      posts: { id: number; title: string; rendered_excerpt: string }[]
-      total: number
-    }>({
+    const result = readPreloaded({
       listHtml: {
         path: 'posts',
         key: 'id',
@@ -310,10 +304,10 @@ describe('readPreloaded', () => {
         itemSelector: '[data-id]',
         contentSelector: '[data-excerpt]',
       },
-    })
+    }) as { posts: { id: number; title: string; rendered_excerpt: string }[]; total: number } | null
 
-    expect(result!.posts[0].rendered_excerpt).toBe('<p>One</p>')
-    expect(result!.posts[1].rendered_excerpt).toBe('')
+    expect(result!.posts[0]!.rendered_excerpt).toBe('<p>One</p>')
+    expect(result!.posts[1]!.rendered_excerpt).toBe('')
   })
 
   it('returns plain metadata when no spec fields are set', () => {
@@ -324,7 +318,7 @@ describe('readPreloaded', () => {
     script.textContent = JSON.stringify(meta)
     document.body.appendChild(script)
 
-    const result = readPreloaded<{ id: number; title: string }>({})
+    const result = readPreloaded({}) as { id: number; title: string } | null
     expect(result).toEqual({ id: 1, title: 'Post' })
   })
 })

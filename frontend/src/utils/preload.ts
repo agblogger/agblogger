@@ -1,12 +1,12 @@
 /** Read and remove the server-injected preload metadata JSON. One-time read. */
-export function readPreloadedMeta<T>(): T | null {
+export function readPreloadedMeta(): unknown {
   const el = document.getElementById('__initial_data__')
   if (el === null) return null
 
   const raw = el.textContent
   el.remove()
   try {
-    return JSON.parse(raw) as T
+    return JSON.parse(raw) as unknown
   } catch {
     return null
   }
@@ -71,13 +71,15 @@ export interface PreloadSpec {
 }
 
 /** Declarative preload reader: reads slim JSON metadata and merges HTML extracted from the DOM. */
-export function readPreloaded<T>(spec: PreloadSpec): T | null {
-  const meta = readPreloadedMeta<Record<string, unknown>>()
+export function readPreloaded(spec: PreloadSpec): unknown {
+  const meta = readPreloadedMeta()
   if (meta === null) return null
+
+  const record = meta as Record<string, unknown>
 
   if (spec.html !== undefined) {
     const html = readPreloadedHtml(spec.html.selector)
-    ;(meta as Record<string, unknown>)[spec.html.field] = html ?? ''
+    record[spec.html.field] = html ?? ''
   }
 
   if (spec.listHtml !== undefined) {
@@ -86,19 +88,19 @@ export function readPreloaded<T>(spec: PreloadSpec): T | null {
     const htmlMap = readPreloadedHtmlMap(itemSelector, idAttr, contentSelector)
 
     const segments = path.split('.')
-    let target: unknown = meta
+    let target: unknown = record
     for (const segment of segments) {
       target = (target as Record<string, unknown>)[segment]
     }
 
     if (Array.isArray(target)) {
       for (const item of target) {
-        const record = item as Record<string, unknown>
-        const itemId = String(record[key])
-        record[field] = htmlMap.get(itemId) ?? ''
+        const itemRecord = item as Record<string, unknown>
+        const itemId = String(itemRecord[key])
+        itemRecord[field] = htmlMap.get(itemId) ?? ''
       }
     }
   }
 
-  return meta as T
+  return record
 }

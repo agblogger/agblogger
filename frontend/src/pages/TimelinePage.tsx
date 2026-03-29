@@ -13,10 +13,10 @@ import { localDateToUtcStart, localDateToUtcEnd } from '@/utils/date'
 import { readPreloaded } from '@/utils/preload'
 import { useSiteStore } from '@/stores/siteStore'
 
-let preloadedTimeline = readPreloaded<PostListResponse>({
+let preloadedTimeline = readPreloaded({
   listHtml: { path: 'posts', key: 'id', field: 'rendered_excerpt',
               itemSelector: '[data-id]', contentSelector: '[data-excerpt]' },
-})
+}) as PostListResponse | null
 
 export default function TimelinePage() {
   const [searchParams, setSearchParams] = useSearchParams()

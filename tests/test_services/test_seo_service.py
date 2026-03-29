@@ -284,8 +284,20 @@ class TestJsonLdHelpers:
 class TestRenderPostListHtml:
     def test_renders_post_links(self) -> None:
         posts = [
-            {"id": "1", "title": "First Post", "slug": "first", "date": "March 28, 2026", "excerpt": "Hello"},
-            {"id": "2", "title": "Second Post", "slug": "second", "date": "March 27, 2026", "excerpt": "World"},
+            {
+                "id": "1",
+                "title": "First Post",
+                "slug": "first",
+                "date": "March 28, 2026",
+                "excerpt": "Hello",
+            },
+            {
+                "id": "2",
+                "title": "Second Post",
+                "slug": "second",
+                "date": "March 27, 2026",
+                "excerpt": "World",
+            },
         ]
         result = render_post_list_html(posts, heading="My Blog")
         assert '<a href="/post/first"' in result
@@ -304,12 +316,16 @@ class TestRenderPostListHtml:
         assert "<li" not in result
 
     def test_escapes_html_in_title(self) -> None:
-        posts = [{"id": "1", "title": "<script>XSS</script>", "slug": "x", "date": "D", "excerpt": "E"}]
+        posts = [
+            {"id": "1", "title": "<script>XSS</script>", "slug": "x", "date": "D", "excerpt": "E"}
+        ]
         result = render_post_list_html(posts, heading="Blog")
         assert "<script>" not in result
 
     def test_escapes_html_in_excerpt(self) -> None:
-        posts = [{"id": "1", "title": "T", "slug": "x", "date": "D", "excerpt": "<img onerror=alert(1)>"}]
+        posts = [
+            {"id": "1", "title": "T", "slug": "x", "date": "D", "excerpt": "<img onerror=alert(1)>"}
+        ]
         result = render_post_list_html(posts, heading="Blog")
         assert "onerror" not in result
 

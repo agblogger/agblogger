@@ -5,9 +5,9 @@ import type { PostDetail, ViewCountResponse } from '@/api/client'
 import { useAuthStore } from '@/stores/authStore'
 import { readPreloaded } from '@/utils/preload'
 
-const preloaded = readPreloaded<PostDetail>({
+const preloaded = readPreloaded({
   html: { field: 'rendered_html', selector: '[data-content]' },
-})
+}) as PostDetail | null
 
 export function usePost(slug: string | null) {
   const userId = useAuthStore((state) => state.user?.id ?? null)

@@ -9,7 +9,7 @@ interface LabelPostsData {
   posts: PostListResponse
 }
 
-const preloaded = readPreloaded<LabelPostsData>({
+const preloaded = readPreloaded({
   listHtml: {
     path: 'posts.posts',
     key: 'id',
@@ -17,7 +17,7 @@ const preloaded = readPreloaded<LabelPostsData>({
     itemSelector: '[data-id]',
     contentSelector: '[data-excerpt]',
   },
-})
+}) as LabelPostsData | null
 
 export function useLabelPosts(labelId: string | null) {
   const userId = useAuthStore((state) => state.user?.id ?? null)
