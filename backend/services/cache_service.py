@@ -11,6 +11,7 @@ from sqlalchemy import delete, text
 from backend.filesystem.content_manager import ContentManager, hash_content
 from backend.models.base import CacheBase, DurableBase, cache_non_virtual_tables
 from backend.models.label import LabelCache, LabelParentCache, PostLabelCache
+from backend.models.page import PageCache
 from backend.models.post import FTS_CREATE_SQL, FTS_INSERT_SQL, PostCache
 from backend.pandoc.renderer import render_markdown, render_markdown_excerpt, rewrite_relative_urls
 from backend.services.dag import break_cycles
@@ -39,6 +40,7 @@ async def rebuild_cache(
         await session.execute(delete(LabelParentCache))
         await session.execute(delete(PostCache))
         await session.execute(delete(LabelCache))
+        await session.execute(delete(PageCache))
 
         # Drop and recreate FTS table
         await session.execute(text("DROP TABLE IF EXISTS posts_fts"))
@@ -80,6 +82,24 @@ async def rebuild_cache(
             edge = LabelParentCache(label_id=label_id, parent_id=parent_id)
             session.add(edge)
 
+        await session.flush()
+
+        # Render and cache file-backed pages
+        for page_cfg in content_manager.site_config.pages:
+            if page_cfg.file is None:
+                continue
+            raw = content_manager.read_page(page_cfg.id)
+            if raw is None:
+                logger.warning("Skipping page %s: file not found", page_cfg.id)
+                continue
+            try:
+                page_html = await render_markdown(raw)
+            except RuntimeError as exc:
+                logger.warning("Skipping page %s: %s", page_cfg.id, exc)
+                continue
+            session.add(
+                PageCache(page_id=page_cfg.id, title=page_cfg.title, rendered_html=page_html)
+            )
         await session.flush()
 
         # Scan and index posts
