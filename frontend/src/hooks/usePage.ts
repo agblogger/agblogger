@@ -8,7 +8,6 @@ const preloaded = readPreloadedData<PageResponse>()
 export function usePage(pageId: string | null) {
   return useSWR<PageResponse, Error>(
     pageId !== null ? `pages/${pageId}` : null,
-    undefined,
     preloaded !== null ? { fallbackData: preloaded } : undefined,
   )
 }
