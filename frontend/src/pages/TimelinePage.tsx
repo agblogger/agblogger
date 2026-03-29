@@ -11,19 +11,28 @@ import { useAuthStore } from '@/stores/authStore'
 import { postUrl } from '@/utils/postUrl'
 import { localDateToUtcStart, localDateToUtcEnd } from '@/utils/date'
 import { readPreloaded } from '@/utils/preload'
-import { useSiteStore } from '@/stores/siteStore'
-
-let preloadedTimeline = readPreloaded({
-  listHtml: { path: 'posts', key: 'id', field: 'rendered_excerpt',
-              itemSelector: '[data-id]', contentSelector: '[data-excerpt]' },
-}) as PostListResponse | null
 
 export default function TimelinePage() {
+  // Lazy initializer: reads and removes the preloaded script tag once per mount.
+  // Returns null on subsequent mounts (tag already gone).
+  const [initialData] = useState<PostListResponse | null>(() => {
+    const data = readPreloaded({
+      listHtml: {
+        path: 'posts',
+        key: 'id',
+        field: 'rendered_excerpt',
+        itemSelector: '[data-id]',
+        contentSelector: '[data-excerpt]',
+      },
+    })
+    return data as PostListResponse | null
+  })
+
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
-  const [data, setData] = useState<PostListResponse | null>(preloadedTimeline)
-  const [loading, setLoading] = useState(preloadedTimeline === null)
+  const [data, setData] = useState<PostListResponse | null>(initialData)
+  const [loading, setLoading] = useState(initialData === null)
   const [error, setError] = useState<string | null>(null)
   const [retryCount, setRetryCount] = useState(0)
   const [uploading, setUploading] = useState(false)
@@ -32,6 +41,9 @@ export default function TimelinePage() {
   const [promptTitle, setPromptTitle] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const folderInputRef = useRef<HTMLInputElement>(null)
+  // Track whether the initial preloaded data has been consumed so the first useEffect
+  // run can skip the network fetch when preloaded data is already shown.
+  const consumedPreload = useRef(initialData !== null)
 
   // Parse filter state from URL
   const page = Number(searchParams.get('page') ?? '1')
@@ -62,15 +74,14 @@ export default function TimelinePage() {
     [setSearchParams],
   )
 
-  const siteTitle = useSiteStore((s) => s.config?.title)
-
   useEffect(() => {
-    if (siteTitle !== undefined && siteTitle !== '') {
-      document.title = siteTitle
+    // Skip the first fetch when preloaded data was used — it's already shown.
+    // Subsequent runs (retryCount, user, searchParams changes) always fetch.
+    if (consumedPreload.current) {
+      consumedPreload.current = false
+      return
     }
-  }, [siteTitle])
 
-  useEffect(() => {
     const p = Number(searchParams.get('page') ?? '1')
     const labels = searchParams.get('labels')?.split(',').filter(Boolean) ?? []
     const labelModeParam = searchParams.get('labelMode')
@@ -79,12 +90,6 @@ export default function TimelinePage() {
     const author = searchParams.get('author') ?? ''
     const fromDate = searchParams.get('from') ?? ''
     const toDate = searchParams.get('to') ?? ''
-
-    // Skip fetch if we have preloaded data for the default view (page 1, no filters)
-    if (preloadedTimeline !== null && p === 1 && labels.length === 0 && !author && !fromDate && !toDate) {
-      preloadedTimeline = null  // one-shot: clear so future renders fetch normally
-      return
-    }
 
     void (async () => {
       setLoading(true)

@@ -794,7 +794,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
     async def _get_base_html(request: Request) -> str | None:
-        """Read and cache the frontend index.html for SEO injection."""
+        """Read the frontend index.html, caching it in app state for the process lifetime."""
         base_html: str | None = getattr(request.app.state, "_seo_base_html", None)
         if base_html is None:
             frontend_dir_path: Path = request.app.state.settings.frontend_dir
@@ -826,8 +826,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
 
         # Post view: /post/<slug> → serve SPA HTML with SEO enrichment
-        import html as html_mod
-
         from backend.models.post import PostCache
         from backend.services.seo_service import (
             SeoContext,
@@ -889,13 +887,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         rendered_body = None
         if post.rendered_html:
-            date_str = post.created_at.strftime("%B %-d, %Y")
+            _dt = post.created_at
+            date_str = f"{_dt.strftime('%B')} {_dt.day}, {_dt.strftime('%Y')}"
             author_line = f" \u00b7 {post.author}" if post.author else ""
             rendered_body = (
                 f"<article>"
-                f"<h1>{html_mod.escape(post.title)}</h1>"
+                f"<h1>{html.escape(post.title)}</h1>"
                 f'<p style="color:#666;font-size:0.875rem;margin-bottom:2rem">'
-                f"{html_mod.escape(date_str)}{html_mod.escape(author_line)}</p>"
+                f"{html.escape(date_str)}{html.escape(author_line)}</p>"
                 f"<div data-content>{post.rendered_html}</div>"
                 f"</article>"
             )
@@ -967,13 +966,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             session_factory = request.app.state.session_factory
             async with session_factory() as session:
                 count_stmt = (
-                    select(func.count()).select_from(PostCache).where(PostCache.is_draft == False)  # noqa: E712
+                    select(func.count()).select_from(PostCache).where(PostCache.is_draft.is_(False))
                 )
                 total = (await session.execute(count_stmt)).scalar_one()
 
                 stmt = (
                     select(PostCache)
-                    .where(PostCache.is_draft == False)  # noqa: E712
+                    .where(PostCache.is_draft.is_(False))
                     .order_by(PostCache.created_at.desc())
                     .limit(10)
                 )
@@ -984,12 +983,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     await session.refresh(p, ["labels"])
                     excerpt = strip_html_tags(p.rendered_excerpt) if p.rendered_excerpt else ""
                     slug = p.file_path.split("/")[1] if "/" in p.file_path else p.file_path
+                    _dt = p.created_at
                     posts_data.append(
                         {
                             "id": str(p.id),
                             "title": p.title,
                             "slug": slug,
-                            "date": p.created_at.strftime("%B %-d, %Y"),
+                            "date": f"{_dt.strftime('%B')} {_dt.day}, {_dt.strftime('%Y')}",
                             "excerpt": excerpt,
                         }
                     )
@@ -1034,8 +1034,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/page/{page_id}", include_in_schema=False, response_model=None)
     async def page_route(page_id: str, request: Request) -> HTMLResponse:
-        import html as html_mod
-
         from backend.services.page_service import get_page
         from backend.services.seo_service import (
             SeoContext,
@@ -1055,7 +1053,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         try:
             page = await get_page(content_manager, page_id)
-        except Exception:
+        except SQLAlchemyError, OSError, RuntimeError:
             logger.exception("Error loading page for SEO: %s", page_id)
             return HTMLResponse(base_html)
 
@@ -1068,7 +1066,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         rendered_body = None
         if page.rendered_html:
             rendered_body = (
-                f"<article><h1>{html_mod.escape(page.title)}</h1>"
+                f"<article><h1>{html.escape(page.title)}</h1>"
                 f"<div data-content>{page.rendered_html}</div></article>"
             )
 
@@ -1122,8 +1120,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/labels/{label_id}", include_in_schema=False, response_model=None)
     async def label_detail_route(label_id: str, request: Request) -> HTMLResponse:
-        import json as json_mod
-
         from backend.models.label import LabelCache, PostLabelCache
         from backend.models.post import PostCache
         from backend.services.seo_service import (
@@ -1165,7 +1161,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         .select_from(PostCache)
                         .join(PostLabelCache, PostCache.id == PostLabelCache.post_id)
                         .where(PostLabelCache.label_id == label_id)
-                        .where(PostCache.is_draft == False)  # noqa: E712
+                        .where(PostCache.is_draft.is_(False))
                     )
                     total_ld = (await session.execute(count_stmt)).scalar_one()
 
@@ -1173,7 +1169,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         select(PostCache)
                         .join(PostLabelCache, PostCache.id == PostLabelCache.post_id)
                         .where(PostLabelCache.label_id == label_id)
-                        .where(PostCache.is_draft == False)  # noqa: E712
+                        .where(PostCache.is_draft.is_(False))
                         .order_by(PostCache.created_at.desc())
                         .limit(20)
                     )
@@ -1184,12 +1180,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         await session.refresh(p, ["labels"])
                         excerpt = strip_html_tags(p.rendered_excerpt) if p.rendered_excerpt else ""
                         slug = p.file_path.split("/")[1] if "/" in p.file_path else p.file_path
+                        _dt = p.created_at
                         posts_data_ld.append(
                             {
                                 "id": str(p.id),
                                 "title": p.title,
                                 "slug": slug,
-                                "date": p.created_at.strftime("%B %-d, %Y"),
+                                "date": f"{_dt.strftime('%B')} {_dt.day}, {_dt.strftime('%Y')}",
                                 "excerpt": excerpt,
                             }
                         )
@@ -1214,7 +1211,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return HTMLResponse(base_html)
 
         label_id_val, label_names_raw, label_is_implicit = label_row
-        label_names = json_mod.loads(label_names_raw) if label_names_raw else [label_id]
+        # Defensive JSON parse: fall back to [label_id] if the DB value is malformed.
+        try:
+            label_names: list[str] = json.loads(label_names_raw) if label_names_raw else [label_id]
+        except json.JSONDecodeError:
+            logger.warning("Malformed label names JSON for %s: %r", label_id, label_names_raw)
+            label_names = [label_id]
         display_name = label_names[0] if label_names else label_id
 
         rendered_body = render_post_list_html(posts_data_ld, heading=display_name)
@@ -1279,18 +1281,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         content_manager: ContentManager = request.app.state.content_manager
 
         urls: list[str] = []
-        urls.append(f"  <url><loc>{base_url}/</loc></url>")
+        urls.append(f"  <url><loc>{html.escape(base_url)}/</loc></url>")
 
         for page in content_manager.site_config.pages:
             if page.file is not None:
-                urls.append(f"  <url><loc>{base_url}/page/{page.id}</loc></url>")
+                urls.append(
+                    f"  <url><loc>{html.escape(base_url)}/page/{html.escape(page.id)}</loc></url>"
+                )
 
         try:
             session_factory = request.app.state.session_factory
             async with session_factory() as session:
                 stmt = (
                     select(PostCache)
-                    .where(PostCache.is_draft == False)  # noqa: E712
+                    .where(PostCache.is_draft.is_(False))
                     .order_by(PostCache.created_at.desc())
                 )
                 result = await session.execute(stmt)
@@ -1300,24 +1304,32 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     slug = p.file_path.split("/")[1] if "/" in p.file_path else p.file_path
                     lastmod = format_iso(p.modified_at)
                     urls.append(
-                        f"  <url><loc>{base_url}/post/{slug}</loc>"
-                        f"<lastmod>{lastmod}</lastmod></url>"
+                        f"  <url><loc>{html.escape(base_url)}/post/{html.escape(slug)}</loc>"
+                        f"<lastmod>{html.escape(lastmod)}</lastmod></url>"
                     )
 
                 label_stmt = (
                     select(LabelCache.id)
                     .join(PostLabelCache, LabelCache.id == PostLabelCache.label_id)
                     .join(PostCache, PostCache.id == PostLabelCache.post_id)
-                    .where(PostCache.is_draft == False)  # noqa: E712
+                    .where(PostCache.is_draft.is_(False))
                     .group_by(LabelCache.id)
                 )
                 label_result = await session.execute(label_stmt)
                 label_ids = label_result.scalars().all()
 
                 for lid in label_ids:
-                    urls.append(f"  <url><loc>{base_url}/labels/{lid}</loc></url>")
+                    urls.append(
+                        f"  <url><loc>{html.escape(base_url)}/labels/{html.escape(lid)}</loc></url>"
+                    )
         except SQLAlchemyError:
             logger.exception("DB error generating sitemap")
+            return Response(
+                content='<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>',
+                media_type="application/xml",
+                status_code=503,
+                headers={"Retry-After": "60"},
+            )
 
         url_block = "\n".join(urls)
         xml = (
@@ -1364,7 +1376,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             async with session_factory() as session:
                 stmt = (
                     select(PostCache)
-                    .where(PostCache.is_draft == False)  # noqa: E712
+                    .where(PostCache.is_draft.is_(False))
                     .order_by(PostCache.created_at.desc())
                     .limit(20)
                 )
@@ -1373,7 +1385,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
                 for p in posts:
                     slug = p.file_path.split("/")[1] if "/" in p.file_path else p.file_path
-                    link = f"{base_url}/post/{slug}"
+                    link = html.escape(f"{base_url}/post/{slug}")
                     esc_title = html.escape(p.title)
                     desc = html.escape(
                         strip_html_tags(p.rendered_excerpt) if p.rendered_excerpt else ""
@@ -1395,15 +1407,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     )
         except SQLAlchemyError:
             logger.exception("DB error generating RSS feed")
+            _empty_rss = (
+                '<?xml version="1.0" encoding="UTF-8"?>\n'
+                '<rss version="2.0"><channel></channel></rss>'
+            )
+            return Response(
+                content=_empty_rss,
+                media_type="application/xml",
+                status_code=503,
+                headers={"Retry-After": "60"},
+            )
 
         items_block = "\n".join(items)
-        feed_url = f"{base_url}/feed.xml"
+        feed_url = html.escape(f"{base_url}/feed.xml")
+        esc_base_url = html.escape(base_url)
         rss = (
             '<?xml version="1.0" encoding="UTF-8"?>\n'
             '<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">\n'
             "  <channel>\n"
             f"    <title>{site_title}</title>\n"
-            f"    <link>{base_url}/</link>\n"
+            f"    <link>{esc_base_url}/</link>\n"
             f"    <description>{site_desc}</description>\n"
             f'    <atom:link href="{feed_url}" rel="self" type="application/rss+xml"/>\n'
             f"{items_block}\n"

@@ -78,6 +78,7 @@ def render_seo_html(base_html: str, ctx: SeoContext) -> str:
 
     if ctx.json_ld is not None:
         ld_json = json.dumps(ctx.json_ld, ensure_ascii=False, separators=(",", ":"))
+        ld_json = ld_json.replace("</", "<\\/")
         head_tags.append(f'<script type="application/ld+json">{ld_json}</script>')
 
     head_block = "\n".join(head_tags)

@@ -110,3 +110,62 @@ class TestSitemap:
     async def test_has_lastmod_for_posts(self, client: AsyncClient) -> None:
         resp = await client.get("/sitemap.xml")
         assert "<lastmod>" in resp.text
+
+
+class TestSitemapXmlEscaping:
+    """Verify that XML-special characters in slugs/IDs are escaped in sitemap output."""
+
+    @pytest.fixture
+    def xml_escape_settings(self, tmp_path: Path) -> Settings:
+        content_dir = tmp_path / "content"
+        posts_dir = content_dir / "posts"
+        posts_dir.mkdir(parents=True)
+
+        # Post with an XML-special character in its slug (directory name)
+        ampersand_post = posts_dir / "q&a"
+        ampersand_post.mkdir()
+        (ampersand_post / "index.md").write_text(
+            "---\ntitle: Q&A Post\ncreated_at: 2026-01-05 12:00:00+00\n"
+            "author: admin\nlabels: []\n---\nBody.\n"
+        )
+
+        labels_toml = content_dir / "labels.toml"
+        labels_toml.write_text("[labels]\n")
+
+        index_toml = content_dir / "index.toml"
+        index_toml.write_text(
+            '[site]\ntitle = "Blog"\ndescription = "A blog"\n'
+            '[[pages]]\nid = "timeline"\ntitle = "Posts"\n'
+        )
+
+        frontend_dir = tmp_path / "frontend"
+        frontend_dir.mkdir()
+        (frontend_dir / "index.html").write_text(
+            '<html><head><title>B</title></head><body><div id="root"></div></body></html>'
+        )
+
+        db_path = tmp_path / "test.db"
+        return Settings(
+            secret_key="test-secret-key-with-at-least-32-characters",
+            debug=True,
+            database_url=f"sqlite+aiosqlite:///{db_path}",
+            content_dir=content_dir,
+            frontend_dir=frontend_dir,
+            admin_username="admin",
+            admin_password="admin123",
+        )
+
+    @pytest.fixture
+    async def xml_escape_client(self, xml_escape_settings: Settings) -> AsyncGenerator[AsyncClient]:
+        async with create_test_client(xml_escape_settings) as ac:
+            yield ac
+
+    async def test_ampersand_in_slug_is_escaped(self, xml_escape_client: AsyncClient) -> None:
+        """Raw & in post slug must be escaped as &amp; in sitemap XML."""
+        resp = await xml_escape_client.get("/sitemap.xml")
+        assert resp.status_code == 200
+        # The post URL must appear with &amp; escaping, not a raw &
+        assert "/post/q&amp;a" in resp.text
+        # A raw unescaped & followed by 'a' in a URL context must not appear
+        # (the only & that should exist is part of &amp;)
+        assert "<loc>http://test/post/q&a</loc>" not in resp.text

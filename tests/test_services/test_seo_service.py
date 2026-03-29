@@ -195,6 +195,16 @@ class TestRenderSeoHtmlJsonLd:
         result = render_seo_html(BASE_HTML, _make_ctx(json_ld=None))
         assert "application/ld+json" not in result
 
+    def test_json_ld_escapes_script_closing_tag(self) -> None:
+        ld = {
+            "@context": "https://schema.org",
+            "@type": "WebSite",
+            "name": "</script><script>alert(1)",
+        }
+        result = render_seo_html(BASE_HTML, _make_ctx(json_ld=ld))
+        assert "</script><script>" not in result
+        assert "<\\/script>" in result
+
 
 class TestRenderSeoHtmlBody:
     def test_injects_rendered_body_inside_root(self) -> None:
