@@ -60,3 +60,17 @@ export function localDateToUtcEnd(dateStr: string): string {
   const local = new Date(`${dateStr}T23:59:59.999`)
   return local.toISOString()
 }
+
+/**
+ * Convert a UTC/ISO timestamp from the URL back into a local YYYY-MM-DD
+ * value suitable for date input controls.
+ */
+export function utcTimestampToLocalDateInput(dateStr: string): string {
+  if (!dateStr) return ''
+  try {
+    return format(parseISO(normalise(dateStr)), 'yyyy-MM-dd')
+  } catch (err) {
+    console.warn(`Failed to parse date "${dateStr}":`, err)
+    return dateStr || ''
+  }
+}

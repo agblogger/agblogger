@@ -10,10 +10,10 @@ import posixpath
 import subprocess
 import sys
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import yaml
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -89,6 +89,14 @@ def _public_post_slug(file_path: str) -> str | None:
     except ValueError:
         logger.warning("Skipping invalid cached post path in public output: %s", file_path)
         return None
+
+
+def format_human_date(value: str) -> str:
+    """Format an ISO-like datetime string as 'Month D, Year' for SEO HTML output."""
+    from backend.utils.datetime import parse_datetime
+
+    dt = parse_datetime(value)
+    return f"{dt.strftime('%B')} {dt.day}, {dt.strftime('%Y')}"
 
 
 class _MultipartBodyTooLargeError(Exception):
@@ -949,8 +957,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return HTMLResponse(enriched)
 
     @app.get("/", include_in_schema=False, response_model=None)
-    async def homepage_route(request: Request) -> HTMLResponse:
-        from backend.models.post import PostCache
+    async def homepage_route(
+        request: Request,
+        page: int = Query(1, ge=1),
+        label: str | None = None,
+        labels: str | None = None,
+        label_mode: Literal["and", "or"] | None = Query(None, alias="labelMode"),
+        include_sublabels: bool = Query(False, alias="includeSublabels"),
+        author: str | None = None,
+        from_date: str | None = Query(None, alias="from"),
+        to_date: str | None = Query(None, alias="to"),
+    ) -> HTMLResponse:
+        from backend.api.deps import get_current_admin, mark_auth_sensitive_read
+        from backend.services.post_service import MAX_SAFE_PAGE, list_posts
         from backend.services.seo_service import (
             SeoContext,
             render_post_list_html,
@@ -958,7 +977,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             strip_html_tags,
             website_ld,
         )
-        from backend.utils.datetime import format_iso
 
         base_html = await _get_base_html(request)
         if base_html is None:
@@ -967,82 +985,75 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         content_manager: ContentManager = request.app.state.content_manager
         site_title = content_manager.site_config.title
         site_desc = content_manager.site_config.description
-        base_url = str(request.base_url).rstrip("/")
+
+        if page > MAX_SAFE_PAGE:
+            return HTMLResponse(base_html)
 
         posts_data: list[dict[str, str]] = []
-        preload_posts: list[dict[str, Any]] = []
-        total = 0
+        preload_data: dict[str, Any] | None = None
+        is_authenticated = False
         try:
             session_factory = request.app.state.session_factory
             async with session_factory() as session:
-                count_stmt = (
-                    select(func.count()).select_from(PostCache).where(PostCache.is_draft.is_(False))
+                user = await get_current_admin(request, session=session)
+                is_authenticated = user is not None
+                post_list = await list_posts(
+                    session,
+                    page=page,
+                    per_page=10,
+                    label=label,
+                    labels=labels.split(",") if labels else None,
+                    label_mode=label_mode or "or",
+                    include_descendants=include_sublabels,
+                    author=author,
+                    from_date=from_date,
+                    to_date=to_date,
+                    include_drafts=is_authenticated,
                 )
-                total = (await session.execute(count_stmt)).scalar_one()
-
-                stmt = (
-                    select(PostCache)
-                    .where(PostCache.is_draft.is_(False))
-                    .order_by(PostCache.created_at.desc())
-                    .limit(10)
-                )
-                result = await session.execute(stmt)
-                posts = result.scalars().all()
-
-                for p in posts:
-                    await session.refresh(p, ["labels"])
-                    excerpt = strip_html_tags(p.rendered_excerpt) if p.rendered_excerpt else ""
-                    slug = _public_post_slug(p.file_path)
+                for post in post_list.posts:
+                    slug = _public_post_slug(post.file_path)
                     if slug is None:
                         continue
-                    _dt = p.created_at
                     posts_data.append(
                         {
-                            "id": str(p.id),
-                            "title": p.title,
+                            "id": str(post.id),
+                            "title": post.title,
                             "slug": slug,
-                            "date": f"{_dt.strftime('%B')} {_dt.day}, {_dt.strftime('%Y')}",
-                            "excerpt": excerpt,
+                            "date": format_human_date(post.created_at),
+                            "excerpt": (
+                                strip_html_tags(post.rendered_excerpt)
+                                if post.rendered_excerpt
+                                else ""
+                            ),
                         }
                     )
-                    preload_posts.append(
-                        {
-                            "id": p.id,
-                            "file_path": p.file_path,
-                            "title": p.title,
-                            "subtitle": p.subtitle,
-                            "author": p.author,
-                            "created_at": format_iso(p.created_at),
-                            "modified_at": format_iso(p.modified_at),
-                            "is_draft": p.is_draft,
-                            "labels": [pl.label_id for pl in p.labels],
-                        }
-                    )
+                preload_data = post_list.model_dump(
+                    exclude={"posts": {"__all__": {"rendered_excerpt"}}}
+                )
         except SQLAlchemyError:
             logger.exception("DB error loading posts for homepage SEO")
+            return HTMLResponse(base_html)
+        except ValueError:
+            logger.warning("Invalid homepage query for SEO preload", exc_info=True)
             return HTMLResponse(base_html)
 
         rendered_body = render_post_list_html(posts_data, heading=site_title)
 
-        preload_data: dict[str, Any] = {
-            "posts": preload_posts,
-            "total": total,
-            "page": 1,
-            "per_page": 10,
-            "total_pages": max(1, (total + 9) // 10),
-        }
+        canonical_url = str(request.url)
 
         ctx = SeoContext(
             title=site_title,
             description=site_desc,
-            canonical_url=base_url + "/",
+            canonical_url=canonical_url,
             site_name=site_title,
-            json_ld=website_ld(name=site_title, description=site_desc, url=base_url + "/"),
+            json_ld=website_ld(name=site_title, description=site_desc, url=canonical_url),
             rendered_body=rendered_body,
             preload_data=preload_data,
         )
 
-        return HTMLResponse(render_seo_html(base_html, ctx))
+        response = HTMLResponse(render_seo_html(base_html, ctx))
+        mark_auth_sensitive_read(response, is_authenticated=is_authenticated)
+        return response
 
     @app.get("/page/{page_id}", include_in_schema=False, response_model=None)
     async def page_route(page_id: str, request: Request) -> HTMLResponse:

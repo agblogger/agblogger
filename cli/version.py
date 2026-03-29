@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import sys
 from functools import lru_cache
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as package_version
 from pathlib import Path
 
 
@@ -19,6 +21,14 @@ def _base_dir() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
+def _installed_package_version() -> str | None:
+    """Return the installed agblogger package version, if available."""
+    try:
+        return package_version("agblogger")
+    except PackageNotFoundError:
+        return None
+
+
 @lru_cache(maxsize=1)
 def get_cli_version() -> str:
     """Return the CLI version string, cached for process lifetime."""
@@ -26,7 +36,7 @@ def get_cli_version() -> str:
     try:
         version = (base / "VERSION").read_text(encoding="utf-8").strip()
     except OSError, UnicodeDecodeError:
-        return "unknown"
+        return _installed_package_version() or "unknown"
     build_path = base / "BUILD"
     if build_path.exists():
         try:

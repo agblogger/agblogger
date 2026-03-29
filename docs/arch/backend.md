@@ -77,6 +77,8 @@ Public read paths are broad for published content, while mutations are concentra
 
 Public browsable routes are served by dedicated handlers registered before the StaticFiles catch-all. Each handler enriches the SPA shell with meta tags, structured data, server-rendered content, and preloaded API data so crawlers and no-JS browsers see real content without executing JavaScript. A shared SEO service provides the injection pipeline; individual route handlers supply the data.
 
+The homepage timeline SEO route reuses the same post-listing service as the JSON API for pagination and filtering, so query-string timeline variants (page, labels, author, date range) preload the same result set the SPA would fetch after hydration. Authenticated homepage preloads are marked private because draft visibility can change the rendered body.
+
 The backend also serves a dynamic sitemap, robots.txt, and an RSS feed.
 
 Top-level page reads split by page type:

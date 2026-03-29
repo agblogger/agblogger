@@ -23,11 +23,15 @@ SWR handles most server data fetching and caching; Zustand coordinates session, 
 
 Single-resource reads (individual posts, pages, label detail) use SWR hooks for caching and revalidation. Paginated and filtered views (timeline, search) use manual `useEffect`+`useState` because their query parameters change frequently with URL param sync.
 
+The timeline route treats the URL as the canonical filter state. Pagination, label filters, author filters, and date filters all round-trip through query params, with date ranges encoded as API-ready UTC/ISO timestamps in the URL while the UI still renders local `YYYY-MM-DD` input values.
+
 Auth-sensitive reads scope their cache key by user ID so the cache invalidates on login/logout. Write operations always use direct API calls.
 
 ## Server-Side Preloading
 
 On the initial page load, the backend embeds pre-rendered HTML inside `<div id="root">` and structured metadata as a JSON script tag. The SPA reads both sources on boot via a declarative preload utility, merging them into typed objects. Rendered HTML content lives only in the server HTML — the preload utility extracts it from the DOM. This gives crawlers and no-JS browsers real content, while the SPA gets structured data without a round-trip. React replaces the server HTML on mount; client-side navigations fetch from the API normally.
+
+For the timeline route, the backend preload now mirrors the active query string, so direct links to filtered or paginated timeline URLs hydrate with matching data instead of falling back to the default first page.
 
 ## API Integration
 

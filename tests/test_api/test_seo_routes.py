@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import json
+import re
+from typing import TYPE_CHECKING, cast
 
 import pytest
 
@@ -14,6 +16,16 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from httpx import AsyncClient
+
+
+def _extract_initial_data(html: str) -> dict[str, object]:
+    match = re.search(
+        r'<script id="__initial_data__" type="application/json">(.*?)</script>',
+        html,
+        re.DOTALL,
+    )
+    assert match is not None
+    return json.loads(match.group(1))
 
 
 @pytest.fixture
@@ -35,6 +47,16 @@ def seo_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
         "author: admin\nlabels: []\n---\n"
         "Second post body.\n"
     )
+
+    for i in range(3, 12):
+        extra_post = posts_dir / f"post-{i}"
+        extra_post.mkdir()
+        day = 28 - i
+        (extra_post / "index.md").write_text(
+            f"---\ntitle: Post {i}\ncreated_at: 2026-03-{day:02d} 12:00:00+00\n"
+            "author: admin\nlabels: []\n---\n"
+            f"Post {i} body.\n"
+        )
 
     nested_parent = posts_dir / "2026"
     nested_parent.mkdir()
@@ -143,6 +165,46 @@ class TestHomepageSeo:
         resp = await client.get("/")
         assert "data-id" in resp.text
         assert "data-excerpt" in resp.text
+
+    async def test_pagination_query_shapes_homepage_preload(self, client: AsyncClient) -> None:
+        resp = await client.get("/?page=2")
+        preload = _extract_initial_data(resp.text)
+
+        assert preload["page"] == 2
+        assert preload["per_page"] == 10
+        assert preload["total"] == 12
+        assert preload["total_pages"] == 2
+        assert "Hello World" not in resp.text
+        assert "Post 10" in resp.text
+        assert "Post 11" in resp.text
+
+    async def test_label_query_shapes_homepage_preload(self, client: AsyncClient) -> None:
+        resp = await client.get("/?labels=python")
+        preload = _extract_initial_data(resp.text)
+
+        assert preload["page"] == 1
+        assert preload["total"] == 2
+        assert preload["total_pages"] == 1
+        assert "Hello World" in resp.text
+        assert "2026 Recap" in resp.text
+        assert "Second Post" not in resp.text
+
+    async def test_authenticated_homepage_preload_includes_drafts(
+        self, client: AsyncClient
+    ) -> None:
+        login = await client.post(
+            "/api/auth/login",
+            json={"username": "admin", "password": "admin123"},
+        )
+        assert login.status_code == 200
+
+        resp = await client.get("/?labels=")
+        preload = _extract_initial_data(resp.text)
+
+        posts = cast("list[dict[str, object]]", preload["posts"])
+        titles = [post["title"] for post in posts]
+        assert "Secret Draft" in titles
+        assert resp.headers["Cache-Control"] == "private, no-store"
 
 
 class TestPageSeo:

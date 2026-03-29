@@ -40,22 +40,47 @@ def test_cli_version_empty_build_file(tmp_path: Path, monkeypatch) -> None:
 
 def test_cli_version_no_version_file(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr("cli.version._base_dir", lambda: tmp_path)
+    monkeypatch.setattr("cli.version.package_version", lambda name: "1.2.3")
+    get_cli_version.cache_clear()
+    assert get_cli_version() == "1.2.3"
+    get_cli_version.cache_clear()
+
+
+def test_cli_version_falls_back_to_installed_package_metadata(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr("cli.version._base_dir", lambda: tmp_path)
+    monkeypatch.setattr("cli.version.package_version", lambda name: "4.5.6")
+    get_cli_version.cache_clear()
+    assert get_cli_version() == "4.5.6"
+    get_cli_version.cache_clear()
+
+
+def test_cli_version_returns_unknown_when_metadata_package_is_missing(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from importlib.metadata import PackageNotFoundError
+
+    def missing_package(name: str) -> str:
+        raise PackageNotFoundError(name)
+
+    monkeypatch.setattr("cli.version._base_dir", lambda: tmp_path)
+    monkeypatch.setattr("cli.version.package_version", missing_package)
     get_cli_version.cache_clear()
     assert get_cli_version() == "unknown"
     get_cli_version.cache_clear()
 
 
 def test_cli_version_unreadable_version_file(tmp_path: Path, monkeypatch) -> None:
-    """Unreadable VERSION file should return 'unknown'."""
+    """Unreadable VERSION file should fall back to package metadata."""
     (tmp_path / "VERSION").write_text("2.0.0\n")
     monkeypatch.setattr("cli.version._base_dir", lambda: tmp_path)
+    monkeypatch.setattr("cli.version.package_version", lambda name: "9.9.9")
     get_cli_version.cache_clear()
     with patch.object(
         type(tmp_path / "VERSION"),
         "read_text",
         side_effect=OSError("permission denied"),
     ):
-        assert get_cli_version() == "unknown"
+        assert get_cli_version() == "9.9.9"
     get_cli_version.cache_clear()
 
 
@@ -91,4 +116,21 @@ def test_cli_version_flag_prints_version(capsys, tmp_path: Path, monkeypatch) ->
         main()
     captured = capsys.readouterr()
     assert "3.0.0+cafe123" in captured.out
+    get_cli_version.cache_clear()
+
+
+def test_cli_version_flag_prints_installed_package_metadata(
+    capsys, tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr("cli.version._base_dir", lambda: tmp_path)
+    monkeypatch.setattr("cli.version.package_version", lambda name: "7.8.9")
+    get_cli_version.cache_clear()
+
+    from cli.sync_client import main
+
+    monkeypatch.setattr(sys, "argv", ["agblogger", "--version"])
+    with contextlib.suppress(SystemExit):
+        main()
+    captured = capsys.readouterr()
+    assert "7.8.9" in captured.out
     get_cli_version.cache_clear()

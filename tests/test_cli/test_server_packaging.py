@@ -37,3 +37,10 @@ def test_dockerfile_installs_server_wheel_without_copying_cli_sources() -> None:
     assert 'CMD ["agblogger-server"]' in dockerfile
     assert "COPY cli/ ./cli/" not in dockerfile
     assert "COPY backend/ ./backend/" not in dockerfile
+
+
+def test_dockerfile_does_not_require_optional_build_file() -> None:
+    dockerfile = (PROJECT_ROOT / "Dockerfile").read_text(encoding="utf-8")
+
+    assert "COPY VERSION BUILD* ./" not in dockerfile
+    assert "COPY VERSION ./" in dockerfile

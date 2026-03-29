@@ -10,7 +10,7 @@ import type { PostListResponse } from '@/api/client'
 import { useAuthStore } from '@/stores/authStore'
 import { useSiteStore } from '@/stores/siteStore'
 import { postUrl } from '@/utils/postUrl'
-import { localDateToUtcStart, localDateToUtcEnd } from '@/utils/date'
+import { localDateToUtcStart, localDateToUtcEnd, utcTimestampToLocalDateInput } from '@/utils/date'
 import { readPreloaded } from '@/utils/preload'
 
 export default function TimelinePage() {
@@ -51,14 +51,16 @@ export default function TimelinePage() {
   const page = Number(searchParams.get('page') ?? '1')
   const urlLabelMode = searchParams.get('labelMode')
   const parsedLabelMode: 'or' | 'and' = urlLabelMode === 'and' ? 'and' : 'or'
+  const urlFromDate = searchParams.get('from') ?? ''
+  const urlToDate = searchParams.get('to') ?? ''
   const filterState: FilterState = useMemo(() => ({
     labels: searchParams.get('labels')?.split(',').filter(Boolean) ?? [],
     labelMode: parsedLabelMode,
     includeSublabels: searchParams.get('includeSublabels') === 'true',
     author: searchParams.get('author') ?? '',
-    fromDate: searchParams.get('from') ?? '',
-    toDate: searchParams.get('to') ?? '',
-  }), [searchParams, parsedLabelMode])
+    fromDate: utcTimestampToLocalDateInput(urlFromDate),
+    toDate: utcTimestampToLocalDateInput(urlToDate),
+  }), [searchParams, parsedLabelMode, urlFromDate, urlToDate])
 
   useEffect(() => {
     if (siteTitle !== undefined && siteTitle !== '') {
@@ -74,8 +76,8 @@ export default function TimelinePage() {
       if (f.labelMode !== 'or') params.set('labelMode', f.labelMode)
       if (f.includeSublabels) params.set('includeSublabels', 'true')
       if (f.author) params.set('author', f.author)
-      if (f.fromDate) params.set('from', f.fromDate)
-      if (f.toDate) params.set('to', f.toDate)
+      if (f.fromDate) params.set('from', localDateToUtcStart(f.fromDate))
+      if (f.toDate) params.set('to', localDateToUtcEnd(f.toDate))
       // Reset page when filters change
       setSearchParams(params)
     },
@@ -111,8 +113,8 @@ export default function TimelinePage() {
         if (labelMode !== 'or') params.labelMode = labelMode
         if (includeSublabels) params.includeSublabels = true
         if (author) params.author = author
-        if (fromDate) params.from = localDateToUtcStart(fromDate)
-        if (toDate) params.to = localDateToUtcEnd(toDate)
+        if (fromDate) params.from = fromDate
+        if (toDate) params.to = toDate
         const d = await fetchPosts(params)
         setData(d)
       } catch (err) {

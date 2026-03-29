@@ -1,5 +1,5 @@
 import { createElement } from 'react'
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -112,7 +112,10 @@ function renderTimeline(initialEntry = '/') {
     [{ path: '/', element: createElement(TimelinePage) }],
     { initialEntries: [initialEntry] },
   )
-  return render(createElement(RouterProvider, { router }))
+  return {
+    router,
+    ...render(createElement(RouterProvider, { router })),
+  }
 }
 
 describe('TimelinePage', () => {
@@ -501,13 +504,48 @@ describe('TimelinePage', () => {
 
   it('passes filter params from URL to fetchPosts', async () => {
     mockFetchPosts.mockResolvedValue(postsResponse)
-    renderTimeline('/?labels=swe,cs&author=Admin&from=2026-01-01&to=2026-02-01')
+    renderTimeline(
+      `/?labels=swe,cs&author=Admin&from=${encodeURIComponent(localDateToUtcStart('2026-01-01'))}&to=${encodeURIComponent(localDateToUtcEnd('2026-02-01'))}`,
+    )
 
     await waitFor(() => {
       expect(mockFetchPosts).toHaveBeenCalledWith(
         expect.objectContaining({
           labels: 'swe,cs',
           author: 'Admin',
+          from: localDateToUtcStart('2026-01-01'),
+          to: localDateToUtcEnd('2026-02-01'),
+        }),
+      )
+    })
+  })
+
+  it('stores date filters in the URL as UTC ISO timestamps', async () => {
+    mockFetchPosts.mockResolvedValue(postsResponse)
+    const { router } = renderTimeline()
+
+    await waitFor(() => {
+      expect(mockFetchPosts).toHaveBeenCalledTimes(1)
+    })
+
+    const dateInputs = document.querySelectorAll('input[type="date"]')
+    expect(dateInputs).toHaveLength(2)
+
+    fireEvent.change(dateInputs[0] as HTMLInputElement, { target: { value: '2026-01-01' } })
+    fireEvent.change(dateInputs[1] as HTMLInputElement, { target: { value: '2026-02-01' } })
+
+    await waitFor(() => {
+      expect(router.state.location.search).toContain(
+        `from=${encodeURIComponent(localDateToUtcStart('2026-01-01'))}`,
+      )
+      expect(router.state.location.search).toContain(
+        `to=${encodeURIComponent(localDateToUtcEnd('2026-02-01'))}`,
+      )
+    })
+
+    await waitFor(() => {
+      expect(mockFetchPosts).toHaveBeenLastCalledWith(
+        expect.objectContaining({
           from: localDateToUtcStart('2026-01-01'),
           to: localDateToUtcEnd('2026-02-01'),
         }),

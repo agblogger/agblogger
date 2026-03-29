@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { formatDate, formatRelativeDate, localDateToUtcStart, localDateToUtcEnd } from '../date'
+import {
+  formatDate,
+  formatRelativeDate,
+  localDateToUtcStart,
+  localDateToUtcEnd,
+  utcTimestampToLocalDateInput,
+} from '../date'
 
 describe('formatDate', () => {
   it('formats standard ISO timestamp', () => {
@@ -110,5 +116,21 @@ describe('localDateToUtcEnd', () => {
 
   it('returns empty string for empty input', () => {
     expect(localDateToUtcEnd('')).toBe('')
+  })
+})
+
+describe('utcTimestampToLocalDateInput', () => {
+  it('converts a UTC ISO timestamp into a local date input value', () => {
+    const iso = localDateToUtcStart('2026-03-01')
+    expect(utcTimestampToLocalDateInput(iso)).toBe('2026-03-01')
+  })
+
+  it('returns empty string for empty input', () => {
+    expect(utcTimestampToLocalDateInput('')).toBe('')
+  })
+
+  it('falls back to the original string on invalid input', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    expect(utcTimestampToLocalDateInput('not-a-date')).toBe('not-a-date')
   })
 })
