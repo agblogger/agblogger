@@ -2,14 +2,22 @@ import useSWR from 'swr'
 import { fetchLabel, fetchLabelPosts } from '@/api/labels'
 import type { LabelResponse, PostListResponse } from '@/api/client'
 import { useAuthStore } from '@/stores/authStore'
-import { readPreloadedData } from '@/utils/preload'
+import { readPreloaded } from '@/utils/preload'
 
 interface LabelPostsData {
   label: LabelResponse
   posts: PostListResponse
 }
 
-const preloaded = readPreloadedData<LabelPostsData>()
+const preloaded = readPreloaded<LabelPostsData>({
+  listHtml: {
+    path: 'posts.posts',
+    key: 'id',
+    field: 'rendered_excerpt',
+    itemSelector: '[data-id]',
+    contentSelector: '[data-excerpt]',
+  },
+})
 
 export function useLabelPosts(labelId: string | null) {
   const userId = useAuthStore((state) => state.user?.id ?? null)

@@ -10,10 +10,13 @@ import type { PostListResponse } from '@/api/client'
 import { useAuthStore } from '@/stores/authStore'
 import { postUrl } from '@/utils/postUrl'
 import { localDateToUtcStart, localDateToUtcEnd } from '@/utils/date'
-import { readPreloadedData } from '@/utils/preload'
+import { readPreloaded } from '@/utils/preload'
 import { useSiteStore } from '@/stores/siteStore'
 
-let preloadedTimeline = readPreloadedData<PostListResponse>()
+let preloadedTimeline = readPreloaded<PostListResponse>({
+  listHtml: { path: 'posts', key: 'id', field: 'rendered_excerpt',
+              itemSelector: '[data-id]', contentSelector: '[data-excerpt]' },
+})
 
 export default function TimelinePage() {
   const [searchParams, setSearchParams] = useSearchParams()

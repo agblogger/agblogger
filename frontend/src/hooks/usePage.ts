@@ -1,8 +1,10 @@
 import useSWR from 'swr'
 import type { PageResponse } from '@/api/client'
-import { readPreloadedData } from '@/utils/preload'
+import { readPreloaded } from '@/utils/preload'
 
-const preloaded = readPreloadedData<PageResponse>()
+const preloaded = readPreloaded<PageResponse>({
+  html: { field: 'rendered_html', selector: '[data-content]' },
+})
 
 /** Uses the global fetcher from SWRConfig. Key: pages/${pageId} */
 export function usePage(pageId: string | null) {
