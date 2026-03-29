@@ -793,7 +793,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
         return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
-    # Post route — serves OG-enriched SPA HTML for post views, and redirects
+    async def _get_base_html(request: Request) -> str | None:
+        """Read and cache the frontend index.html for SEO injection."""
+        base_html: str | None = getattr(request.app.state, "_seo_base_html", None)
+        if base_html is None:
+            frontend_dir_path: Path = request.app.state.settings.frontend_dir
+            index_path = frontend_dir_path / "index.html"
+            try:
+                base_html = await asyncio.to_thread(index_path.read_text, encoding="utf-8")
+                request.app.state._seo_base_html = base_html
+            except OSError:
+                logger.warning("index.html not found at %s", index_path)
+                return None
+        return base_html
+
+    # Post route — serves SEO-enriched SPA HTML for post views, and redirects
     # asset requests to the content API.  Must be registered before the
     # StaticFiles catch-all.
     @app.get("/post/{file_path:path}", include_in_schema=False, response_model=None)
@@ -811,29 +825,28 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 status_code=301,
             )
 
-        # Post view: /post/<slug> → serve SPA HTML with OG tags
+        # Post view: /post/<slug> → serve SPA HTML with SEO enrichment
+        import html as html_mod
+
         from backend.models.post import PostCache
-        from backend.services.opengraph_service import inject_og_tags, strip_html_tags
+        from backend.services.seo_service import (
+            SeoContext,
+            blogposting_ld,
+            render_seo_html,
+            strip_html_tags,
+        )
         from backend.utils.datetime import format_iso
 
-        frontend_dir_path: Path = request.app.state.settings.frontend_dir
-        index_path = frontend_dir_path / "index.html"
-
-        # Read and cache the base index.html
-        base_html: str | None = getattr(request.app.state, "_og_base_html", None)
+        base_html = await _get_base_html(request)
         if base_html is None:
-            try:
-                base_html = await asyncio.to_thread(index_path.read_text, encoding="utf-8")
-                request.app.state._og_base_html = base_html
-            except OSError:
-                logger.warning("index.html not found at %s", index_path)
-                return HTMLResponse("<html><body>Not found</body></html>", status_code=404)
+            return HTMLResponse("<html><body>Not found</body></html>", status_code=404)
 
         # Look up the post by exact canonical file path or canonical slug.
         from backend.utils.slug import is_directory_post_path, resolve_slug_candidates
 
         slug = file_path
         post = None
+        label_ids: list[str] = []
         try:
             session_factory = request.app.state.session_factory
             async with session_factory() as session:
@@ -851,8 +864,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     post = result.scalar_one_or_none()
                     if post is not None:
                         break
+
+                if post is not None and not post.is_draft:
+                    # Load labels while the session is still open to avoid
+                    # DetachedInstanceError on lazy-loaded relationship.
+                    await session.refresh(post, ["labels"])
+                    label_ids = [pl.label_id for pl in post.labels]
         except SQLAlchemyError:
-            logger.exception("DB error looking up post for OG tags: %s", slug)
+            logger.exception("DB error looking up post for SEO: %s", slug)
             return HTMLResponse(base_html)
 
         if post is None or post.is_draft:
@@ -864,17 +883,62 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         content_manager: ContentManager = request.app.state.content_manager
         site_name = content_manager.site_config.title
+        canonical = str(request.base_url).rstrip("/") + f"/post/{slug}"
+        published = format_iso(post.created_at)
+        modified = format_iso(post.modified_at)
 
-        enriched = inject_og_tags(
-            base_html,
+        rendered_body = None
+        if post.rendered_html:
+            date_str = post.created_at.strftime("%B %-d, %Y")
+            author_line = f" \u00b7 {post.author}" if post.author else ""
+            rendered_body = (
+                f"<article>"
+                f"<h1>{html_mod.escape(post.title)}</h1>"
+                f'<p style="color:#666;font-size:0.875rem;margin-bottom:2rem">'
+                f"{html_mod.escape(date_str)}{html_mod.escape(author_line)}</p>"
+                f"{post.rendered_html}"
+                f"</article>"
+            )
+
+        preload_data = {
+            "id": post.id,
+            "file_path": post.file_path,
+            "title": post.title,
+            "subtitle": post.subtitle,
+            "author": post.author,
+            "created_at": published,
+            "modified_at": modified,
+            "is_draft": post.is_draft,
+            "rendered_excerpt": post.rendered_excerpt,
+            "labels": label_ids,
+            "rendered_html": post.rendered_html or "",
+            "content": None,
+            "warnings": [],
+        }
+
+        ctx = SeoContext(
             title=post.title,
             description=description,
-            url=str(request.url),
+            canonical_url=canonical,
+            og_type="article",
             site_name=site_name,
             author=post.author,
-            published_time=format_iso(post.created_at),
-            modified_time=format_iso(post.modified_at),
+            published_time=published,
+            modified_time=modified,
+            json_ld=blogposting_ld(
+                headline=post.title,
+                description=description,
+                url=canonical,
+                date_published=published,
+                date_modified=modified,
+                author_name=post.author,
+                publisher_name=site_name,
+            ),
+            rendered_body=rendered_body,
+            preload_data=preload_data,
         )
+
+        enriched = render_seo_html(base_html, ctx)
         return HTMLResponse(enriched)
 
     # Serve frontend static files in production

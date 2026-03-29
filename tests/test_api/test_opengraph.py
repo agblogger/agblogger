@@ -54,8 +54,8 @@ def og_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
     frontend_dir = tmp_path / "frontend"
     frontend_dir.mkdir()
     (frontend_dir / "index.html").write_text(
-        "<!DOCTYPE html><html><head><title>AgBlogger</title></head>"
-        "<body><div id='root'></div></body></html>"
+        '<!DOCTYPE html><html><head><title>AgBlogger</title></head>'
+        '<body><div id="root"></div></body></html>'
     )
 
     db_path = tmp_path / "test.db"
@@ -149,3 +149,40 @@ class TestPostOgTagsDirectoryBacked:
         resp = await client.get("/post/2026/recap")
         assert resp.status_code == 200
         assert 'og:title" content="Nested Recap"' in resp.text
+
+
+class TestPostSeoMetaTags:
+    """New SEO meta tags on post pages."""
+
+    async def test_meta_description_present(self, client: AsyncClient) -> None:
+        resp = await client.get("/post/hello")
+        assert '<meta name="description"' in resp.text
+
+    async def test_canonical_link_present(self, client: AsyncClient) -> None:
+        resp = await client.get("/post/hello")
+        assert '<link rel="canonical"' in resp.text
+        assert "/post/hello" in resp.text
+
+    async def test_json_ld_blogposting(self, client: AsyncClient) -> None:
+        resp = await client.get("/post/hello")
+        assert 'application/ld+json' in resp.text
+        assert '"BlogPosting"' in resp.text
+        assert '"Hello World"' in resp.text
+
+    async def test_rendered_body_inside_root(self, client: AsyncClient) -> None:
+        resp = await client.get("/post/hello")
+        assert "post body with some content" in resp.text
+
+    async def test_preload_data_present(self, client: AsyncClient) -> None:
+        resp = await client.get("/post/hello")
+        assert '__initial_data__' in resp.text
+        assert '"rendered_html"' in resp.text
+
+    async def test_draft_has_no_rendered_body(self, client: AsyncClient) -> None:
+        resp = await client.get("/post/my-draft")
+        assert "Draft content" not in resp.text
+
+    async def test_missing_post_has_no_seo(self, client: AsyncClient) -> None:
+        resp = await client.get("/post/nonexistent")
+        assert '<meta name="description"' not in resp.text
+        assert "application/ld+json" not in resp.text
