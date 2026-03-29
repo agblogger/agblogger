@@ -51,3 +51,54 @@ export function readPreloadedHtmlMap(
 
   return result
 }
+
+export interface HtmlField {
+  field: string
+  selector: string
+}
+
+export interface ListHtmlField {
+  path: string
+  key: string
+  field: string
+  itemSelector: string
+  contentSelector: string
+}
+
+export interface PreloadSpec {
+  html?: HtmlField
+  listHtml?: ListHtmlField
+}
+
+/** Declarative preload reader: reads slim JSON metadata and merges HTML extracted from the DOM. */
+export function readPreloaded<T>(spec: PreloadSpec): T | null {
+  const meta = readPreloadedMeta<Record<string, unknown>>()
+  if (meta === null) return null
+
+  if (spec.html !== undefined) {
+    const html = readPreloadedHtml(spec.html.selector)
+    ;(meta as Record<string, unknown>)[spec.html.field] = html ?? ''
+  }
+
+  if (spec.listHtml !== undefined) {
+    const { path, key, field, itemSelector, contentSelector } = spec.listHtml
+    const idAttr = itemSelector.replace(/^\[|\]$/g, '')
+    const htmlMap = readPreloadedHtmlMap(itemSelector, idAttr, contentSelector)
+
+    const segments = path.split('.')
+    let target: unknown = meta
+    for (const segment of segments) {
+      target = (target as Record<string, unknown>)[segment]
+    }
+
+    if (Array.isArray(target)) {
+      for (const item of target) {
+        const record = item as Record<string, unknown>
+        const itemId = String(record[key])
+        record[field] = htmlMap.get(itemId) ?? ''
+      }
+    }
+  }
+
+  return meta as T
+}

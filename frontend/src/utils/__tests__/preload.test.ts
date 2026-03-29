@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { readPreloadedMeta, readPreloadedHtml, readPreloadedHtmlMap } from '@/utils/preload'
+import { readPreloadedMeta, readPreloadedHtml, readPreloadedHtmlMap, readPreloaded } from '@/utils/preload'
 
 describe('readPreloadedMeta', () => {
   beforeEach(() => {
@@ -141,5 +141,190 @@ describe('readPreloadedHtmlMap', () => {
 
     const result = readPreloadedHtmlMap('[data-id]', 'data-id', '[data-excerpt]')
     expect(result.size).toBe(1)
+  })
+})
+
+describe('readPreloaded', () => {
+  beforeEach(() => {
+    document.getElementById('__initial_data__')?.remove()
+    const root = document.getElementById('root')
+    if (root) root.innerHTML = ''
+    else {
+      const div = document.createElement('div')
+      div.id = 'root'
+      document.body.appendChild(div)
+    }
+  })
+
+  it('returns null when no JSON tag exists', () => {
+    expect(readPreloaded({})).toBeNull()
+  })
+
+  it('merges single HTML field from DOM into metadata', () => {
+    const meta = { id: 1, title: 'Post' }
+    const script = document.createElement('script')
+    script.id = '__initial_data__'
+    script.type = 'application/json'
+    script.textContent = JSON.stringify(meta)
+    document.body.appendChild(script)
+
+    const root = document.getElementById('root')!
+    root.innerHTML = '<article><h1>Post</h1><div data-content><p>Body HTML</p></div></article>'
+
+    const result = readPreloaded<{ id: number; title: string; rendered_html: string }>({
+      html: { field: 'rendered_html', selector: '[data-content]' },
+    })
+
+    expect(result).toEqual({ id: 1, title: 'Post', rendered_html: '<p>Body HTML</p>' })
+  })
+
+  it('sets HTML field to empty string when DOM element not found', () => {
+    const meta = { id: 1, title: 'Post' }
+    const script = document.createElement('script')
+    script.id = '__initial_data__'
+    script.type = 'application/json'
+    script.textContent = JSON.stringify(meta)
+    document.body.appendChild(script)
+
+    const result = readPreloaded<{ id: number; title: string; rendered_html: string }>({
+      html: { field: 'rendered_html', selector: '[data-content]' },
+    })
+
+    expect(result).toEqual({ id: 1, title: 'Post', rendered_html: '' })
+  })
+
+  it('merges list HTML fields into nested array items', () => {
+    const meta = {
+      posts: [
+        { id: 1, title: 'First' },
+        { id: 2, title: 'Second' },
+      ],
+      total: 2,
+    }
+    const script = document.createElement('script')
+    script.id = '__initial_data__'
+    script.type = 'application/json'
+    script.textContent = JSON.stringify(meta)
+    document.body.appendChild(script)
+
+    const root = document.getElementById('root')!
+    root.innerHTML =
+      '<ul>' +
+      '<li data-id="1"><div data-excerpt><p>Excerpt one</p></div></li>' +
+      '<li data-id="2"><div data-excerpt><p>Excerpt two</p></div></li>' +
+      '</ul>'
+
+    const result = readPreloaded<{
+      posts: { id: number; title: string; rendered_excerpt: string }[]
+      total: number
+    }>({
+      listHtml: {
+        path: 'posts',
+        key: 'id',
+        field: 'rendered_excerpt',
+        itemSelector: '[data-id]',
+        contentSelector: '[data-excerpt]',
+      },
+    })
+
+    expect(result).toEqual({
+      posts: [
+        { id: 1, title: 'First', rendered_excerpt: '<p>Excerpt one</p>' },
+        { id: 2, title: 'Second', rendered_excerpt: '<p>Excerpt two</p>' },
+      ],
+      total: 2,
+    })
+  })
+
+  it('handles dot-path traversal for nested arrays', () => {
+    const meta = {
+      label: { id: 'python', names: ['Python'] },
+      posts: {
+        posts: [
+          { id: 1, title: 'First' },
+          { id: 2, title: 'Second' },
+        ],
+        total: 2,
+      },
+    }
+    const script = document.createElement('script')
+    script.id = '__initial_data__'
+    script.type = 'application/json'
+    script.textContent = JSON.stringify(meta)
+    document.body.appendChild(script)
+
+    const root = document.getElementById('root')!
+    root.innerHTML =
+      '<ul>' +
+      '<li data-id="1"><div data-excerpt><p>One</p></div></li>' +
+      '<li data-id="2"><div data-excerpt><p>Two</p></div></li>' +
+      '</ul>'
+
+    const result = readPreloaded<{
+      label: { id: string; names: string[] }
+      posts: {
+        posts: { id: number; title: string; rendered_excerpt: string }[]
+        total: number
+      }
+    }>({
+      listHtml: {
+        path: 'posts.posts',
+        key: 'id',
+        field: 'rendered_excerpt',
+        itemSelector: '[data-id]',
+        contentSelector: '[data-excerpt]',
+      },
+    })
+
+    expect(result!.posts.posts[0].rendered_excerpt).toBe('<p>One</p>')
+    expect(result!.posts.posts[1].rendered_excerpt).toBe('<p>Two</p>')
+    expect(result!.label.id).toBe('python')
+  })
+
+  it('sets empty string for list items with no matching DOM element', () => {
+    const meta = {
+      posts: [
+        { id: 1, title: 'First' },
+        { id: 3, title: 'No DOM match' },
+      ],
+      total: 2,
+    }
+    const script = document.createElement('script')
+    script.id = '__initial_data__'
+    script.type = 'application/json'
+    script.textContent = JSON.stringify(meta)
+    document.body.appendChild(script)
+
+    const root = document.getElementById('root')!
+    root.innerHTML =
+      '<ul><li data-id="1"><div data-excerpt><p>One</p></div></li></ul>'
+
+    const result = readPreloaded<{
+      posts: { id: number; title: string; rendered_excerpt: string }[]
+      total: number
+    }>({
+      listHtml: {
+        path: 'posts',
+        key: 'id',
+        field: 'rendered_excerpt',
+        itemSelector: '[data-id]',
+        contentSelector: '[data-excerpt]',
+      },
+    })
+
+    expect(result!.posts[0].rendered_excerpt).toBe('<p>One</p>')
+    expect(result!.posts[1].rendered_excerpt).toBe('')
+  })
+
+  it('returns plain metadata when no spec fields are set', () => {
+    const meta = { id: 1, title: 'Post' }
+    const script = document.createElement('script')
+    script.id = '__initial_data__'
+    script.type = 'application/json'
+    script.textContent = JSON.stringify(meta)
+    document.body.appendChild(script)
+
+    const result = readPreloaded<{ id: number; title: string }>({})
+    expect(result).toEqual({ id: 1, title: 'Post' })
   })
 })
