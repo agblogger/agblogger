@@ -58,7 +58,6 @@ Use unsandboxed `uv run` for ALL Python tooling.
 
 - Commit format: `type: subject` in imperative lowercase (e.g., `feat: add transfer flow`).
 - Keep commits focused; avoid mixing unrelated changes.
-- Use `git add`, `git commit`, `git merge`, etc. Do NOT use the `-C` option with `git`.
 
 ## Reliability Guidelines
 
