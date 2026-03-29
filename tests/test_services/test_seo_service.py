@@ -4,7 +4,15 @@ from __future__ import annotations
 
 from typing import Any
 
-from backend.services.seo_service import strip_html_tags
+from backend.services.seo_service import (
+    SeoContext,
+    blogposting_ld,
+    render_post_list_html,
+    render_seo_html,
+    strip_html_tags,
+    webpage_ld,
+    website_ld,
+)
 
 
 class TestStripHtmlTags:
@@ -42,8 +50,6 @@ class TestStripHtmlTags:
         assert strip_html_tags('<a href="http://example.com">link</a>') == "link"
 
 
-from backend.services.seo_service import SeoContext, render_seo_html
-
 BASE_HTML = """\
 <!DOCTYPE html>
 <html>
@@ -76,9 +82,7 @@ class TestRenderSeoHtml:
         assert '<meta name="description" content="My desc">' in result
 
     def test_injects_canonical_link(self) -> None:
-        result = render_seo_html(
-            BASE_HTML, _make_ctx(canonical_url="https://example.com/post/x")
-        )
+        result = render_seo_html(BASE_HTML, _make_ctx(canonical_url="https://example.com/post/x"))
         assert '<link rel="canonical" href="https://example.com/post/x">' in result
 
     def test_injects_og_title(self) -> None:
@@ -90,9 +94,7 @@ class TestRenderSeoHtml:
         assert '<meta property="og:description" content="Desc">' in result
 
     def test_injects_og_url(self) -> None:
-        result = render_seo_html(
-            BASE_HTML, _make_ctx(canonical_url="https://example.com/post/x")
-        )
+        result = render_seo_html(BASE_HTML, _make_ctx(canonical_url="https://example.com/post/x"))
         assert '<meta property="og:url" content="https://example.com/post/x">' in result
 
     def test_og_type_defaults_to_website(self) -> None:
@@ -132,15 +134,11 @@ class TestRenderSeoHtml:
         assert "article:author" not in result
 
     def test_includes_published_time(self) -> None:
-        result = render_seo_html(
-            BASE_HTML, _make_ctx(published_time="2026-01-15T10:30:00+00:00")
-        )
+        result = render_seo_html(BASE_HTML, _make_ctx(published_time="2026-01-15T10:30:00+00:00"))
         assert 'article:published_time" content="2026-01-15T10:30:00+00:00"' in result
 
     def test_includes_modified_time(self) -> None:
-        result = render_seo_html(
-            BASE_HTML, _make_ctx(modified_time="2026-02-20T14:00:00+00:00")
-        )
+        result = render_seo_html(BASE_HTML, _make_ctx(modified_time="2026-02-20T14:00:00+00:00"))
         assert 'article:modified_time" content="2026-02-20T14:00:00+00:00"' in result
 
     def test_omits_published_time_when_none(self) -> None:
@@ -152,9 +150,7 @@ class TestRenderSeoHtml:
         assert "<script>" not in result
 
     def test_escapes_html_in_description(self) -> None:
-        result = render_seo_html(
-            BASE_HTML, _make_ctx(description='<img src=x onerror="alert(1)">')
-        )
+        result = render_seo_html(BASE_HTML, _make_ctx(description='<img src=x onerror="alert(1)">'))
         assert 'onerror="alert(1)"' not in result
 
     def test_truncates_long_description(self) -> None:
@@ -202,9 +198,7 @@ class TestRenderSeoHtmlJsonLd:
 
 class TestRenderSeoHtmlBody:
     def test_injects_rendered_body_inside_root(self) -> None:
-        result = render_seo_html(
-            BASE_HTML, _make_ctx(rendered_body="<h1>Hello</h1><p>World</p>")
-        )
+        result = render_seo_html(BASE_HTML, _make_ctx(rendered_body="<h1>Hello</h1><p>World</p>"))
         assert "<h1>Hello</h1><p>World</p>" in result
         assert '<div id="root"><div style="' in result
 
@@ -241,9 +235,6 @@ class TestRenderSeoHtmlPreload:
         result = render_seo_html(BASE_HTML, _make_ctx(preload_data=data))
         assert "</script><script>" not in result
         assert "<\\/script>" in result
-
-
-from backend.services.seo_service import blogposting_ld, webpage_ld, website_ld
 
 
 class TestJsonLdHelpers:
@@ -284,22 +275,22 @@ class TestJsonLdHelpers:
         assert result["name"] == "About"
 
     def test_website_ld(self) -> None:
-        result = website_ld(
-            name="My Blog", description="A blog", url="https://example.com/"
-        )
+        result = website_ld(name="My Blog", description="A blog", url="https://example.com/")
         assert result["@context"] == "https://schema.org"
         assert result["@type"] == "WebSite"
         assert result["name"] == "My Blog"
-
-
-from backend.services.seo_service import render_post_list_html
 
 
 class TestRenderPostListHtml:
     def test_renders_post_links(self) -> None:
         posts = [
             {"title": "First Post", "slug": "first", "date": "March 28, 2026", "excerpt": "Hello"},
-            {"title": "Second Post", "slug": "second", "date": "March 27, 2026", "excerpt": "World"},
+            {
+                "title": "Second Post",
+                "slug": "second",
+                "date": "March 27, 2026",
+                "excerpt": "World",
+            },
         ]
         result = render_post_list_html(posts, heading="My Blog")
         assert '<a href="/post/first"' in result

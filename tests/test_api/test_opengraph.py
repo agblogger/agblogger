@@ -54,7 +54,7 @@ def og_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
     frontend_dir = tmp_path / "frontend"
     frontend_dir.mkdir()
     (frontend_dir / "index.html").write_text(
-        '<!DOCTYPE html><html><head><title>AgBlogger</title></head>'
+        "<!DOCTYPE html><html><head><title>AgBlogger</title></head>"
         '<body><div id="root"></div></body></html>'
     )
 
@@ -165,7 +165,7 @@ class TestPostSeoMetaTags:
 
     async def test_json_ld_blogposting(self, client: AsyncClient) -> None:
         resp = await client.get("/post/hello")
-        assert 'application/ld+json' in resp.text
+        assert "application/ld+json" in resp.text
         assert '"BlogPosting"' in resp.text
         assert '"Hello World"' in resp.text
 
@@ -175,7 +175,7 @@ class TestPostSeoMetaTags:
 
     async def test_preload_data_present(self, client: AsyncClient) -> None:
         resp = await client.get("/post/hello")
-        assert '__initial_data__' in resp.text
+        assert "__initial_data__" in resp.text
         assert '"rendered_html"' in resp.text
 
     async def test_draft_has_no_rendered_body(self, client: AsyncClient) -> None:

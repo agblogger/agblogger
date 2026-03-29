@@ -59,7 +59,7 @@ def seo_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
     frontend_dir = tmp_path / "frontend"
     frontend_dir.mkdir()
     (frontend_dir / "index.html").write_text(
-        '<!DOCTYPE html><html><head><title>Blog</title></head>'
+        "<!DOCTYPE html><html><head><title>Blog</title></head>"
         '<body><div id="root"></div></body></html>'
     )
 
