@@ -24,6 +24,16 @@ SWR handles most server data fetching and caching; Zustand coordinates session, 
 Read-only data fetching usually uses dedicated SWR hooks for each resource. Write operations use direct API calls. Components with debounced search and paginated/filtered fetches use manual `useEffect`+`useState` patterns, as do mutation-only components.
 Auth-sensitive reads whose payload can change once the admin session is known wait for auth initialization before the first request, then scope cache keys by the current browser session so they avoid duplicate public-then-admin fetches while still revalidating on login/logout.
 
+## Server-Side Preloading
+
+On the initial page load, the backend may embed API data in a `<script id="__initial_data__" type="application/json">` tag. The `readPreloadedData<T>()` utility (`frontend/src/utils/preload.ts`) reads and removes this tag once. SWR hooks (`usePost`, `usePage`, `useLabelPosts`) pass the preloaded data as `fallbackData` to skip the initial fetch. The timeline page checks for preloaded data in its `useEffect` and uses it as initial state.
+
+The backend also injects server-rendered HTML inside `<div id="root">` for SEO and no-JS browsers. React's `createRoot().render()` replaces this content on mount — no special cleanup needed.
+
+## Page Titles
+
+Each page component sets `document.title` dynamically via a `useEffect` using the site name from `useSiteStore`. The format is `"{page title} — {site name}"` for content pages and just `"{site name}"` for the homepage.
+
 ## API Integration
 
 The frontend talks to the backend through a shared HTTP client shaped around the backend’s cookie-based browser session model. Browser authentication stays cookie-first, CSRF protection is attached to unsafe requests, and session renewal is handled through the API boundary rather than by storing durable bearer credentials in app state.
@@ -42,7 +52,8 @@ The frontend does not own markdown rendering. It receives rendered HTML from the
 - `frontend/src/pages/` contains the main public browsing, authentication, editing and administration entry points.
 - `frontend/src/stores/` contains the small set of shared Zustand stores for auth, site config, theme, and UI coordination.
 - `frontend/src/api/` contains the HTTP client and API-facing modules that connect the SPA to the backend.
-- `frontend/src/hooks/` contains SWR data-fetching hooks and client-side enhancements layered on top of backend-rendered content and editor workflows.
+- `frontend/src/hooks/` contains SWR data-fetching hooks (with server-preloaded fallback data support) and client-side enhancements layered on top of backend-rendered content and editor workflows.
+- `frontend/src/utils/preload.ts` provides the one-shot `readPreloadedData<T>()` utility for reading server-injected JSON data.
 - `frontend/src/components/search/` contains the live search dropdown components used by the header for as-you-type search previews.
 - `frontend/src/components/share/` contains the social sharing bar and platform-specific sharing components used by the post view.
 - `frontend/src/components/labels/` contains shared label form components (names editor, parents selector) used by both the label creation and label settings pages.

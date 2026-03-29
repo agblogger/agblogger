@@ -73,6 +73,19 @@ The API is organized around a small set of concerns:
 
 Public read paths are broad for published content, while mutations are concentrated behind authorization boundaries.
 
+## SEO and Server-Side Enrichment
+
+All public browsable routes (`/`, `/post/{slug}`, `/page/{pageId}`, `/labels`, `/labels/{labelId}`, `/search`) are served by dedicated route handlers registered before the StaticFiles catch-all mount. Each handler enriches the SPA's `index.html` with:
+
+- meta tags (title, description, canonical, Open Graph, Twitter Cards)
+- JSON-LD structured data (BlogPosting, WebPage, WebSite as appropriate)
+- server-rendered content inside `<div id="root">` (post body, page body, or post list) so crawlers and no-JS browsers see real content
+- preloaded API data in a `<script id="__initial_data__">` tag so the SPA can skip its initial fetch
+
+The shared `seo_service.py` provides `SeoContext` (a dataclass describing what to inject) and `render_seo_html()` (the injection engine). Route handlers build a context from a quick DB or service lookup and call the shared renderer.
+
+Additional SEO endpoints: `/sitemap.xml` (dynamic, includes posts, pages, and labels), `/robots.txt` (disallows API/admin/editor paths), `/feed.xml` (RSS 2.0, 20 most recent posts).
+
 ## Failure Handling
 
 The backend is designed around graceful degradation:
@@ -88,7 +101,7 @@ The goal is to preserve content, preserve service availability where possible, a
 
 - `backend/main.py` is the main runtime entry point.
 - `backend/api/` contains the HTTP-facing modules grouped by feature area.
-- `backend/services/` contains the orchestration and business-logic layer, including services for page retrieval and rendering, posts CRUD operations, authentication, cross-posting, sync, analytics, and admin panel business logic.
+- `backend/services/` contains the orchestration and business-logic layer, including services for page retrieval and rendering, posts CRUD operations, authentication, cross-posting, sync, analytics, admin panel business logic, and SEO enrichment (`seo_service.py`).
 - `backend/models/` contains SQLAlchemy ORM models for both durable tables (admin users, admin refresh tokens, social accounts, cross-posts, analytics settings) and cache tables (posts, labels, sync manifest).
 - `backend/schemas/` contains Pydantic request/response schemas that define the API contracts.
 - `backend/filesystem/` contains the canonical content model.
