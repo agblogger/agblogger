@@ -219,9 +219,12 @@ class TestSyncDeletionOSError:
         mock_git.commit_all = AsyncMock()
         mock_git.head_commit = AsyncMock(return_value="abc123")
 
+        from backend.services.storage_quota import ContentSizeTracker
+
         mock_session = AsyncMock()
         mock_session_factory = MagicMock()
         mock_user = MagicMock(id=1, username="admin", display_name="Admin")
+        mock_tracker = ContentSizeTracker(content_dir=content_dir, max_size=None)
 
         metadata = json.dumps({"deleted_files": ["posts/doomed/index.md"]})
 
@@ -252,6 +255,7 @@ class TestSyncDeletionOSError:
                 content_manager=cm,
                 git_service=mock_git,
                 user=mock_user,
+                content_size_tracker=mock_tracker,
             )
 
         # The file should still exist since unlink failed

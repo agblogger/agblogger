@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from backend.api.deps import (
     AsyncWriteLock,
     get_content_manager,
+    get_content_size_tracker,
     get_content_write_lock,
     get_git_service,
     get_session,
@@ -26,6 +27,7 @@ from backend.api.deps import (
 from backend.filesystem.content_manager import ContentManager
 from backend.models.user import AdminUser
 from backend.services.git_service import GitService
+from backend.services.storage_quota import ContentSizeTracker
 from backend.services.sync_service import (
     FileEntry,
     compute_sync_plan,
@@ -196,6 +198,7 @@ async def sync_commit(
     content_write_lock: Annotated[AsyncWriteLock, Depends(get_content_write_lock)],
     user: Annotated[AdminUser, Depends(require_admin)],
     session_factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
+    content_size_tracker: Annotated[ContentSizeTracker, Depends(get_content_size_tracker)],
     metadata: Annotated[str, Form()] = "{}",
     files: list[UploadFile] | None = File(default=None),
 ) -> SyncCommitResponse:
@@ -214,6 +217,7 @@ async def sync_commit(
             content_manager=content_manager,
             git_service=git_service,
             user=user,
+            content_size_tracker=content_size_tracker,
         )
 
 
@@ -226,6 +230,7 @@ async def _sync_commit_inner(
     content_manager: ContentManager,
     git_service: GitService,
     user: AdminUser,
+    content_size_tracker: ContentSizeTracker,
 ) -> SyncCommitResponse:
     """Inner sync commit logic, called under the shared content write lock."""
     content_dir = content_manager.content_dir
@@ -251,6 +256,18 @@ async def _sync_commit_inner(
     old_manifest = await get_server_manifest(session)
 
     sync_warnings: list[str] = []
+
+    # ── Quota check ──
+    if upload_files:
+        total_incoming = 0
+        for upload in upload_files:
+            size = upload.size
+            if size is not None:
+                total_incoming += min(size, _MAX_UPLOAD_SIZE)
+            else:
+                total_incoming += _MAX_UPLOAD_SIZE  # conservative estimate
+        if not content_size_tracker.check(total_incoming):
+            raise HTTPException(status_code=413, detail="Storage limit reached")
 
     # ── Apply deletions ──
     successful_deletions = 0
@@ -430,6 +447,7 @@ async def _sync_commit_inner(
         from backend.services.cache_service import rebuild_cache
 
         _post_count, cache_warnings = await rebuild_cache(session_factory, content_manager)
+        content_size_tracker.recompute()
     except (OSError, OperationalError, RuntimeError) as exc:
         logger.error("Cache rebuild failed during sync commit: %s", exc)
         sync_warnings.append(
