@@ -21,8 +21,26 @@ SWR handles most server data fetching and caching; Zustand coordinates session, 
 
 ## Data Fetching
 
-Read-only data fetching usually uses dedicated SWR hooks for each resource. Write operations use direct API calls. Components with debounced search and paginated/filtered fetches use manual `useEffect`+`useState` patterns, as do mutation-only components.
-Auth-sensitive reads whose payload can change once the admin session is known wait for auth initialization before the first request, then scope cache keys by the current browser session so they avoid duplicate public-then-admin fetches while still revalidating on login/logout.
+Two patterns are used for reading server data:
+
+**SWR hooks** — used for single-resource reads where the data is stable (not paginated or filtered). Each hook wraps `useSWR` with a conditional key and a dedicated fetcher. Auth-sensitive hooks scope the cache key by user ID so the cache invalidates on login/logout.
+
+| Hook | Key shape | Used by |
+|------|-----------|---------|
+| `usePost(slug)` | `['post', slug, userId]` | `PostPage` |
+| `usePage(pageId)` | `pages/${pageId}` | `PageViewPage` |
+| `useLabelPosts(labelId)` | `['labelPosts', labelId, userId]` | `LabelPostsPage` |
+| `useLabels()` | `labels` | `LabelsPage` |
+| `useViewCount(slug)` | `['viewCount', slug]` | `PostPage` |
+
+**Manual `useEffect`+`useState`** — used for paginated, filtered, or debounced fetches where the query parameters change frequently and SWR's key model is less ergonomic. These components manage their own loading/error state and may use `AbortController` for request cancellation.
+
+| Page | Why not SWR |
+|------|-------------|
+| `TimelinePage` | Paginated + multi-filter (labels, author, date range) with URL param sync |
+| `SearchPage` | Debounced query with abort controller |
+
+Write operations always use direct API calls regardless of the read pattern.
 
 ## Server-Side Preloading
 
