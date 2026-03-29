@@ -30,6 +30,18 @@ vi.mock('@/stores/authStore', async () => {
   }
 })
 
+const siteState = {
+  config: {
+    title: 'Blog',
+    description: 'A blog',
+    pages: [{ id: 'timeline', title: 'Posts', file: null }],
+  },
+}
+
+vi.mock('@/stores/siteStore', () => ({
+  useSiteStore: (selector: (s: typeof siteState) => unknown) => selector(siteState),
+}))
+
 const mockNavigate = vi.fn()
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom')
@@ -128,6 +140,16 @@ describe('TimelinePage', () => {
       expect(screen.getByText('Hello World')).toBeInTheDocument()
     })
     expect(screen.getByText('Second Post')).toBeInTheDocument()
+  })
+
+  it('resets document.title to the site title on the timeline route', async () => {
+    document.title = 'Hello World — Blog'
+    mockFetchPosts.mockResolvedValue(postsResponse)
+    renderTimeline()
+
+    await waitFor(() => {
+      expect(document.title).toBe('Blog')
+    })
   })
 
   it('error shows retry button', async () => {

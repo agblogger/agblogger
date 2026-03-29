@@ -34,9 +34,20 @@ const postDetail: PostDetail = {
 
 const viewCountResponse: ViewCountResponse = { views: 42 }
 
+function injectPostPreload(post: PostDetail) {
+  document.body.innerHTML = `
+    <div id="root"><div data-content>${post.rendered_html}</div></div>
+    <script id="__initial_data__" type="application/json">${JSON.stringify({
+      ...post,
+      rendered_html: undefined,
+    })}</script>
+  `
+}
+
 describe('usePost', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    document.body.innerHTML = ''
     useAuthStore.setState({
       user: null,
       isLoading: false,
@@ -110,6 +121,27 @@ describe('usePost', () => {
 
     expect(mockFetchPost).toHaveBeenNthCalledWith(1, 'draft-post/index.md')
     expect(mockFetchPost).toHaveBeenNthCalledWith(2, 'draft-post/index.md')
+  })
+
+  it('does not reuse preloaded fallback after the slug changes', async () => {
+    injectPostPreload(postDetail)
+    mockFetchPost.mockImplementation(() => new Promise(() => {}))
+
+    const { result, rerender } = renderHook(
+      ({ slug }: { slug: string | null }) => usePost(slug),
+      {
+        initialProps: { slug: 'my-post/index.md' },
+        wrapper: SWRTestWrapper,
+      },
+    )
+
+    expect(result.current.data?.title).toBe('My Post')
+
+    rerender({ slug: 'other-post/index.md' })
+
+    await waitFor(() => {
+      expect(result.current.data).toBeUndefined()
+    })
   })
 })
 

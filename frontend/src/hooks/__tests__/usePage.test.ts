@@ -24,9 +24,20 @@ function wrapper({ children }: { children: ReactNode }) {
 
 import { usePage } from '../usePage'
 
+function injectPagePreload(page: PageResponse) {
+  document.body.innerHTML = `
+    <div id="root"><div data-content>${page.rendered_html}</div></div>
+    <script id="__initial_data__" type="application/json">${JSON.stringify({
+      ...page,
+      rendered_html: undefined,
+    })}</script>
+  `
+}
+
 describe('usePage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    document.body.innerHTML = ''
   })
 
   it('returns page data on success', async () => {
@@ -53,5 +64,26 @@ describe('usePage', () => {
     expect(result.current.data).toBeUndefined()
     expect(result.current.isLoading).toBe(false)
     expect(mockFetcher).not.toHaveBeenCalled()
+  })
+
+  it('does not reuse preloaded fallback after the page id changes', async () => {
+    injectPagePreload(mockPage)
+    mockFetcher.mockImplementation(() => new Promise(() => {}))
+
+    const { result, rerender } = renderHook(
+      ({ pageId }: { pageId: string | null }) => usePage(pageId),
+      {
+        initialProps: { pageId: 'about' },
+        wrapper,
+      },
+    )
+
+    expect(result.current.data?.title).toBe('About')
+
+    rerender({ pageId: 'contact' })
+
+    await waitFor(() => {
+      expect(result.current.data).toBeUndefined()
+    })
   })
 })

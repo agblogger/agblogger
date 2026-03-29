@@ -36,6 +36,26 @@ import { useLabelPosts } from '../useLabelPosts'
 const mockFetchLabel = vi.mocked(fetchLabel)
 const mockFetchLabelPosts = vi.mocked(fetchLabelPosts)
 
+function injectLabelPostsPreload(data: { label: LabelResponse; posts: PostListResponse }) {
+  document.body.innerHTML = `
+    <div id="root">
+      ${data.posts.posts
+        .map(
+          (post) =>
+            `<li data-id="${post.id}"><div data-excerpt>${post.rendered_excerpt ?? ''}</div></li>`,
+        )
+        .join('')}
+    </div>
+    <script id="__initial_data__" type="application/json">${JSON.stringify({
+      label: data.label,
+      posts: {
+        ...data.posts,
+        posts: data.posts.posts.map(({ rendered_excerpt: _rendered_excerpt, ...post }) => post),
+      },
+    })}</script>
+  `
+}
+
 function wrapper({ children }: { children: ReactNode }) {
   return createElement(SWRTestWrapper, null, children)
 }
@@ -43,6 +63,7 @@ function wrapper({ children }: { children: ReactNode }) {
 describe('useLabelPosts', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    document.body.innerHTML = ''
     useAuthStore.setState({
       user: null,
       isLoading: false,
@@ -127,5 +148,48 @@ describe('useLabelPosts', () => {
     })
 
     expect(mockFetchLabelPosts).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not reuse preloaded fallback after the label id changes', async () => {
+    injectLabelPostsPreload({
+      label: mockLabel,
+      posts: {
+        ...mockPosts,
+        posts: [
+          {
+            id: 1,
+            file_path: 'posts/tech-post/index.md',
+            title: 'Tech Post',
+            subtitle: null,
+            author: 'admin',
+            created_at: '2026-01-01T00:00:00Z',
+            modified_at: '2026-01-01T00:00:00Z',
+            is_draft: false,
+            rendered_excerpt: '<p>Tech excerpt</p>',
+            labels: ['tech'],
+          },
+        ],
+        total: 1,
+        total_pages: 1,
+      },
+    })
+    mockFetchLabel.mockImplementation(() => new Promise(() => {}))
+    mockFetchLabelPosts.mockImplementation(() => new Promise(() => {}))
+
+    const { result, rerender } = renderHook(
+      ({ labelId }: { labelId: string | null }) => useLabelPosts(labelId),
+      {
+        initialProps: { labelId: 'tech' },
+        wrapper,
+      },
+    )
+
+    expect(result.current.data?.label.id).toBe('tech')
+
+    rerender({ labelId: 'art' })
+
+    await waitFor(() => {
+      expect(result.current.data).toBeUndefined()
+    })
   })
 })

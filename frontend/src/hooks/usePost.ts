@@ -1,25 +1,26 @@
-import { useState } from 'react'
 import useSWR from 'swr'
 import { fetchPost } from '@/api/posts'
 import { fetchViewCount } from '@/api/analytics'
 import type { PostDetail, ViewCountResponse } from '@/api/client'
 import { useAuthStore } from '@/stores/authStore'
 import { readPreloaded } from '@/utils/preload'
+import { useScopedPreloadedFallback } from '@/hooks/useScopedPreloadedFallback'
 
 export function usePost(slug: string | null) {
+  const userId = useAuthStore((state) => state.user?.id ?? null)
+  const key = slug !== null ? ['post', slug, userId] as const : null
+
   // Lazy initializer: reads and removes the preloaded script tag once per mount.
   // Returns null on subsequent mounts (tag already gone) — safe for SWR fallbackData.
-  const [fallback] = useState<PostDetail | null>(() => {
+  const fallback = useScopedPreloadedFallback<PostDetail>(key, () => {
     const data = readPreloaded({
       html: { field: 'rendered_html', selector: '[data-content]' },
     })
     return data as PostDetail | null
   })
 
-  const userId = useAuthStore((state) => state.user?.id ?? null)
-
   return useSWR<PostDetail, Error>(
-    slug !== null ? ['post', slug, userId] : null,
+    key,
     ([, s]: [string, string, number | null]) => fetchPost(s),
     fallback !== null ? { fallbackData: fallback } : undefined,
   )

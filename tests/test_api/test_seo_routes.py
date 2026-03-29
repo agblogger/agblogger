@@ -36,6 +36,16 @@ def seo_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
         "Second post body.\n"
     )
 
+    nested_parent = posts_dir / "2026"
+    nested_parent.mkdir()
+    nested = nested_parent / "recap"
+    nested.mkdir()
+    (nested / "index.md").write_text(
+        "---\ntitle: 2026 Recap\ncreated_at: 2026-03-27 18:00:00+00\n"
+        "author: admin\nlabels: [python]\n---\n"
+        "Nested post body.\n"
+    )
+
     draft = posts_dir / "my-draft"
     draft.mkdir()
     (draft / "index.md").write_text(
@@ -113,6 +123,12 @@ class TestHomepageSeo:
         assert "/post/hello" in resp.text
         assert "Hello World" in resp.text
         assert "/post/second" in resp.text
+
+    async def test_preserves_nested_post_slug_in_rendered_post_list(
+        self, client: AsyncClient
+    ) -> None:
+        resp = await client.get("/")
+        assert "/post/2026/recap" in resp.text
 
     async def test_draft_not_in_post_list(self, client: AsyncClient) -> None:
         resp = await client.get("/")
@@ -217,6 +233,12 @@ class TestLabelDetailSeo:
         resp = await client.get("/labels/python")
         assert "/post/hello" in resp.text
         assert "Hello World" in resp.text
+
+    async def test_preserves_nested_post_slug_in_rendered_post_list(
+        self, client: AsyncClient
+    ) -> None:
+        resp = await client.get("/labels/python")
+        assert "/post/2026/recap" in resp.text
 
     async def test_preload_data_present(self, client: AsyncClient) -> None:
         resp = await client.get("/labels/python")

@@ -27,6 +27,15 @@ def sitemap_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
         "author: admin\nlabels: [python]\n---\nBody.\n"
     )
 
+    nested_parent = posts_dir / "2026"
+    nested_parent.mkdir()
+    nested = nested_parent / "recap"
+    nested.mkdir()
+    (nested / "index.md").write_text(
+        "---\ntitle: 2026 Recap\ncreated_at: 2026-03-27 12:00:00+00\n"
+        "author: admin\nlabels: []\n---\nNested body.\n"
+    )
+
     draft = posts_dir / "my-draft"
     draft.mkdir()
     (draft / "index.md").write_text(
@@ -89,6 +98,10 @@ class TestSitemap:
     async def test_includes_published_post(self, client: AsyncClient) -> None:
         resp = await client.get("/sitemap.xml")
         assert "/post/hello" in resp.text
+
+    async def test_preserves_nested_slug_segments(self, client: AsyncClient) -> None:
+        resp = await client.get("/sitemap.xml")
+        assert "/post/2026/recap" in resp.text
 
     async def test_excludes_draft(self, client: AsyncClient) -> None:
         resp = await client.get("/sitemap.xml")

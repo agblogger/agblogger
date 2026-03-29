@@ -43,6 +43,7 @@ from backend.models.post import FTS_CREATE_SQL
 from backend.services.csrf_service import validate_csrf_token
 from backend.services.rate_limit_service import InMemoryRateLimiter
 from backend.services.upload_limits import get_multipart_body_limit
+from backend.utils.slug import file_path_to_slug
 from backend.version import get_version
 
 if TYPE_CHECKING:
@@ -79,6 +80,15 @@ def _looks_like_post_asset_path(file_path: str) -> bool:
 
     suffix = posixpath.splitext(leaf)[1]
     return suffix != "" and suffix != ".md"
+
+
+def _public_post_slug(file_path: str) -> str | None:
+    """Return the canonical public slug for a cached post path, or None if invalid."""
+    try:
+        return file_path_to_slug(file_path)
+    except ValueError:
+        logger.warning("Skipping invalid cached post path in public output: %s", file_path)
+        return None
 
 
 class _MultipartBodyTooLargeError(Exception):
@@ -982,7 +992,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 for p in posts:
                     await session.refresh(p, ["labels"])
                     excerpt = strip_html_tags(p.rendered_excerpt) if p.rendered_excerpt else ""
-                    slug = p.file_path.split("/")[1] if "/" in p.file_path else p.file_path
+                    slug = _public_post_slug(p.file_path)
+                    if slug is None:
+                        continue
                     _dt = p.created_at
                     posts_data.append(
                         {
@@ -1179,7 +1191,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     for p in posts:
                         await session.refresh(p, ["labels"])
                         excerpt = strip_html_tags(p.rendered_excerpt) if p.rendered_excerpt else ""
-                        slug = p.file_path.split("/")[1] if "/" in p.file_path else p.file_path
+                        slug = _public_post_slug(p.file_path)
+                        if slug is None:
+                            continue
                         _dt = p.created_at
                         posts_data_ld.append(
                             {
@@ -1301,7 +1315,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 posts = result.scalars().all()
 
                 for p in posts:
-                    slug = p.file_path.split("/")[1] if "/" in p.file_path else p.file_path
+                    slug = _public_post_slug(p.file_path)
+                    if slug is None:
+                        continue
                     lastmod = format_iso(p.modified_at)
                     urls.append(
                         f"  <url><loc>{html.escape(base_url)}/post/{html.escape(slug)}</loc>"
@@ -1384,14 +1400,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 posts = result.scalars().all()
 
                 for p in posts:
-                    slug = p.file_path.split("/")[1] if "/" in p.file_path else p.file_path
+                    slug = _public_post_slug(p.file_path)
+                    if slug is None:
+                        continue
                     link = html.escape(f"{base_url}/post/{slug}")
                     esc_title = html.escape(p.title)
                     desc = html.escape(
                         strip_html_tags(p.rendered_excerpt) if p.rendered_excerpt else ""
                     )
                     pub_dt = (
-                        p.created_at
+                        p.created_at.astimezone(UTC)
                         if p.created_at.tzinfo is not None
                         else p.created_at.replace(tzinfo=UTC)
                     )
