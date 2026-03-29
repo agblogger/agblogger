@@ -27,6 +27,14 @@ def app_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
         "---\ncreated_at: 2026-02-02 22:21:29.975359+00\n"
         "author: admin\nlabels: []\n---\n# Hello World\n\nTest content.\n"
     )
+    # Add a file-backed page to the site config
+    index_toml = tmp_content_dir / "index.toml"
+    index_toml.write_text(
+        '[site]\ntitle = "Test Blog"\ntimezone = "UTC"\n\n'
+        '[[pages]]\nid = "timeline"\ntitle = "Posts"\n\n'
+        '[[pages]]\nid = "about"\ntitle = "About"\nfile = "about.md"\n'
+    )
+    (tmp_content_dir / "about.md").write_text("# About\n\nAbout page.\n")
     db_path = tmp_path / "test.db"
     return Settings(
         secret_key="test-secret-key-with-at-least-32-characters",
@@ -130,24 +138,26 @@ class TestPageHitRecording:
 
     @pytest.mark.asyncio
     async def test_unauthenticated_page_request_fires_hit(self, client: AsyncClient) -> None:
+        """Request a file-backed page (about) — cache row seeded by rebuild_cache."""
         import asyncio
 
         with patch(
             "backend.services.analytics_service.record_hit",
             new=AsyncMock(),
         ) as mock_record:
-            resp = await client.get("/api/pages/timeline")
+            resp = await client.get("/api/pages/about")
             assert resp.status_code == 200
             await asyncio.sleep(0)
         mock_record.assert_called_once()
         call_kwargs = mock_record.call_args.kwargs
-        assert call_kwargs["path"] == "/page/timeline"
+        assert call_kwargs["path"] == "/page/about"
         assert call_kwargs["user"] is None
 
     @pytest.mark.asyncio
     async def test_authenticated_page_request_passes_user_to_record_hit(
         self, client: AsyncClient
     ) -> None:
+        """Request a file-backed page (about) with auth — cache row seeded by rebuild_cache."""
         import asyncio
 
         token = await _get_admin_token(client)
@@ -156,7 +166,7 @@ class TestPageHitRecording:
             new=AsyncMock(),
         ) as mock_record:
             resp = await client.get(
-                "/api/pages/timeline",
+                "/api/pages/about",
                 headers={"Authorization": f"Bearer {token}"},
             )
             assert resp.status_code == 200
@@ -164,6 +174,12 @@ class TestPageHitRecording:
         mock_record.assert_called_once()
         call_kwargs = mock_record.call_args.kwargs
         assert call_kwargs["user"] is not None
+
+    @pytest.mark.asyncio
+    async def test_fileless_page_returns_404(self, client: AsyncClient) -> None:
+        """Pages without backing files (timeline, labels) now return 404."""
+        resp = await client.get("/api/pages/timeline")
+        assert resp.status_code == 404
 
     @pytest.mark.asyncio
     async def test_nonexistent_page_does_not_fire_hit(self, client: AsyncClient) -> None:
@@ -220,6 +236,7 @@ class TestPageHitSessionFactoryFailure:
         import asyncio
         import logging
 
+        # "about" page cache row seeded by rebuild_cache during app startup.
         # Use record_hit raising to trigger exception inside the _do_hit body,
         # which exercises the same try/except block as a session_factory failure.
         with (
@@ -229,7 +246,7 @@ class TestPageHitSessionFactoryFailure:
                 new=AsyncMock(side_effect=RuntimeError("pool exhausted")),
             ),
         ):
-            resp = await client.get("/api/pages/timeline")
+            resp = await client.get("/api/pages/about")
             assert resp.status_code == 200
             await asyncio.sleep(0.01)
 
