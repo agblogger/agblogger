@@ -252,6 +252,15 @@ async def create_test_client(settings: Settings) -> AsyncGenerator[AsyncClient]:
 
         await rebuild_cache(session_factory, content_manager)
 
+        from backend.services.storage_quota import ContentSizeTracker
+
+        content_size_tracker = ContentSizeTracker(
+            content_dir=settings.content_dir,
+            max_size=settings.max_content_size,
+        )
+        content_size_tracker.recompute()
+        app.state.content_size_tracker = content_size_tracker
+
         async with AsyncClient(
             transport=ASGITransport(app=app),
             base_url="http://test",

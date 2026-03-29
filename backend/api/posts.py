@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from backend.api.deps import (
     AsyncWriteLock,
     get_content_manager,
+    get_content_size_tracker,
     get_content_write_lock,
     get_current_admin,
     get_git_service,
@@ -59,6 +60,7 @@ from backend.services.post_service import (
     search_posts,
 )
 from backend.services.slug_service import date_slug_prefix, generate_post_path, generate_post_slug
+from backend.services.storage_quota import ContentSizeTracker
 from backend.utils.datetime import format_iso, now_utc
 from backend.utils.slug import file_path_to_slug, resolve_slug_candidates
 
@@ -256,6 +258,7 @@ async def upload_post(
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
     git_service: Annotated[GitService, Depends(get_git_service)],
     content_write_lock: Annotated[AsyncWriteLock, Depends(get_content_write_lock)],
+    content_size_tracker: Annotated[ContentSizeTracker, Depends(get_content_size_tracker)],
     user: Annotated[AdminUser, Depends(require_admin)],
     title: str | None = Query(None),
 ) -> PostDetail:
@@ -337,6 +340,9 @@ async def upload_post(
         rendered_excerpt = rewrite_relative_urls(raw_excerpt, file_path)
         rendered_html = rewrite_relative_urls(raw_html, file_path)
 
+        if not content_size_tracker.check(total_size):
+            raise HTTPException(status_code=413, detail="Storage limit reached")
+
         # Write asset files to directory
         post_dir = post_path.parent
         written_assets: list[FilePath] = []
@@ -398,6 +404,7 @@ async def upload_post(
             raise
 
         await session.commit()
+        content_size_tracker.adjust(total_size)
         await session.refresh(post)
         set_git_warning(response, await git_service.try_commit(f"Upload post: {file_path}"))
 
