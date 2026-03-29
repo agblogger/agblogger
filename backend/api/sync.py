@@ -257,17 +257,22 @@ async def _sync_commit_inner(
 
     sync_warnings: list[str] = []
 
-    # ── Quota check ──
-    if upload_files:
-        total_incoming = 0
-        for upload in upload_files:
-            size = upload.size
-            if size is not None:
-                total_incoming += min(size, _MAX_UPLOAD_SIZE)
-            else:
-                total_incoming += _MAX_UPLOAD_SIZE  # conservative estimate
-        if not content_size_tracker.check(total_incoming):
-            raise HTTPException(status_code=413, detail="Storage limit reached")
+    # ── Pre-read uploads and quota check ──
+    upload_data: dict[str, tuple[UploadFile, bytes]] = {}
+    total_incoming = 0
+    for upload in upload_files:
+        if upload.filename is None:
+            continue
+        content = await upload.read(_MAX_UPLOAD_SIZE + 1)
+        if len(content) > _MAX_UPLOAD_SIZE:
+            raise HTTPException(
+                status_code=413,
+                detail=f"File too large (max 10 MB): {upload.filename.lstrip('/')}",
+            )
+        upload_data[upload.filename] = (upload, content)
+        total_incoming += len(content)
+    if not content_size_tracker.check(total_incoming):
+        raise HTTPException(status_code=413, detail="Storage limit reached")
 
     # ── Apply deletions ──
     successful_deletions = 0
@@ -288,21 +293,9 @@ async def _sync_commit_inner(
     to_download: list[str] = []
     uploaded_paths: list[str] = []
 
-    for upload in upload_files:
-        if upload.filename is None:
-            logger.warning("Sync upload with no filename, skipping")
-            sync_warnings.append("Skipped file upload with no filename")
-            continue
-
-        target_path = upload.filename.lstrip("/")
+    for filename, (_upload, upload_content) in upload_data.items():
+        target_path = filename.lstrip("/")
         full_path = _resolve_safe_path(content_dir, target_path)
-
-        # Read upload content (enforce size limit)
-        upload_content = await upload.read(_MAX_UPLOAD_SIZE + 1)
-        if len(upload_content) > _MAX_UPLOAD_SIZE:
-            raise HTTPException(
-                status_code=413, detail=f"File too large (max 10 MB): {target_path}"
-            )
 
         # Read server's current content BEFORE writing upload
         server_content: str | None = None
