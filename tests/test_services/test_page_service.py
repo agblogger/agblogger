@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
-from unittest.mock import AsyncMock, patch
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from backend.filesystem.content_manager import ContentManager
+from backend.models.page import PageCache
+from backend.services.cache_service import ensure_tables
 from backend.services.page_service import get_page, get_site_config
 
 if TYPE_CHECKING:
@@ -35,6 +37,16 @@ def cm(content_dir: Path) -> ContentManager:
     return ContentManager(content_dir=content_dir)
 
 
+@pytest.fixture
+async def session_factory() -> async_sessionmaker[AsyncSession]:
+    engine = create_async_engine("sqlite+aiosqlite://", echo=False)
+    factory: async_sessionmaker[AsyncSession] = async_sessionmaker(engine, expire_on_commit=False)
+    async with factory() as session:
+        await ensure_tables(session)
+    yield factory  # type: ignore[misc]
+    await engine.dispose()
+
+
 class TestGetSiteConfig:
     def test_returns_correct_title_and_description(self, cm: ContentManager) -> None:
         result = get_site_config(cm)
@@ -50,42 +62,35 @@ class TestGetSiteConfig:
 
 
 class TestGetPage:
-    async def test_returns_none_for_nonexistent_page_id(self, cm: ContentManager) -> None:
-        result = await get_page(cm, "nonexistent")
+    async def test_returns_none_for_nonexistent_page_id(
+        self, cm: ContentManager, session_factory: async_sessionmaker[AsyncSession]
+    ) -> None:
+        result = await get_page(session_factory, cm, "nonexistent")
         assert result is None
 
-    async def test_returns_empty_html_for_timeline(self, cm: ContentManager) -> None:
-        result = await get_page(cm, "timeline")
-        assert result is not None
-        assert result.id == "timeline"
-        assert result.title == "Posts"
-        assert result.rendered_html == ""
-
-    async def test_returns_empty_html_for_virtual_page_without_file(
-        self, cm: ContentManager
+    async def test_returns_none_for_page_without_file(
+        self, cm: ContentManager, session_factory: async_sessionmaker[AsyncSession]
     ) -> None:
-        result = await get_page(cm, "nofile")
-        assert result is not None
-        assert result.id == "nofile"
-        assert result.title == "No File Page"
-        assert result.rendered_html == ""
-
-    async def test_returns_none_when_file_does_not_exist(
-        self, content_dir: Path, cm: ContentManager
-    ) -> None:
-        # Remove the about.md file so it exists in config but not on disk
-        (content_dir / "about.md").unlink()
-        result = await get_page(cm, "about")
+        # "timeline" and "nofile" pages have file=None — no cache row, returns None
+        result = await get_page(session_factory, cm, "timeline")
         assert result is None
 
-    async def test_returns_rendered_html_for_valid_page(self, cm: ContentManager) -> None:
-        with patch(
-            "backend.services.page_service.render_markdown",
-            new_callable=AsyncMock,
-            return_value="<h1>About</h1>\n<p>About page content.</p>",
-        ):
-            result = await get_page(cm, "about")
+    async def test_returns_cached_html(
+        self, cm: ContentManager, session_factory: async_sessionmaker[AsyncSession]
+    ) -> None:
+        # Pre-populate cache
+        async with session_factory() as session:
+            session.add(PageCache(page_id="about", title="About", rendered_html="<h1>About</h1>"))
+            await session.commit()
+
+        result = await get_page(session_factory, cm, "about")
         assert result is not None
-        assert result.id == "about"
+        assert result.rendered_html == "<h1>About</h1>"
         assert result.title == "About"
-        assert "<h1>About</h1>" in result.rendered_html
+
+    async def test_returns_none_when_page_not_in_cache(
+        self, cm: ContentManager, session_factory: async_sessionmaker[AsyncSession]
+    ) -> None:
+        # "about" is in config with a file, but no cache row exists
+        result = await get_page(session_factory, cm, "about")
+        assert result is None
