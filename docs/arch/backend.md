@@ -75,16 +75,9 @@ Public read paths are broad for published content, while mutations are concentra
 
 ## SEO and Server-Side Enrichment
 
-All public browsable routes (`/`, `/post/{slug}`, `/page/{pageId}`, `/labels`, `/labels/{labelId}`, `/search`) are served by dedicated route handlers registered before the StaticFiles catch-all mount. Each handler enriches the SPA's `index.html` with:
+Public browsable routes are served by dedicated handlers registered before the StaticFiles catch-all. Each handler enriches the SPA shell with meta tags, structured data, server-rendered content, and preloaded API data so crawlers and no-JS browsers see real content without executing JavaScript. A shared SEO service provides the injection pipeline; individual route handlers supply the data.
 
-- meta tags (title, description, canonical, Open Graph, Twitter Cards)
-- JSON-LD structured data (BlogPosting, WebPage, WebSite as appropriate)
-- server-rendered content inside `<div id="root">` (post body, page body, or post list) so crawlers and no-JS browsers see real content
-- preloaded API data in a `<script id="__initial_data__">` tag so the SPA can skip its initial fetch
-
-The shared `seo_service.py` provides `SeoContext` (a dataclass describing what to inject) and `render_seo_html()` (the injection engine). Route handlers build a context from a quick DB or service lookup and call the shared renderer.
-
-Additional SEO endpoints: `/sitemap.xml` (dynamic, includes posts, pages, and labels), `/robots.txt` (disallows API/admin/editor paths), `/feed.xml` (RSS 2.0, 20 most recent posts).
+The backend also serves a dynamic sitemap, robots.txt, and an RSS feed.
 
 ## Failure Handling
 
