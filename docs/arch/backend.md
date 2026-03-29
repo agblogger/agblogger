@@ -48,6 +48,8 @@ The backend treats the Pandoc server as runtime infrastructure, not a per-reques
 
 Content mutations are serialized through a shared application-level write boundary. This prevents filesystem updates, cache refreshes, and history updates from interleaving across posts, pages, labels, and sync operations.
 
+Content mutations can optionally be subject to a storage quota (`MAX_CONTENT_SIZE`) that caps the total size of files under `content/`. The quota is tracked by a running byte counter that is computed at startup and adjusted incrementally on writes and deletes.
+
 This favors correctness and consistency over high write concurrency.
 
 ## Database Schema Management

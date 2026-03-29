@@ -2426,9 +2426,7 @@ def collect_config(project_dir: Path | None = None) -> DeployConfig:
         default=False,
     )
 
-    max_content_size_raw = input(
-        "Max content storage size (e.g., 2G, 500M) [unlimited]: "
-    ).strip()
+    max_content_size_raw = input("Max content storage size (e.g., 2G, 500M) [unlimited]: ").strip()
     max_content_size = max_content_size_raw or None
 
     do_scan = False

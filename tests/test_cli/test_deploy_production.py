@@ -3263,7 +3263,7 @@ class TestDnsInfoMessage:
                 "",  # additional trusted hosts
                 "",  # additional proxy ips
                 "n",  # expose docs
-            "",  # max content size (unlimited)
+                "",  # max content size (unlimited)
             ]
         )
         passwords = iter(["", "strongpass123", "strongpass123"])
@@ -3603,7 +3603,7 @@ class TestCollectConfigExternalCaddy:
                 "blog.example.com",  # trusted hosts
                 "",  # extra proxy ips
                 "n",  # expose docs
-            "",  # max content size (unlimited)
+                "",  # max content size (unlimited)
             ]
         )
         getpass_inputs = iter(
