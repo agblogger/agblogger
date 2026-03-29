@@ -176,7 +176,11 @@ class TestPostSeoMetaTags:
     async def test_preload_data_present(self, client: AsyncClient) -> None:
         resp = await client.get("/post/hello")
         assert "__initial_data__" in resp.text
-        assert '"rendered_html"' in resp.text
+        assert '"rendered_html"' not in resp.text
+
+    async def test_rendered_body_has_data_content_marker(self, client: AsyncClient) -> None:
+        resp = await client.get("/post/hello")
+        assert "data-content" in resp.text
 
     async def test_draft_has_no_rendered_body(self, client: AsyncClient) -> None:
         resp = await client.get("/post/my-draft")

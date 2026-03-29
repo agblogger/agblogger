@@ -896,7 +896,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 f"<h1>{html_mod.escape(post.title)}</h1>"
                 f'<p style="color:#666;font-size:0.875rem;margin-bottom:2rem">'
                 f"{html_mod.escape(date_str)}{html_mod.escape(author_line)}</p>"
-                f"{post.rendered_html}"
+                f"<div data-content>{post.rendered_html}</div>"
                 f"</article>"
             )
 
@@ -909,9 +909,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "created_at": published,
             "modified_at": modified,
             "is_draft": post.is_draft,
-            "rendered_excerpt": post.rendered_excerpt,
             "labels": label_ids,
-            "rendered_html": post.rendered_html or "",
             "content": None,
             "warnings": [],
         }
