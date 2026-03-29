@@ -29,7 +29,7 @@ Auth-sensitive reads scope their cache key by user ID so the cache invalidates o
 
 ## Server-Side Preloading
 
-On the initial page load, the backend embeds pre-rendered HTML inside `<div id="root">` and structured metadata as a JSON script tag. The SPA reads both sources on boot via a declarative preload utility, merging them into typed objects. Rendered HTML content lives only in the server HTML — the preload utility extracts it from the DOM. This gives crawlers and no-JS browsers real content, while the SPA gets structured data without a round-trip. React replaces the server HTML on mount; client-side navigations fetch from the API normally.
+On the initial page load, the backend embeds pre-rendered HTML inside `<div id="root">` and structured metadata as a server-owned JSON script tag outside the rendered content tree. The SPA reads both sources on boot via a declarative preload utility, merging them into typed objects. Rendered HTML content lives only in the server HTML — the preload utility extracts it from the DOM. The preload script is identified with a dedicated marker that sanitized user content cannot forge, so rendered markdown cannot spoof bootstrap metadata. This gives crawlers and no-JS browsers real content, while the SPA gets structured data without a round-trip. React replaces the server HTML on mount; client-side navigations fetch from the API normally.
 
 For the timeline route, the backend preload now mirrors the active query string, so direct links to filtered or paginated timeline URLs hydrate with matching data instead of falling back to the default first page.
 

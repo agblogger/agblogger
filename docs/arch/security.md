@@ -22,7 +22,7 @@ Authorization is enforced at the API boundary. Published content is broadly read
 
 ## Content Security
 
-User-authored content is treated as untrusted input. Rendering and sanitization happen on the server, and asset access stays behind controlled application routes instead of direct filesystem exposure.
+User-authored content is treated as untrusted input. Rendering and sanitization happen on the server, and asset access stays behind controlled application routes instead of direct filesystem exposure. Server-rendered preload metadata also stays behind a server-owned marker outside the rendered content tree so sanitized markdown cannot spoof client bootstrap state.
 
 ## Filesystem and Sync Boundaries
 

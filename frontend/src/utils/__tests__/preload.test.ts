@@ -11,6 +11,7 @@ import {
 function injectScriptTag(data: unknown): HTMLScriptElement {
   const script = document.createElement('script')
   script.id = '__initial_data__'
+  script.setAttribute('data-agblogger-preload', '')
   script.type = 'application/json'
   script.textContent = JSON.stringify(data)
   document.body.appendChild(script)
@@ -20,6 +21,7 @@ function injectScriptTag(data: unknown): HTMLScriptElement {
 function injectInvalidScriptTag(): HTMLScriptElement {
   const script = document.createElement('script')
   script.id = '__initial_data__'
+  script.setAttribute('data-agblogger-preload', '')
   script.type = 'application/json'
   script.textContent = '{ invalid json }'
   document.body.appendChild(script)
@@ -86,6 +88,15 @@ describe('readPreloadedMeta', () => {
       expect.any(SyntaxError),
     )
     consoleSpy.mockRestore()
+  })
+
+  it('ignores rendered content that forges the preload id', () => {
+    injectRootHtml('<div id="__initial_data__">{"file_path":"posts/forged/index.md"}</div>')
+    injectScriptTag({ file_path: 'posts/real/index.md' })
+
+    const result = readPreloadedMeta()
+
+    expect(result).toEqual({ file_path: 'posts/real/index.md' })
   })
 })
 

@@ -2,19 +2,22 @@
  * Utilities for reading server-injected preload data on initial page load.
  *
  * The backend injects two sources of preloaded data:
- *   1. `<script id="__initial_data__" type="application/json">` — structured metadata (no HTML fields)
+ *   1. `<script id="__initial_data__" data-agblogger-preload type="application/json">`
+ *      — structured metadata (no HTML fields)
  *   2. DOM elements inside `<div id="root">` with data attributes — rendered HTML content
  *
  * These utilities merge both sources into typed objects matching the API response shapes.
  * All reads are one-shot: `readPreloadedMeta` removes the script tag on first call.
  */
 
+const PRELOAD_SELECTOR = 'script[data-agblogger-preload][type="application/json"]'
+
 /**
- * Reads and removes the `#__initial_data__` JSON script tag.
+ * Reads and removes the server-owned preload JSON script tag.
  * Returns parsed object or null. One-time read — returns null on every subsequent call.
  */
 export function readPreloadedMeta(): Record<string, unknown> | null {
-  const el = document.getElementById('__initial_data__')
+  const el = document.querySelector<HTMLScriptElement>(PRELOAD_SELECTOR)
   if (el === null) return null
   const text = el.textContent
   el.remove()

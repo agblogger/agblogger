@@ -46,7 +46,7 @@ function injectLabelPostsPreload(data: { label: LabelResponse; posts: PostListRe
         )
         .join('')}
     </div>
-    <script id="__initial_data__" type="application/json">${JSON.stringify({
+    <script id="__initial_data__" data-agblogger-preload type="application/json">${JSON.stringify({
       label: data.label,
       posts: {
         ...data.posts,

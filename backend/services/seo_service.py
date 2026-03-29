@@ -14,6 +14,7 @@ _PRE_RENDER_STYLE = (
     "max-width:42rem;margin:0 auto;padding:2rem 1rem;"
     "font-family:system-ui,sans-serif;line-height:1.7;color:#1a1a1a"
 )
+_PRELOAD_MARKER_ATTR = "data-agblogger-preload"
 
 
 def strip_html_tags(text: str) -> str:
@@ -96,7 +97,8 @@ def render_seo_html(base_html: str, ctx: SeoContext) -> str:
         preload_json = json.dumps(ctx.preload_data, ensure_ascii=False, separators=(",", ":"))
         esc_preload = preload_json.replace("</", "<\\/")
         preload_tag = (
-            f'<script id="__initial_data__" type="application/json">{esc_preload}</script>'
+            f'<script id="__initial_data__" {_PRELOAD_MARKER_ATTR} type="application/json">'
+            f"{esc_preload}</script>"
         )
         result = result.replace("</body>", f"{preload_tag}\n</body>")
 

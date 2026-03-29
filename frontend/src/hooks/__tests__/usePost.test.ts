@@ -37,7 +37,7 @@ const viewCountResponse: ViewCountResponse = { views: 42 }
 function injectPostPreload(post: PostDetail) {
   document.body.innerHTML = `
     <div id="root"><div data-content>${post.rendered_html}</div></div>
-    <script id="__initial_data__" type="application/json">${JSON.stringify({
+    <script id="__initial_data__" data-agblogger-preload type="application/json">${JSON.stringify({
       ...post,
       rendered_html: undefined,
     })}</script>

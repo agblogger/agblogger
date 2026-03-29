@@ -27,7 +27,7 @@ import { usePage } from '../usePage'
 function injectPagePreload(page: PageResponse) {
   document.body.innerHTML = `
     <div id="root"><div data-content>${page.rendered_html}</div></div>
-    <script id="__initial_data__" type="application/json">${JSON.stringify({
+    <script id="__initial_data__" data-agblogger-preload type="application/json">${JSON.stringify({
       ...page,
       rendered_html: undefined,
     })}</script>

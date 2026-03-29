@@ -20,7 +20,8 @@ if TYPE_CHECKING:
 
 def _extract_initial_data(html: str) -> dict[str, object]:
     match = re.search(
-        r'<script id="__initial_data__" type="application/json">(.*?)</script>',
+        r'<script id="__initial_data__" data-agblogger-preload type="application/json">'
+        r"(.*?)</script>",
         html,
         re.DOTALL,
     )

@@ -226,8 +226,16 @@ class TestRenderSeoHtmlPreload:
     def test_injects_preload_script(self) -> None:
         data = {"posts": [{"title": "Hello"}], "total": 1}
         result = render_seo_html(BASE_HTML, _make_ctx(preload_data=data))
-        assert '<script id="__initial_data__" type="application/json">' in result
+        assert (
+            '<script id="__initial_data__" data-agblogger-preload type="application/json">'
+            in result
+        )
         assert '"posts":[{"title":"Hello"}]' in result
+
+    def test_preload_script_uses_server_owned_marker(self) -> None:
+        data = {"posts": [{"title": "Hello"}], "total": 1}
+        result = render_seo_html(BASE_HTML, _make_ctx(preload_data=data))
+        assert "data-agblogger-preload" in result
 
     def test_preload_before_body_close(self) -> None:
         data = {"key": "value"}
