@@ -8,7 +8,9 @@ import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from backend.filesystem.content_manager import ContentManager
+from backend.filesystem.toml_manager import PageConfig
 from backend.models.page import PageCache
+from backend.services.admin_service import update_page_order
 from backend.services.cache_service import ensure_tables
 from backend.services.page_service import get_page, get_site_config
 
@@ -90,6 +92,30 @@ class TestGetPage:
         assert result is not None
         assert result.rendered_html == "<h1>About</h1>"
         assert result.title == "About"
+
+    async def test_prefers_config_title_over_stale_cached_title(
+        self, cm: ContentManager, session_factory: async_sessionmaker[AsyncSession]
+    ) -> None:
+        async with session_factory() as session:
+            session.add(
+                PageCache(page_id="about", title="Old About", rendered_html="<h1>About</h1>")
+            )
+            await session.commit()
+
+        update_page_order(
+            cm,
+            [
+                PageConfig(id="timeline", title="Posts"),
+                PageConfig(id="about", title="About Us", file="about.md"),
+                PageConfig(id="nofile", title="No File Page"),
+            ],
+        )
+
+        result = await get_page(session_factory, cm, "about")
+
+        assert result is not None
+        assert result.title == "About Us"
+        assert result.rendered_html == "<h1>About</h1>"
 
     async def test_returns_none_when_page_not_in_cache(
         self, cm: ContentManager, session_factory: async_sessionmaker[AsyncSession]

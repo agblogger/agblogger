@@ -52,4 +52,4 @@ async def get_page(
         logger.warning("Page %s has a file but no cache entry", page_id)
         return None
 
-    return PageResponse(id=page_id, title=row.title, rendered_html=row.rendered_html)
+    return PageResponse(id=page_id, title=page_cfg.title, rendered_html=row.rendered_html)

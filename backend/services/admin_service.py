@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import delete as sa_delete
 
-from backend.exceptions import BuiltinPageError
+from backend.exceptions import BuiltinPageError, InternalServerError
 from backend.filesystem.toml_manager import (
     PageConfig,
     SiteConfig,
@@ -78,6 +78,27 @@ def get_admin_pages(cm: ContentManager) -> list[dict[str, Any]]:
     return result
 
 
+async def _refresh_page_cache(
+    session_factory: async_sessionmaker[AsyncSession],
+    cm: ContentManager,
+    *,
+    page_id: str,
+    title: str,
+) -> None:
+    """Refresh the derived cache row for a file-backed page."""
+    raw = cm.read_page(page_id)
+    if raw is None:
+        msg = f"Failed to read page {page_id} for cache refresh"
+        raise InternalServerError(msg)
+
+    async with session_factory() as session:
+        cache_updated = await upsert_page_cache(session, page_id, title, raw)
+        if not cache_updated:
+            msg = f"Failed to render page {page_id} for cache refresh"
+            raise InternalServerError(msg)
+        await session.commit()
+
+
 async def create_page(
     session_factory: async_sessionmaker[AsyncSession],
     cm: ContentManager,
@@ -112,16 +133,29 @@ async def create_page(
         raise
     cm.reload_config()
 
-    raw = cm.read_page(page_id)
-    if raw is not None:
+    try:
+        await _refresh_page_cache(session_factory, cm, page_id=page_id, title=title)
+    except Exception as exc:
+        logger.error("Failed to refresh page cache for page %s", page_id, exc_info=exc)
         try:
-            async with session_factory() as session:
-                await upsert_page_cache(session, page_id, title, raw)
-                await session.commit()
-        except Exception:
-            logger.warning(
-                "Failed to cache page %s; will populate on rebuild", page_id, exc_info=True
+            write_site_config(cm.content_dir, cfg)
+            cm.reload_config()
+        except OSError as rollback_exc:
+            logger.error(
+                "Failed to rollback site config after cache refresh failure for page %s: %s",
+                page_id,
+                rollback_exc,
             )
+        else:
+            try:
+                md_path.unlink(missing_ok=True)
+            except OSError as cleanup_exc:
+                logger.warning(
+                    "Failed to clean up page file %s after cache refresh failure: %s",
+                    md_path,
+                    cleanup_exc,
+                )
+        raise InternalServerError("Failed to refresh page cache") from exc
 
     return new_page
 
@@ -143,6 +177,21 @@ async def update_page(
 
     original_title = page.title
 
+    page_path = None
+    original_content = None
+    if page.file is not None and content is not None:
+        try:
+            page_path = cm._validate_path(page.file)
+        except ValueError as exc:
+            msg = f"Page '{page_id}' has an invalid file path"
+            raise ValueError(msg) from exc
+        try:
+            original_content = page_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            logger.error("Failed to read existing page %s before update: %s", page_id, exc)
+            msg = f"Failed to read page {page_id} before update"
+            raise InternalServerError(msg) from exc
+
     if title is not None:
         pages = [
             PageConfig(id=p.id, title=title if p.id == page_id else p.title, file=p.file)
@@ -153,11 +202,9 @@ async def update_page(
         cm.reload_config()
 
     if content is not None and page.file:
-        try:
-            page_path = cm._validate_path(page.file)
-        except ValueError as exc:
+        if page_path is None:
             msg = f"Page '{page_id}' has an invalid file path"
-            raise ValueError(msg) from exc
+            raise ValueError(msg)
         try:
             page_path.write_text(content, encoding="utf-8")
         except OSError:
@@ -185,16 +232,45 @@ async def update_page(
 
     updated_page = next((p for p in cm.site_config.pages if p.id == page_id), None)
     if updated_page is not None and updated_page.file is not None:
-        raw = cm.read_page(page_id)
-        if raw is not None:
-            try:
-                async with session_factory() as session:
-                    await upsert_page_cache(session, page_id, updated_page.title, raw)
-                    await session.commit()
-            except Exception:
-                logger.warning(
-                    "Failed to cache page %s; will populate on rebuild", page_id, exc_info=True
-                )
+        try:
+            await _refresh_page_cache(
+                session_factory,
+                cm,
+                page_id=page_id,
+                title=updated_page.title,
+            )
+        except Exception as exc:
+            logger.error("Failed to refresh page cache for page %s", page_id, exc_info=exc)
+            if content is not None and page_path is not None and original_content is not None:
+                try:
+                    page_path.write_text(original_content, encoding="utf-8")
+                except OSError as rollback_exc:
+                    logger.error(
+                        "Failed to rollback page content for page %s: %s",
+                        page_id,
+                        rollback_exc,
+                    )
+            if title is not None:
+                rollback_pages = [
+                    PageConfig(
+                        id=p.id,
+                        title=original_title if p.id == page_id else p.title,
+                        file=p.file,
+                    )
+                    for p in cm.site_config.pages
+                ]
+                rollback_cfg = cfg.with_pages(rollback_pages)
+                try:
+                    write_site_config(cm.content_dir, rollback_cfg)
+                    cm.reload_config()
+                except OSError as rollback_exc:
+                    logger.error(
+                        "Failed to rollback title change for page %s "
+                        "after cache refresh failure: %s",
+                        page_id,
+                        rollback_exc,
+                    )
+            raise InternalServerError("Failed to refresh page cache") from exc
 
 
 async def delete_page(

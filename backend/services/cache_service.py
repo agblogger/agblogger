@@ -29,22 +29,24 @@ async def upsert_page_cache(
     page_id: str,
     title: str,
     raw_markdown: str,
-) -> None:
+) -> bool:
     """Render page markdown and upsert the cache row.
 
-    Catches rendering failures and logs a warning instead of propagating.
+    Returns ``True`` when the cache row was refreshed.
+    Returns ``False`` when markdown rendering fails.
+    Database errors still propagate to the caller.
     """
     try:
         rendered = await render_markdown(raw_markdown)
     except RuntimeError:
-        logger.warning("Failed to render page %s; skipping cache update", page_id)
-        return
+        return False
     stmt = sqlite_insert(PageCache).values(page_id=page_id, title=title, rendered_html=rendered)
     stmt = stmt.on_conflict_do_update(
         index_elements=["page_id"],
         set_={"title": stmt.excluded.title, "rendered_html": stmt.excluded.rendered_html},
     )
     await session.execute(stmt)
+    return True
 
 
 async def rebuild_cache(
@@ -116,7 +118,10 @@ async def rebuild_cache(
             if raw is None:
                 logger.warning("Skipping page %s: file not found", page_cfg.id)
                 continue
-            await upsert_page_cache(session, page_cfg.id, page_cfg.title, raw)
+            if not await upsert_page_cache(session, page_cfg.id, page_cfg.title, raw):
+                msg = f"Skipping page {page_cfg.id}: render failed"
+                logger.warning(msg)
+                warnings.append(msg)
         await session.flush()
 
         # Scan and index posts

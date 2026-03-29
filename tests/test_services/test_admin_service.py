@@ -10,6 +10,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from backend.exceptions import InternalServerError
 from backend.filesystem.content_manager import ContentManager
 from backend.filesystem.toml_manager import PageConfig, SiteConfig, parse_site_config
 from backend.models.page import PageCache
@@ -362,29 +363,32 @@ class TestDeletePageCache:
             assert row is None
 
 
-class TestCreatePageRenderFailure:
-    """create_page should succeed even when Pandoc rendering fails."""
+class TestCreatePageCacheRefreshFailure:
+    """create_page must fail if the derived public page cannot be refreshed."""
 
-    async def test_create_page_succeeds_when_render_fails(
+    async def test_create_page_rolls_back_when_render_fails(
         self, cm: ContentManager, session_factory: async_sessionmaker[AsyncSession]
     ) -> None:
-        with patch(
-            "backend.services.cache_service.render_markdown",
-            new_callable=AsyncMock,
-            side_effect=RuntimeError("Pandoc crashed"),
+        with (
+            patch(
+                "backend.services.cache_service.render_markdown",
+                new_callable=AsyncMock,
+                side_effect=RuntimeError("Pandoc crashed"),
+            ),
+            pytest.raises(InternalServerError, match="Failed to refresh page cache"),
         ):
-            result = await create_page(session_factory, cm, page_id="contact", title="Contact")
+            await create_page(session_factory, cm, page_id="contact", title="Contact")
 
-        assert result.id == "contact"
-        assert (cm.content_dir / "contact.md").exists()
-        # Cache should be empty since render failed
+        assert not (cm.content_dir / "contact.md").exists()
+        reloaded = parse_site_config(cm.content_dir)
+        assert not any(page.id == "contact" for page in reloaded.pages)
         async with session_factory() as session:
             row = (
                 await session.execute(select(PageCache).where(PageCache.page_id == "contact"))
             ).scalar_one_or_none()
             assert row is None
 
-    async def test_create_page_logs_warning_on_render_failure(
+    async def test_create_page_logs_error_on_cache_refresh_failure(
         self,
         cm: ContentManager,
         session_factory: async_sessionmaker[AsyncSession],
@@ -396,18 +400,19 @@ class TestCreatePageRenderFailure:
                 new_callable=AsyncMock,
                 side_effect=RuntimeError("Pandoc crashed"),
             ),
-            caplog.at_level(logging.WARNING),
+            caplog.at_level(logging.ERROR),
+            pytest.raises(InternalServerError, match="Failed to refresh page cache"),
         ):
             await create_page(session_factory, cm, page_id="faq", title="FAQ")
         assert any(
-            "faq" in r.message.lower() or "cache" in r.message.lower() for r in caplog.records
+            "faq" in r.message.lower() and "cache" in r.message.lower() for r in caplog.records
         )
 
 
-class TestUpdatePageRenderFailure:
-    """update_page should succeed even when Pandoc rendering fails."""
+class TestUpdatePageCacheRefreshFailure:
+    """update_page must fail if the derived public page cannot be refreshed."""
 
-    async def test_update_page_succeeds_when_render_fails(
+    async def test_update_page_rolls_back_when_render_fails(
         self, cm: ContentManager, session_factory: async_sessionmaker[AsyncSession]
     ) -> None:
         # Pre-populate cache with old content
@@ -415,17 +420,35 @@ class TestUpdatePageRenderFailure:
             session.add(PageCache(page_id="about", title="About", rendered_html="<p>old</p>"))
             await session.commit()
 
-        with patch(
-            "backend.services.cache_service.render_markdown",
-            new_callable=AsyncMock,
-            side_effect=RuntimeError("Pandoc crashed"),
+        original_content = (cm.content_dir / "about.md").read_text(encoding="utf-8")
+        with (
+            patch(
+                "backend.services.cache_service.render_markdown",
+                new_callable=AsyncMock,
+                side_effect=RuntimeError("Pandoc crashed"),
+            ),
+            pytest.raises(InternalServerError, match="Failed to refresh page cache"),
         ):
-            await update_page(session_factory, cm, "about", content="new content")
+            await update_page(
+                session_factory,
+                cm,
+                "about",
+                title="About Us",
+                content="new content",
+            )
 
-        # Filesystem should be updated
-        assert "new content" in (cm.content_dir / "about.md").read_text()
+        assert (cm.content_dir / "about.md").read_text(encoding="utf-8") == original_content
+        assert next(page for page in cm.site_config.pages if page.id == "about").title == "About"
 
-    async def test_update_page_logs_warning_on_render_failure(
+        async with session_factory() as session:
+            row = (
+                await session.execute(select(PageCache).where(PageCache.page_id == "about"))
+            ).scalar_one_or_none()
+            assert row is not None
+            assert row.title == "About"
+            assert row.rendered_html == "<p>old</p>"
+
+    async def test_update_page_logs_error_on_cache_refresh_failure(
         self,
         cm: ContentManager,
         session_factory: async_sessionmaker[AsyncSession],
@@ -437,11 +460,12 @@ class TestUpdatePageRenderFailure:
                 new_callable=AsyncMock,
                 side_effect=RuntimeError("Pandoc crashed"),
             ),
-            caplog.at_level(logging.WARNING),
+            caplog.at_level(logging.ERROR),
+            pytest.raises(InternalServerError, match="Failed to refresh page cache"),
         ):
             await update_page(session_factory, cm, "about", content="updated")
         assert any(
-            "about" in r.message.lower() or "cache" in r.message.lower() for r in caplog.records
+            "about" in r.message.lower() and "cache" in r.message.lower() for r in caplog.records
         )
 
 
