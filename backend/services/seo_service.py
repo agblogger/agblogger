@@ -100,3 +100,51 @@ def render_seo_html(base_html: str, ctx: SeoContext) -> str:
         result = result.replace("</body>", f"{preload_tag}\n</body>")
 
     return result
+
+
+def blogposting_ld(
+    *,
+    headline: str,
+    description: str,
+    url: str,
+    date_published: str,
+    date_modified: str,
+    author_name: str | None,
+    publisher_name: str,
+) -> dict[str, Any]:
+    """Build a schema.org BlogPosting JSON-LD dict."""
+    ld: dict[str, Any] = {
+        "@context": "https://schema.org",
+        "@type": "BlogPosting",
+        "headline": headline,
+        "description": description,
+        "url": url,
+        "datePublished": date_published,
+        "dateModified": date_modified,
+        "publisher": {"@type": "Organization", "name": publisher_name},
+    }
+    if author_name is not None:
+        ld["author"] = {"@type": "Person", "name": author_name}
+    return ld
+
+
+def webpage_ld(*, name: str, description: str, url: str) -> dict[str, Any]:
+    """Build a schema.org WebPage JSON-LD dict."""
+    return {
+        "@context": "https://schema.org",
+        "@type": "WebPage",
+        "name": name,
+        "description": description,
+        "url": url,
+    }
+
+
+def website_ld(*, name: str, description: str, url: str) -> dict[str, Any]:
+    """Build a schema.org WebSite JSON-LD dict."""
+    return {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": name,
+        "description": description,
+        "url": url,
+    }

@@ -241,3 +241,52 @@ class TestRenderSeoHtmlPreload:
         result = render_seo_html(BASE_HTML, _make_ctx(preload_data=data))
         assert "</script><script>" not in result
         assert "<\\/script>" in result
+
+
+from backend.services.seo_service import blogposting_ld, webpage_ld, website_ld
+
+
+class TestJsonLdHelpers:
+    def test_blogposting_ld_basic(self) -> None:
+        result = blogposting_ld(
+            headline="My Post",
+            description="A description",
+            url="https://example.com/post/x",
+            date_published="2026-03-28T12:00:00+00:00",
+            date_modified="2026-03-28T14:00:00+00:00",
+            author_name="Jane",
+            publisher_name="My Blog",
+        )
+        assert result["@context"] == "https://schema.org"
+        assert result["@type"] == "BlogPosting"
+        assert result["headline"] == "My Post"
+        assert result["author"] == {"@type": "Person", "name": "Jane"}
+        assert result["publisher"] == {"@type": "Organization", "name": "My Blog"}
+
+    def test_blogposting_ld_no_author(self) -> None:
+        result = blogposting_ld(
+            headline="Post",
+            description="Desc",
+            url="https://example.com/post/x",
+            date_published="2026-03-28T12:00:00+00:00",
+            date_modified="2026-03-28T14:00:00+00:00",
+            author_name=None,
+            publisher_name="Blog",
+        )
+        assert "author" not in result
+
+    def test_webpage_ld(self) -> None:
+        result = webpage_ld(
+            name="About", description="About page", url="https://example.com/page/about"
+        )
+        assert result["@context"] == "https://schema.org"
+        assert result["@type"] == "WebPage"
+        assert result["name"] == "About"
+
+    def test_website_ld(self) -> None:
+        result = website_ld(
+            name="My Blog", description="A blog", url="https://example.com/"
+        )
+        assert result["@context"] == "https://schema.org"
+        assert result["@type"] == "WebSite"
+        assert result["name"] == "My Blog"
