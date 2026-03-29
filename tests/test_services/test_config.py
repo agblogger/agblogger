@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from backend.config import Settings, sqlite_database_path
+import pytest
+
+from backend.config import Settings, parse_human_size, sqlite_database_path
 
 
 class TestSettings:
@@ -91,3 +93,62 @@ class TestCrosspostSettings:
 
         assert key_path == tmp_path / "db" / ".agblogger-secrets" / "atproto-oauth-key.json"
         assert not key_path.is_relative_to(content_dir)
+
+
+class TestMaxContentSize:
+    def test_default_is_none(self) -> None:
+        s = Settings(_env_file=None)
+        assert s.max_content_size is None
+
+    def test_parse_gigabytes(self) -> None:
+        assert parse_human_size("2G") == 2 * 1024**3
+
+    def test_parse_megabytes(self) -> None:
+        assert parse_human_size("500M") == 500 * 1024**2
+
+    def test_parse_kilobytes(self) -> None:
+        assert parse_human_size("10K") == 10 * 1024
+
+    def test_parse_plain_bytes(self) -> None:
+        assert parse_human_size("1048576") == 1048576
+
+    def test_case_insensitive_gigabytes(self) -> None:
+        assert parse_human_size("1g") == 1024**3
+
+    def test_case_insensitive_megabytes(self) -> None:
+        assert parse_human_size("1m") == 1024**2
+
+    def test_case_insensitive_kilobytes(self) -> None:
+        assert parse_human_size("1k") == 1024
+
+    def test_zero_rejected(self) -> None:
+        with pytest.raises(ValueError, match="positive"):
+            parse_human_size("0")
+
+    def test_negative_rejected(self) -> None:
+        with pytest.raises(ValueError, match="positive"):
+            parse_human_size("-1M")
+
+    def test_invalid_suffix_rejected(self) -> None:
+        with pytest.raises(ValueError, match="suffix"):
+            parse_human_size("100X")
+
+    def test_settings_accepts_human_size_string(self) -> None:
+        s = Settings(_env_file=None, max_content_size="2G")  # type: ignore[arg-type]
+        assert s.max_content_size == 2 * 1024**3
+
+    def test_settings_accepts_plain_int(self) -> None:
+        s = Settings(_env_file=None, max_content_size=1024)
+        assert s.max_content_size == 1024
+
+    def test_settings_empty_string_treated_as_none(self) -> None:
+        s = Settings(_env_file=None, max_content_size="")  # type: ignore[arg-type]
+        assert s.max_content_size is None
+
+    def test_empty_string_rejected(self) -> None:
+        with pytest.raises(ValueError, match="Invalid size value"):
+            parse_human_size("")
+
+    def test_settings_zero_int_rejected(self) -> None:
+        with pytest.raises(ValueError, match="positive"):
+            Settings(_env_file=None, max_content_size=0)

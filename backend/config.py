@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from urllib.parse import urlparse
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from backend.exceptions import InternalServerError
@@ -43,6 +43,43 @@ def sqlite_database_path(database_url: str) -> Path | None:
             raw_path = database_url.removeprefix(prefix)
             return Path(raw_path)
     return None
+
+
+_SIZE_SUFFIXES: dict[str, int] = {
+    "G": 1024**3,
+    "M": 1024**2,
+    "K": 1024,
+}
+
+
+def parse_human_size(value: str) -> int:
+    """Parse a human-readable size string into bytes.
+
+    Accepts G, M, K suffixes (powers of 1024) or plain integers.
+    Raises ValueError for zero, negative values, or unrecognised suffixes.
+    """
+    stripped = value.strip()
+    suffix = stripped[-1].upper() if stripped and stripped[-1].isalpha() else None
+    if suffix is not None:
+        if suffix not in _SIZE_SUFFIXES:
+            raise ValueError(
+                f"Unrecognised size suffix {stripped[-1]!r}; use G, M, K or plain bytes"
+            )
+        numeric_part = stripped[:-1].strip()
+        multiplier = _SIZE_SUFFIXES[suffix]
+    else:
+        numeric_part = stripped
+        multiplier = 1
+
+    try:
+        numeric = int(numeric_part)
+    except ValueError:
+        raise ValueError(f"Invalid size value: {value!r}") from None
+
+    result = numeric * multiplier
+    if result <= 0:
+        raise ValueError(f"max_content_size must be a positive integer, got {value!r}")
+    return result
 
 
 class Settings(BaseSettings):
@@ -99,6 +136,9 @@ class Settings(BaseSettings):
     admin_password: str = INSECURE_BOOTSTRAP_SENTINEL
     admin_display_name: str = ""
 
+    # Content limits
+    max_content_size: int | None = None
+
     # Response hardening
     security_headers_enabled: bool = True
     cross_origin_opener_policy: str = "same-origin"
@@ -128,6 +168,19 @@ class Settings(BaseSettings):
         "form-action 'self'; "
         "frame-ancestors 'none'"
     )
+
+    @field_validator("max_content_size", mode="before")
+    @classmethod
+    def _validate_max_content_size(cls, v: object) -> int | None:
+        if v is None or v == "":
+            return None
+        if isinstance(v, str):
+            return parse_human_size(v)
+        if isinstance(v, int):
+            if v <= 0:
+                raise ValueError(f"max_content_size must be a positive integer, got {v!r}")
+            return v
+        raise ValueError(f"max_content_size must be a string or int, got {type(v).__name__!r}")
 
     def atproto_oauth_key_path(self) -> Path:
         """Return the persisted ATProto OAuth key path outside the content tree."""
