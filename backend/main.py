@@ -986,6 +986,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     slug = p.file_path.split("/")[1] if "/" in p.file_path else p.file_path
                     posts_data.append(
                         {
+                            "id": str(p.id),
                             "title": p.title,
                             "slug": slug,
                             "date": p.created_at.strftime("%B %-d, %Y"),
@@ -1002,7 +1003,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                             "created_at": format_iso(p.created_at),
                             "modified_at": format_iso(p.modified_at),
                             "is_draft": p.is_draft,
-                            "rendered_excerpt": p.rendered_excerpt,
                             "labels": [pl.label_id for pl in p.labels],
                         }
                     )
@@ -1186,6 +1186,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         slug = p.file_path.split("/")[1] if "/" in p.file_path else p.file_path
                         posts_data_ld.append(
                             {
+                                "id": str(p.id),
                                 "title": p.title,
                                 "slug": slug,
                                 "date": p.created_at.strftime("%B %-d, %Y"),
@@ -1202,7 +1203,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                                 "created_at": format_iso(p.created_at),
                                 "modified_at": format_iso(p.modified_at),
                                 "is_draft": p.is_draft,
-                                "rendered_excerpt": p.rendered_excerpt,
                                 "labels": [pl.label_id for pl in p.labels],
                             }
                         )

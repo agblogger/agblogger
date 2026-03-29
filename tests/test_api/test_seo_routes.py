@@ -121,6 +121,12 @@ class TestHomepageSeo:
     async def test_preload_data_present(self, client: AsyncClient) -> None:
         resp = await client.get("/")
         assert "__initial_data__" in resp.text
+        assert '"rendered_excerpt"' not in resp.text
+
+    async def test_rendered_list_has_data_id_markers(self, client: AsyncClient) -> None:
+        resp = await client.get("/")
+        assert "data-id" in resp.text
+        assert "data-excerpt" in resp.text
 
 
 class TestPageSeo:
@@ -215,6 +221,12 @@ class TestLabelDetailSeo:
     async def test_preload_data_present(self, client: AsyncClient) -> None:
         resp = await client.get("/labels/python")
         assert "__initial_data__" in resp.text
+        assert '"rendered_excerpt"' not in resp.text
+
+    async def test_rendered_list_has_data_id_markers(self, client: AsyncClient) -> None:
+        resp = await client.get("/labels/python")
+        assert "data-id" in resp.text
+        assert "data-excerpt" in resp.text
 
     async def test_unknown_label_returns_plain_html(self, client: AsyncClient) -> None:
         resp = await client.get("/labels/nonexistent")

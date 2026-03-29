@@ -284,20 +284,14 @@ class TestJsonLdHelpers:
 class TestRenderPostListHtml:
     def test_renders_post_links(self) -> None:
         posts = [
-            {"title": "First Post", "slug": "first", "date": "March 28, 2026", "excerpt": "Hello"},
-            {
-                "title": "Second Post",
-                "slug": "second",
-                "date": "March 27, 2026",
-                "excerpt": "World",
-            },
+            {"id": "1", "title": "First Post", "slug": "first", "date": "March 28, 2026", "excerpt": "Hello"},
+            {"id": "2", "title": "Second Post", "slug": "second", "date": "March 27, 2026", "excerpt": "World"},
         ]
         result = render_post_list_html(posts, heading="My Blog")
         assert '<a href="/post/first"' in result
         assert "First Post" in result
         assert '<a href="/post/second"' in result
         assert "March 28, 2026" in result
-        assert "Hello" in result
 
     def test_renders_heading(self) -> None:
         result = render_post_list_html([], heading="My Blog")
@@ -310,11 +304,22 @@ class TestRenderPostListHtml:
         assert "<li" not in result
 
     def test_escapes_html_in_title(self) -> None:
-        posts = [{"title": "<script>XSS</script>", "slug": "x", "date": "D", "excerpt": "E"}]
+        posts = [{"id": "1", "title": "<script>XSS</script>", "slug": "x", "date": "D", "excerpt": "E"}]
         result = render_post_list_html(posts, heading="Blog")
         assert "<script>" not in result
 
     def test_escapes_html_in_excerpt(self) -> None:
-        posts = [{"title": "T", "slug": "x", "date": "D", "excerpt": "<img onerror=alert(1)>"}]
+        posts = [{"id": "1", "title": "T", "slug": "x", "date": "D", "excerpt": "<img onerror=alert(1)>"}]
         result = render_post_list_html(posts, heading="Blog")
         assert "onerror" not in result
+
+    def test_includes_data_id_attribute(self) -> None:
+        posts = [{"id": "42", "title": "T", "slug": "s", "date": "D", "excerpt": "E"}]
+        result = render_post_list_html(posts, heading="Blog")
+        assert 'data-id="42"' in result
+
+    def test_includes_data_excerpt_marker(self) -> None:
+        posts = [{"id": "1", "title": "T", "slug": "s", "date": "D", "excerpt": "My excerpt text"}]
+        result = render_post_list_html(posts, heading="Blog")
+        assert "data-excerpt" in result
+        assert "My excerpt text" in result

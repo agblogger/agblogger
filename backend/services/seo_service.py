@@ -157,21 +157,23 @@ def render_post_list_html(
 ) -> str:
     """Render a simple HTML post list for server-side pre-rendering.
 
-    Each post dict must have keys: title, slug, date, excerpt.
+    Each post dict must have keys: id, title, slug, date, excerpt.
     """
     esc_heading = html.escape(heading)
     items = []
     for post in posts:
+        esc_id = html.escape(str(post["id"]))
         esc_title = html.escape(strip_html_tags(post["title"]))
         esc_slug = html.escape(post["slug"])
         esc_date = html.escape(post["date"])
         esc_excerpt = html.escape(strip_html_tags(post["excerpt"]))
         items.append(
-            f'<li style="margin-bottom:1.5rem">'
+            f'<li data-id="{esc_id}" style="margin-bottom:1.5rem">'
             f'<a href="/post/{esc_slug}" style="font-size:1.25rem;color:#1a1a1a;'
             f'text-decoration:none">{esc_title}</a>'
             f'<p style="color:#666;font-size:0.875rem;margin:0.25rem 0">{esc_date}</p>'
-            f'<p style="color:#444;font-size:0.95rem;margin:0">{esc_excerpt}</p>'
+            f'<div data-excerpt><p style="color:#444;font-size:0.95rem;margin:0">'
+            f"{esc_excerpt}</p></div>"
             f"</li>"
         )
     list_html = "\n".join(items)
