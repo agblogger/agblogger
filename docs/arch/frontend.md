@@ -21,36 +21,13 @@ SWR handles most server data fetching and caching; Zustand coordinates session, 
 
 ## Data Fetching
 
-Two patterns are used for reading server data:
+Single-resource reads (individual posts, pages, label detail) use SWR hooks for caching and revalidation. Paginated and filtered views (timeline, search) use manual `useEffect`+`useState` because their query parameters change frequently with URL param sync.
 
-**SWR hooks** — used for single-resource reads where the data is stable (not paginated or filtered). Each hook wraps `useSWR` with a conditional key and a dedicated fetcher. Auth-sensitive hooks scope the cache key by user ID so the cache invalidates on login/logout.
-
-| Hook | Key shape | Used by |
-|------|-----------|---------|
-| `usePost(slug)` | `['post', slug, userId]` | `PostPage` |
-| `usePage(pageId)` | `pages/${pageId}` | `PageViewPage` |
-| `useLabelPosts(labelId)` | `['labelPosts', labelId, userId]` | `LabelPostsPage` |
-| `useLabels()` | `labels` | `LabelsPage` |
-| `useViewCount(slug)` | `['viewCount', slug]` | `PostPage` |
-
-**Manual `useEffect`+`useState`** — used for paginated, filtered, or debounced fetches where the query parameters change frequently and SWR's key model is less ergonomic. These components manage their own loading/error state and may use `AbortController` for request cancellation.
-
-| Page | Why not SWR |
-|------|-------------|
-| `TimelinePage` | Paginated + multi-filter (labels, author, date range) with URL param sync |
-| `SearchPage` | Debounced query with abort controller |
-
-Write operations always use direct API calls regardless of the read pattern.
+Auth-sensitive reads scope their cache key by user ID so the cache invalidates on login/logout. Write operations always use direct API calls.
 
 ## Server-Side Preloading
 
-On the initial page load, the backend may embed API data in a `<script id="__initial_data__" type="application/json">` tag. The `readPreloadedData<T>()` utility (`frontend/src/utils/preload.ts`) reads and removes this tag once. SWR hooks (`usePost`, `usePage`, `useLabelPosts`) pass the preloaded data as `fallbackData` to skip the initial fetch. The timeline page checks for preloaded data in its `useEffect` and uses it as initial state.
-
-The backend also injects server-rendered HTML inside `<div id="root">` for SEO and no-JS browsers. React's `createRoot().render()` replaces this content on mount — no special cleanup needed.
-
-## Page Titles
-
-Each page component sets `document.title` dynamically via a `useEffect` using the site name from `useSiteStore`. The format is `"{page title} — {site name}"` for content pages and just `"{site name}"` for the homepage.
+On the initial page load, the backend embeds pre-rendered HTML inside `<div id="root">` and the corresponding API data as a JSON script tag. This gives crawlers and no-JS browsers real content, and lets the SPA skip its initial fetch by reading the embedded data on boot. React replaces the server HTML on mount; client-side navigations fetch from the API normally.
 
 ## API Integration
 
