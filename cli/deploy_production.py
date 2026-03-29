@@ -145,6 +145,7 @@ class DeployConfig:
     caddy_mode: CaddyMode = CADDY_MODE_NONE
     shared_caddy_config: SharedCaddyConfig | None = None
     scan_image: bool = True
+    max_content_size: str | None = None
 
     @property
     def use_bundled_caddy(self) -> bool:
@@ -279,6 +280,8 @@ def build_env_content(config: DeployConfig) -> str:
             "  # Uncomment to enable Bluesky cross-posting",
         ]
     )
+    if config.max_content_size is not None:
+        lines.append(f"MAX_CONTENT_SIZE={config.max_content_size}")
     if config.image_ref is not None:
         lines.append(f"AGBLOGGER_IMAGE={_quote_env_value(config.image_ref)}")
     return "\n".join(lines) + "\n"
@@ -2423,6 +2426,11 @@ def collect_config(project_dir: Path | None = None) -> DeployConfig:
         default=False,
     )
 
+    max_content_size_raw = input(
+        "Max content storage size (e.g., 2G, 500M) [unlimited]: "
+    ).strip()
+    max_content_size = max_content_size_raw or None
+
     do_scan = False
     if shutil.which("trivy") is not None:
         do_scan = _prompt_yes_no(
@@ -2442,6 +2450,7 @@ def collect_config(project_dir: Path | None = None) -> DeployConfig:
         caddy_config=caddy_config,
         caddy_public=caddy_public,
         expose_docs=expose_docs,
+        max_content_size=max_content_size,
         deployment_mode=deployment_mode,
         image_ref=image_ref,
         bundle_dir=DEFAULT_BUNDLE_DIR,
@@ -2523,6 +2532,7 @@ def config_from_args(args: argparse.Namespace) -> DeployConfig:
         caddy_config=caddy_config,
         caddy_public=caddy_public,
         expose_docs=args.expose_docs,
+        max_content_size=args.max_content_size,
         deployment_mode=args.deployment_mode,
         image_ref=image_ref,
         bundle_dir=args.bundle_dir,
@@ -2625,6 +2635,10 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         default=False,
         help="Expose API documentation at /docs (default: disabled).",
+    )
+    config_group.add_argument(
+        "--max-content-size",
+        help="Maximum total content storage size (e.g., 2G, 500M). Unlimited if omitted.",
     )
     config_group.add_argument(
         "--deployment-mode",

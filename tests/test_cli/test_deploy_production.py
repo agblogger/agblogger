@@ -104,6 +104,7 @@ def _make_config(
     shared_caddy_config: SharedCaddyConfig | None = None,
     trusted_proxy_ips: list[str] | None = None,
     scan_image: bool = True,
+    max_content_size: str | None = None,
 ) -> DeployConfig:
     """Build a valid DeployConfig with sensible defaults for tests."""
     return DeployConfig(
@@ -125,6 +126,7 @@ def _make_config(
         caddy_mode=caddy_mode,
         shared_caddy_config=shared_caddy_config,
         scan_image=scan_image,
+        max_content_size=max_content_size,
     )
 
 
@@ -1050,6 +1052,7 @@ def test_config_from_args_builds_config_without_caddy() -> None:
         tarball_filename=DEFAULT_IMAGE_TARBALL,
         platform=None,
         skip_scan=False,
+        max_content_size=None,
     )
 
     config = config_from_args(args)
@@ -1085,6 +1088,7 @@ def test_config_from_args_builds_config_with_caddy() -> None:
         tarball_filename=DEFAULT_IMAGE_TARBALL,
         platform=None,
         skip_scan=False,
+        max_content_size=None,
     )
 
     config = config_from_args(args)
@@ -1120,6 +1124,7 @@ def test_config_from_args_auto_generates_secret_key() -> None:
         tarball_filename=DEFAULT_IMAGE_TARBALL,
         platform=None,
         skip_scan=False,
+        max_content_size=None,
     )
 
     config = config_from_args(args)
@@ -1149,6 +1154,7 @@ def test_config_from_args_auto_appends_caddy_domain_to_trusted_hosts() -> None:
         tarball_filename=DEFAULT_IMAGE_TARBALL,
         platform=None,
         skip_scan=False,
+        max_content_size=None,
     )
 
     config = config_from_args(args)
@@ -1178,6 +1184,7 @@ def test_config_from_args_raises_on_missing_admin_username() -> None:
         tarball_filename=DEFAULT_IMAGE_TARBALL,
         platform=None,
         skip_scan=False,
+        max_content_size=None,
     )
 
     with pytest.raises(DeployError, match="--admin-username"):
@@ -1210,6 +1217,7 @@ def test_config_from_args_raises_on_missing_admin_password(
         tarball_filename=DEFAULT_IMAGE_TARBALL,
         platform=None,
         skip_scan=False,
+        max_content_size=None,
     )
 
     with pytest.raises(DeployError, match="--admin-password"):
@@ -1239,6 +1247,7 @@ def test_config_from_args_raises_on_missing_trusted_hosts() -> None:
         tarball_filename=DEFAULT_IMAGE_TARBALL,
         platform=None,
         skip_scan=False,
+        max_content_size=None,
     )
 
     with pytest.raises(DeployError, match="--trusted-hosts"):
@@ -1268,6 +1277,7 @@ def test_config_from_args_defaults_image_ref_for_registry_mode() -> None:
         tarball_filename=DEFAULT_IMAGE_TARBALL,
         platform=None,
         skip_scan=False,
+        max_content_size=None,
     )
 
     config = config_from_args(args)
@@ -1297,6 +1307,7 @@ def test_config_from_args_defaults_image_ref_for_tarball_mode() -> None:
         tarball_filename=DEFAULT_IMAGE_TARBALL,
         platform=None,
         skip_scan=False,
+        max_content_size=None,
     )
 
     config = config_from_args(args)
@@ -1326,6 +1337,7 @@ def test_config_from_args_builds_registry_mode() -> None:
         tarball_filename=DEFAULT_IMAGE_TARBALL,
         platform=None,
         skip_scan=False,
+        max_content_size=None,
     )
 
     config = config_from_args(args)
@@ -1418,6 +1430,7 @@ def test_config_from_args_auto_adds_caddy_proxy_subnet() -> None:
         tarball_filename=DEFAULT_IMAGE_TARBALL,
         platform=None,
         skip_scan=False,
+        max_content_size=None,
     )
 
     config = config_from_args(args)
@@ -1447,6 +1460,7 @@ def test_config_from_args_no_caddy_does_not_add_proxy_subnet() -> None:
         tarball_filename=DEFAULT_IMAGE_TARBALL,
         platform=None,
         skip_scan=False,
+        max_content_size=None,
     )
 
     config = config_from_args(args)
@@ -1482,6 +1496,7 @@ def test_config_from_args_reads_admin_password_from_env(
         tarball_filename=DEFAULT_IMAGE_TARBALL,
         platform=None,
         skip_scan=False,
+        max_content_size=None,
     )
 
     config = config_from_args(args)
@@ -2766,7 +2781,7 @@ class TestCollectConfigReusesExistingSecrets:
 
         # Simulate interactive answers: reuse=yes, mode=local, caddy=none, public=no,
         # port=8000, trusted hosts=example.com, proxy ips=(none), expose docs=no
-        inputs = iter(["y", "local", "none", "n", "", "example.com", "", "n"])
+        inputs = iter(["y", "local", "none", "n", "", "example.com", "", "n", ""])
         monkeypatch.setattr("builtins.input", lambda _prompt: next(inputs))
         monkeypatch.setattr("cli.deploy_production.getpass.getpass", lambda _prompt: "")
 
@@ -2786,7 +2801,7 @@ class TestCollectConfigReusesExistingSecrets:
         # Simulate: secret_key=auto, username=admin, display_name=admin,
         # password+confirm, mode=local,
         # caddy=none, public=no, port=8000, trusted hosts=example.com, proxy ips, docs=no
-        inputs = iter(["admin", "", "local", "n", "none", "n", "", "example.com", "", "n"])
+        inputs = iter(["admin", "", "local", "n", "none", "n", "", "example.com", "", "n", ""])
         passwords = iter(["", "strongpass123", "strongpass123"])
         monkeypatch.setattr("builtins.input", lambda _prompt: next(inputs))
         monkeypatch.setattr(
@@ -2898,6 +2913,7 @@ class TestCrossArchitectureBuild:
             tarball_filename=DEFAULT_IMAGE_TARBALL,
             platform=None,
             skip_scan=False,
+            max_content_size=None,
         )
         config = config_from_args(args)
         assert config.platform == DEFAULT_REMOTE_PLATFORM
@@ -2925,6 +2941,7 @@ class TestCrossArchitectureBuild:
             tarball_filename=DEFAULT_IMAGE_TARBALL,
             platform=None,
             skip_scan=False,
+            max_content_size=None,
         )
         config = config_from_args(args)
         assert config.platform == DEFAULT_REMOTE_PLATFORM
@@ -2952,6 +2969,7 @@ class TestCrossArchitectureBuild:
             tarball_filename=DEFAULT_IMAGE_TARBALL,
             platform=None,
             skip_scan=False,
+            max_content_size=None,
         )
         config = config_from_args(args)
         assert config.platform is None
@@ -2979,6 +2997,7 @@ class TestCrossArchitectureBuild:
             tarball_filename=DEFAULT_IMAGE_TARBALL,
             platform="linux/arm64",
             skip_scan=False,
+            max_content_size=None,
         )
         config = config_from_args(args)
         assert config.platform == "linux/arm64"
@@ -3244,6 +3263,7 @@ class TestDnsInfoMessage:
                 "",  # additional trusted hosts
                 "",  # additional proxy ips
                 "n",  # expose docs
+            "",  # max content size (unlimited)
             ]
         )
         passwords = iter(["", "strongpass123", "strongpass123"])
@@ -3383,6 +3403,7 @@ def test_config_from_args_external_caddy() -> None:
         tarball_filename=DEFAULT_IMAGE_TARBALL,
         platform=None,
         skip_scan=False,
+        max_content_size=None,
     )
     config = config_from_args(args)
     assert config.caddy_mode == CADDY_MODE_EXTERNAL
@@ -3416,6 +3437,7 @@ def test_config_from_args_external_caddy_with_explicit_shared_email() -> None:
         tarball_filename=DEFAULT_IMAGE_TARBALL,
         platform=None,
         skip_scan=False,
+        max_content_size=None,
     )
     config = config_from_args(args)
     assert config.shared_caddy_config is not None
@@ -3501,7 +3523,7 @@ class TestCollectConfigBundleDirReuse:
 
         # Simulate: reuse=yes, mode=local, caddy=none, public=no,
         # port=8000, trusted hosts, proxy ips, docs=no
-        inputs = iter(["y", "local", "none", "n", "", "example.com", "", "n"])
+        inputs = iter(["y", "local", "none", "n", "", "example.com", "", "n", ""])
         monkeypatch.setattr("builtins.input", lambda _prompt: next(inputs))
         monkeypatch.setattr("cli.deploy_production.getpass.getpass", lambda _prompt: "")
 
@@ -3543,7 +3565,7 @@ class TestCollectConfigBundleDirReuse:
 
         # Simulate: reuse=yes, mode=local, caddy=none, public=no,
         # port=8000, trusted hosts, proxy ips, docs=no
-        inputs = iter(["y", "local", "none", "n", "", "example.com", "", "n"])
+        inputs = iter(["y", "local", "none", "n", "", "example.com", "", "n", ""])
         monkeypatch.setattr("builtins.input", lambda _prompt: next(inputs))
         monkeypatch.setattr("cli.deploy_production.getpass.getpass", lambda _prompt: "")
 
@@ -3581,6 +3603,7 @@ class TestCollectConfigExternalCaddy:
                 "blog.example.com",  # trusted hosts
                 "",  # extra proxy ips
                 "n",  # expose docs
+            "",  # max content size (unlimited)
             ]
         )
         getpass_inputs = iter(
@@ -3834,6 +3857,7 @@ def test_config_from_args_sets_bundled_mode_when_caddy_domain_given() -> None:
         tarball_filename=DEFAULT_IMAGE_TARBALL,
         platform=None,
         skip_scan=False,
+        max_content_size=None,
     )
 
     config = config_from_args(args)
@@ -3863,6 +3887,7 @@ def test_config_from_args_sets_none_mode_when_no_caddy_domain() -> None:
         tarball_filename=DEFAULT_IMAGE_TARBALL,
         platform=None,
         skip_scan=False,
+        max_content_size=None,
     )
 
     config = config_from_args(args)
@@ -4322,6 +4347,7 @@ def test_config_from_args_raises_on_caddy_external_without_domain() -> None:
         tarball_filename=DEFAULT_IMAGE_TARBALL,
         platform=None,
         skip_scan=False,
+        max_content_size=None,
     )
     with pytest.raises(DeployError, match="--caddy-external requires --caddy-domain"):
         config_from_args(args)
@@ -4362,6 +4388,7 @@ def test_config_from_args_external_caddy_uses_placeholder_not_compose_subnet() -
         tarball_filename=DEFAULT_IMAGE_TARBALL,
         platform=None,
         skip_scan=False,
+        max_content_size=None,
     )
     config = config_from_args(args)
     assert CADDY_NETWORK_SUBNET_PLACEHOLDER in config.trusted_proxy_ips
@@ -5568,3 +5595,17 @@ def test_write_bundle_files_fails_gracefully_when_entrypoint_missing(
 
     captured = capsys.readouterr()
     assert "entrypoint" in captured.err.lower()
+
+
+def test_build_env_content_includes_max_content_size() -> None:
+    """MAX_CONTENT_SIZE should appear in .env when set."""
+    config = _make_config(max_content_size="2G")
+    env = build_env_content(config)
+    assert "MAX_CONTENT_SIZE=2G" in env
+
+
+def test_build_env_content_omits_max_content_size_when_none() -> None:
+    """MAX_CONTENT_SIZE should not appear in .env when not set."""
+    config = _make_config()
+    env = build_env_content(config)
+    assert "MAX_CONTENT_SIZE" not in env
