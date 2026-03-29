@@ -33,6 +33,7 @@ def app_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
         '[site]\ntitle = "Test Blog"\ntimezone = "UTC"\n\n'
         '[[pages]]\nid = "timeline"\ntitle = "Posts"\n\n'
         '[[pages]]\nid = "about"\ntitle = "About"\nfile = "about.md"\n'
+        '\n[[pages]]\nid = "nofile"\ntitle = "No File Page"\n'
     )
     (tmp_content_dir / "about.md").write_text("# About\n\nAbout page.\n")
     db_path = tmp_path / "test.db"
@@ -180,6 +181,17 @@ class TestPageHitRecording:
         """Pages without backing files (timeline, labels) now return 404."""
         resp = await client.get("/api/pages/timeline")
         assert resp.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_custom_fileless_page_returns_empty_html(self, client: AsyncClient) -> None:
+        resp = await client.get("/api/pages/nofile")
+
+        assert resp.status_code == 200
+        assert resp.json() == {
+            "id": "nofile",
+            "title": "No File Page",
+            "rendered_html": "",
+        }
 
     @pytest.mark.asyncio
     async def test_nonexistent_page_does_not_fire_hit(self, client: AsyncClient) -> None:

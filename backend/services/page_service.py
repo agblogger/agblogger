@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
+BUILTIN_PAGE_IDS = {"timeline", "labels"}
 
 
 def get_site_config(content_manager: ContentManager) -> SiteConfigResponse:
@@ -41,7 +42,9 @@ async def get_page(
         return None
 
     if page_cfg.file is None:
-        return None
+        if page_id in BUILTIN_PAGE_IDS:
+            return None
+        return PageResponse(id=page_id, title=page_cfg.title, rendered_html="")
 
     async with session_factory() as session:
         row = (

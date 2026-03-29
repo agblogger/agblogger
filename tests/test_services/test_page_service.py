@@ -80,6 +80,15 @@ class TestGetPage:
         result = await get_page(session_factory, cm, "timeline")
         assert result is None
 
+    async def test_returns_empty_html_for_custom_page_without_file(
+        self, cm: ContentManager, session_factory: async_sessionmaker[AsyncSession]
+    ) -> None:
+        result = await get_page(session_factory, cm, "nofile")
+
+        assert result is not None
+        assert result.title == "No File Page"
+        assert result.rendered_html == ""
+
     async def test_returns_cached_html(
         self, cm: ContentManager, session_factory: async_sessionmaker[AsyncSession]
     ) -> None:

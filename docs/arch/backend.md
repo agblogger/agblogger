@@ -73,6 +73,12 @@ The API is organized around a small set of concerns:
 
 Public read paths are broad for published content, while mutations are concentrated behind authorization boundaries.
 
+Top-level page reads split by page type:
+
+- file-backed custom pages are served from the derived pages cache
+- custom pages without a backing markdown file remain valid and resolve as empty-body pages from site config
+- built-in navigation pages such as timeline and labels are handled outside the cached page-content path
+
 ## Failure Handling
 
 The backend is designed around graceful degradation:

@@ -24,6 +24,7 @@ from backend.services.admin_service import (
     update_site_settings,
 )
 from backend.services.cache_service import ensure_tables
+from backend.services.page_service import get_page
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
@@ -345,6 +346,29 @@ class TestUpdatePageCache:
             assert row is not None
             assert row.title == "About Us"
 
+    async def test_update_title_does_not_require_re_render(
+        self, cm: ContentManager, session_factory: async_sessionmaker[AsyncSession]
+    ) -> None:
+        async with session_factory() as session:
+            session.add(PageCache(page_id="about", title="About", rendered_html="<p>x</p>"))
+            await session.commit()
+
+        with patch(
+            "backend.services.cache_service.render_markdown",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("Pandoc crashed"),
+        ):
+            await update_page(session_factory, cm, "about", title="About Us")
+
+        assert next(page for page in cm.site_config.pages if page.id == "about").title == "About Us"
+        async with session_factory() as session:
+            row = (
+                await session.execute(select(PageCache).where(PageCache.page_id == "about"))
+            ).scalar_one_or_none()
+            assert row is not None
+            assert row.title == "About Us"
+            assert row.rendered_html == "<p>x</p>"
+
 
 class TestDeletePageCache:
     async def test_delete_page_removes_cache_row(
@@ -361,6 +385,36 @@ class TestDeletePageCache:
                 await session.execute(select(PageCache).where(PageCache.page_id == "about"))
             ).scalar_one_or_none()
             assert row is None
+
+    async def test_delete_page_keeps_cache_when_file_is_retained_and_restore_reuses_it(
+        self, cm: ContentManager, session_factory: async_sessionmaker[AsyncSession]
+    ) -> None:
+        async with session_factory() as session:
+            session.add(PageCache(page_id="about", title="About", rendered_html="<p>x</p>"))
+            await session.commit()
+
+        await delete_page(session_factory, cm, "about", delete_file=False)
+
+        async with session_factory() as session:
+            row = (
+                await session.execute(select(PageCache).where(PageCache.page_id == "about"))
+            ).scalar_one_or_none()
+            assert row is not None
+            assert row.rendered_html == "<p>x</p>"
+
+        update_page_order(
+            cm,
+            [
+                PageConfig(id="timeline", title="Posts"),
+                PageConfig(id="about", title="About", file="about.md"),
+                PageConfig(id="labels", title="Labels"),
+            ],
+        )
+
+        result = await get_page(session_factory, cm, "about")
+        assert result is not None
+        assert result.title == "About"
+        assert result.rendered_html == "<p>x</p>"
 
 
 class TestCreatePageCacheRefreshFailure:
