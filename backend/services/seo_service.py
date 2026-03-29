@@ -1,0 +1,102 @@
+"""SEO enrichment service: meta tags, structured data, and pre-rendered content injection."""
+
+from __future__ import annotations
+
+import html
+import json
+import re
+from dataclasses import dataclass
+from typing import Any
+
+_MAX_DESCRIPTION_LENGTH = 200
+
+_PRE_RENDER_STYLE = (
+    "max-width:42rem;margin:0 auto;padding:2rem 1rem;"
+    "font-family:system-ui,sans-serif;line-height:1.7;color:#1a1a1a"
+)
+
+
+def strip_html_tags(text: str) -> str:
+    """Strip HTML tags, decode entities, and collapse whitespace."""
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = html.unescape(text)
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
+
+
+@dataclass
+class SeoContext:
+    """All SEO metadata for a single page response."""
+
+    title: str
+    description: str
+    canonical_url: str
+    og_type: str = "website"
+    site_name: str | None = None
+    author: str | None = None
+    published_time: str | None = None
+    modified_time: str | None = None
+    json_ld: dict[str, Any] | None = None
+    rendered_body: str | None = None
+    preload_data: dict[str, Any] | None = None
+
+
+def render_seo_html(base_html: str, ctx: SeoContext) -> str:
+    """Inject SEO meta tags, structured data, and pre-rendered content into base HTML."""
+    description = ctx.description
+    if len(description) > _MAX_DESCRIPTION_LENGTH:
+        description = description[: _MAX_DESCRIPTION_LENGTH - 3] + "..."
+
+    esc_title = html.escape(ctx.title)
+    esc_desc = html.escape(description)
+    esc_url = html.escape(ctx.canonical_url)
+
+    head_tags = [
+        f'<meta name="description" content="{esc_desc}">',
+        f'<link rel="canonical" href="{esc_url}">',
+        f'<meta property="og:title" content="{esc_title}">',
+        f'<meta property="og:description" content="{esc_desc}">',
+        f'<meta property="og:url" content="{esc_url}">',
+        f'<meta property="og:type" content="{html.escape(ctx.og_type)}">',
+        '<meta name="twitter:card" content="summary">',
+        f'<meta name="twitter:title" content="{esc_title}">',
+        f'<meta name="twitter:description" content="{esc_desc}">',
+    ]
+
+    if ctx.site_name:
+        head_tags.append(f'<meta property="og:site_name" content="{html.escape(ctx.site_name)}">')
+    if ctx.author is not None:
+        head_tags.append(f'<meta property="article:author" content="{html.escape(ctx.author)}">')
+    if ctx.published_time is not None:
+        head_tags.append(
+            f'<meta property="article:published_time" content="{html.escape(ctx.published_time)}">'
+        )
+    if ctx.modified_time is not None:
+        head_tags.append(
+            f'<meta property="article:modified_time" content="{html.escape(ctx.modified_time)}">'
+        )
+
+    if ctx.json_ld is not None:
+        ld_json = json.dumps(ctx.json_ld, ensure_ascii=False, separators=(",", ":"))
+        head_tags.append(f'<script type="application/ld+json">{ld_json}</script>')
+
+    head_block = "\n".join(head_tags)
+
+    result = re.sub(r"<title>[^<]*</title>", f"<title>{esc_title}</title>", base_html)
+    result = result.replace("</head>", f"{head_block}\n</head>")
+
+    if ctx.rendered_body is not None:
+        result = result.replace(
+            '<div id="root"></div>',
+            f'<div id="root"><div style="{_PRE_RENDER_STYLE}">{ctx.rendered_body}</div></div>',
+        )
+
+    if ctx.preload_data is not None:
+        preload_json = json.dumps(ctx.preload_data, ensure_ascii=False, separators=(",", ":"))
+        esc_preload = preload_json.replace("</", "<\\/")
+        preload_tag = (
+            f'<script id="__initial_data__" type="application/json">{esc_preload}</script>'
+        )
+        result = result.replace("</body>", f"{preload_tag}\n</body>")
+
+    return result
