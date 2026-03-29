@@ -5,7 +5,10 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncGenerator
 from types import TracebackType
-from typing import Annotated, Any, Protocol, cast
+from typing import TYPE_CHECKING, Annotated, Any, Protocol, cast
+
+if TYPE_CHECKING:
+    from backend.services.storage_quota import ContentSizeTracker
 
 from fastapi import Depends, HTTPException, Request, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -126,6 +129,14 @@ def get_content_write_lock(request: Request) -> AsyncWriteLock:
     return cast(
         "AsyncWriteLock",
         _require_app_state(request, "content_write_lock", _SERVICE_UNAVAILABLE),
+    )
+
+
+def get_content_size_tracker(request: Request) -> ContentSizeTracker:
+    """Get the content size tracker from app state."""
+    return cast(
+        "ContentSizeTracker",
+        _require_app_state(request, "content_size_tracker", _SERVICE_UNAVAILABLE),
     )
 
 

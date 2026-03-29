@@ -291,6 +291,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
             logger.critical("Failed to rebuild cache: %s", exc)
             raise
 
+        from backend.services.storage_quota import ContentSizeTracker
+
+        content_size_tracker = ContentSizeTracker(
+            content_dir=settings.content_dir,
+            max_size=settings.max_content_size,
+        )
+        content_size_tracker.recompute()
+        app.state.content_size_tracker = content_size_tracker
+
         yield
     finally:
         from backend.services.analytics_service import close_analytics_client
