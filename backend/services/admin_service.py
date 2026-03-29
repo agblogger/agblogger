@@ -152,6 +152,7 @@ async def create_page(
     *,
     page_id: str,
     title: str,
+    body: str | None = None,
 ) -> PageConfig:
     """Create a new page entry and .md file."""
     cfg = cm.site_config
@@ -165,7 +166,8 @@ async def create_page(
 
     file_name = f"{page_id}.md"
     md_path = cm.content_dir / file_name
-    md_path.write_text(f"# {title}\n", encoding="utf-8")
+    initial_content = body if body is not None else f"# {title}\n"
+    md_path.write_text(initial_content, encoding="utf-8")
 
     new_page = PageConfig(id=page_id, title=title, file=file_name)
     updated = cfg.with_pages([*cfg.pages, new_page])

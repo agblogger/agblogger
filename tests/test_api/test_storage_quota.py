@@ -160,9 +160,7 @@ class TestSyncQuota:
 
 class TestCreatePostQuota:
     @pytest.mark.asyncio
-    async def test_create_post_exceeding_quota_returns_413(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_create_post_exceeding_quota_returns_413(self, client: AsyncClient) -> None:
         token = await _login(client)
         resp = await client.post(
             "/api/posts",
@@ -172,6 +170,38 @@ class TestCreatePostQuota:
                 "labels": [],
                 "is_draft": False,
             },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 413
+        assert resp.json()["detail"] == "Storage limit reached"
+
+
+class TestPageQuota:
+    @pytest.mark.asyncio
+    async def test_create_page_exceeding_quota_returns_413(self, client: AsyncClient) -> None:
+        token = await _login(client)
+        resp = await client.post(
+            "/api/admin/pages",
+            json={"id": "big-page", "title": "Big Page", "body": "x" * 50_000},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 413
+        assert resp.json()["detail"] == "Storage limit reached"
+
+    @pytest.mark.asyncio
+    async def test_update_page_exceeding_quota_returns_413(self, client: AsyncClient) -> None:
+        token = await _login(client)
+        # First create a small page
+        resp = await client.post(
+            "/api/admin/pages",
+            json={"id": "my-page", "title": "My Page"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 201
+        # Now update it with content that exceeds the quota
+        resp = await client.put(
+            "/api/admin/pages/my-page",
+            json={"content": "x" * 50_000},
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 413
@@ -240,9 +270,7 @@ class TestEditPostQuota:
         assert resp.json()["detail"] == "Storage limit reached"
 
     @pytest.mark.asyncio
-    async def test_edit_that_shrinks_post_succeeds(
-        self, client_with_post: AsyncClient
-    ) -> None:
+    async def test_edit_that_shrinks_post_succeeds(self, client_with_post: AsyncClient) -> None:
         """Editing a post to make it smaller should always succeed."""
         token = await _login(client_with_post)
         resp = await client_with_post.put(

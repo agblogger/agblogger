@@ -53,6 +53,7 @@ class PageCreate(BaseModel):
 
     id: str = Field(min_length=1, max_length=50, pattern=r"^[a-z0-9][a-z0-9_-]*$")
     title: str = Field(min_length=1, max_length=200)
+    body: str | None = Field(default=None, max_length=500_000)
 
 
 class PageUpdate(BaseModel):
