@@ -217,3 +217,42 @@ class TestDeleteFreesQuota:
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 201
+
+
+class TestEditPostQuota:
+    @pytest.mark.asyncio
+    async def test_edit_that_grows_post_beyond_quota_returns_413(
+        self, client_with_post: AsyncClient
+    ) -> None:
+        """Editing a post to grow it beyond the quota should be rejected."""
+        token = await _login(client_with_post)
+        resp = await client_with_post.put(
+            f"/api/posts/{POST_PATH}",
+            json={
+                "title": "Seed Post",
+                "body": "x" * 50_000,  # exceeds 50_000 byte quota
+                "labels": [],
+                "is_draft": False,
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 413
+        assert resp.json()["detail"] == "Storage limit reached"
+
+    @pytest.mark.asyncio
+    async def test_edit_that_shrinks_post_succeeds(
+        self, client_with_post: AsyncClient
+    ) -> None:
+        """Editing a post to make it smaller should always succeed."""
+        token = await _login(client_with_post)
+        resp = await client_with_post.put(
+            f"/api/posts/{POST_PATH}",
+            json={
+                "title": "Seed Post",
+                "body": "Short.",
+                "labels": [],
+                "is_draft": False,
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
