@@ -451,6 +451,7 @@ async def upload_assets(
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
     git_service: Annotated[GitService, Depends(get_git_service)],
     content_write_lock: Annotated[AsyncWriteLock, Depends(get_content_write_lock)],
+    content_size_tracker: Annotated[ContentSizeTracker, Depends(get_content_size_tracker)],
     _user: Annotated[AdminUser, Depends(require_admin)],
 ) -> dict[str, list[str]]:
     """Upload asset files to a post's directory."""
@@ -482,6 +483,9 @@ async def upload_assets(
         if post is None:
             raise HTTPException(status_code=404, detail="Post not found")
 
+        if not content_size_tracker.check(total_size):
+            raise HTTPException(status_code=413, detail="Storage limit reached")
+
         post_dir = _get_post_asset_directory(file_path, content_manager)
         uploaded: list[str] = []
         for filename, data in asset_data:
@@ -502,6 +506,7 @@ async def upload_assets(
                 response,
                 await git_service.try_commit(commit_message),
             )
+            content_size_tracker.adjust(total_size)
 
         return {"uploaded": uploaded}
 

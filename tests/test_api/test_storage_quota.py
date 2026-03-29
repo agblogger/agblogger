@@ -75,3 +75,63 @@ class TestPostUploadQuota:
         )
         assert resp.status_code == 413
         assert resp.json()["detail"] == "Storage limit reached"
+
+
+POST_PATH = "posts/2026-01-01-seed-post/index.md"
+
+
+@pytest.fixture
+def quota_settings_with_post(tmp_content_dir: Path, tmp_path: Path) -> Settings:
+    """Settings with a quota and a pre-existing post."""
+    post_dir = tmp_content_dir / "posts" / "2026-01-01-seed-post"
+    post_dir.mkdir(parents=True)
+    (post_dir / "index.md").write_text(
+        "---\ntitle: Seed Post\ncreated_at: 2026-01-01 00:00:00+00\n"
+        "author: admin\nlabels: []\n---\n\nSeed.\n"
+    )
+    db_path = tmp_path / "test.db"
+    return Settings(
+        secret_key="test-secret-key-with-at-least-32-characters",
+        debug=True,
+        database_url=f"sqlite+aiosqlite:///{db_path}",
+        content_dir=tmp_content_dir,
+        frontend_dir=tmp_path / "frontend",
+        admin_username="admin",
+        admin_password="admin123",
+        max_content_size=50_000,
+    )
+
+
+@pytest.fixture
+async def client_with_post(
+    quota_settings_with_post: Settings,
+) -> AsyncGenerator[AsyncClient]:
+    async with create_test_client(quota_settings_with_post) as ac:
+        yield ac
+
+
+class TestAssetUploadQuota:
+    @pytest.mark.asyncio
+    async def test_asset_upload_within_quota_succeeds(
+        self, client_with_post: AsyncClient
+    ) -> None:
+        token = await _login(client_with_post)
+        resp = await client_with_post.post(
+            f"/api/posts/{POST_PATH}/assets",
+            files=[("files", ("photo.png", b"x" * 100, "image/png"))],
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_asset_upload_exceeding_quota_returns_413(
+        self, client_with_post: AsyncClient
+    ) -> None:
+        token = await _login(client_with_post)
+        resp = await client_with_post.post(
+            f"/api/posts/{POST_PATH}/assets",
+            files=[("files", ("photo.png", b"x" * 50_000, "image/png"))],
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 413
+        assert resp.json()["detail"] == "Storage limit reached"
