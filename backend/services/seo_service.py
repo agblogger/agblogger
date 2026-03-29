@@ -148,3 +148,34 @@ def website_ld(*, name: str, description: str, url: str) -> dict[str, Any]:
         "description": description,
         "url": url,
     }
+
+
+def render_post_list_html(
+    posts: list[dict[str, str]],
+    *,
+    heading: str,
+) -> str:
+    """Render a simple HTML post list for server-side pre-rendering.
+
+    Each post dict must have keys: title, slug, date, excerpt.
+    """
+    esc_heading = html.escape(heading)
+    items = []
+    for post in posts:
+        esc_title = html.escape(strip_html_tags(post["title"]))
+        esc_slug = html.escape(post["slug"])
+        esc_date = html.escape(post["date"])
+        esc_excerpt = html.escape(strip_html_tags(post["excerpt"]))
+        items.append(
+            f'<li style="margin-bottom:1.5rem">'
+            f'<a href="/post/{esc_slug}" style="font-size:1.25rem;color:#1a1a1a;'
+            f'text-decoration:none">{esc_title}</a>'
+            f'<p style="color:#666;font-size:0.875rem;margin:0.25rem 0">{esc_date}</p>'
+            f'<p style="color:#444;font-size:0.95rem;margin:0">{esc_excerpt}</p>'
+            f"</li>"
+        )
+    list_html = "\n".join(items)
+    return (
+        f'<h1 style="font-size:2.25rem;line-height:1.2;margin-bottom:1.5rem">{esc_heading}</h1>'
+        f'<ul style="list-style:none;padding:0">{list_html}</ul>'
+    )

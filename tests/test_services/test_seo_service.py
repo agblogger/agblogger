@@ -290,3 +290,40 @@ class TestJsonLdHelpers:
         assert result["@context"] == "https://schema.org"
         assert result["@type"] == "WebSite"
         assert result["name"] == "My Blog"
+
+
+from backend.services.seo_service import render_post_list_html
+
+
+class TestRenderPostListHtml:
+    def test_renders_post_links(self) -> None:
+        posts = [
+            {"title": "First Post", "slug": "first", "date": "March 28, 2026", "excerpt": "Hello"},
+            {"title": "Second Post", "slug": "second", "date": "March 27, 2026", "excerpt": "World"},
+        ]
+        result = render_post_list_html(posts, heading="My Blog")
+        assert '<a href="/post/first"' in result
+        assert "First Post" in result
+        assert '<a href="/post/second"' in result
+        assert "March 28, 2026" in result
+        assert "Hello" in result
+
+    def test_renders_heading(self) -> None:
+        result = render_post_list_html([], heading="My Blog")
+        assert "<h1" in result
+        assert "My Blog" in result
+
+    def test_empty_list(self) -> None:
+        result = render_post_list_html([], heading="Blog")
+        assert "<ul" in result
+        assert "<li" not in result
+
+    def test_escapes_html_in_title(self) -> None:
+        posts = [{"title": "<script>XSS</script>", "slug": "x", "date": "D", "excerpt": "E"}]
+        result = render_post_list_html(posts, heading="Blog")
+        assert "<script>" not in result
+
+    def test_escapes_html_in_excerpt(self) -> None:
+        posts = [{"title": "T", "slug": "x", "date": "D", "excerpt": "<img onerror=alert(1)>"}]
+        result = render_post_list_html(posts, heading="Blog")
+        assert "onerror" not in result
