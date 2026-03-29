@@ -27,7 +27,7 @@ Auth-sensitive reads scope their cache key by user ID so the cache invalidates o
 
 ## Server-Side Preloading
 
-On the initial page load, the backend embeds pre-rendered HTML inside `<div id="root">` and slim structured metadata as a JSON script tag. HTML content is marked with `data-content` (single-resource pages) and `data-id`/`data-excerpt` (list views) attributes for extraction. The SPA reads metadata from the JSON tag and HTML from the DOM via a declarative preload utility, then merges them into typed objects. This avoids duplicating rendered HTML across both sources. React replaces the server HTML on mount; client-side navigations fetch from the API normally.
+On the initial page load, the backend embeds pre-rendered HTML inside `<div id="root">` and structured metadata as a JSON script tag. The SPA reads both sources on boot via a declarative preload utility, merging them into typed objects so the initial API fetch can be skipped. Rendered HTML content lives only in the server HTML (not duplicated in the JSON) — the preload utility extracts it from the DOM. This gives crawlers and no-JS browsers real content, while the SPA gets structured data without a round-trip. React replaces the server HTML on mount; client-side navigations fetch from the API normally.
 
 ## API Integration
 
@@ -48,7 +48,7 @@ The frontend does not own markdown rendering. It receives rendered HTML from the
 - `frontend/src/stores/` contains the small set of shared Zustand stores for auth, site config, theme, and UI coordination.
 - `frontend/src/api/` contains the HTTP client and API-facing modules that connect the SPA to the backend.
 - `frontend/src/hooks/` contains SWR data-fetching hooks (with server-preloaded fallback data support) and client-side enhancements layered on top of backend-rendered content and editor workflows.
-- `frontend/src/utils/preload.ts` provides the layered preload system: low-level `readPreloadedMeta`, `readPreloadedHtml`, and `readPreloadedHtmlMap` utilities, plus the declarative `readPreloaded(spec)` consumer API for merging server-injected JSON metadata with DOM-extracted HTML content.
+- `frontend/src/utils/preload.ts` provides the preload system: low-level utilities for reading JSON metadata and extracting HTML from the server-rendered DOM, plus a declarative `readPreloaded(spec)` consumer API that merges both sources into typed objects.
 - `frontend/src/components/search/` contains the live search dropdown components used by the header for as-you-type search previews.
 - `frontend/src/components/share/` contains the social sharing bar and platform-specific sharing components used by the post view.
 - `frontend/src/components/labels/` contains shared label form components (names editor, parents selector) used by both the label creation and label settings pages.
