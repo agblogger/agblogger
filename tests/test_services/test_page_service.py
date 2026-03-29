@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from backend.filesystem.content_manager import ContentManager
 from backend.models.page import PageCache
@@ -13,7 +13,10 @@ from backend.services.cache_service import ensure_tables
 from backend.services.page_service import get_page, get_site_config
 
 if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
     from pathlib import Path
+
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 @pytest.fixture
@@ -38,12 +41,12 @@ def cm(content_dir: Path) -> ContentManager:
 
 
 @pytest.fixture
-async def session_factory() -> async_sessionmaker[AsyncSession]:
+async def session_factory() -> AsyncGenerator[async_sessionmaker[AsyncSession]]:
     engine = create_async_engine("sqlite+aiosqlite://", echo=False)
     factory: async_sessionmaker[AsyncSession] = async_sessionmaker(engine, expire_on_commit=False)
     async with factory() as session:
         await ensure_tables(session)
-    yield factory  # type: ignore[misc]
+    yield factory
     await engine.dispose()
 
 
@@ -68,12 +71,14 @@ class TestGetPage:
         result = await get_page(session_factory, cm, "nonexistent")
         assert result is None
 
-    async def test_returns_none_for_page_without_file(
+    async def test_returns_empty_html_for_page_without_file(
         self, cm: ContentManager, session_factory: async_sessionmaker[AsyncSession]
     ) -> None:
-        # "timeline" and "nofile" pages have file=None — no cache row, returns None
+        # "timeline" has file=None — frontend-only page returns empty rendered_html
         result = await get_page(session_factory, cm, "timeline")
-        assert result is None
+        assert result is not None
+        assert result.rendered_html == ""
+        assert result.id == "timeline"
 
     async def test_returns_cached_html(
         self, cm: ContentManager, session_factory: async_sessionmaker[AsyncSession]

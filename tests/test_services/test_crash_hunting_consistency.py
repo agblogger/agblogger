@@ -461,7 +461,11 @@ class TestDeletePageConfigBeforeFile:
     """Config must be updated before file deletion so that if file deletion
     fails, the config is already consistent."""
 
-    def test_config_updated_even_if_file_delete_fails(self, cm: ContentManager) -> None:
+    async def test_config_updated_even_if_file_delete_fails(
+        self,
+        cm: ContentManager,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
         """After the fix, if the file deletion fails, the config should
         already be updated (page removed from config)."""
         about_path = cm.content_dir / "about.md"
@@ -472,7 +476,7 @@ class TestDeletePageConfigBeforeFile:
         # Patch Path.unlink to fail
         with patch.object(Path, "unlink", side_effect=OSError("permission denied")):
             # After the fix, this should NOT raise - it logs a warning
-            delete_page(cm, page_id="about", delete_file=True)
+            await delete_page(session_factory, cm, page_id="about", delete_file=True)
 
         # Config should have the page removed
         reloaded = parse_site_config(cm.content_dir)
@@ -481,7 +485,11 @@ class TestDeletePageConfigBeforeFile:
         # File still exists (unlink failed) but config is correct
         assert about_path.exists()
 
-    def test_config_updated_before_file_deletion(self, cm: ContentManager) -> None:
+    async def test_config_updated_before_file_deletion(
+        self,
+        cm: ContentManager,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
         """After the fix, config is updated first, then file is deleted."""
         from backend.filesystem.toml_manager import write_site_config
         from backend.services.admin_service import delete_page
@@ -505,15 +513,16 @@ class TestDeletePageConfigBeforeFile:
             ),
             patch.object(Path, "unlink", track_unlink),
         ):
-            delete_page(cm, page_id="about", delete_file=True)
+            await delete_page(session_factory, cm, page_id="about", delete_file=True)
 
         write_idx = call_order.index("write_config")
         delete_idx = call_order.index("delete_file")
         assert write_idx < delete_idx, "Config must be written before file is deleted"
 
-    def test_file_delete_failure_logged_as_warning(
+    async def test_file_delete_failure_logged_as_warning(
         self,
         cm: ContentManager,
+        session_factory: async_sessionmaker[AsyncSession],
         caplog: pytest.LogCaptureFixture,
     ) -> None:
         """When file deletion fails after config update, a warning is logged."""
@@ -523,7 +532,7 @@ class TestDeletePageConfigBeforeFile:
             patch.object(Path, "unlink", side_effect=OSError("disk error")),
             caplog.at_level(logging.WARNING),
         ):
-            delete_page(cm, page_id="about", delete_file=True)
+            await delete_page(session_factory, cm, page_id="about", delete_file=True)
 
         assert any("disk error" in r.message for r in caplog.records)
 

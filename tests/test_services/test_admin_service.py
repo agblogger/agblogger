@@ -4,23 +4,31 @@ from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from backend.filesystem.content_manager import ContentManager
 from backend.filesystem.toml_manager import PageConfig, SiteConfig, parse_site_config
+from backend.models.page import PageCache
 from backend.services.admin_service import (
     create_page,
     delete_page,
     get_admin_pages,
     get_site_settings,
+    update_page,
     update_page_order,
     update_site_settings,
 )
+from backend.services.cache_service import ensure_tables
 
 if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
     from pathlib import Path
+
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 @pytest.fixture
@@ -42,6 +50,16 @@ def content_dir(tmp_path: Path) -> Path:
 @pytest.fixture
 def cm(content_dir: Path) -> ContentManager:
     return ContentManager(content_dir=content_dir)
+
+
+@pytest.fixture
+async def session_factory() -> AsyncGenerator[async_sessionmaker[AsyncSession]]:
+    engine = create_async_engine("sqlite+aiosqlite://", echo=False)
+    factory: async_sessionmaker[AsyncSession] = async_sessionmaker(engine, expire_on_commit=False)
+    async with factory() as session:
+        await ensure_tables(session)
+    yield factory
+    await engine.dispose()
 
 
 class TestGetSiteSettings:
@@ -84,23 +102,36 @@ class TestGetAdminPages:
 
 
 class TestCreatePage:
-    def test_creates_page(self, cm: ContentManager) -> None:
-        result = create_page(cm, page_id="contact", title="Contact")
+    async def test_creates_page(
+        self, cm: ContentManager, session_factory: async_sessionmaker[AsyncSession]
+    ) -> None:
+        with patch(
+            "backend.services.admin_service.render_markdown",
+            new_callable=AsyncMock,
+            return_value="<p>rendered</p>",
+        ):
+            result = await create_page(session_factory, cm, page_id="contact", title="Contact")
         assert result.id == "contact"
         assert (cm.content_dir / "contact.md").exists()
 
         reloaded = parse_site_config(cm.content_dir)
         assert any(p.id == "contact" for p in reloaded.pages)
 
-    def test_duplicate_id_raises(self, cm: ContentManager) -> None:
+    async def test_duplicate_id_raises(
+        self, cm: ContentManager, session_factory: async_sessionmaker[AsyncSession]
+    ) -> None:
         with pytest.raises(ValueError, match="already exists"):
-            create_page(cm, page_id="about", title="About 2")
+            await create_page(session_factory, cm, page_id="about", title="About 2")
 
-    def test_path_traversal_in_page_id_rejected(self, cm: ContentManager) -> None:
+    async def test_path_traversal_in_page_id_rejected(
+        self, cm: ContentManager, session_factory: async_sessionmaker[AsyncSession]
+    ) -> None:
         with pytest.raises(OSError):
-            create_page(cm, page_id="../../../etc/passwd", title="Evil")
+            await create_page(session_factory, cm, page_id="../../../etc/passwd", title="Evil")
 
-    def test_reserved_builtin_id_raises(self, tmp_path: Path) -> None:
+    async def test_reserved_builtin_id_raises(
+        self, tmp_path: Path, session_factory: async_sessionmaker[AsyncSession]
+    ) -> None:
         content_dir = tmp_path / "content"
         content_dir.mkdir()
         (content_dir / "posts").mkdir()
@@ -109,34 +140,42 @@ class TestCreatePage:
             '[[pages]]\nid = "timeline"\ntitle = "Posts"\n'
         )
         (content_dir / "labels.toml").write_text("[labels]\n")
-        cm = ContentManager(content_dir=content_dir)
+        local_cm = ContentManager(content_dir=content_dir)
 
         with pytest.raises(ValueError, match="reserved"):
-            create_page(cm, page_id="labels", title="Labels")
+            await create_page(session_factory, local_cm, page_id="labels", title="Labels")
 
         assert not (content_dir / "labels.md").exists()
 
 
 class TestDeletePage:
-    def test_deletes_page_and_file(self, cm: ContentManager) -> None:
-        delete_page(cm, page_id="about", delete_file=True)
+    async def test_deletes_page_and_file(
+        self, cm: ContentManager, session_factory: async_sessionmaker[AsyncSession]
+    ) -> None:
+        await delete_page(session_factory, cm, page_id="about", delete_file=True)
         reloaded = parse_site_config(cm.content_dir)
         assert not any(p.id == "about" for p in reloaded.pages)
         assert not (cm.content_dir / "about.md").exists()
 
-    def test_deletes_page_keeps_file(self, cm: ContentManager) -> None:
-        delete_page(cm, page_id="about", delete_file=False)
+    async def test_deletes_page_keeps_file(
+        self, cm: ContentManager, session_factory: async_sessionmaker[AsyncSession]
+    ) -> None:
+        await delete_page(session_factory, cm, page_id="about", delete_file=False)
         reloaded = parse_site_config(cm.content_dir)
         assert not any(p.id == "about" for p in reloaded.pages)
         assert (cm.content_dir / "about.md").exists()
 
-    def test_delete_builtin_raises(self, cm: ContentManager) -> None:
+    async def test_delete_builtin_raises(
+        self, cm: ContentManager, session_factory: async_sessionmaker[AsyncSession]
+    ) -> None:
         with pytest.raises(ValueError, match="Cannot delete built-in"):
-            delete_page(cm, page_id="timeline", delete_file=False)
+            await delete_page(session_factory, cm, page_id="timeline", delete_file=False)
 
-    def test_delete_nonexistent_raises(self, cm: ContentManager) -> None:
+    async def test_delete_nonexistent_raises(
+        self, cm: ContentManager, session_factory: async_sessionmaker[AsyncSession]
+    ) -> None:
         with pytest.raises(ValueError, match="not found"):
-            delete_page(cm, page_id="nope", delete_file=False)
+            await delete_page(session_factory, cm, page_id="nope", delete_file=False)
 
 
 class TestUpdateSiteSettingsWriteError:
@@ -157,8 +196,11 @@ class TestUpdateSiteSettingsWriteError:
 
 
 class TestDeletePageUnlinkError:
-    def test_unlink_error_logged_not_raised(
-        self, cm: ContentManager, caplog: pytest.LogCaptureFixture
+    async def test_unlink_error_logged_not_raised(
+        self,
+        cm: ContentManager,
+        session_factory: async_sessionmaker[AsyncSession],
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         """File deletion errors are logged as warnings (config is already updated)."""
         about_path = cm.content_dir / "about.md"
@@ -166,7 +208,7 @@ class TestDeletePageUnlinkError:
             patch.object(type(about_path), "unlink", side_effect=OSError("permission denied")),
             caplog.at_level(logging.WARNING),
         ):
-            delete_page(cm, page_id="about", delete_file=True)
+            await delete_page(session_factory, cm, page_id="about", delete_file=True)
         assert any("permission denied" in r.message for r in caplog.records)
 
 
@@ -237,3 +279,84 @@ class TestSiteConfigWithPages:
         # Original unchanged
         assert len(cfg.pages) == 1
         assert cfg.pages[0].id == "p1"
+
+
+class TestCreatePageCache:
+    async def test_create_page_caches_rendered_html(
+        self, cm: ContentManager, session_factory: async_sessionmaker[AsyncSession]
+    ) -> None:
+        with patch(
+            "backend.services.admin_service.render_markdown",
+            new_callable=AsyncMock,
+            return_value="<h1>New Page</h1>\n",
+        ):
+            await create_page(session_factory, cm, page_id="newpage", title="New Page")
+
+        async with session_factory() as session:
+            row = (
+                await session.execute(select(PageCache).where(PageCache.page_id == "newpage"))
+            ).scalar_one_or_none()
+            assert row is not None
+            assert row.rendered_html == "<h1>New Page</h1>\n"
+            assert row.title == "New Page"
+
+
+class TestUpdatePageCache:
+    async def test_update_content_re_renders_cache(
+        self, cm: ContentManager, session_factory: async_sessionmaker[AsyncSession]
+    ) -> None:
+        async with session_factory() as session:
+            session.add(PageCache(page_id="about", title="About", rendered_html="<p>old</p>"))
+            await session.commit()
+
+        with patch(
+            "backend.services.admin_service.render_markdown",
+            new_callable=AsyncMock,
+            return_value="<p>new</p>",
+        ):
+            await update_page(session_factory, cm, "about", content="new content")
+
+        async with session_factory() as session:
+            row = (
+                await session.execute(select(PageCache).where(PageCache.page_id == "about"))
+            ).scalar_one_or_none()
+            assert row is not None
+            assert row.rendered_html == "<p>new</p>"
+
+    async def test_update_title_updates_cache_title(
+        self, cm: ContentManager, session_factory: async_sessionmaker[AsyncSession]
+    ) -> None:
+        async with session_factory() as session:
+            session.add(PageCache(page_id="about", title="About", rendered_html="<p>x</p>"))
+            await session.commit()
+
+        with patch(
+            "backend.services.admin_service.render_markdown",
+            new_callable=AsyncMock,
+            return_value="<p>x</p>",
+        ):
+            await update_page(session_factory, cm, "about", title="About Us")
+
+        async with session_factory() as session:
+            row = (
+                await session.execute(select(PageCache).where(PageCache.page_id == "about"))
+            ).scalar_one_or_none()
+            assert row is not None
+            assert row.title == "About Us"
+
+
+class TestDeletePageCache:
+    async def test_delete_page_removes_cache_row(
+        self, cm: ContentManager, session_factory: async_sessionmaker[AsyncSession]
+    ) -> None:
+        async with session_factory() as session:
+            session.add(PageCache(page_id="about", title="About", rendered_html="<p>x</p>"))
+            await session.commit()
+
+        await delete_page(session_factory, cm, "about", delete_file=True)
+
+        async with session_factory() as session:
+            row = (
+                await session.execute(select(PageCache).where(PageCache.page_id == "about"))
+            ).scalar_one_or_none()
+            assert row is None

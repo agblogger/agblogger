@@ -133,19 +133,14 @@ class TestRenderEndpointPandocFailure:
         assert "render" in resp.json()["detail"].lower()
 
 
-class TestPagePandocFailure:
-    """Page service propagates RenderError to global handler (502)."""
+class TestPageCacheMissReturns404:
+    """Page endpoint returns 404 when the page is not in cache."""
 
     @pytest.mark.asyncio
-    async def test_page_pandoc_failure_returns_502(self, client: AsyncClient) -> None:
-        with patch(
-            "backend.services.page_service.render_markdown",
-            new_callable=AsyncMock,
-            side_effect=RenderError("pandoc broken"),
-        ):
-            resp = await client.get("/api/pages/about")
-        assert resp.status_code == 502
-        assert "render" in resp.json()["detail"].lower()
+    async def test_page_cache_miss_returns_404(self, client: AsyncClient) -> None:
+        # 'nonexistent' page is not in the site config at all
+        resp = await client.get("/api/pages/nonexistent")
+        assert resp.status_code == 404
 
 
 class TestRuntimeErrorHandler:

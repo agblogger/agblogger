@@ -100,7 +100,7 @@ class TestPostRenameRollbackOnCommitFailure:
 class TestPageCreateAtomicity:
     """create_page must not leave orphan .md files if config write fails."""
 
-    def test_md_file_cleaned_up_on_config_write_failure(self, tmp_path: Path) -> None:
+    async def test_md_file_cleaned_up_on_config_write_failure(self, tmp_path: Path) -> None:
         from backend.filesystem.content_manager import ContentManager
         from backend.services.admin_service import create_page
 
@@ -111,6 +111,7 @@ class TestPageCreateAtomicity:
         (tmp_path / "labels.toml").write_text("[labels]")
         (tmp_path / "posts").mkdir()
         cm = ContentManager(content_dir=tmp_path)
+        session_factory = AsyncMock()
 
         with (
             patch(
@@ -119,7 +120,7 @@ class TestPageCreateAtomicity:
             ),
             pytest.raises(OSError),
         ):
-            create_page(cm, page_id="about", title="About")
+            await create_page(session_factory, cm, page_id="about", title="About")
 
         md_path = tmp_path / "about.md"
         assert not md_path.exists(), "Orphan .md file should be cleaned up on config write failure"
@@ -128,7 +129,7 @@ class TestPageCreateAtomicity:
 class TestPageUpdateAtomicity:
     """update_page must not leave config updated if content write fails."""
 
-    def test_config_rolled_back_on_content_write_failure(self, tmp_path: Path) -> None:
+    async def test_config_rolled_back_on_content_write_failure(self, tmp_path: Path) -> None:
         from backend.filesystem.content_manager import ContentManager
         from backend.services.admin_service import update_page
 
@@ -141,6 +142,7 @@ class TestPageUpdateAtomicity:
         (tmp_path / "posts").mkdir()
         (tmp_path / "about.md").write_text("# About\n\nOld content.\n")
         cm = ContentManager(content_dir=tmp_path)
+        session_factory = AsyncMock()
 
         original_title = cm.site_config.pages[1].title
         assert original_title == "About"
@@ -163,7 +165,9 @@ class TestPageUpdateAtomicity:
             patch("pathlib.Path.write_text", failing_write),
             pytest.raises(OSError),
         ):
-            update_page(cm, "about", title="New Title", content="New content")
+            await update_page(
+                session_factory, cm, "about", title="New Title", content="New content"
+            )
 
         # The title in config should be rolled back to original
         cm.reload_config()

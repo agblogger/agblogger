@@ -5,14 +5,20 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
+from sqlalchemy import delete as sa_delete
+
 from backend.exceptions import BuiltinPageError
 from backend.filesystem.toml_manager import (
     PageConfig,
     SiteConfig,
     write_site_config,
 )
+from backend.models.page import PageCache
+from backend.pandoc.renderer import render_markdown
 
 if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
     from backend.filesystem.content_manager import ContentManager
 
 BUILTIN_PAGE_IDS = {"timeline", "labels"}
@@ -72,7 +78,13 @@ def get_admin_pages(cm: ContentManager) -> list[dict[str, Any]]:
     return result
 
 
-def create_page(cm: ContentManager, *, page_id: str, title: str) -> PageConfig:
+async def create_page(
+    session_factory: async_sessionmaker[AsyncSession],
+    cm: ContentManager,
+    *,
+    page_id: str,
+    title: str,
+) -> PageConfig:
     """Create a new page entry and .md file."""
     cfg = cm.site_config
     if page_id in BUILTIN_PAGE_IDS:
@@ -99,10 +111,19 @@ def create_page(cm: ContentManager, *, page_id: str, title: str) -> PageConfig:
             logger.warning("Failed to clean up orphan page file %s: %s", md_path, cleanup_exc)
         raise
     cm.reload_config()
+
+    raw = cm.read_page(page_id)
+    if raw is not None:
+        rendered = await render_markdown(raw)
+        async with session_factory() as session:
+            session.add(PageCache(page_id=page_id, title=title, rendered_html=rendered))
+            await session.commit()
+
     return new_page
 
 
-def update_page(
+async def update_page(
+    session_factory: async_sessionmaker[AsyncSession],
     cm: ContentManager,
     page_id: str,
     *,
@@ -158,8 +179,25 @@ def update_page(
                     )
             raise
 
+    updated_page = next((p for p in cm.site_config.pages if p.id == page_id), None)
+    if updated_page is not None and updated_page.file is not None:
+        raw = cm.read_page(page_id)
+        if raw is not None:
+            rendered = await render_markdown(raw)
+            current_title = updated_page.title
+            async with session_factory() as session:
+                await session.execute(sa_delete(PageCache).where(PageCache.page_id == page_id))
+                session.add(PageCache(page_id=page_id, title=current_title, rendered_html=rendered))
+                await session.commit()
 
-def delete_page(cm: ContentManager, page_id: str, *, delete_file: bool) -> None:
+
+async def delete_page(
+    session_factory: async_sessionmaker[AsyncSession],
+    cm: ContentManager,
+    page_id: str,
+    *,
+    delete_file: bool,
+) -> None:
     """Remove a page from config and optionally delete the .md file."""
     if page_id in BUILTIN_PAGE_IDS:
         msg = f"Cannot delete built-in page '{page_id}'"
@@ -197,6 +235,10 @@ def delete_page(cm: ContentManager, page_id: str, *, delete_file: bool) -> None:
                 resolved_file_path,
                 exc,
             )
+
+    async with session_factory() as session:
+        await session.execute(sa_delete(PageCache).where(PageCache.page_id == page_id))
+        await session.commit()
 
 
 def update_page_order(cm: ContentManager, pages: list[PageConfig]) -> None:

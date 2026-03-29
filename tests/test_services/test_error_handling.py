@@ -137,11 +137,13 @@ class TestReadPageErrorHandling:
         assert result is None
 
 
-class TestPageServicePropagatesRenderError:
-    """get_page propagates RenderError instead of returning empty HTML."""
+class TestPageServiceCacheMissReturnsNone:
+    """get_page returns None on cache miss (page exists on filesystem but not in cache)."""
 
-    async def test_get_page_propagates_render_error(self, tmp_path: Path) -> None:
-        from backend.pandoc.renderer import RenderError
+    async def test_get_page_returns_none_on_cache_miss(self, tmp_path: Path) -> None:
+        from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+        from backend.services.cache_service import ensure_tables
         from backend.services.page_service import get_page
 
         (tmp_path / "index.toml").write_text(
@@ -151,15 +153,14 @@ class TestPageServicePropagatesRenderError:
         (tmp_path / "about.md").write_text("# About\n\nAbout page.\n")
         cm = ContentManager(content_dir=tmp_path)
 
-        with (
-            patch(
-                "backend.services.page_service.render_markdown",
-                new_callable=AsyncMock,
-                side_effect=RenderError("pandoc broken"),
-            ),
-            pytest.raises(RenderError, match="pandoc broken"),
-        ):
-            await get_page(cm, "about")
+        engine = create_async_engine("sqlite+aiosqlite://", echo=False)
+        factory = async_sessionmaker(engine, expire_on_commit=False)
+        async with factory() as session:
+            await ensure_tables(session)
+
+        result = await get_page(factory, cm, "about")
+        await engine.dispose()
+        assert result is None
 
 
 class TestSafeParseNames:
