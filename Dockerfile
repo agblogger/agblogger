@@ -54,7 +54,7 @@ COPY backend/migrations ./backend/migrations
 # Copy built frontend
 COPY --from=frontend-build /app/frontend/dist ./frontend/dist
 
-# Copy version file for runtime version detection
+# Copy version and build metadata files for runtime version detection
 COPY VERSION BUILD* ./
 
 # Create data directories

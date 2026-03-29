@@ -118,7 +118,7 @@ All registered before the StaticFiles catch-all mount in `main.py`. Each handler
 |-------|------------|---------|---------------|---------|-------------|
 | `/` | Site config + first page of posts from DB | `website` | Post list (titles, dates, excerpts, links) | `WebSite` | Post list response |
 | `/post/{slug}` | PostCache DB lookup (existing, refactored) | `article` | Full `post.rendered_html` | `BlogPosting` | Post detail response |
-| `/page/{pageId}` | Page service (render markdown via Pandoc) | `website` | Rendered page HTML | `WebPage` | Page response |
+| `/page/{pageId}` | PageCache DB lookup (pre-rendered) | `website` | Rendered page HTML | `WebPage` | Page response |
 | `/labels` | Site config | `website` | None | None | None |
 | `/labels/{labelId}` | Label DB + posts for label | `website` | Post list filtered to label | None | Label posts response |
 | `/search` | No lookup | `website` | None | None | None |

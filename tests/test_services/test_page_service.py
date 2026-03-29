@@ -97,3 +97,18 @@ class TestGetPage:
         # "about" is in config with a file, but no cache row exists
         result = await get_page(session_factory, cm, "about")
         assert result is None
+
+
+class TestGetPageCacheMissLogging:
+    async def test_logs_warning_for_cache_miss_on_file_backed_page(
+        self,
+        cm: ContentManager,
+        session_factory: async_sessionmaker[AsyncSession],
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            result = await get_page(session_factory, cm, "about")
+        assert result is None
+        assert any("about" in r.message and "cache" in r.message.lower() for r in caplog.records)

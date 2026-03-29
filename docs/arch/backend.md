@@ -88,7 +88,7 @@ The goal is to preserve content, preserve service availability where possible, a
 
 - `backend/main.py` is the main runtime entry point.
 - `backend/api/` contains the HTTP-facing modules grouped by feature area.
-- `backend/services/` contains the orchestration and business-logic layer, including services for page retrieval and rendering, posts CRUD operations, authentication, cross-posting, sync, analytics, and admin panel business logic.
+- `backend/services/` contains the orchestration and business-logic layer, including services for page retrieval, page cache population, posts CRUD operations, authentication, cross-posting, sync, analytics, and admin panel business logic.
 - `backend/models/` contains SQLAlchemy ORM models for both durable tables (admin users, admin refresh tokens, social accounts, cross-posts, analytics settings) and cache tables (posts, pages, labels, sync manifest).
 - `backend/schemas/` contains Pydantic request/response schemas that define the API contracts.
 - `backend/filesystem/` contains the canonical content model.

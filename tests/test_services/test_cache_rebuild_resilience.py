@@ -280,3 +280,44 @@ class TestRebuildCacheSessionIsolation:
         assert call_count == 1, (
             f"Expected rebuild_cache to create exactly 1 session, got {call_count}"
         )
+
+
+class TestPagePandocFailureResilience:
+    """Pandoc failure for a page should not crash rebuild_cache."""
+
+    async def test_pandoc_failure_skips_page_without_crashing(
+        self,
+        db_session: AsyncSession,
+        db_session_factory: async_sessionmaker[AsyncSession],
+        tmp_path: Path,
+    ) -> None:
+        content_dir = tmp_path / "page_pandoc_test"
+        content_dir.mkdir()
+        (content_dir / "posts").mkdir()
+        (content_dir / "index.toml").write_text(
+            '[site]\ntitle = "T"\ndescription = "D"\ntimezone = "UTC"\n\n'
+            '[[pages]]\nid = "good"\ntitle = "Good"\nfile = "good.md"\n\n'
+            '[[pages]]\nid = "bad"\ntitle = "Bad"\nfile = "bad.md"\n'
+        )
+        (content_dir / "labels.toml").write_text("[labels]\n")
+        (content_dir / "good.md").write_text("# Good\n\nGood page.\n")
+        (content_dir / "bad.md").write_text("# Bad\n\nBad page.\n")
+        cm = ContentManager(content_dir=content_dir)
+
+        await ensure_tables(db_session)
+
+        async def failing_render(markdown: str) -> str:
+            if "Bad page" in markdown:
+                raise RuntimeError("Pandoc failed")
+            return f"<p>{markdown}</p>"
+
+        with patch(
+            "backend.services.cache_service.render_markdown",
+            side_effect=failing_render,
+        ):
+            await rebuild_cache(db_session_factory, cm)
+
+        async with db_session_factory() as session:
+            pages = (await session.execute(select(PageCache))).scalars().all()
+            assert len(pages) == 1
+            assert pages[0].page_id == "good"

@@ -37,7 +37,6 @@ _pandoc_server_broken = False
 # Modules that import render_markdown by name and may hold direct references.
 _RENDER_MARKDOWN_IMPORT_SITES = (
     "backend.services.cache_service",
-    "backend.services.admin_service",
     "backend.api.posts",
     "backend.api.render",
 )

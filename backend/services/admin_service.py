@@ -14,7 +14,7 @@ from backend.filesystem.toml_manager import (
     write_site_config,
 )
 from backend.models.page import PageCache
-from backend.pandoc.renderer import render_markdown
+from backend.services.cache_service import upsert_page_cache
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -114,10 +114,14 @@ async def create_page(
 
     raw = cm.read_page(page_id)
     if raw is not None:
-        rendered = await render_markdown(raw)
-        async with session_factory() as session:
-            session.add(PageCache(page_id=page_id, title=title, rendered_html=rendered))
-            await session.commit()
+        try:
+            async with session_factory() as session:
+                await upsert_page_cache(session, page_id, title, raw)
+                await session.commit()
+        except Exception:
+            logger.warning(
+                "Failed to cache page %s; will populate on rebuild", page_id, exc_info=True
+            )
 
     return new_page
 
@@ -183,12 +187,14 @@ async def update_page(
     if updated_page is not None and updated_page.file is not None:
         raw = cm.read_page(page_id)
         if raw is not None:
-            rendered = await render_markdown(raw)
-            current_title = updated_page.title
-            async with session_factory() as session:
-                await session.execute(sa_delete(PageCache).where(PageCache.page_id == page_id))
-                session.add(PageCache(page_id=page_id, title=current_title, rendered_html=rendered))
-                await session.commit()
+            try:
+                async with session_factory() as session:
+                    await upsert_page_cache(session, page_id, updated_page.title, raw)
+                    await session.commit()
+            except Exception:
+                logger.warning(
+                    "Failed to cache page %s; will populate on rebuild", page_id, exc_info=True
+                )
 
 
 async def delete_page(
@@ -236,9 +242,14 @@ async def delete_page(
                 exc,
             )
 
-    async with session_factory() as session:
-        await session.execute(sa_delete(PageCache).where(PageCache.page_id == page_id))
-        await session.commit()
+    try:
+        async with session_factory() as session:
+            await session.execute(sa_delete(PageCache).where(PageCache.page_id == page_id))
+            await session.commit()
+    except Exception:
+        logger.warning(
+            "Failed to remove cache for page %s; will clean on rebuild", page_id, exc_info=True
+        )
 
 
 def update_page_order(cm: ContentManager, pages: list[PageConfig]) -> None:

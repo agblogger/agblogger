@@ -1,7 +1,8 @@
-"""Page service: top-level page retrieval and rendering."""
+"""Page service: top-level page retrieval from cache."""
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
@@ -13,6 +14,9 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
     from backend.filesystem.content_manager import ContentManager
+
+
+logger = logging.getLogger(__name__)
 
 
 def get_site_config(content_manager: ContentManager) -> SiteConfigResponse:
@@ -45,6 +49,7 @@ async def get_page(
         ).scalar_one_or_none()
 
     if row is None:
+        logger.warning("Page %s has a file but no cache entry", page_id)
         return None
 
     return PageResponse(id=page_id, title=row.title, rendered_html=row.rendered_html)

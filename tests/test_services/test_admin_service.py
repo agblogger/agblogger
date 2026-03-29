@@ -106,7 +106,7 @@ class TestCreatePage:
         self, cm: ContentManager, session_factory: async_sessionmaker[AsyncSession]
     ) -> None:
         with patch(
-            "backend.services.admin_service.render_markdown",
+            "backend.services.cache_service.render_markdown",
             new_callable=AsyncMock,
             return_value="<p>rendered</p>",
         ):
@@ -286,7 +286,7 @@ class TestCreatePageCache:
         self, cm: ContentManager, session_factory: async_sessionmaker[AsyncSession]
     ) -> None:
         with patch(
-            "backend.services.admin_service.render_markdown",
+            "backend.services.cache_service.render_markdown",
             new_callable=AsyncMock,
             return_value="<h1>New Page</h1>\n",
         ):
@@ -310,7 +310,7 @@ class TestUpdatePageCache:
             await session.commit()
 
         with patch(
-            "backend.services.admin_service.render_markdown",
+            "backend.services.cache_service.render_markdown",
             new_callable=AsyncMock,
             return_value="<p>new</p>",
         ):
@@ -331,7 +331,7 @@ class TestUpdatePageCache:
             await session.commit()
 
         with patch(
-            "backend.services.admin_service.render_markdown",
+            "backend.services.cache_service.render_markdown",
             new_callable=AsyncMock,
             return_value="<p>x</p>",
         ):
@@ -360,3 +360,98 @@ class TestDeletePageCache:
                 await session.execute(select(PageCache).where(PageCache.page_id == "about"))
             ).scalar_one_or_none()
             assert row is None
+
+
+class TestCreatePageRenderFailure:
+    """create_page should succeed even when Pandoc rendering fails."""
+
+    async def test_create_page_succeeds_when_render_fails(
+        self, cm: ContentManager, session_factory: async_sessionmaker[AsyncSession]
+    ) -> None:
+        with patch(
+            "backend.services.cache_service.render_markdown",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("Pandoc crashed"),
+        ):
+            result = await create_page(session_factory, cm, page_id="contact", title="Contact")
+
+        assert result.id == "contact"
+        assert (cm.content_dir / "contact.md").exists()
+        # Cache should be empty since render failed
+        async with session_factory() as session:
+            row = (
+                await session.execute(select(PageCache).where(PageCache.page_id == "contact"))
+            ).scalar_one_or_none()
+            assert row is None
+
+    async def test_create_page_logs_warning_on_render_failure(
+        self,
+        cm: ContentManager,
+        session_factory: async_sessionmaker[AsyncSession],
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        with (
+            patch(
+                "backend.services.cache_service.render_markdown",
+                new_callable=AsyncMock,
+                side_effect=RuntimeError("Pandoc crashed"),
+            ),
+            caplog.at_level(logging.WARNING),
+        ):
+            await create_page(session_factory, cm, page_id="faq", title="FAQ")
+        assert any(
+            "faq" in r.message.lower() or "cache" in r.message.lower() for r in caplog.records
+        )
+
+
+class TestUpdatePageRenderFailure:
+    """update_page should succeed even when Pandoc rendering fails."""
+
+    async def test_update_page_succeeds_when_render_fails(
+        self, cm: ContentManager, session_factory: async_sessionmaker[AsyncSession]
+    ) -> None:
+        # Pre-populate cache with old content
+        async with session_factory() as session:
+            session.add(PageCache(page_id="about", title="About", rendered_html="<p>old</p>"))
+            await session.commit()
+
+        with patch(
+            "backend.services.cache_service.render_markdown",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("Pandoc crashed"),
+        ):
+            await update_page(session_factory, cm, "about", content="new content")
+
+        # Filesystem should be updated
+        assert "new content" in (cm.content_dir / "about.md").read_text()
+
+    async def test_update_page_logs_warning_on_render_failure(
+        self,
+        cm: ContentManager,
+        session_factory: async_sessionmaker[AsyncSession],
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        with (
+            patch(
+                "backend.services.cache_service.render_markdown",
+                new_callable=AsyncMock,
+                side_effect=RuntimeError("Pandoc crashed"),
+            ),
+            caplog.at_level(logging.WARNING),
+        ):
+            await update_page(session_factory, cm, "about", content="updated")
+        assert any(
+            "about" in r.message.lower() or "cache" in r.message.lower() for r in caplog.records
+        )
+
+
+class TestDeletePageNoCacheRow:
+    """delete_page should succeed even when no cache row exists."""
+
+    async def test_delete_page_succeeds_without_cache_row(
+        self, cm: ContentManager, session_factory: async_sessionmaker[AsyncSession]
+    ) -> None:
+        # No cache row pre-populated — should not raise
+        await delete_page(session_factory, cm, page_id="about", delete_file=True)
+        reloaded = parse_site_config(cm.content_dir)
+        assert not any(p.id == "about" for p in reloaded.pages)

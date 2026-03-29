@@ -7,6 +7,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from sqlalchemy import delete, text
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from backend.filesystem.content_manager import ContentManager, hash_content
 from backend.models.base import CacheBase, DurableBase, cache_non_virtual_tables
@@ -21,6 +22,29 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 logger = logging.getLogger(__name__)
+
+
+async def upsert_page_cache(
+    session: AsyncSession,
+    page_id: str,
+    title: str,
+    raw_markdown: str,
+) -> None:
+    """Render page markdown and upsert the cache row.
+
+    Catches rendering failures and logs a warning instead of propagating.
+    """
+    try:
+        rendered = await render_markdown(raw_markdown)
+    except RuntimeError:
+        logger.warning("Failed to render page %s; skipping cache update", page_id)
+        return
+    stmt = sqlite_insert(PageCache).values(page_id=page_id, title=title, rendered_html=rendered)
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["page_id"],
+        set_={"title": stmt.excluded.title, "rendered_html": stmt.excluded.rendered_html},
+    )
+    await session.execute(stmt)
 
 
 async def rebuild_cache(
@@ -92,14 +116,7 @@ async def rebuild_cache(
             if raw is None:
                 logger.warning("Skipping page %s: file not found", page_cfg.id)
                 continue
-            try:
-                page_html = await render_markdown(raw)
-            except RuntimeError as exc:
-                logger.warning("Skipping page %s: %s", page_cfg.id, exc)
-                continue
-            session.add(
-                PageCache(page_id=page_cfg.id, title=page_cfg.title, rendered_html=page_html)
-            )
+            await upsert_page_cache(session, page_cfg.id, page_cfg.title, raw)
         await session.flush()
 
         # Scan and index posts

@@ -36,7 +36,7 @@ async def get_page_endpoint(
     user: Annotated[AdminUser | None, Depends(get_current_admin)],
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
 ) -> PageResponse:
-    """Get a top-level page with rendered HTML."""
+    """Get a top-level page with cached HTML."""
     if not _PAGE_ID_PATTERN.match(page_id):
         raise HTTPException(status_code=400, detail="Invalid page ID")
     page = await get_page(session_factory, content_manager, page_id)

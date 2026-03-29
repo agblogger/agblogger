@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import Integer, Text
+from sqlalchemy import Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.models.base import CacheBase
@@ -13,7 +13,6 @@ class PageCache(CacheBase):
 
     __tablename__ = "pages_cache"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    page_id: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    page_id: Mapped[str] = mapped_column(Text, primary_key=True)
     title: Mapped[str] = mapped_column(Text, nullable=False)
     rendered_html: Mapped[str] = mapped_column(Text, nullable=False)
