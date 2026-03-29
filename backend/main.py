@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import html
 import json
 import logging
 import posixpath
@@ -16,7 +17,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
@@ -50,7 +51,6 @@ if TYPE_CHECKING:
 
     from sqlalchemy import Connection
     from sqlalchemy.ext.asyncio import AsyncEngine
-    from starlette.responses import Response
     from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 logger = logging.getLogger(__name__)
@@ -1270,6 +1270,149 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
 
         return HTMLResponse(render_seo_html(base_html, ctx))
+
+    @app.get("/sitemap.xml", include_in_schema=False, response_model=None)
+    async def sitemap_route(request: Request) -> Response:
+        from backend.models.label import LabelCache, PostLabelCache
+        from backend.models.post import PostCache
+        from backend.utils.datetime import format_iso
+
+        base_url = str(request.base_url).rstrip("/")
+        content_manager: ContentManager = request.app.state.content_manager
+
+        urls: list[str] = []
+        urls.append(f"  <url><loc>{base_url}/</loc></url>")
+
+        for page in content_manager.site_config.pages:
+            if page.file is not None:
+                urls.append(f"  <url><loc>{base_url}/page/{page.id}</loc></url>")
+
+        try:
+            session_factory = request.app.state.session_factory
+            async with session_factory() as session:
+                stmt = (
+                    select(PostCache)
+                    .where(PostCache.is_draft == False)  # noqa: E712
+                    .order_by(PostCache.created_at.desc())
+                )
+                result = await session.execute(stmt)
+                posts = result.scalars().all()
+
+                for p in posts:
+                    slug = p.file_path.split("/")[1] if "/" in p.file_path else p.file_path
+                    lastmod = format_iso(p.modified_at)
+                    urls.append(
+                        f"  <url><loc>{base_url}/post/{slug}</loc>"
+                        f"<lastmod>{lastmod}</lastmod></url>"
+                    )
+
+                label_stmt = (
+                    select(LabelCache.id)
+                    .join(PostLabelCache, LabelCache.id == PostLabelCache.label_id)
+                    .join(PostCache, PostCache.id == PostLabelCache.post_id)
+                    .where(PostCache.is_draft == False)  # noqa: E712
+                    .group_by(LabelCache.id)
+                )
+                label_result = await session.execute(label_stmt)
+                label_ids = label_result.scalars().all()
+
+                for lid in label_ids:
+                    urls.append(f"  <url><loc>{base_url}/labels/{lid}</loc></url>")
+        except SQLAlchemyError:
+            logger.exception("DB error generating sitemap")
+
+        url_block = "\n".join(urls)
+        xml = (
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+            f"{url_block}\n"
+            "</urlset>"
+        )
+        return Response(content=xml, media_type="application/xml")
+
+    @app.get("/robots.txt", include_in_schema=False, response_model=None)
+    async def robots_route(request: Request) -> Response:
+        base_url = str(request.base_url).rstrip("/")
+        body = (
+            "User-agent: *\n"
+            "Allow: /\n"
+            "Disallow: /api/\n"
+            "Disallow: /admin\n"
+            "Disallow: /editor/\n"
+            "Disallow: /login\n"
+            "Disallow: /labels/new\n"
+            "Disallow: /labels/*/settings\n"
+            "\n"
+            f"Sitemap: {base_url}/sitemap.xml\n"
+        )
+        return Response(content=body, media_type="text/plain")
+
+    @app.get("/feed.xml", include_in_schema=False, response_model=None)
+    async def feed_route(request: Request) -> Response:
+        from datetime import UTC
+        from email.utils import format_datetime as format_rfc2822
+
+        from backend.models.post import PostCache
+        from backend.services.seo_service import strip_html_tags
+
+        base_url = str(request.base_url).rstrip("/")
+        content_manager: ContentManager = request.app.state.content_manager
+        site_title = html.escape(content_manager.site_config.title)
+        site_desc = html.escape(content_manager.site_config.description)
+
+        items: list[str] = []
+        try:
+            session_factory = request.app.state.session_factory
+            async with session_factory() as session:
+                stmt = (
+                    select(PostCache)
+                    .where(PostCache.is_draft == False)  # noqa: E712
+                    .order_by(PostCache.created_at.desc())
+                    .limit(20)
+                )
+                result = await session.execute(stmt)
+                posts = result.scalars().all()
+
+                for p in posts:
+                    slug = p.file_path.split("/")[1] if "/" in p.file_path else p.file_path
+                    link = f"{base_url}/post/{slug}"
+                    esc_title = html.escape(p.title)
+                    desc = html.escape(
+                        strip_html_tags(p.rendered_excerpt) if p.rendered_excerpt else ""
+                    )
+                    pub_dt = (
+                        p.created_at
+                        if p.created_at.tzinfo is not None
+                        else p.created_at.replace(tzinfo=UTC)
+                    )
+                    pub_date = format_rfc2822(pub_dt, usegmt=True)
+                    items.append(
+                        f"    <item>\n"
+                        f"      <title>{esc_title}</title>\n"
+                        f"      <link>{link}</link>\n"
+                        f'      <guid isPermaLink="true">{link}</guid>\n'
+                        f"      <pubDate>{pub_date}</pubDate>\n"
+                        f"      <description>{desc}</description>\n"
+                        f"    </item>"
+                    )
+        except SQLAlchemyError:
+            logger.exception("DB error generating RSS feed")
+
+        items_block = "\n".join(items)
+        feed_url = f"{base_url}/feed.xml"
+        rss = (
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">\n'
+            "  <channel>\n"
+            f"    <title>{site_title}</title>\n"
+            f"    <link>{base_url}/</link>\n"
+            f"    <description>{site_desc}</description>\n"
+            f'    <atom:link href="{feed_url}" rel="self" type="application/rss+xml"/>\n'
+            f"{items_block}\n"
+            "  </channel>\n"
+            "</rss>"
+        )
+        return Response(content=rss, media_type="application/rss+xml")
 
     # Serve frontend static files in production
     frontend_dir = settings.frontend_dir
