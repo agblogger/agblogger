@@ -1,9 +1,10 @@
-import { lazy, Suspense, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import { Link } from 'react-router-dom'
 import { Tag, Settings, Search, Plus } from 'lucide-react'
 
 import { useAuthStore } from '@/stores/authStore'
+import { useSiteStore } from '@/stores/siteStore'
 import { HTTPError } from '@/api/client'
 import { useLabels } from '@/hooks/useLabels'
 import { filterLabelsBySearch } from '@/components/labels/searchUtils'
@@ -16,6 +17,13 @@ export default function LabelsPage() {
   const user = useAuthStore((s) => s.user)
   const [view, setView] = useState<'list' | 'graph'>('list')
   const [search, setSearch] = useState('')
+  const siteTitle = useSiteStore((s) => s.config?.title)
+
+  useEffect(() => {
+    if (siteTitle !== undefined && siteTitle !== '') {
+      document.title = `Labels — ${siteTitle}`
+    }
+  }, [siteTitle])
 
   const viewToggle = (
     <div className="flex items-center bg-paper-warm rounded-lg p-0.5 border border-border">

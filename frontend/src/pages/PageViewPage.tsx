@@ -1,13 +1,22 @@
+import { useEffect } from 'react'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import { useParams } from 'react-router-dom'
 import { useRenderedHtml } from '@/hooks/useKatex'
 import { usePage } from '@/hooks/usePage'
+import { useSiteStore } from '@/stores/siteStore'
 
 export default function PageViewPage() {
   const { pageId } = useParams()
   const { data: page, error: pageErr, isLoading: loading } = usePage(pageId ?? null)
   const error = pageErr ? 'Failed to load page.' : null
   const renderedHtml = useRenderedHtml(page?.rendered_html)
+  const siteTitle = useSiteStore((s) => s.config?.title)
+
+  useEffect(() => {
+    if (page !== undefined && siteTitle !== undefined && siteTitle !== '') {
+      document.title = `${page.title} — ${siteTitle}`
+    }
+  }, [page, siteTitle])
 
   if (loading) {
     return <LoadingSpinner />

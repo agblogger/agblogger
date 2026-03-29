@@ -5,6 +5,7 @@ import { searchPosts } from '@/api/posts'
 import type { SearchResult } from '@/api/client'
 import { useRenderedHtml } from '@/hooks/useKatex'
 import { useAuthStore } from '@/stores/authStore'
+import { useSiteStore } from '@/stores/siteStore'
 import { formatRelativeDate } from '@/utils/date'
 import { postUrl } from '@/utils/postUrl'
 
@@ -17,6 +18,13 @@ export default function SearchPage() {
   const [results, setResults] = useState<SearchResult[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const siteTitle = useSiteStore((s) => s.config?.title)
+
+  useEffect(() => {
+    if (siteTitle !== undefined && siteTitle !== '') {
+      document.title = `Search — ${siteTitle}`
+    }
+  }, [siteTitle])
 
   useEffect(() => {
     setInputValue(query)

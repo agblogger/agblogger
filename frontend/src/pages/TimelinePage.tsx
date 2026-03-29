@@ -10,13 +10,17 @@ import type { PostListResponse } from '@/api/client'
 import { useAuthStore } from '@/stores/authStore'
 import { postUrl } from '@/utils/postUrl'
 import { localDateToUtcStart, localDateToUtcEnd } from '@/utils/date'
+import { readPreloadedData } from '@/utils/preload'
+import { useSiteStore } from '@/stores/siteStore'
+
+let preloadedTimeline = readPreloadedData<PostListResponse>()
 
 export default function TimelinePage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
-  const [data, setData] = useState<PostListResponse | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [data, setData] = useState<PostListResponse | null>(preloadedTimeline)
+  const [loading, setLoading] = useState(preloadedTimeline === null)
   const [error, setError] = useState<string | null>(null)
   const [retryCount, setRetryCount] = useState(0)
   const [uploading, setUploading] = useState(false)
@@ -55,6 +59,14 @@ export default function TimelinePage() {
     [setSearchParams],
   )
 
+  const siteTitle = useSiteStore((s) => s.config?.title)
+
+  useEffect(() => {
+    if (siteTitle !== undefined && siteTitle !== '') {
+      document.title = siteTitle
+    }
+  }, [siteTitle])
+
   useEffect(() => {
     const p = Number(searchParams.get('page') ?? '1')
     const labels = searchParams.get('labels')?.split(',').filter(Boolean) ?? []
@@ -64,6 +76,12 @@ export default function TimelinePage() {
     const author = searchParams.get('author') ?? ''
     const fromDate = searchParams.get('from') ?? ''
     const toDate = searchParams.get('to') ?? ''
+
+    // Skip fetch if we have preloaded data for the default view (page 1, no filters)
+    if (preloadedTimeline !== null && p === 1 && labels.length === 0 && !author && !fromDate && !toDate) {
+      preloadedTimeline = null  // one-shot: clear so future renders fetch normally
+      return
+    }
 
     void (async () => {
       setLoading(true)
