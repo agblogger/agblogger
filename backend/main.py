@@ -9,7 +9,7 @@ import posixpath
 import subprocess
 import sys
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import yaml
 from fastapi import FastAPI, Request
@@ -18,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
@@ -940,6 +940,336 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         enriched = render_seo_html(base_html, ctx)
         return HTMLResponse(enriched)
+
+    @app.get("/", include_in_schema=False, response_model=None)
+    async def homepage_route(request: Request) -> HTMLResponse:
+        from backend.models.post import PostCache
+        from backend.services.seo_service import (
+            SeoContext,
+            render_post_list_html,
+            render_seo_html,
+            strip_html_tags,
+            website_ld,
+        )
+        from backend.utils.datetime import format_iso
+
+        base_html = await _get_base_html(request)
+        if base_html is None:
+            return HTMLResponse("<html><body>Not found</body></html>", status_code=404)
+
+        content_manager: ContentManager = request.app.state.content_manager
+        site_title = content_manager.site_config.title
+        site_desc = content_manager.site_config.description
+        base_url = str(request.base_url).rstrip("/")
+
+        posts_data: list[dict[str, str]] = []
+        preload_posts: list[dict[str, Any]] = []
+        total = 0
+        try:
+            session_factory = request.app.state.session_factory
+            async with session_factory() as session:
+                count_stmt = (
+                    select(func.count()).select_from(PostCache).where(PostCache.is_draft == False)  # noqa: E712
+                )
+                total = (await session.execute(count_stmt)).scalar_one()
+
+                stmt = (
+                    select(PostCache)
+                    .where(PostCache.is_draft == False)  # noqa: E712
+                    .order_by(PostCache.created_at.desc())
+                    .limit(10)
+                )
+                result = await session.execute(stmt)
+                posts = result.scalars().all()
+
+                for p in posts:
+                    await session.refresh(p, ["labels"])
+                    excerpt = strip_html_tags(p.rendered_excerpt) if p.rendered_excerpt else ""
+                    slug = p.file_path.split("/")[1] if "/" in p.file_path else p.file_path
+                    posts_data.append(
+                        {
+                            "title": p.title,
+                            "slug": slug,
+                            "date": p.created_at.strftime("%B %-d, %Y"),
+                            "excerpt": excerpt,
+                        }
+                    )
+                    preload_posts.append(
+                        {
+                            "id": p.id,
+                            "file_path": p.file_path,
+                            "title": p.title,
+                            "subtitle": p.subtitle,
+                            "author": p.author,
+                            "created_at": format_iso(p.created_at),
+                            "modified_at": format_iso(p.modified_at),
+                            "is_draft": p.is_draft,
+                            "rendered_excerpt": p.rendered_excerpt,
+                            "labels": [pl.label_id for pl in p.labels],
+                        }
+                    )
+        except SQLAlchemyError:
+            logger.exception("DB error loading posts for homepage SEO")
+            return HTMLResponse(base_html)
+
+        rendered_body = render_post_list_html(posts_data, heading=site_title)
+
+        preload_data: dict[str, Any] = {
+            "posts": preload_posts,
+            "total": total,
+            "page": 1,
+            "per_page": 10,
+            "total_pages": max(1, (total + 9) // 10),
+        }
+
+        ctx = SeoContext(
+            title=site_title,
+            description=site_desc,
+            canonical_url=base_url + "/",
+            site_name=site_title,
+            json_ld=website_ld(name=site_title, description=site_desc, url=base_url + "/"),
+            rendered_body=rendered_body,
+            preload_data=preload_data,
+        )
+
+        return HTMLResponse(render_seo_html(base_html, ctx))
+
+    @app.get("/page/{page_id}", include_in_schema=False, response_model=None)
+    async def page_route(page_id: str, request: Request) -> HTMLResponse:
+        import html as html_mod
+
+        from backend.services.page_service import get_page
+        from backend.services.seo_service import (
+            SeoContext,
+            render_seo_html,
+            strip_html_tags,
+            webpage_ld,
+        )
+
+        base_html = await _get_base_html(request)
+        if base_html is None:
+            return HTMLResponse("<html><body>Not found</body></html>", status_code=404)
+
+        content_manager: ContentManager = request.app.state.content_manager
+        site_name = content_manager.site_config.title
+        site_desc = content_manager.site_config.description
+        base_url = str(request.base_url).rstrip("/")
+
+        try:
+            page = await get_page(content_manager, page_id)
+        except Exception:
+            logger.exception("Error loading page for SEO: %s", page_id)
+            return HTMLResponse(base_html)
+
+        if page is None:
+            return HTMLResponse(base_html)
+
+        description = strip_html_tags(page.rendered_html)[:200] if page.rendered_html else site_desc
+        canonical = f"{base_url}/page/{page_id}"
+
+        rendered_body = None
+        if page.rendered_html:
+            rendered_body = (
+                f"<article><h1>{html_mod.escape(page.title)}</h1>{page.rendered_html}</article>"
+            )
+
+        preload_data = {
+            "id": page.id,
+            "title": page.title,
+            "rendered_html": page.rendered_html,
+        }
+
+        ctx = SeoContext(
+            title=page.title,
+            description=description,
+            canonical_url=canonical,
+            site_name=site_name,
+            json_ld=webpage_ld(name=page.title, description=description, url=canonical),
+            rendered_body=rendered_body,
+            preload_data=preload_data,
+        )
+
+        return HTMLResponse(render_seo_html(base_html, ctx))
+
+    @app.get("/labels", include_in_schema=False, response_model=None)
+    async def labels_index_route(request: Request) -> HTMLResponse:
+        from backend.services.seo_service import SeoContext, render_seo_html
+
+        base_html = await _get_base_html(request)
+        if base_html is None:
+            return HTMLResponse("<html><body>Not found</body></html>", status_code=404)
+
+        content_manager: ContentManager = request.app.state.content_manager
+        site_name = content_manager.site_config.title
+        base_url = str(request.base_url).rstrip("/")
+
+        ctx = SeoContext(
+            title=f"Labels \u2014 {site_name}",
+            description=f"Labels \u2014 {site_name}",
+            canonical_url=f"{base_url}/labels",
+            site_name=site_name,
+        )
+
+        return HTMLResponse(render_seo_html(base_html, ctx))
+
+    @app.get("/labels/new", include_in_schema=False, response_model=None)
+    async def labels_new_route(request: Request) -> HTMLResponse:
+        base_html = await _get_base_html(request)
+        return HTMLResponse(base_html or "<html><body>Not found</body></html>")
+
+    @app.get("/labels/{label_id}/settings", include_in_schema=False, response_model=None)
+    async def label_settings_route(label_id: str, request: Request) -> HTMLResponse:
+        base_html = await _get_base_html(request)
+        return HTMLResponse(base_html or "<html><body>Not found</body></html>")
+
+    @app.get("/labels/{label_id}", include_in_schema=False, response_model=None)
+    async def label_detail_route(label_id: str, request: Request) -> HTMLResponse:
+        import json as json_mod
+
+        from backend.models.label import LabelCache, PostLabelCache
+        from backend.models.post import PostCache
+        from backend.services.seo_service import (
+            SeoContext,
+            render_post_list_html,
+            render_seo_html,
+            strip_html_tags,
+        )
+        from backend.utils.datetime import format_iso
+
+        base_html = await _get_base_html(request)
+        if base_html is None:
+            return HTMLResponse("<html><body>Not found</body></html>", status_code=404)
+
+        content_manager: ContentManager = request.app.state.content_manager
+        site_name = content_manager.site_config.title
+        base_url = str(request.base_url).rstrip("/")
+
+        label_row: tuple[str, str, bool] | None = None
+        label_parent_ids: list[str] = []
+        label_child_ids: list[str] = []
+        posts_data_ld: list[dict[str, str]] = []
+        preload_posts_ld: list[dict[str, Any]] = []
+        total_ld = 0
+        try:
+            session_factory = request.app.state.session_factory
+            async with session_factory() as session:
+                label_stmt = select(LabelCache).where(LabelCache.id == label_id)
+                label_obj = (await session.execute(label_stmt)).scalar_one_or_none()
+
+                if label_obj is not None:
+                    await session.refresh(label_obj, ["parent_edges", "child_edges"])
+                    label_row = (label_obj.id, label_obj.names, label_obj.is_implicit)
+                    label_parent_ids = [e.parent_id for e in label_obj.parent_edges]
+                    label_child_ids = [e.label_id for e in label_obj.child_edges]
+
+                    count_stmt = (
+                        select(func.count())
+                        .select_from(PostCache)
+                        .join(PostLabelCache, PostCache.id == PostLabelCache.post_id)
+                        .where(PostLabelCache.label_id == label_id)
+                        .where(PostCache.is_draft == False)  # noqa: E712
+                    )
+                    total_ld = (await session.execute(count_stmt)).scalar_one()
+
+                    posts_stmt = (
+                        select(PostCache)
+                        .join(PostLabelCache, PostCache.id == PostLabelCache.post_id)
+                        .where(PostLabelCache.label_id == label_id)
+                        .where(PostCache.is_draft == False)  # noqa: E712
+                        .order_by(PostCache.created_at.desc())
+                        .limit(20)
+                    )
+                    result = await session.execute(posts_stmt)
+                    posts = result.scalars().all()
+
+                    for p in posts:
+                        await session.refresh(p, ["labels"])
+                        excerpt = strip_html_tags(p.rendered_excerpt) if p.rendered_excerpt else ""
+                        slug = p.file_path.split("/")[1] if "/" in p.file_path else p.file_path
+                        posts_data_ld.append(
+                            {
+                                "title": p.title,
+                                "slug": slug,
+                                "date": p.created_at.strftime("%B %-d, %Y"),
+                                "excerpt": excerpt,
+                            }
+                        )
+                        preload_posts_ld.append(
+                            {
+                                "id": p.id,
+                                "file_path": p.file_path,
+                                "title": p.title,
+                                "subtitle": p.subtitle,
+                                "author": p.author,
+                                "created_at": format_iso(p.created_at),
+                                "modified_at": format_iso(p.modified_at),
+                                "is_draft": p.is_draft,
+                                "rendered_excerpt": p.rendered_excerpt,
+                                "labels": [pl.label_id for pl in p.labels],
+                            }
+                        )
+        except SQLAlchemyError:
+            logger.exception("DB error loading label for SEO: %s", label_id)
+            return HTMLResponse(base_html)
+
+        if label_row is None:
+            return HTMLResponse(base_html)
+
+        label_id_val, label_names_raw, label_is_implicit = label_row
+        label_names = json_mod.loads(label_names_raw) if label_names_raw else [label_id]
+        display_name = label_names[0] if label_names else label_id
+
+        rendered_body = render_post_list_html(posts_data_ld, heading=display_name)
+
+        preload_data = {
+            "label": {
+                "id": label_id_val,
+                "names": label_names,
+                "is_implicit": label_is_implicit,
+                "parents": label_parent_ids,
+                "children": label_child_ids,
+                "post_count": total_ld,
+            },
+            "posts": {
+                "posts": preload_posts_ld,
+                "total": total_ld,
+                "page": 1,
+                "per_page": 20,
+                "total_pages": max(1, (total_ld + 19) // 20),
+            },
+        }
+
+        ctx = SeoContext(
+            title=f"{display_name} \u2014 {site_name}",
+            description=f"Posts labeled {display_name} \u2014 {site_name}",
+            canonical_url=f"{base_url}/labels/{label_id}",
+            site_name=site_name,
+            rendered_body=rendered_body,
+            preload_data=preload_data,
+        )
+
+        return HTMLResponse(render_seo_html(base_html, ctx))
+
+    @app.get("/search", include_in_schema=False, response_model=None)
+    async def search_route(request: Request) -> HTMLResponse:
+        from backend.services.seo_service import SeoContext, render_seo_html
+
+        base_html = await _get_base_html(request)
+        if base_html is None:
+            return HTMLResponse("<html><body>Not found</body></html>", status_code=404)
+
+        content_manager: ContentManager = request.app.state.content_manager
+        site_name = content_manager.site_config.title
+        base_url = str(request.base_url).rstrip("/")
+
+        ctx = SeoContext(
+            title=f"Search \u2014 {site_name}",
+            description=f"Search \u2014 {site_name}",
+            canonical_url=f"{base_url}/search",
+            site_name=site_name,
+        )
+
+        return HTMLResponse(render_seo_html(base_html, ctx))
 
     # Serve frontend static files in production
     frontend_dir = settings.frontend_dir
