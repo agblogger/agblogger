@@ -1,9 +1,9 @@
 import useSWR from 'swr'
 import { fetchLabel, fetchLabelPosts } from '@/api/labels'
 import type { LabelResponse, PostListResponse } from '@/api/client'
+import { useScopedPreloadedFallback } from '@/hooks/useScopedPreloadedFallback'
 import { useAuthStore } from '@/stores/authStore'
 import { readPreloaded } from '@/utils/preload'
-import { useScopedPreloadedFallback } from '@/hooks/useScopedPreloadedFallback'
 
 interface LabelPostsData {
   label: LabelResponse

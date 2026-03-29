@@ -36,5 +36,5 @@ These remain derived views of the same content system, not separate content stor
 
 - `backend/api/posts.py`, `backend/api/pages.py`, and related API modules define the entry points for reads and mutations.
 - `backend/filesystem/content_manager.py` owns the canonical on-disk content operations.
-- `backend/services/cache_service.py` and `backend/services/post_service.py` expose the main derived read models.
+- `backend/services/cache_service.py`, `backend/services/post_service.py`, and `backend/services/page_service.py` expose the main derived read models.
 - `backend/pandoc/renderer.py` and related rendering code handle the shared HTML rendering path.

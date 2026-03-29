@@ -671,6 +671,7 @@ class TestTablePartitionInvariants:
             "label_parents_cache",
             "post_labels_cache",
             "sync_manifest",
+            "pages_cache",
         }
         assert set(CacheBase.metadata.tables.keys()) == expected
 

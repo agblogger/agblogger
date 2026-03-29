@@ -174,7 +174,7 @@ class TestIssue1CommitFailureLogsError:
 class TestIssue2ConfigWriteHandlesOSError:
     """create_page should handle OSError from config write, not bare Exception."""
 
-    def test_config_write_oserror_propagates(self, tmp_path: Path) -> None:
+    async def test_config_write_oserror_propagates(self, tmp_path: Path) -> None:
         """If config write fails with OSError, it should propagate as OSError."""
         from backend.filesystem.content_manager import ContentManager
         from backend.services.admin_service import create_page
@@ -189,6 +189,7 @@ class TestIssue2ConfigWriteHandlesOSError:
             '[[pages]]\nid = "timeline"\ntitle = "Posts"\n'
         )
         cm = ContentManager(content_dir=content_dir)
+        session_factory = AsyncMock()
 
         with (
             patch(
@@ -197,7 +198,7 @@ class TestIssue2ConfigWriteHandlesOSError:
             ),
             pytest.raises(OSError, match="disk full"),
         ):
-            create_page(cm, page_id="test-page", title="Test Page")
+            await create_page(session_factory, cm, page_id="test-page", title="Test Page")
 
 
 # ── Issue 3: sync_status returns warnings on git failure ──

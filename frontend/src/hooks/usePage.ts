@@ -1,8 +1,8 @@
 import useSWR from 'swr'
 import type { SWRConfiguration } from 'swr'
 import type { PageResponse } from '@/api/client'
-import { readPreloaded } from '@/utils/preload'
 import { useScopedPreloadedFallback } from '@/hooks/useScopedPreloadedFallback'
+import { readPreloaded } from '@/utils/preload'
 
 /** Uses the global fetcher from SWRConfig. Key: pages/${pageId} */
 export function usePage(pageId: string | null) {

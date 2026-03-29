@@ -55,7 +55,7 @@ This favors correctness and consistency over high write concurrency.
 The database uses two separate declarative bases to distinguish durable state from derived cache state:
 
 - **DurableBase** tables (admin users, admin refresh tokens, social accounts, cross-posts, analytics settings) are managed by Alembic migrations. Schema changes are applied programmatically during application startup via `alembic upgrade head`. These tables persist across restarts and upgrades.
-- **CacheBase** tables (posts cache, labels cache, label associations, sync manifest) are dropped and recreated on every startup. Their content is rebuilt from the filesystem.
+- **CacheBase** tables (posts cache, pages cache, labels cache, label associations, sync manifest) are dropped and recreated on every startup. Their content is rebuilt from the filesystem.
 
 This separation means adding a column to a durable table requires an Alembic migration, while cache table schema changes take effect automatically on the next restart.
 
@@ -79,6 +79,12 @@ Public browsable routes are served by dedicated handlers registered before the S
 
 The backend also serves a dynamic sitemap, robots.txt, and an RSS feed.
 
+Top-level page reads split by page type:
+
+- file-backed custom pages are served from the derived pages cache
+- custom pages without a backing markdown file remain valid and resolve as empty-body pages from site config
+- built-in navigation pages such as timeline and labels are handled outside the cached page-content path
+
 ## Failure Handling
 
 The backend is designed around graceful degradation:
@@ -94,8 +100,8 @@ The goal is to preserve content, preserve service availability where possible, a
 
 - `backend/main.py` is the main runtime entry point.
 - `backend/api/` contains the HTTP-facing modules grouped by feature area.
-- `backend/services/` contains the orchestration and business-logic layer, including services for page retrieval and rendering, posts CRUD operations, authentication, cross-posting, sync, analytics, admin panel business logic, and SEO enrichment (`seo_service.py`).
-- `backend/models/` contains SQLAlchemy ORM models for both durable tables (admin users, admin refresh tokens, social accounts, cross-posts, analytics settings) and cache tables (posts, labels, sync manifest).
+- `backend/services/` contains the orchestration and business-logic layer, including services for page retrieval, page cache population, rendering, posts CRUD operations, authentication, cross-posting, sync, analytics, admin panel business logic, and SEO enrichment (`seo_service.py`).
+- `backend/models/` contains SQLAlchemy ORM models for both durable tables (admin users, admin refresh tokens, social accounts, cross-posts, analytics settings) and cache tables (posts, pages, labels, sync manifest).
 - `backend/schemas/` contains Pydantic request/response schemas that define the API contracts.
 - `backend/filesystem/` contains the canonical content model.
 - `backend/pandoc/server.py` manages the long-lived Pandoc server process used by the application.

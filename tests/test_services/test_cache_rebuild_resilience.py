@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from sqlalchemy import select
 
 from backend.filesystem.content_manager import ContentManager
 from backend.models.label import LabelCache, LabelParentCache
+from backend.models.page import PageCache
 from backend.models.post import PostCache
 from backend.services.cache_service import ensure_tables, rebuild_cache
 
@@ -155,6 +156,91 @@ class TestPandocFailureResilience:
         assert len(warnings) == 2
 
 
+class TestPageCacheRebuild:
+    """Test that rebuild_cache populates PageCache for file-backed pages."""
+
+    async def test_rebuild_caches_file_backed_pages(
+        self,
+        db_session: AsyncSession,
+        db_session_factory: async_sessionmaker[AsyncSession],
+        tmp_path: Path,
+    ) -> None:
+        content_dir = tmp_path / "page_test_content"
+        content_dir.mkdir()
+        (content_dir / "posts").mkdir()
+        (content_dir / "index.toml").write_text(
+            '[site]\ntitle = "T"\ndescription = "D"\ntimezone = "UTC"\n\n'
+            '[[pages]]\nid = "about"\ntitle = "About"\nfile = "about.md"\n\n'
+            '[[pages]]\nid = "timeline"\ntitle = "Posts"\n'
+        )
+        (content_dir / "labels.toml").write_text("[labels]\n")
+        (content_dir / "about.md").write_text("# About\n\nHello.\n")
+        cm = ContentManager(content_dir=content_dir)
+
+        await ensure_tables(db_session)
+
+        with patch(
+            "backend.services.cache_service.render_markdown",
+            new_callable=AsyncMock,
+            return_value="<h1>About</h1>\n<p>Hello.</p>",
+        ):
+            await rebuild_cache(db_session_factory, cm)
+
+        async with db_session_factory() as session:
+            pages = (await session.execute(select(PageCache))).scalars().all()
+            assert len(pages) == 1
+            assert pages[0].page_id == "about"
+            assert pages[0].title == "About"
+            assert "<h1>About</h1>" in pages[0].rendered_html
+
+    async def test_rebuild_skips_pages_without_file(
+        self,
+        db_session: AsyncSession,
+        db_session_factory: async_sessionmaker[AsyncSession],
+        tmp_path: Path,
+    ) -> None:
+        content_dir = tmp_path / "page_test_content"
+        content_dir.mkdir()
+        (content_dir / "posts").mkdir()
+        (content_dir / "index.toml").write_text(
+            '[site]\ntitle = "T"\ndescription = "D"\ntimezone = "UTC"\n\n'
+            '[[pages]]\nid = "timeline"\ntitle = "Posts"\n'
+        )
+        (content_dir / "labels.toml").write_text("[labels]\n")
+        cm = ContentManager(content_dir=content_dir)
+
+        await ensure_tables(db_session)
+        await rebuild_cache(db_session_factory, cm)
+
+        async with db_session_factory() as session:
+            pages = (await session.execute(select(PageCache))).scalars().all()
+            assert len(pages) == 0
+
+    async def test_rebuild_skips_page_with_missing_file(
+        self,
+        db_session: AsyncSession,
+        db_session_factory: async_sessionmaker[AsyncSession],
+        tmp_path: Path,
+    ) -> None:
+        content_dir = tmp_path / "page_test_content"
+        content_dir.mkdir()
+        (content_dir / "posts").mkdir()
+        (content_dir / "index.toml").write_text(
+            '[site]\ntitle = "T"\ndescription = "D"\ntimezone = "UTC"\n\n'
+            '[[pages]]\nid = "about"\ntitle = "About"\nfile = "about.md"\n'
+        )
+        (content_dir / "labels.toml").write_text("[labels]\n")
+        # about.md intentionally not created
+        cm = ContentManager(content_dir=content_dir)
+
+        await ensure_tables(db_session)
+        await rebuild_cache(db_session_factory, cm)
+
+        async with db_session_factory() as session:
+            pages = (await session.execute(select(PageCache))).scalars().all()
+            assert len(pages) == 0
+
+
 class TestRebuildCacheSessionIsolation:
     """rebuild_cache must use its own session to avoid committing the caller's transaction."""
 
@@ -194,3 +280,44 @@ class TestRebuildCacheSessionIsolation:
         assert call_count == 1, (
             f"Expected rebuild_cache to create exactly 1 session, got {call_count}"
         )
+
+
+class TestPagePandocFailureResilience:
+    """Pandoc failure for a page should not crash rebuild_cache."""
+
+    async def test_pandoc_failure_skips_page_without_crashing(
+        self,
+        db_session: AsyncSession,
+        db_session_factory: async_sessionmaker[AsyncSession],
+        tmp_path: Path,
+    ) -> None:
+        content_dir = tmp_path / "page_pandoc_test"
+        content_dir.mkdir()
+        (content_dir / "posts").mkdir()
+        (content_dir / "index.toml").write_text(
+            '[site]\ntitle = "T"\ndescription = "D"\ntimezone = "UTC"\n\n'
+            '[[pages]]\nid = "good"\ntitle = "Good"\nfile = "good.md"\n\n'
+            '[[pages]]\nid = "bad"\ntitle = "Bad"\nfile = "bad.md"\n'
+        )
+        (content_dir / "labels.toml").write_text("[labels]\n")
+        (content_dir / "good.md").write_text("# Good\n\nGood page.\n")
+        (content_dir / "bad.md").write_text("# Bad\n\nBad page.\n")
+        cm = ContentManager(content_dir=content_dir)
+
+        await ensure_tables(db_session)
+
+        async def failing_render(markdown: str) -> str:
+            if "Bad page" in markdown:
+                raise RuntimeError("Pandoc failed")
+            return f"<p>{markdown}</p>"
+
+        with patch(
+            "backend.services.cache_service.render_markdown",
+            side_effect=failing_render,
+        ):
+            await rebuild_cache(db_session_factory, cm)
+
+        async with db_session_factory() as session:
+            pages = (await session.execute(select(PageCache))).scalars().all()
+            assert len(pages) == 1
+            assert pages[0].page_id == "good"

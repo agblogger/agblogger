@@ -2,9 +2,9 @@ import useSWR from 'swr'
 import { fetchPost } from '@/api/posts'
 import { fetchViewCount } from '@/api/analytics'
 import type { PostDetail, ViewCountResponse } from '@/api/client'
+import { useScopedPreloadedFallback } from '@/hooks/useScopedPreloadedFallback'
 import { useAuthStore } from '@/stores/authStore'
 import { readPreloaded } from '@/utils/preload'
-import { useScopedPreloadedFallback } from '@/hooks/useScopedPreloadedFallback'
 
 export function usePost(slug: string | null) {
   const userId = useAuthStore((state) => state.user?.id ?? null)

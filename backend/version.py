@@ -12,7 +12,10 @@ def _resolve_version(base_dir: Path) -> str:
     version = (base_dir / "VERSION").read_text(encoding="utf-8").strip()
     build_path = base_dir / "BUILD"
     if build_path.exists():
-        commit = build_path.read_text(encoding="utf-8").strip()
+        try:
+            commit = build_path.read_text(encoding="utf-8").strip()
+        except OSError, UnicodeDecodeError:
+            return version
         if commit:
             return f"{version}+{commit}"
     return version

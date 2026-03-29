@@ -13,8 +13,9 @@ def _base_dir() -> Path:
     In a PyInstaller bundle, data files are extracted to ``sys._MEIPASS``.
     Otherwise, resolve relative to this file (cli/ -> repo root).
     """
-    if getattr(sys, "_MEIPASS", None):
-        return Path(sys._MEIPASS)  # type: ignore[attr-defined]
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass is not None:
+        return Path(meipass)
     return Path(__file__).resolve().parents[1]
 
 
@@ -22,13 +23,16 @@ def _base_dir() -> Path:
 def get_cli_version() -> str:
     """Return the CLI version string, cached for process lifetime."""
     base = _base_dir()
-    version_path = base / "VERSION"
-    if not version_path.exists():
+    try:
+        version = (base / "VERSION").read_text(encoding="utf-8").strip()
+    except OSError, UnicodeDecodeError:
         return "unknown"
-    version = version_path.read_text(encoding="utf-8").strip()
     build_path = base / "BUILD"
     if build_path.exists():
-        commit = build_path.read_text(encoding="utf-8").strip()
+        try:
+            commit = build_path.read_text(encoding="utf-8").strip()
+        except OSError, UnicodeDecodeError:
+            return version
         if commit:
             return f"{version}+{commit}"
     return version

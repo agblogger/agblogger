@@ -7,7 +7,7 @@ import re
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from backend.api.deps import (
     AsyncWriteLock,
@@ -15,6 +15,7 @@ from backend.api.deps import (
     get_content_write_lock,
     get_git_service,
     get_session,
+    get_session_factory,
     require_admin,
     set_git_warning,
 )
@@ -118,12 +119,15 @@ async def create_page_endpoint(
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
     git_service: Annotated[GitService, Depends(get_git_service)],
     content_write_lock: Annotated[AsyncWriteLock, Depends(get_content_write_lock)],
+    session_factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
     _user: Annotated[AdminUser, Depends(require_admin)],
 ) -> AdminPageConfig:
     """Create a new page."""
     async with content_write_lock:
         try:
-            page = create_page(content_manager, page_id=body.id, title=body.title)
+            page = await create_page(
+                session_factory, content_manager, page_id=body.id, title=body.title
+            )
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         except OSError as exc:
@@ -169,6 +173,7 @@ async def update_page_endpoint(
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
     git_service: Annotated[GitService, Depends(get_git_service)],
     content_write_lock: Annotated[AsyncWriteLock, Depends(get_content_write_lock)],
+    session_factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
     _user: Annotated[AdminUser, Depends(require_admin)],
 ) -> dict[str, str]:
     """Update a page's title and/or content."""
@@ -176,7 +181,9 @@ async def update_page_endpoint(
         raise HTTPException(status_code=400, detail=_PAGE_ID_ERROR)
     async with content_write_lock:
         try:
-            update_page(content_manager, page_id, title=body.title, content=body.content)
+            await update_page(
+                session_factory, content_manager, page_id, title=body.title, content=body.content
+            )
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except OSError as exc:
@@ -193,6 +200,7 @@ async def delete_page_endpoint(
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
     git_service: Annotated[GitService, Depends(get_git_service)],
     content_write_lock: Annotated[AsyncWriteLock, Depends(get_content_write_lock)],
+    session_factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
     _user: Annotated[AdminUser, Depends(require_admin)],
     delete_file: bool = Query(default=True),
 ) -> None:
@@ -201,7 +209,7 @@ async def delete_page_endpoint(
         raise HTTPException(status_code=400, detail=_PAGE_ID_ERROR)
     async with content_write_lock:
         try:
-            delete_page(content_manager, page_id, delete_file=delete_file)
+            await delete_page(session_factory, content_manager, page_id, delete_file=delete_file)
         except BuiltinPageError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except ValueError as exc:

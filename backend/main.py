@@ -1059,12 +1059,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return HTMLResponse("<html><body>Not found</body></html>", status_code=404)
 
         content_manager: ContentManager = request.app.state.content_manager
+        session_factory = request.app.state.session_factory
         site_name = content_manager.site_config.title
         site_desc = content_manager.site_config.description
         base_url = str(request.base_url).rstrip("/")
 
         try:
-            page = await get_page(content_manager, page_id)
+            page = await get_page(session_factory, content_manager, page_id)
         except SQLAlchemyError, OSError, RuntimeError:
             logger.exception("Error loading page for SEO: %s", page_id)
             return HTMLResponse(base_html)

@@ -5,14 +5,20 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from backend.exceptions import BuiltinPageError
+from sqlalchemy import delete as sa_delete
+
+from backend.exceptions import BuiltinPageError, InternalServerError
 from backend.filesystem.toml_manager import (
     PageConfig,
     SiteConfig,
     write_site_config,
 )
+from backend.models.page import PageCache
+from backend.services.cache_service import upsert_page_cache
 
 if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
     from backend.filesystem.content_manager import ContentManager
 
 BUILTIN_PAGE_IDS = {"timeline", "labels"}
@@ -72,7 +78,81 @@ def get_admin_pages(cm: ContentManager) -> list[dict[str, Any]]:
     return result
 
 
-def create_page(cm: ContentManager, *, page_id: str, title: str) -> PageConfig:
+async def _refresh_page_cache(
+    session_factory: async_sessionmaker[AsyncSession],
+    cm: ContentManager,
+    *,
+    page_id: str,
+    title: str,
+) -> None:
+    """Refresh the derived cache row for a file-backed page."""
+    raw = cm.read_page(page_id)
+    if raw is None:
+        msg = f"Failed to read page {page_id} for cache refresh"
+        raise InternalServerError(msg)
+
+    async with session_factory() as session:
+        cache_updated = await upsert_page_cache(session, page_id, title, raw)
+        if not cache_updated:
+            msg = f"Failed to render page {page_id} for cache refresh"
+            raise InternalServerError(msg)
+        await session.commit()
+
+
+async def _update_page_cache_title(
+    session_factory: async_sessionmaker[AsyncSession],
+    *,
+    page_id: str,
+    title: str,
+) -> None:
+    """Update the cached page title without re-rendering markdown."""
+    async with session_factory() as session:
+        row = await session.get(PageCache, page_id)
+        if row is None:
+            logger.warning("Page %s title updated but cache row is missing", page_id)
+            return
+        row.title = title
+        await session.commit()
+
+
+def _rollback_page_title(
+    cm: ContentManager,
+    *,
+    cfg: SiteConfig,
+    current_pages: list[PageConfig],
+    page_id: str,
+    original_title: str,
+    failure_context: str,
+) -> None:
+    """Restore the original title in site config after a failed update."""
+    rollback_pages = [
+        PageConfig(
+            id=p.id,
+            title=original_title if p.id == page_id else p.title,
+            file=p.file,
+        )
+        for p in current_pages
+    ]
+    rollback_cfg = cfg.with_pages(rollback_pages)
+    try:
+        write_site_config(cm.content_dir, rollback_cfg)
+        cm.reload_config()
+    except OSError as rollback_exc:
+        logger.error(
+            "Failed to rollback title change for page %s %s: %s",
+            page_id,
+            failure_context,
+            rollback_exc,
+        )
+
+
+async def create_page(
+    session_factory: async_sessionmaker[AsyncSession],
+    cm: ContentManager,
+    *,
+    page_id: str,
+    title: str,
+) -> PageConfig:
     """Create a new page entry and .md file."""
     cfg = cm.site_config
     if page_id in BUILTIN_PAGE_IDS:
@@ -99,10 +179,36 @@ def create_page(cm: ContentManager, *, page_id: str, title: str) -> PageConfig:
             logger.warning("Failed to clean up orphan page file %s: %s", md_path, cleanup_exc)
         raise
     cm.reload_config()
+
+    try:
+        await _refresh_page_cache(session_factory, cm, page_id=page_id, title=title)
+    except Exception as exc:
+        logger.error("Failed to refresh page cache for page %s", page_id, exc_info=exc)
+        try:
+            write_site_config(cm.content_dir, cfg)
+            cm.reload_config()
+        except OSError as rollback_exc:
+            logger.error(
+                "Failed to rollback site config after cache refresh failure for page %s: %s",
+                page_id,
+                rollback_exc,
+            )
+        else:
+            try:
+                md_path.unlink(missing_ok=True)
+            except OSError as cleanup_exc:
+                logger.warning(
+                    "Failed to clean up page file %s after cache refresh failure: %s",
+                    md_path,
+                    cleanup_exc,
+                )
+        raise InternalServerError("Failed to refresh page cache") from exc
+
     return new_page
 
 
-def update_page(
+async def update_page(
+    session_factory: async_sessionmaker[AsyncSession],
     cm: ContentManager,
     page_id: str,
     *,
@@ -118,6 +224,21 @@ def update_page(
 
     original_title = page.title
 
+    page_path = None
+    original_content = None
+    if page.file is not None and content is not None:
+        try:
+            page_path = cm._validate_path(page.file)
+        except ValueError as exc:
+            msg = f"Page '{page_id}' has an invalid file path"
+            raise ValueError(msg) from exc
+        try:
+            original_content = page_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            logger.error("Failed to read existing page %s before update: %s", page_id, exc)
+            msg = f"Failed to read page {page_id} before update"
+            raise InternalServerError(msg) from exc
+
     if title is not None:
         pages = [
             PageConfig(id=p.id, title=title if p.id == page_id else p.title, file=p.file)
@@ -128,38 +249,69 @@ def update_page(
         cm.reload_config()
 
     if content is not None and page.file:
-        try:
-            page_path = cm._validate_path(page.file)
-        except ValueError as exc:
+        if page_path is None:
             msg = f"Page '{page_id}' has an invalid file path"
-            raise ValueError(msg) from exc
+            raise ValueError(msg)
         try:
             page_path.write_text(content, encoding="utf-8")
         except OSError:
             if title is not None:
-                # Roll back the title change in config
-                rollback_pages = [
-                    PageConfig(
-                        id=p.id,
-                        title=original_title if p.id == page_id else p.title,
-                        file=p.file,
-                    )
-                    for p in cm.site_config.pages
-                ]
-                rollback_cfg = cfg.with_pages(rollback_pages)
+                _rollback_page_title(
+                    cm,
+                    cfg=cfg,
+                    current_pages=cm.site_config.pages,
+                    page_id=page_id,
+                    original_title=original_title,
+                    failure_context="after page write failure",
+                )
+            raise
+
+    updated_page = next((p for p in cm.site_config.pages if p.id == page_id), None)
+    if updated_page is not None and updated_page.file is not None:
+        try:
+            if content is not None:
+                await _refresh_page_cache(
+                    session_factory,
+                    cm,
+                    page_id=page_id,
+                    title=updated_page.title,
+                )
+            elif title is not None:
+                await _update_page_cache_title(
+                    session_factory,
+                    page_id=page_id,
+                    title=updated_page.title,
+                )
+        except Exception as exc:
+            logger.error("Failed to refresh page cache for page %s", page_id, exc_info=exc)
+            if content is not None and page_path is not None and original_content is not None:
                 try:
-                    write_site_config(cm.content_dir, rollback_cfg)
-                    cm.reload_config()
+                    page_path.write_text(original_content, encoding="utf-8")
                 except OSError as rollback_exc:
                     logger.error(
-                        "Failed to rollback title change for page %s: %s",
+                        "Failed to rollback page content for page %s: %s",
                         page_id,
                         rollback_exc,
                     )
-            raise
+            if title is not None:
+                _rollback_page_title(
+                    cm,
+                    cfg=cfg,
+                    current_pages=cm.site_config.pages,
+                    page_id=page_id,
+                    original_title=original_title,
+                    failure_context="after cache refresh failure",
+                )
+            raise InternalServerError("Failed to refresh page cache") from exc
 
 
-def delete_page(cm: ContentManager, page_id: str, *, delete_file: bool) -> None:
+async def delete_page(
+    session_factory: async_sessionmaker[AsyncSession],
+    cm: ContentManager,
+    page_id: str,
+    *,
+    delete_file: bool,
+) -> None:
     """Remove a page from config and optionally delete the .md file."""
     if page_id in BUILTIN_PAGE_IDS:
         msg = f"Cannot delete built-in page '{page_id}'"
@@ -196,6 +348,18 @@ def delete_page(cm: ContentManager, page_id: str, *, delete_file: bool) -> None:
                 "Failed to delete page file %s (config already updated): %s",
                 resolved_file_path,
                 exc,
+            )
+
+    if delete_file or page.file is None:
+        try:
+            async with session_factory() as session:
+                await session.execute(sa_delete(PageCache).where(PageCache.page_id == page_id))
+                await session.commit()
+        except Exception:
+            logger.warning(
+                "Failed to remove cache for page %s; will clean on rebuild",
+                page_id,
+                exc_info=True,
             )
 
 

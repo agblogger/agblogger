@@ -7,10 +7,12 @@ import logging
 from typing import TYPE_CHECKING
 
 from sqlalchemy import delete, text
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from backend.filesystem.content_manager import ContentManager, hash_content
 from backend.models.base import CacheBase, DurableBase, cache_non_virtual_tables
 from backend.models.label import LabelCache, LabelParentCache, PostLabelCache
+from backend.models.page import PageCache
 from backend.models.post import FTS_CREATE_SQL, FTS_INSERT_SQL, PostCache
 from backend.pandoc.renderer import render_markdown, render_markdown_excerpt, rewrite_relative_urls
 from backend.services.dag import break_cycles
@@ -20,6 +22,31 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 logger = logging.getLogger(__name__)
+
+
+async def upsert_page_cache(
+    session: AsyncSession,
+    page_id: str,
+    title: str,
+    raw_markdown: str,
+) -> bool:
+    """Render page markdown and upsert the cache row.
+
+    Returns ``True`` when the cache row was refreshed.
+    Returns ``False`` when markdown rendering fails.
+    Database errors still propagate to the caller.
+    """
+    try:
+        rendered = await render_markdown(raw_markdown)
+    except RuntimeError:
+        return False
+    stmt = sqlite_insert(PageCache).values(page_id=page_id, title=title, rendered_html=rendered)
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["page_id"],
+        set_={"title": stmt.excluded.title, "rendered_html": stmt.excluded.rendered_html},
+    )
+    await session.execute(stmt)
+    return True
 
 
 async def rebuild_cache(
@@ -39,6 +66,7 @@ async def rebuild_cache(
         await session.execute(delete(LabelParentCache))
         await session.execute(delete(PostCache))
         await session.execute(delete(LabelCache))
+        await session.execute(delete(PageCache))
 
         # Drop and recreate FTS table
         await session.execute(text("DROP TABLE IF EXISTS posts_fts"))
@@ -80,6 +108,20 @@ async def rebuild_cache(
             edge = LabelParentCache(label_id=label_id, parent_id=parent_id)
             session.add(edge)
 
+        await session.flush()
+
+        # Render and cache file-backed pages
+        for page_cfg in content_manager.site_config.pages:
+            if page_cfg.file is None:
+                continue
+            raw = content_manager.read_page(page_cfg.id)
+            if raw is None:
+                logger.warning("Skipping page %s: file not found", page_cfg.id)
+                continue
+            if not await upsert_page_cache(session, page_cfg.id, page_cfg.title, raw):
+                msg = f"Skipping page {page_cfg.id}: render failed"
+                logger.warning(msg)
+                warnings.append(msg)
         await session.flush()
 
         # Scan and index posts

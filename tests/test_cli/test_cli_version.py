@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 import sys
 from typing import TYPE_CHECKING
+from unittest.mock import patch
 
 from cli.version import get_cli_version
 
@@ -41,6 +42,39 @@ def test_cli_version_no_version_file(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr("cli.version._base_dir", lambda: tmp_path)
     get_cli_version.cache_clear()
     assert get_cli_version() == "unknown"
+    get_cli_version.cache_clear()
+
+
+def test_cli_version_unreadable_version_file(tmp_path: Path, monkeypatch) -> None:
+    """Unreadable VERSION file should return 'unknown'."""
+    (tmp_path / "VERSION").write_text("2.0.0\n")
+    monkeypatch.setattr("cli.version._base_dir", lambda: tmp_path)
+    get_cli_version.cache_clear()
+    with patch.object(
+        type(tmp_path / "VERSION"),
+        "read_text",
+        side_effect=OSError("permission denied"),
+    ):
+        assert get_cli_version() == "unknown"
+    get_cli_version.cache_clear()
+
+
+def test_cli_version_unreadable_build_file(tmp_path: Path, monkeypatch) -> None:
+    """Unreadable BUILD file should fall back to base version."""
+    (tmp_path / "VERSION").write_text("2.0.0\n")
+    build = tmp_path / "BUILD"
+    build.write_text("def5678\n")
+    monkeypatch.setattr("cli.version._base_dir", lambda: tmp_path)
+    get_cli_version.cache_clear()
+    original = type(build).read_text
+
+    def fail_on_build(self, *args, **kwargs):
+        if self.name == "BUILD":
+            raise OSError("disk error")
+        return original(self, *args, **kwargs)
+
+    with patch.object(type(build), "read_text", fail_on_build):
+        assert get_cli_version() == "2.0.0"
     get_cli_version.cache_clear()
 
 
