@@ -787,6 +787,7 @@ async def create_post_endpoint(
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
     git_service: Annotated[GitService, Depends(get_git_service)],
     content_write_lock: Annotated[AsyncWriteLock, Depends(get_content_write_lock)],
+    content_size_tracker: Annotated[ContentSizeTracker, Depends(get_content_size_tracker)],
     user: Annotated[AdminUser, Depends(require_admin)],
 ) -> PostDetail:
     """Create a new post."""
@@ -853,6 +854,11 @@ async def create_post_endpoint(
             await session.rollback()
             raise
 
+        serialized_size = len(serialized.encode("utf-8"))
+        if not content_size_tracker.check(serialized_size):
+            await session.rollback()
+            raise HTTPException(status_code=413, detail="Storage limit reached")
+
         try:
             content_manager.write_post(file_path, post_data)
         except OSError as exc:
@@ -862,6 +868,10 @@ async def create_post_endpoint(
 
         await session.commit()
         await session.refresh(post)
+
+        new_path = content_manager.content_dir / file_path
+        content_size_tracker.adjust(new_path.stat().st_size)
+
         set_git_warning(response, await git_service.try_commit(f"Create post: {file_path}"))
 
         return await _build_post_detail(

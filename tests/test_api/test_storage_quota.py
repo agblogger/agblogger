@@ -158,6 +158,26 @@ class TestSyncQuota:
         assert resp.json()["detail"] == "Storage limit reached"
 
 
+class TestCreatePostQuota:
+    @pytest.mark.asyncio
+    async def test_create_post_exceeding_quota_returns_413(
+        self, client: AsyncClient
+    ) -> None:
+        token = await _login(client)
+        resp = await client.post(
+            "/api/posts",
+            json={
+                "title": "Big Post",
+                "body": "x" * 50_000,
+                "labels": [],
+                "is_draft": False,
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 413
+        assert resp.json()["detail"] == "Storage limit reached"
+
+
 class TestDeleteFreesQuota:
     @pytest.mark.asyncio
     async def test_delete_post_frees_space_for_new_upload(
