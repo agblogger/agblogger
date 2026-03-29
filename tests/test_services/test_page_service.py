@@ -71,14 +71,12 @@ class TestGetPage:
         result = await get_page(session_factory, cm, "nonexistent")
         assert result is None
 
-    async def test_returns_empty_html_for_page_without_file(
+    async def test_returns_none_for_page_without_file(
         self, cm: ContentManager, session_factory: async_sessionmaker[AsyncSession]
     ) -> None:
-        # "timeline" has file=None — frontend-only page returns empty rendered_html
+        # "timeline" has file=None — no cache row, returns None
         result = await get_page(session_factory, cm, "timeline")
-        assert result is not None
-        assert result.rendered_html == ""
-        assert result.id == "timeline"
+        assert result is None
 
     async def test_returns_cached_html(
         self, cm: ContentManager, session_factory: async_sessionmaker[AsyncSession]

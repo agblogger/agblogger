@@ -37,8 +37,7 @@ async def get_page(
         return None
 
     if page_cfg.file is None:
-        # Pages without a backing file are handled entirely by the frontend.
-        return PageResponse(id=page_cfg.id, title=page_cfg.title, rendered_html="")
+        return None
 
     async with session_factory() as session:
         row = (
