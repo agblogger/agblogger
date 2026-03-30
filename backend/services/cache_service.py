@@ -38,7 +38,8 @@ async def upsert_page_cache(
     """
     try:
         rendered = await render_markdown(raw_markdown)
-    except RuntimeError:
+    except RuntimeError as exc:
+        logger.warning("Failed to render markdown for page %s: %s", page_id, exc)
         return False
     stmt = sqlite_insert(PageCache).values(page_id=page_id, title=title, rendered_html=rendered)
     stmt = stmt.on_conflict_do_update(

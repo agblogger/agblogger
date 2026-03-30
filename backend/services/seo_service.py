@@ -84,7 +84,9 @@ def render_seo_html(base_html: str, ctx: SeoContext) -> str:
 
     head_block = "\n".join(head_tags)
 
-    result = re.sub(r"<title>[^<]*</title>", f"<title>{esc_title}</title>", base_html)
+    # Use a lambda so the replacement string is never interpreted for backreferences.
+    title_tag = f"<title>{esc_title}</title>"
+    result = re.sub(r"<title>[^<]*</title>", lambda _: title_tag, base_html)
     result = result.replace("</head>", f"{head_block}\n</head>")
 
     if ctx.rendered_body is not None:

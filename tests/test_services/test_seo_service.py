@@ -176,6 +176,15 @@ class TestRenderSeoHtml:
         assert '<meta charset="utf-8">' in result
         assert "<!DOCTYPE html>" in result
 
+    def test_title_with_backslash_sequences_not_interpreted_as_backreferences(self) -> None:
+        """Regression: re.sub must not interpret \\1 etc. in the replacement."""
+        result = render_seo_html(BASE_HTML, _make_ctx(title=r"Price is \1 off"))
+        assert r"<title>Price is \1 off</title>" in result
+
+    def test_title_with_null_backslash_no_silent_corruption(self) -> None:
+        result = render_seo_html(BASE_HTML, _make_ctx(title=r"Sale \0 today"))
+        assert r"<title>Sale \0 today</title>" in result
+
 
 class TestRenderSeoHtmlJsonLd:
     def test_injects_json_ld_script(self) -> None:

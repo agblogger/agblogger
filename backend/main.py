@@ -453,6 +453,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         content={"detail": "Multipart request body too large"},
                     )
             except ValueError:
+                # int() raises ValueError for non-numeric Content-Length header values
                 logger.warning("Invalid Content-Length header on %s", request.url.path)
 
         received = 0
@@ -821,7 +822,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
     async def _get_base_html(request: Request) -> str | None:
-        """Read the frontend index.html, caching it in app state for the process lifetime."""
+        """Read the frontend index.html, caching it in app state for the process lifetime.
+
+        The cache is never invalidated during the process lifetime;
+        a server restart is required to pick up changes to index.html.
+        """
         base_html: str | None = getattr(request.app.state, "_seo_base_html", None)
         if base_html is None:
             frontend_dir_path: Path = request.app.state.settings.frontend_dir
@@ -829,8 +834,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             try:
                 base_html = await asyncio.to_thread(index_path.read_text, encoding="utf-8")
                 request.app.state._seo_base_html = base_html
-            except OSError:
-                logger.warning("index.html not found at %s", index_path)
+            except OSError as exc:
+                logger.warning("Failed to read index.html at %s: %s", index_path, exc)
                 return None
         return base_html
 
@@ -1043,6 +1048,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             logger.exception("DB error loading posts for homepage SEO")
             return HTMLResponse(base_html)
         except ValueError:
+            # list_posts raises ValueError on invalid date query parameters
             logger.warning("Invalid homepage query for SEO preload", exc_info=True)
             return HTMLResponse(base_html)
 

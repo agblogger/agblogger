@@ -17,9 +17,11 @@ from backend.api.deps import (
     get_git_service,
     get_session,
     get_session_factory,
-    get_settings as get_settings_dep,
     require_admin,
     set_git_warning,
+)
+from backend.api.deps import (
+    get_settings as get_settings_dep,
 )
 from backend.config import Settings
 from backend.exceptions import BuiltinPageError
@@ -87,6 +89,7 @@ async def update_settings(
     git_service: Annotated[GitService, Depends(get_git_service)],
     content_write_lock: Annotated[AsyncWriteLock, Depends(get_content_write_lock)],
     _user: Annotated[AdminUser, Depends(require_admin)],
+    settings: Annotated[Settings, Depends(get_settings_dep)],
 ) -> SiteSettingsResponse:
     """Update site settings."""
     async with content_write_lock:
@@ -105,6 +108,7 @@ async def update_settings(
             title=cfg.title,
             description=cfg.description,
             timezone=cfg.timezone,
+            password_change_disabled=settings.disable_password_change,
         )
 
 
@@ -131,10 +135,10 @@ async def create_page_endpoint(
 ) -> AdminPageConfig:
     """Create a new page."""
     initial_content = body.body if body.body is not None else f"# {body.title}\n"
-    page_size = len(initial_content.encode("utf-8"))
-    if not content_size_tracker.check(page_size):
-        raise HTTPException(status_code=413, detail="Storage limit reached")
     async with content_write_lock:
+        page_size = len(initial_content.encode("utf-8"))
+        if not content_size_tracker.check(page_size):
+            raise HTTPException(status_code=413, detail="Storage limit reached")
         try:
             page = await create_page(
                 session_factory, content_manager, page_id=body.id, title=body.title, body=body.body
@@ -193,21 +197,21 @@ async def update_page_endpoint(
     """Update a page's title and/or content."""
     if not _PAGE_ID_PATTERN.match(page_id):
         raise HTTPException(status_code=400, detail=_PAGE_ID_ERROR)
-    old_content_size = 0
-    if body.content is not None:
-        cfg = content_manager.site_config
-        page_cfg = next((p for p in cfg.pages if p.id == page_id), None)
-        if page_cfg is not None and page_cfg.file is not None:
-            try:
-                page_path = content_manager._validate_path(page_cfg.file)
-                old_content_size = page_path.stat().st_size if page_path.exists() else 0
-            except ValueError, OSError:
-                old_content_size = 0
-        new_size = len(body.content.encode("utf-8"))
-        edit_delta = new_size - old_content_size
-        if edit_delta > 0 and not content_size_tracker.check(edit_delta):
-            raise HTTPException(status_code=413, detail="Storage limit reached")
     async with content_write_lock:
+        old_content_size = 0
+        if body.content is not None:
+            cfg = content_manager.site_config
+            page_cfg = next((p for p in cfg.pages if p.id == page_id), None)
+            if page_cfg is not None and page_cfg.file is not None:
+                try:
+                    page_path = content_manager._validate_path(page_cfg.file)
+                    old_content_size = page_path.stat().st_size if page_path.exists() else 0
+                except ValueError, OSError:
+                    old_content_size = 0
+            new_size = len(body.content.encode("utf-8"))
+            edit_delta = new_size - old_content_size
+            if edit_delta > 0 and not content_size_tracker.check(edit_delta):
+                raise HTTPException(status_code=413, detail="Storage limit reached")
         try:
             await update_page(
                 session_factory, content_manager, page_id, title=body.title, content=body.content
@@ -225,8 +229,10 @@ async def update_page_endpoint(
                     page_path = content_manager._validate_path(page_cfg.file)
                     final_size = page_path.stat().st_size if page_path.exists() else 0
                     content_size_tracker.adjust(final_size - old_content_size)
-                except ValueError, OSError:
-                    pass
+                except (ValueError, OSError) as exc:
+                    logger.warning(
+                        "Failed to adjust page quota after update for %s: %s", page_id, exc
+                    )
         set_git_warning(response, await git_service.try_commit(f"Update page: {page_id}"))
         return {"status": "ok"}
 
@@ -239,6 +245,7 @@ async def delete_page_endpoint(
     git_service: Annotated[GitService, Depends(get_git_service)],
     content_write_lock: Annotated[AsyncWriteLock, Depends(get_content_write_lock)],
     session_factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
+    content_size_tracker: Annotated[ContentSizeTracker, Depends(get_content_size_tracker)],
     _user: Annotated[AdminUser, Depends(require_admin)],
     delete_file: bool = Query(default=True),
 ) -> None:
@@ -246,6 +253,19 @@ async def delete_page_endpoint(
     if not _PAGE_ID_PATTERN.match(page_id):
         raise HTTPException(status_code=400, detail=_PAGE_ID_ERROR)
     async with content_write_lock:
+        # Read page file size before deletion so the tracker can be adjusted.
+        page_size = 0
+        if delete_file:
+            cfg = content_manager.site_config
+            page_cfg = next((p for p in cfg.pages if p.id == page_id), None)
+            if page_cfg is not None and page_cfg.file is not None:
+                try:
+                    page_path = content_manager._validate_path(page_cfg.file)
+                    page_size = page_path.stat().st_size if page_path.exists() else 0
+                except (ValueError, OSError) as exc:
+                    logger.warning(
+                        "Failed to read page size before deletion for %s: %s", page_id, exc
+                    )
         try:
             await delete_page(session_factory, content_manager, page_id, delete_file=delete_file)
         except BuiltinPageError as exc:
@@ -255,6 +275,8 @@ async def delete_page_endpoint(
         except OSError as exc:
             logger.error("Failed to delete page %s: %s", page_id, exc)
             raise HTTPException(status_code=500, detail="Failed to delete page") from exc
+        if delete_file and page_size > 0:
+            content_size_tracker.adjust(-page_size)
         set_git_warning(response, await git_service.try_commit(f"Delete page: {page_id}"))
 
 

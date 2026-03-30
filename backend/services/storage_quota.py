@@ -23,8 +23,8 @@ class ContentSizeTracker:
     occur under normal use. Do NOT call from multiple OS threads without
     external synchronization.
 
-    On recompute() failure, usage resets to 0 (quota unenforced until next
-    successful recompute).
+    recompute() performs blocking filesystem I/O (rglob + stat) and should
+    only be called during startup or other infrequent operations.
     """
 
     def __init__(self, *, content_dir: Path, max_size: int | None) -> None:
@@ -41,14 +41,15 @@ class ContentSizeTracker:
         """Walk content_dir, sum file sizes (skipping symlinks).
 
         Catches individual OSError on stat() calls (skips unreadable files).
-        Catches top-level OSError on rglob (logs the error, sets usage to 0).
+        Catches top-level OSError on rglob (logs the error, preserves previous
+        usage — fails closed rather than resetting to 0).
         Logs usage info at INFO level when max_size is configured.
         """
         try:
             paths = list(self._content_dir.rglob("*"))
         except OSError as exc:
             logger.error("Failed to walk content directory %s: %s", self._content_dir, exc)
-            self._usage = 0
+            # Preserve previous usage — fail closed rather than fail open
             return
 
         total = 0

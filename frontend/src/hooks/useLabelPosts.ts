@@ -17,7 +17,7 @@ export function useLabelPosts(labelId: string | null) {
   // Lazy initializer: reads and removes the preloaded script tag once per mount.
   // Returns null on subsequent mounts (tag already gone) — safe for SWR fallbackData.
   const fallback = useScopedPreloadedFallback<LabelPostsData>(key, () => {
-    const data = readPreloaded({
+    const raw = readPreloaded({
       listHtml: {
         path: 'posts.posts',
         key: 'id',
@@ -26,7 +26,8 @@ export function useLabelPosts(labelId: string | null) {
         contentSelector: '[data-excerpt]',
       },
     })
-    return data as LabelPostsData | null
+    const data = raw && typeof raw === 'object' && 'posts' in raw ? (raw as unknown as LabelPostsData) : null
+    return data
   })
 
   return useSWR<LabelPostsData, Error>(

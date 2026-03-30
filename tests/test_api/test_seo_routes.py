@@ -207,6 +207,12 @@ class TestHomepageSeo:
         assert "Secret Draft" in titles
         assert resp.headers["Cache-Control"] == "private, no-store"
 
+    async def test_unauthenticated_homepage_is_cacheable(self, client: AsyncClient) -> None:
+        resp = await client.get("/")
+        assert resp.status_code == 200
+        cache_control = resp.headers.get("Cache-Control", "")
+        assert cache_control != "private, no-store"
+
 
 class TestPageSeo:
     async def test_returns_html(self, client: AsyncClient) -> None:

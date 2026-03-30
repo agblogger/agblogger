@@ -11,10 +11,11 @@ export function usePage(pageId: string | null) {
   // Lazy initializer: reads and removes the preloaded script tag once per mount.
   // Returns null on subsequent mounts (tag already gone) — safe for SWR fallbackData.
   const fallback = useScopedPreloadedFallback<PageResponse>(key, () => {
-    const data = readPreloaded({
+    const raw = readPreloaded({
       html: { field: 'rendered_html', selector: '[data-content]' },
     })
-    return data as PageResponse | null
+    const data = raw && typeof raw === 'object' && 'title' in raw ? (raw as unknown as PageResponse) : null
+    return data
   })
 
   const config: SWRConfiguration<PageResponse, Error> | undefined =

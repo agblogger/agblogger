@@ -533,3 +533,54 @@ class TestDeletePageNoCacheRow:
         await delete_page(session_factory, cm, page_id="about", delete_file=True)
         reloaded = parse_site_config(cm.content_dir)
         assert not any(p.id == "about" for p in reloaded.pages)
+
+
+class TestDeletePageQuotaTracking:
+    """delete_page_endpoint must adjust the content_size_tracker after deletion."""
+
+    async def test_delete_page_endpoint_adjusts_tracker(
+        self,
+        cm: ContentManager,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
+        """After deleting a page, delete_page_endpoint must call adjust(-size) on the tracker."""
+        from unittest.mock import AsyncMock, MagicMock
+
+        from backend.api.admin import delete_page_endpoint
+        from backend.models.user import AdminUser
+        from backend.services.storage_quota import ContentSizeTracker
+
+        # The about.md file already exists; record its size
+        about_path = cm.content_dir / "about.md"
+        expected_size = about_path.stat().st_size
+        assert expected_size > 0
+
+        tracker = ContentSizeTracker(content_dir=cm.content_dir, max_size=None)
+        tracker.adjust(expected_size)  # simulate that tracker knows about the file
+
+        response = MagicMock()
+        response.headers = {}
+
+        git_service = MagicMock()
+        git_service.try_commit = AsyncMock(return_value="abc123")
+
+        write_lock = MagicMock()
+        write_lock.__aenter__ = AsyncMock(return_value=None)
+        write_lock.__aexit__ = AsyncMock(return_value=None)
+
+        admin_user = MagicMock(spec=AdminUser)
+
+        await delete_page_endpoint(
+            page_id="about",
+            response=response,
+            content_manager=cm,
+            git_service=git_service,
+            content_write_lock=write_lock,
+            session_factory=session_factory,
+            content_size_tracker=tracker,
+            _user=admin_user,
+            delete_file=True,
+        )
+
+        # After deletion, tracker usage should have decreased by the file size
+        assert tracker.current_usage == 0

@@ -13,10 +13,11 @@ export function usePost(slug: string | null) {
   // Lazy initializer: reads and removes the preloaded script tag once per mount.
   // Returns null on subsequent mounts (tag already gone) — safe for SWR fallbackData.
   const fallback = useScopedPreloadedFallback<PostDetail>(key, () => {
-    const data = readPreloaded({
+    const raw = readPreloaded({
       html: { field: 'rendered_html', selector: '[data-content]' },
     })
-    return data as PostDetail | null
+    const data = raw && typeof raw === 'object' && 'file_path' in raw ? (raw as unknown as PostDetail) : null
+    return data
   })
 
   return useSWR<PostDetail, Error>(

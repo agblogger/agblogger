@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING
+from unittest.mock import patch
 
 from backend.services.storage_quota import ContentSizeTracker
 
@@ -68,12 +69,25 @@ class TestRecompute:
 
         assert any("50" in record.message for record in caplog.records)
 
-    def test_recompute_handles_oserror_on_rglob(self, tmp_path: Path) -> None:
-        """If the directory itself is unreadable, usage is set to 0 without crashing."""
-        tracker = ContentSizeTracker(content_dir=tmp_path / "nonexistent", max_size=None)
-        # Should not raise; sets usage to 0
-        tracker.recompute()
-        assert tracker.current_usage == 0
+    def test_recompute_handles_oserror_on_rglob(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """If rglob raises OSError, usage is preserved (fail closed) and an error is logged."""
+        tracker = ContentSizeTracker(content_dir=tmp_path, max_size=None)
+        tracker.adjust(1000)
+        assert tracker.current_usage == 1000
+
+        with (
+            patch.object(
+                type(tracker._content_dir), "rglob", side_effect=OSError("permission denied")
+            ),
+            caplog.at_level(logging.ERROR, logger="backend.services.storage_quota"),
+        ):
+            tracker.recompute()
+
+        # Usage must be preserved — not reset to 0 — so quota remains enforced
+        assert tracker.current_usage == 1000
+        assert any("Failed to walk" in record.message for record in caplog.records)
 
 
 class TestCheck:

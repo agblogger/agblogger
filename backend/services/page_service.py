@@ -1,4 +1,4 @@
-"""Page service: top-level page retrieval from cache."""
+"""Page service: top-level page and site configuration retrieval."""
 
 from __future__ import annotations
 

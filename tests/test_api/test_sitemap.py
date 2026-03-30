@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from httpx import ASGITransport
+from sqlalchemy.exc import SQLAlchemyError
 
 from backend.config import Settings
 from tests.conftest import create_test_client
@@ -182,3 +185,27 @@ class TestSitemapXmlEscaping:
         # A raw unescaped & followed by 'a' in a URL context must not appear
         # (the only & that should exist is part of &amp;)
         assert "<loc>http://test/post/q&a</loc>" not in resp.text
+
+
+class TestSitemapDatabaseError:
+    async def test_db_error_returns_503_with_retry_after(self, client: AsyncClient) -> None:
+        """Sitemap route must return 503 with Retry-After when the database is unavailable."""
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.side_effect = SQLAlchemyError("DB down")
+
+        mock_session = AsyncMock()
+        mock_session.execute.side_effect = SQLAlchemyError("DB down")
+
+        mock_session_factory = MagicMock()
+        mock_session_factory.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session_factory.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        transport = client._transport
+        assert isinstance(transport, ASGITransport)
+        state = getattr(transport.app, "state", None)
+        assert state is not None
+        state.session_factory = mock_session_factory
+
+        resp = await client.get("/sitemap.xml")
+        assert resp.status_code == 503
+        assert "Retry-After" in resp.headers

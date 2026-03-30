@@ -15,13 +15,13 @@ from backend.filesystem.toml_manager import (
 )
 from backend.models.page import PageCache
 from backend.services.cache_service import upsert_page_cache
+from backend.services.page_service import BUILTIN_PAGE_IDS
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
     from backend.filesystem.content_manager import ContentManager
 
-BUILTIN_PAGE_IDS = {"timeline", "labels"}
 logger = logging.getLogger(__name__)
 
 

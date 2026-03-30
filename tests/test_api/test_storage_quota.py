@@ -160,6 +160,21 @@ class TestSyncQuota:
 
 class TestCreatePostQuota:
     @pytest.mark.asyncio
+    async def test_create_post_within_quota_succeeds(self, client: AsyncClient) -> None:
+        token = await _login(client)
+        resp = await client.post(
+            "/api/posts",
+            json={
+                "title": "Small Post",
+                "body": "Hello, world.",
+                "labels": [],
+                "is_draft": False,
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 201
+
+    @pytest.mark.asyncio
     async def test_create_post_exceeding_quota_returns_413(self, client: AsyncClient) -> None:
         token = await _login(client)
         resp = await client.post(
@@ -206,6 +221,26 @@ class TestPageQuota:
         )
         assert resp.status_code == 413
         assert resp.json()["detail"] == "Storage limit reached"
+
+    @pytest.mark.asyncio
+    async def test_update_page_that_shrinks_succeeds(self, client: AsyncClient) -> None:
+        """Updating a page to make it smaller should always succeed near the quota limit."""
+        token = await _login(client)
+        # Create a page with substantial content — quota is 50 000 B, git overhead ~26-27 KB,
+        # so a 15 000-byte body stays within quota on creation.
+        resp = await client.post(
+            "/api/admin/pages",
+            json={"id": "shrink-page", "title": "Shrink Page", "body": "x" * 15_000},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 201
+        # Now update it to be much smaller — should succeed even though quota was nearly full
+        resp = await client.put(
+            "/api/admin/pages/shrink-page",
+            json={"content": "Short content."},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
 
 
 class TestDeleteFreesQuota:

@@ -827,6 +827,10 @@ async def create_post_endpoint(
         rendered_html = rewrite_relative_urls(raw_html, file_path)
 
         serialized = serialize_post(post_data)
+        serialized_size = len(serialized.encode("utf-8"))
+        if not content_size_tracker.check(serialized_size):
+            raise HTTPException(status_code=413, detail="Storage limit reached")
+
         post = PostCache(
             file_path=file_path,
             title=post_data.title,
@@ -854,11 +858,6 @@ async def create_post_endpoint(
             await session.rollback()
             raise
 
-        serialized_size = len(serialized.encode("utf-8"))
-        if not content_size_tracker.check(serialized_size):
-            await session.rollback()
-            raise HTTPException(status_code=413, detail="Storage limit reached")
-
         try:
             content_manager.write_post(file_path, post_data)
         except OSError as exc:
@@ -868,9 +867,7 @@ async def create_post_endpoint(
 
         await session.commit()
         await session.refresh(post)
-
-        new_path = content_manager.content_dir / file_path
-        content_size_tracker.adjust(new_path.stat().st_size)
+        content_size_tracker.adjust(serialized_size)
 
         set_git_warning(response, await git_service.try_commit(f"Create post: {file_path}"))
 
@@ -1079,7 +1076,11 @@ async def update_post_endpoint(
                         )
             raise
         final_path = new_file_path if needs_rename else file_path
-        new_size = (content_manager.content_dir / final_path).stat().st_size
+        try:
+            new_size = (content_manager.content_dir / final_path).stat().st_size
+        except OSError:
+            logger.warning("Could not stat post file after update: %s", final_path)
+            new_size = old_size  # No adjustment if stat fails
         content_size_tracker.adjust(new_size - old_size)
         await session.refresh(existing)
         set_git_warning(
