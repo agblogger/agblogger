@@ -7,6 +7,16 @@ def test_entrypoint_reprovisions_when_db_volume_is_replaced_but_token_volume_rem
     assert 'if [ ! -f "$TOKEN_FILE" ] || [ ! -s "$GOATCOUNTER_DB" ]; then' in entrypoint
 
 
+def test_entrypoint_checks_existing_site_before_creating_one() -> None:
+    entrypoint = Path("goatcounter/entrypoint.sh").read_text()
+
+    assert "site_exists()" in entrypoint
+    assert "command -v sqlite3" in entrypoint
+    assert "SELECT 1 FROM sites WHERE cname='$GOATCOUNTER_VHOST' LIMIT 1;" in entrypoint
+    assert "SELECT 1 FROM site WHERE cname='$GOATCOUNTER_VHOST' LIMIT 1;" in entrypoint
+    assert entrypoint.index("site_exists; then") < entrypoint.index("goatcounter db create site")
+
+
 def test_entrypoint_has_fail_fast_mode() -> None:
     """The entrypoint must use set -eu to fail fast on errors."""
     entrypoint = Path("goatcounter/entrypoint.sh").read_text()
@@ -32,6 +42,7 @@ def test_entrypoint_site_creation_exits_on_unexpected_failure() -> None:
     # Must capture output and check for known-safe patterns
     assert "output=$(" in entrypoint
     assert '"already exists"' in entrypoint
+    assert "there is already a site for the host" in entrypoint
     assert '"UNIQUE constraint"' in entrypoint
     # Must exit 1 on unexpected failures
     assert "exit 1" in entrypoint
