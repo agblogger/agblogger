@@ -86,6 +86,7 @@ const defaultSettings: AdminSiteSettings = {
   title: 'My Blog',
   description: 'A test blog',
   timezone: 'UTC',
+  password_change_disabled: false,
 }
 
 const defaultPages: AdminPageConfig[] = [
@@ -893,6 +894,48 @@ describe('AdminPage', () => {
     await waitFor(() => {
       expect(screen.getByText('Session expired. Please log in again.')).toBeInTheDocument()
     })
+  })
+
+  // === Password Change Disabled ===
+
+  it('hides password form when password change is disabled', async () => {
+    mockFetchAdminSiteSettings.mockResolvedValue({
+      ...defaultSettings,
+      password_change_disabled: true,
+    })
+    mockFetchAdminPages.mockResolvedValue({ pages: defaultPages })
+    renderAdmin()
+    const user = userEvent.setup()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Account' })).toBeInTheDocument()
+    })
+    await switchToTab(user, 'Account')
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('Password changes are disabled by server configuration.'),
+      ).toBeInTheDocument()
+    })
+    expect(screen.queryByLabelText(/current password/i)).not.toBeInTheDocument()
+  })
+
+  it('shows password form when password change is enabled', async () => {
+    setupLoadSuccess()
+    renderAdmin()
+    const user = userEvent.setup()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Account' })).toBeInTheDocument()
+    })
+    await switchToTab(user, 'Account')
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/current password/i)).toBeInTheDocument()
+    })
+    expect(
+      screen.queryByText('Password changes are disabled by server configuration.'),
+    ).not.toBeInTheDocument()
   })
 
   // === Profile Update ===
