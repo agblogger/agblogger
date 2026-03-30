@@ -1209,32 +1209,10 @@ async def delete_post_endpoint(
         # Compute size to free before deletion so the tracker stays accurate.
         post_dir = (content_manager.content_dir / file_path).parent
         if should_delete_assets and post_dir.is_dir():
-            dir_size = 0
-            for f in post_dir.rglob("*"):
-                if f.is_file() and not f.is_symlink():
-                    try:
-                        dir_size += f.stat().st_size
-                    except OSError as exc:
-                        logger.warning(
-                            "Could not stat %s during delete_post size computation"
-                            " (treating size as 0): %s",
-                            f,
-                            exc,
-                        )
+            dir_size = sum(content_size_tracker.file_size(f) for f in post_dir.rglob("*"))
         else:
             full_path = content_manager.content_dir / file_path
-            if full_path.exists():
-                try:
-                    dir_size = full_path.stat().st_size
-                except OSError as exc:
-                    logger.warning(
-                        "Could not stat post %s for size accounting (treating size as 0): %s",
-                        full_path,
-                        exc,
-                    )
-                    dir_size = 0
-            else:
-                dir_size = 0
+            dir_size = content_size_tracker.file_size(full_path)
 
         # Delete the file after DB commit. If this fails, the DB is already
         # correct and the next cache rebuild will clean up any stale references.

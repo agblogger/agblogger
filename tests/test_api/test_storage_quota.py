@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import patch
 
 import pytest
@@ -20,6 +20,8 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from httpx import AsyncClient
+
+    from backend.services.storage_quota import ContentSizeTracker
 
 
 @pytest.fixture
@@ -64,6 +66,11 @@ def _content_usage(content_dir: Path) -> int:
         and not path.is_symlink()
         and all(not part.startswith(".") for part in path.relative_to(content_dir).parts)
     )
+
+
+def _client_content_size_tracker(client: AsyncClient) -> ContentSizeTracker:
+    transport = cast("Any", client._transport)
+    return transport.app.state.content_size_tracker
 
 
 class TestPostUploadQuota:
@@ -709,6 +716,27 @@ class TestDeleteFreesQuota:
         )
         assert resp.status_code == 201
 
+    @pytest.mark.asyncio
+    async def test_delete_post_does_not_count_hidden_assets(
+        self,
+        client_with_post: AsyncClient,
+        quota_settings_with_post: Settings,
+    ) -> None:
+        token = await _login(client_with_post)
+        content_dir = quota_settings_with_post.content_dir
+        hidden_asset = content_dir / "posts" / "2026-01-01-seed-post" / ".DS_Store"
+        hidden_asset.write_bytes(b"x" * 321)
+
+        resp = await client_with_post.delete(
+            f"/api/posts/{POST_PATH}?delete_assets=true",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 204
+        assert not hidden_asset.exists()
+
+        tracker = _client_content_size_tracker(client_with_post)
+        assert tracker.current_usage == _content_usage(content_dir)
+
 
 class TestEditPostQuota:
     @pytest.mark.asyncio
@@ -1137,9 +1165,8 @@ class TestDeletePostQuotaTrackerDrift:
 
         # Patch delete_post to raise OSError, and track recompute calls
         recompute_called = False
-        original_recompute = (
-            client_with_post._transport.app.state.content_size_tracker.recompute  # type: ignore[union-attr]
-        )
+        tracker = _client_content_size_tracker(client_with_post)
+        original_recompute = tracker.recompute
 
         def tracking_recompute() -> None:
             nonlocal recompute_called
@@ -1152,7 +1179,7 @@ class TestDeletePostQuotaTrackerDrift:
                 side_effect=OSError("disk error"),
             ),
             patch.object(
-                client_with_post._transport.app.state.content_size_tracker,  # type: ignore[union-attr]
+                tracker,
                 "recompute",
                 side_effect=tracking_recompute,
             ),

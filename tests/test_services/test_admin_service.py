@@ -25,6 +25,7 @@ from backend.services.admin_service import (
 )
 from backend.services.cache_service import ensure_tables
 from backend.services.page_service import get_page
+from backend.services.storage_quota import ContentSizeTracker
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
@@ -656,6 +657,58 @@ class TestDeletePageQuotaTracking:
 
         # After deletion, tracker usage should have decreased by the file size
         assert tracker.current_usage == 0
+
+    async def test_delete_page_endpoint_does_not_under_count_when_file_unlink_fails(
+        self,
+        cm: ContentManager,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
+        """If the page file survives deletion, quota should only reflect the config rewrite."""
+        from unittest.mock import AsyncMock, MagicMock
+
+        from backend.api.admin import delete_page_endpoint
+        from backend.models.user import AdminUser
+
+        tracker = ContentSizeTracker(content_dir=cm.content_dir, max_size=None)
+        tracker.recompute()
+
+        def tracked_usage() -> int:
+            return sum(
+                path.stat().st_size
+                for path in cm.content_dir.rglob("*")
+                if path.is_file()
+                and not path.is_symlink()
+                and all(not part.startswith(".") for part in path.relative_to(cm.content_dir).parts)
+            )
+
+        response = MagicMock()
+        response.headers = {}
+
+        git_service = MagicMock()
+        git_service.try_commit = AsyncMock(return_value="abc123")
+
+        write_lock = MagicMock()
+        write_lock.__aenter__ = AsyncMock(return_value=None)
+        write_lock.__aexit__ = AsyncMock(return_value=None)
+
+        admin_user = MagicMock(spec=AdminUser)
+        about_path = cm.content_dir / "about.md"
+
+        with patch.object(type(about_path), "unlink", side_effect=OSError("permission denied")):
+            await delete_page_endpoint(
+                page_id="about",
+                response=response,
+                content_manager=cm,
+                git_service=git_service,
+                content_write_lock=write_lock,
+                session_factory=session_factory,
+                content_size_tracker=tracker,
+                _user=admin_user,
+                delete_file=True,
+            )
+
+        assert about_path.exists()
+        assert tracker.current_usage == tracked_usage()
 
 
 class TestExceptionNarrowingCreatePage:

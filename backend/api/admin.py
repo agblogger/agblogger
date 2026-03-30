@@ -301,6 +301,7 @@ async def delete_page_endpoint(
     async with content_write_lock:
         # Read page file size before deletion so the tracker can be adjusted.
         page_size = 0
+        page_path = None
         index_path = content_manager.content_dir / "index.toml"
         old_index_size = content_size_tracker.file_size(index_path)
         if delete_file:
@@ -323,8 +324,9 @@ async def delete_page_endpoint(
         except OSError as exc:
             logger.error("Failed to delete page %s: %s", page_id, exc)
             raise HTTPException(status_code=500, detail="Failed to delete page") from exc
+        deleted_page_size = page_size if page_path is not None and not page_path.exists() else 0
         content_size_tracker.adjust(
-            (content_size_tracker.file_size(index_path) - old_index_size) - page_size
+            (content_size_tracker.file_size(index_path) - old_index_size) - deleted_page_size
         )
         set_git_warning(response, await git_service.try_commit(f"Delete page: {page_id}"))
 

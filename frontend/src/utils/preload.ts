@@ -18,7 +18,7 @@ export function readPreloadedMeta(): Record<string, unknown> | null {
   if (el === null) return null
   const text = el.textContent
   el.remove()
-  if (text === null || text === '') return null
+  if (text === '') return null
   try {
     return JSON.parse(text) as Record<string, unknown>
   } catch (e) {

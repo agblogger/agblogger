@@ -479,10 +479,8 @@ class TestSeoContextJsonLdValidation:
 class TestRenderSeoHtmlMissingMarkers:
     """render_seo_html should log warnings when expected HTML markers are absent."""
 
-    def test_warns_when_head_close_missing(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        html_no_head = "<!DOCTYPE html><html><body><div id=\"root\"></div></body></html>"
+    def test_warns_when_head_close_missing(self, caplog: pytest.LogCaptureFixture) -> None:
+        html_no_head = '<!DOCTYPE html><html><body><div id="root"></div></body></html>'
         with caplog.at_level(logging.WARNING, logger="backend.services.seo_service"):
             render_seo_html(html_no_head, _make_ctx())
         assert any("</head>" in r.message for r in caplog.records)
@@ -506,9 +504,7 @@ class TestRenderSeoHtmlMissingMarkers:
     def test_warns_when_body_close_missing_and_preload_set(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
-        html_no_body_close = (
-            "<!DOCTYPE html><html><head></head><body><div id=\"root\"></div></body"
-        )
+        html_no_body_close = '<!DOCTYPE html><html><head></head><body><div id="root"></div></body'
         with caplog.at_level(logging.WARNING, logger="backend.services.seo_service"):
             render_seo_html(html_no_body_close, _make_ctx(preload_data={"key": "val"}))
         assert any("</body>" in r.message for r in caplog.records)
@@ -516,7 +512,7 @@ class TestRenderSeoHtmlMissingMarkers:
     def test_no_body_close_warning_when_preload_is_none(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
-        html_no_body_close = "<!DOCTYPE html><html><head></head><body><div id=\"root\"></div>"
+        html_no_body_close = '<!DOCTYPE html><html><head></head><body><div id="root"></div>'
         with caplog.at_level(logging.WARNING, logger="backend.services.seo_service"):
             render_seo_html(html_no_body_close, _make_ctx(preload_data=None))
         assert not any("</body>" in r.message for r in caplog.records)
