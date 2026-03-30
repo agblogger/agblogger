@@ -264,6 +264,7 @@ export interface AdminSiteSettings {
   title: string
   description: string
   timezone: string
+  password_change_disabled: boolean
 }
 
 export interface AdminPageConfig {

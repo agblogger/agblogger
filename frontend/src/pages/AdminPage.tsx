@@ -27,7 +27,7 @@ const ADMIN_TABS = [
 type AdminTabKey = (typeof ADMIN_TABS)[number]['key']
 const VALID_TAB_KEYS: Set<AdminTabKey> = new Set(ADMIN_TABS.map((t) => t.key))
 
-const EMPTY_SITE_SETTINGS: AdminSiteSettings = { title: '', description: '', timezone: '' }
+const EMPTY_SITE_SETTINGS: AdminSiteSettings = { title: '', description: '', timezone: '', password_change_disabled: false }
 
 export default function AdminPage() {
   const location = useLocation()
@@ -158,7 +158,7 @@ export default function AdminPage() {
         />
       )}
       {activeTab === 'account' && (
-        <AccountSection busy={busy} onSaving={setAccountSaving} onDirtyChange={setAccountDirty} />
+        <AccountSection busy={busy} passwordChangeDisabled={siteSettings.password_change_disabled} onSaving={setAccountSaving} onDirtyChange={setAccountDirty} />
       )}
       {activeTab === 'social' && (
         <SocialAccountsPanel busy={busy} onBusyChange={setSocialBusy} />

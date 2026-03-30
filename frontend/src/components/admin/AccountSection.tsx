@@ -15,11 +15,12 @@ const INPUT_CLASSES =
 
 interface AccountSectionProps {
   busy: boolean
+  passwordChangeDisabled: boolean
   onSaving: (saving: boolean) => void
   onDirtyChange: (dirty: boolean) => void
 }
 
-export default function AccountSection({ busy, onSaving, onDirtyChange }: AccountSectionProps) {
+export default function AccountSection({ busy, passwordChangeDisabled, onSaving, onDirtyChange }: AccountSectionProps) {
   const user = useAuthStore((s) => s.user)
   const setUser = useAuthStore((s) => s.setUser)
 
@@ -223,106 +224,118 @@ export default function AccountSection({ busy, onSaving, onDirtyChange }: Accoun
       </section>
 
       {/* Password section */}
-      <section className="mb-8 p-5 bg-paper border border-border rounded-lg">
-        <div className="flex items-center gap-2 mb-4">
-          <Lock size={16} className="text-accent" />
-          <h2 className="text-sm font-medium text-ink">Change Password</h2>
-        </div>
-
-        {passwordError !== null && (
-          <AlertBanner variant="error" className="mb-4">{passwordError}</AlertBanner>
-        )}
-        {passwordSuccess !== null && (
-          <AlertBanner variant="success" className="mb-4">{passwordSuccess}</AlertBanner>
-        )}
-
-        <form
-          onSubmit={(e) => {
-            e.preventDefault()
-            void handleChangePassword()
-          }}
-          className="space-y-4 max-w-md"
-        >
-          <div>
-            <label
-              htmlFor="current-password"
-              className="block text-xs font-medium text-muted mb-1"
-            >
-              Current Password *
-            </label>
-            <input
-              id="current-password"
-              name="current-password"
-              type="password"
-              autoComplete="current-password"
-              value={currentPassword}
-              onChange={(e) => {
-                setCurrentPassword(e.target.value)
-                setPasswordError(null)
-                setPasswordSuccess(null)
-              }}
-              disabled={busy}
-              className={INPUT_CLASSES}
-            />
+      {passwordChangeDisabled ? (
+        <section className="mb-8 p-5 bg-paper border border-border rounded-lg">
+          <div className="flex items-center gap-2 mb-4">
+            <Lock size={16} className="text-accent" />
+            <h2 className="text-sm font-medium text-ink">Change Password</h2>
+          </div>
+          <p className="text-sm text-muted">
+            Password changes are disabled by server configuration.
+          </p>
+        </section>
+      ) : (
+        <section className="mb-8 p-5 bg-paper border border-border rounded-lg">
+          <div className="flex items-center gap-2 mb-4">
+            <Lock size={16} className="text-accent" />
+            <h2 className="text-sm font-medium text-ink">Change Password</h2>
           </div>
 
-          <div>
-            <label htmlFor="new-password" className="block text-xs font-medium text-muted mb-1">
-              New Password *
-            </label>
-            <input
-              id="new-password"
-              name="new-password"
-              type="password"
-              autoComplete="new-password"
-              value={newPassword}
-              onChange={(e) => {
-                setNewPassword(e.target.value)
-                setPasswordError(null)
-                setPasswordSuccess(null)
-              }}
-              disabled={busy}
-              className={INPUT_CLASSES}
-            />
-            <p className="text-xs text-muted mt-1">At least {MIN_PASSWORD_LENGTH} characters.</p>
-          </div>
+          {passwordError !== null && (
+            <AlertBanner variant="error" className="mb-4">{passwordError}</AlertBanner>
+          )}
+          {passwordSuccess !== null && (
+            <AlertBanner variant="success" className="mb-4">{passwordSuccess}</AlertBanner>
+          )}
 
-          <div>
-            <label
-              htmlFor="confirm-password"
-              className="block text-xs font-medium text-muted mb-1"
-            >
-              Confirm New Password *
-            </label>
-            <input
-              id="confirm-password"
-              name="confirm-password"
-              type="password"
-              autoComplete="new-password"
-              value={confirmPassword}
-              onChange={(e) => {
-                setConfirmPassword(e.target.value)
-                setPasswordError(null)
-                setPasswordSuccess(null)
-              }}
-              disabled={busy}
-              className={INPUT_CLASSES}
-            />
-          </div>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              void handleChangePassword()
+            }}
+            className="space-y-4 max-w-md"
+          >
+            <div>
+              <label
+                htmlFor="current-password"
+                className="block text-xs font-medium text-muted mb-1"
+              >
+                Current Password *
+              </label>
+              <input
+                id="current-password"
+                name="current-password"
+                type="password"
+                autoComplete="current-password"
+                value={currentPassword}
+                onChange={(e) => {
+                  setCurrentPassword(e.target.value)
+                  setPasswordError(null)
+                  setPasswordSuccess(null)
+                }}
+                disabled={busy}
+                className={INPUT_CLASSES}
+              />
+            </div>
 
-          <div className="mt-4">
-            <button
-              type="submit"
-              disabled={busy}
-              className="flex items-center gap-1.5 px-5 py-2 text-sm font-medium bg-accent text-white rounded-lg
-                       hover:bg-accent-light disabled:opacity-50 transition-colors"
-            >
-              <Lock size={14} />
-              {savingPassword ? 'Changing...' : 'Change Password'}
-            </button>
-          </div>
-        </form>
-      </section>
+            <div>
+              <label htmlFor="new-password" className="block text-xs font-medium text-muted mb-1">
+                New Password *
+              </label>
+              <input
+                id="new-password"
+                name="new-password"
+                type="password"
+                autoComplete="new-password"
+                value={newPassword}
+                onChange={(e) => {
+                  setNewPassword(e.target.value)
+                  setPasswordError(null)
+                  setPasswordSuccess(null)
+                }}
+                disabled={busy}
+                className={INPUT_CLASSES}
+              />
+              <p className="text-xs text-muted mt-1">At least {MIN_PASSWORD_LENGTH} characters.</p>
+            </div>
+
+            <div>
+              <label
+                htmlFor="confirm-password"
+                className="block text-xs font-medium text-muted mb-1"
+              >
+                Confirm New Password *
+              </label>
+              <input
+                id="confirm-password"
+                name="confirm-password"
+                type="password"
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(e) => {
+                  setConfirmPassword(e.target.value)
+                  setPasswordError(null)
+                  setPasswordSuccess(null)
+                }}
+                disabled={busy}
+                className={INPUT_CLASSES}
+              />
+            </div>
+
+            <div className="mt-4">
+              <button
+                type="submit"
+                disabled={busy}
+                className="flex items-center gap-1.5 px-5 py-2 text-sm font-medium bg-accent text-white rounded-lg
+                         hover:bg-accent-light disabled:opacity-50 transition-colors"
+              >
+                <Lock size={14} />
+                {savingPassword ? 'Changing...' : 'Change Password'}
+              </button>
+            </div>
+          </form>
+        </section>
+      )}
     </>
   )
 }
