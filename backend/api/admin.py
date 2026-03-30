@@ -17,9 +17,11 @@ from backend.api.deps import (
     get_git_service,
     get_session,
     get_session_factory,
+    get_settings as get_settings_dep,
     require_admin,
     set_git_warning,
 )
+from backend.config import Settings
 from backend.exceptions import BuiltinPageError
 from backend.filesystem.content_manager import ContentManager
 from backend.filesystem.toml_manager import PageConfig
@@ -264,8 +266,14 @@ async def change_password(
     request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
     user: Annotated[AdminUser, Depends(require_admin)],
+    settings: Annotated[Settings, Depends(get_settings_dep)],
 ) -> dict[str, str | bool]:
     """Change admin password."""
+    if settings.disable_password_change:
+        raise HTTPException(
+            status_code=403,
+            detail="Password changes are disabled by server configuration",
+        )
     limiter: InMemoryRateLimiter = request.app.state.rate_limiter
     rate_key = f"password_change:{user.id}"
     limited, retry_after = limiter.is_limited(

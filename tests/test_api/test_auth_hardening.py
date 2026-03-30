@@ -456,6 +456,57 @@ class TestOldPasswordAfterChange:
         assert new_login.status_code == 200
 
 
+class TestPasswordChangeDisabled:
+    @pytest.fixture
+    def app_settings(self, tmp_content_dir: Path, tmp_path: Path) -> Settings:
+        """Create settings with password change disabled."""
+        posts_dir = tmp_content_dir / "posts"
+        hello_post = posts_dir / "hello"
+        hello_post.mkdir()
+        (hello_post / "index.md").write_text("# Hello\n")
+        (tmp_content_dir / "labels.toml").write_text("[labels]\n")
+
+        db_path = tmp_path / "test.db"
+        return Settings(
+            secret_key="test-secret-key-with-at-least-32-characters",
+            debug=True,
+            database_url=f"sqlite+aiosqlite:///{db_path}",
+            content_dir=tmp_content_dir,
+            frontend_dir=tmp_path / "frontend",
+            admin_username="admin",
+            admin_password="admin123",
+            disable_password_change=True,
+        )
+
+    @pytest.fixture
+    async def client(self, app_settings: Settings) -> AsyncGenerator[AsyncClient]:
+        """Create test HTTP client with initialized app state."""
+        async with create_test_client(app_settings) as ac:
+            yield ac
+
+    @pytest.mark.asyncio
+    async def test_password_change_returns_403_when_disabled(
+        self, client: AsyncClient
+    ) -> None:
+        """PUT /api/admin/password returns 403 when disable_password_change is set."""
+        token_resp = await client.post(
+            "/api/auth/token-login",
+            json={"username": "admin", "password": "admin123"},
+        )
+        access_token = token_resp.json()["access_token"]
+        resp = await client.put(
+            "/api/admin/password",
+            json={
+                "current_password": "admin123",
+                "new_password": "newpassword1234",
+                "confirm_password": "newpassword1234",
+            },
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        assert resp.status_code == 403
+        assert resp.json()["detail"] == "Password changes are disabled by server configuration"
+
+
 class TestGetCurrentAdminLogging:
     """get_current_admin must log differentiated messages for different auth failure modes.
 
