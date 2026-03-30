@@ -236,6 +236,9 @@ async def update_page_endpoint(
                 page_path = content_manager._validate_path(page_cfg.file)
                 old_content_size = content_size_tracker.file_size(page_path)
             except ValueError, OSError:
+                logger.warning(
+                    "Failed to resolve page path for size accounting: %s", page_id, exc_info=True
+                )
                 page_path = None
                 old_content_size = 0
         index_path = content_manager.content_dir / "index.toml"

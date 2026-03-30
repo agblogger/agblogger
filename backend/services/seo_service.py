@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import html
 import json
+import logging
 import re
 from dataclasses import dataclass
 from typing import Any, Literal, TypedDict
+
+logger = logging.getLogger(__name__)
 
 _MAX_DESCRIPTION_LENGTH = 200
 
@@ -19,6 +22,7 @@ _PRELOAD_MARKER_ATTR = "data-agblogger-preload"
 
 def strip_html_tags(text: str) -> str:
     """Strip HTML tags, decode entities, and collapse whitespace."""
+    # Replace tags with spaces (not empty string) to preserve word boundaries
     text = re.sub(r"<[^>]+>", " ", text)
     text = html.unescape(text)
     text = re.sub(r"\s+", " ", text)
@@ -26,7 +30,7 @@ def strip_html_tags(text: str) -> str:
 
 
 class SeoPostItem(TypedDict):
-    """Typed dict for a single post entry in render_post_list_html."""
+    """Post entry shape used for SEO pre-rendering."""
 
     id: str
     title: str
@@ -50,6 +54,12 @@ class SeoContext:
     json_ld: dict[str, Any] | None = None
     rendered_body: str | None = None
     preload_data: dict[str, Any] | None = None
+
+    def __post_init__(self) -> None:
+        if self.json_ld is not None and (
+            "@context" not in self.json_ld or "@type" not in self.json_ld
+        ):
+            raise ValueError("json_ld must contain @context and @type keys")
 
 
 def render_seo_html(base_html: str, ctx: SeoContext) -> str:
@@ -114,6 +124,13 @@ def render_seo_html(base_html: str, ctx: SeoContext) -> str:
         )
         result = result.replace("</body>", f"{preload_tag}\n</body>")
 
+    if "</head>" not in base_html:
+        logger.warning("SEO injection skipped: </head> marker not found in base HTML")
+    if '<div id="root"></div>' not in base_html and ctx.rendered_body is not None:
+        logger.warning('SEO injection skipped: <div id="root"></div> marker not found in base HTML')
+    if "</body>" not in base_html and ctx.preload_data is not None:
+        logger.warning("SEO injection skipped: </body> marker not found in base HTML")
+
     return result
 
 
@@ -170,10 +187,7 @@ def render_post_list_html(
     *,
     heading: str,
 ) -> str:
-    """Render a simple HTML post list for server-side pre-rendering.
-
-    Each post dict must have keys: id, title, slug, date, excerpt.
-    """
+    """Render a simple HTML post list for server-side pre-rendering."""
     esc_heading = html.escape(heading)
     items = []
     for post in posts:

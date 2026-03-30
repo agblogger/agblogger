@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 from unittest.mock import patch
 
@@ -866,13 +867,13 @@ class TestSyncRollbackFailure:
     """Tests for _restore_original_files double-failure scenario.
 
     When a sync commit exceeds the quota AND the rollback itself fails (e.g. a
-    permission error writing a file), the server must return a 500 error rather
-    than silently swallowing the failure.
+    permission error writing a file), the server must still return the original
+    quota error (413) rather than masking it with a 500 rollback error.
     """
 
     @pytest.mark.asyncio
-    async def test_sync_rollback_failure_returns_500(self, client: AsyncClient) -> None:
-        """When rollback of an over-quota sync fails, the server returns 500."""
+    async def test_sync_rollback_failure_still_returns_413(self, client: AsyncClient) -> None:
+        """When rollback of an over-quota sync fails, the original 413 is preserved."""
         token = await _login(client)
         big_content = (
             "---\ntitle: Huge Sync Post\ncreated_at: 2026-01-01 00:00:00+00\n"
@@ -902,9 +903,9 @@ class TestSyncRollbackFailure:
                 headers={"Authorization": f"Bearer {token}"},
             )
 
-        # Quota is exceeded so rollback is attempted; rollback fails → 500
-        assert resp.status_code == 500
-        assert resp.json()["detail"] == "Failed to rollback sync changes"
+        # Quota is exceeded; rollback fails but original 413 is preserved
+        assert resp.status_code == 413
+        assert resp.json()["detail"] == "Storage limit reached"
 
 
 class TestUpdateSettingsQuota:
@@ -1064,3 +1065,171 @@ class TestUpdatePageOrderQuota:
         )
         assert resp.status_code == 413
         assert resp.json()["detail"] == "Storage limit reached"
+
+
+class TestSyncRollbackModifiedFiles:
+    """S7: Verify rollback restores original content when sync modifies existing files.
+
+    Sync uses three-way merge for existing posts so a simple overwrite won't work.
+    Instead we upload a new huge file alongside the existing post to exceed quota,
+    and verify the *existing* files on disk are preserved after rollback.
+    """
+
+    @pytest.mark.asyncio
+    async def test_sync_rollback_preserves_existing_files_on_quota_breach(
+        self,
+        client_with_post: AsyncClient,
+        quota_settings_with_post: Settings,
+    ) -> None:
+        token = await _login(client_with_post)
+        content_dir = quota_settings_with_post.content_dir
+
+        # Read the existing post content before sync attempt
+        existing_post_path = content_dir / POST_PATH
+        original_content = existing_post_path.read_text(encoding="utf-8")
+
+        # Also add a small asset so we can check it's preserved
+        asset_data = b"original-asset-data"
+        resp = await client_with_post.post(
+            f"/api/posts/{POST_PATH}/assets",
+            files=[("files", ("keep.txt", asset_data, "text/plain"))],
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+
+        asset_path = content_dir / "posts" / "2026-01-01-seed-post" / "keep.txt"
+        assert asset_path.exists()
+
+        # Upload a new post that exceeds quota alongside a non-conflicting file
+        big_content = (
+            "---\ntitle: Huge New Post\ncreated_at: 2026-06-01 00:00:00+00\n"
+            "author: admin\nlabels: []\n---\n\n" + "x" * 50_000
+        )
+        resp = await client_with_post.post(
+            "/api/sync/commit",
+            data={"metadata": '{"deleted_files":[],"last_sync_commit":null}'},
+            files=[
+                (
+                    "files",
+                    ("posts/2026-06-01-huge/index.md", big_content.encode(), "text/plain"),
+                )
+            ],
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 413
+
+        # Verify rollback: original post and its asset are preserved
+        restored_content = existing_post_path.read_text(encoding="utf-8")
+        assert restored_content == original_content, "Rollback modified existing post content"
+        assert asset_path.read_bytes() == asset_data, "Rollback removed or corrupted existing asset"
+
+
+class TestDeletePostQuotaTrackerDrift:
+    """Issue #8: Verify quota tracker recomputes after failed file deletion."""
+
+    @pytest.mark.asyncio
+    async def test_tracker_recomputes_after_failed_deletion(
+        self,
+        client_with_post: AsyncClient,
+        quota_settings_with_post: Settings,
+    ) -> None:
+        token = await _login(client_with_post)
+
+        # Patch delete_post to raise OSError, and track recompute calls
+        recompute_called = False
+        original_recompute = (
+            client_with_post._transport.app.state.content_size_tracker.recompute  # type: ignore[union-attr]
+        )
+
+        def tracking_recompute() -> None:
+            nonlocal recompute_called
+            recompute_called = True
+            original_recompute()
+
+        with (
+            patch(
+                "backend.api.posts.ContentManager.delete_post",
+                side_effect=OSError("disk error"),
+            ),
+            patch.object(
+                client_with_post._transport.app.state.content_size_tracker,  # type: ignore[union-attr]
+                "recompute",
+                side_effect=tracking_recompute,
+            ),
+        ):
+            resp = await client_with_post.delete(
+                f"/api/posts/{POST_PATH}",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            # DB deletion succeeds (204), file deletion fails
+            assert resp.status_code == 204
+
+        # Tracker must recompute to stay in sync with actual disk state
+        assert recompute_called, "Tracker did not recompute after failed file deletion"
+
+
+class TestSyncRollbackFailurePreservesOriginalError:
+    """Issue #9: Rollback failure must not mask the original quota error."""
+
+    @pytest.mark.asyncio
+    async def test_rollback_failure_still_returns_413(
+        self, client: AsyncClient, quota_settings: Settings
+    ) -> None:
+        token = await _login(client)
+
+        big_content = (
+            "---\ntitle: Huge Sync Post\ncreated_at: 2026-01-01 00:00:00+00\n"
+            "author: admin\nlabels: []\n---\n\n" + "x" * 50_000
+        )
+
+        # Patch _restore_original_files to simulate a rollback failure
+        with patch(
+            "backend.api.sync._restore_original_files",
+            return_value=["posts/2026-01-01-huge/index.md"],
+        ) as mock_restore:
+            resp = await client.post(
+                "/api/sync/commit",
+                data={"metadata": '{"deleted_files":[],"last_sync_commit":null}'},
+                files=[
+                    (
+                        "files",
+                        ("posts/2026-01-01-huge/index.md", big_content.encode(), "text/plain"),
+                    )
+                ],
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            # Must still return 413 (the original error), not 500 (rollback failure)
+            assert resp.status_code == 413
+            assert resp.json()["detail"] == "Storage limit reached"
+            mock_restore.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_rollback_failure_logs_error(
+        self, client: AsyncClient, quota_settings: Settings, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        token = await _login(client)
+
+        big_content = (
+            "---\ntitle: Huge Sync Post\ncreated_at: 2026-01-01 00:00:00+00\n"
+            "author: admin\nlabels: []\n---\n\n" + "x" * 50_000
+        )
+
+        with (
+            patch(
+                "backend.api.sync._restore_original_files",
+                return_value=["posts/2026-01-01-huge/index.md"],
+            ),
+            caplog.at_level(logging.ERROR, logger="backend.api.sync"),
+        ):
+            await client.post(
+                "/api/sync/commit",
+                data={"metadata": '{"deleted_files":[],"last_sync_commit":null}'},
+                files=[
+                    (
+                        "files",
+                        ("posts/2026-01-01-huge/index.md", big_content.encode(), "text/plain"),
+                    )
+                ],
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            assert any("rollback incomplete" in r.message.lower() for r in caplog.records)

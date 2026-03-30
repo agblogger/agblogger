@@ -6,6 +6,7 @@ import asyncio
 import logging
 import os
 import shutil
+import stat as _stat
 from pathlib import Path as FilePath
 from typing import Annotated, Literal
 
@@ -84,6 +85,24 @@ def _get_post_asset_directory(file_path: str, content_manager: ContentManager) -
     return post_file.parent
 
 
+def _safe_file_size(path: FilePath) -> int:
+    """Return the size of a regular file, or 0 if absent/non-regular.
+
+    Handles TOCTOU races by catching filesystem errors rather than
+    using check-then-act patterns like ``path.exists() and path.stat()``.
+    """
+    try:
+        st = path.stat()
+        if not _stat.S_ISREG(st.st_mode):
+            return 0
+        return st.st_size
+    except FileNotFoundError:
+        return 0
+    except OSError as exc:
+        logger.error("Failed to stat %s: %s", path, exc)
+        return 0
+
+
 def _asset_upload_net_delta(
     *,
     asset_data: list[tuple[str, bytes]],
@@ -93,17 +112,7 @@ def _asset_upload_net_delta(
     final_sizes = {filename: len(data) for filename, data in asset_data}
     net_delta = 0
     for filename, final_size in final_sizes.items():
-        existing_path = post_dir / filename
-        try:
-            existing_size = existing_path.stat().st_size
-        except FileNotFoundError:
-            existing_size = 0
-        except OSError as exc:
-            logger.error("Failed to stat existing asset %s: %s", existing_path, exc)
-            raise HTTPException(
-                status_code=500,
-                detail=f"Failed to inspect existing asset: {filename}",
-            ) from exc
+        existing_size = _safe_file_size(post_dir / filename)
         net_delta += final_size - existing_size
     return net_delta
 
@@ -521,7 +530,7 @@ async def upload_assets(
         written_delta = 0
         for filename, data in asset_data:
             dest = post_dir / filename
-            old_size = dest.stat().st_size if dest.exists() and dest.is_file() else 0
+            old_size = _safe_file_size(dest)
             # Handle filesystem errors during asset write
             try:
                 dest.write_bytes(data)
@@ -1242,5 +1251,6 @@ async def delete_post_endpoint(
                 file_path,
                 exc,
             )
+            content_size_tracker.recompute()
 
         set_git_warning(response, await git_service.try_commit(f"Delete post: {file_path}"))

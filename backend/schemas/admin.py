@@ -74,7 +74,7 @@ class PageUpdate(BaseModel):
 class PageOrderItem(BaseModel):
     """A single page in the reorder list."""
 
-    id: str
+    id: str = Field(min_length=1, max_length=50, pattern=r"^[a-z0-9][a-z0-9_-]*$")
     title: str
     file: str | None = None
 

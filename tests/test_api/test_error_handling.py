@@ -143,6 +143,21 @@ class TestPageCacheMissReturns404:
         assert resp.status_code == 404
 
 
+class TestPageDatabaseError:
+    """Issue #6: Page API endpoint returns 503 on SQLAlchemyError."""
+
+    @pytest.mark.asyncio
+    async def test_page_db_error_returns_503(self, client: AsyncClient) -> None:
+        with patch(
+            "backend.api.pages.get_page",
+            new_callable=AsyncMock,
+            side_effect=OperationalError("db error", params=None, orig=Exception()),
+        ):
+            resp = await client.get("/api/pages/about")
+        assert resp.status_code == 503
+        assert resp.json()["detail"] == "Page temporarily unavailable"
+
+
 class TestRuntimeErrorHandler:
     """Non-render RuntimeError returns 500 'Internal server error'."""
 

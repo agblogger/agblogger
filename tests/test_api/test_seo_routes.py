@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, cast
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from httpx import ASGITransport
@@ -510,8 +511,7 @@ class TestFormatHumanDateWithDatetime:
 class TestHomepageDatabaseError:
     """Homepage SEO route must degrade gracefully when the DB raises SQLAlchemyError."""
 
-    async def test_db_error_returns_plain_html(self, client: AsyncClient) -> None:
-        """Homepage must return plain HTML (200) and not crash when the DB is unavailable."""
+    def _inject_failing_session(self, client: AsyncClient) -> None:
         mock_session = AsyncMock()
         mock_session.execute.side_effect = SQLAlchemyError("DB down")
 
@@ -525,10 +525,240 @@ class TestHomepageDatabaseError:
         assert state is not None
         state.session_factory = mock_session_factory
 
+    async def test_db_error_returns_503(self, client: AsyncClient) -> None:
+        """Homepage must return 503 (not 200) when the DB is unavailable."""
+        self._inject_failing_session(client)
         resp = await client.get("/")
-        assert resp.status_code == 200
+        assert resp.status_code == 503
+
+    async def test_db_error_has_retry_after_header(self, client: AsyncClient) -> None:
+        """Homepage 503 response must include Retry-After header."""
+        self._inject_failing_session(client)
+        resp = await client.get("/")
+        assert resp.headers.get("Retry-After") == "60"
+
+    async def test_db_error_returns_base_html_body(self, client: AsyncClient) -> None:
+        """Homepage 503 response body must still contain the base HTML."""
+        self._inject_failing_session(client)
+        resp = await client.get("/")
         assert "text/html" in resp.headers["content-type"]
-        # The response must be non-empty plain HTML (the base index.html fallback)
         assert len(resp.text) > 0
         # SEO-enriched content (rendered post list) must NOT be present on DB error
         assert "Hello World" not in resp.text
+
+
+class TestPageDatabaseError:
+    """page_route must return 503 with Retry-After when the DB raises SQLAlchemyError."""
+
+    def _inject_failing_session(self, client: AsyncClient) -> None:
+        mock_session = AsyncMock()
+        mock_session.execute.side_effect = SQLAlchemyError("DB down")
+
+        mock_session_factory = MagicMock()
+        mock_session_factory.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session_factory.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        transport = client._transport
+        assert isinstance(transport, ASGITransport)
+        state = getattr(transport.app, "state", None)
+        assert state is not None
+        state.session_factory = mock_session_factory
+
+    async def test_db_error_returns_503(self, client: AsyncClient) -> None:
+        """page_route must return 503 (not 200) when the DB is unavailable."""
+        self._inject_failing_session(client)
+        resp = await client.get("/page/about")
+        assert resp.status_code == 503
+
+    async def test_db_error_has_retry_after_header(self, client: AsyncClient) -> None:
+        """page_route 503 response must include Retry-After header."""
+        self._inject_failing_session(client)
+        resp = await client.get("/page/about")
+        assert resp.headers.get("Retry-After") == "60"
+
+    async def test_db_error_returns_base_html_body(self, client: AsyncClient) -> None:
+        """page_route 503 response body must still contain the base HTML."""
+        self._inject_failing_session(client)
+        resp = await client.get("/page/about")
+        assert "text/html" in resp.headers["content-type"]
+        assert len(resp.text) > 0
+
+
+class TestLabelDetailDatabaseError:
+    """label_detail_route must return 503 with Retry-After when the DB raises SQLAlchemyError."""
+
+    def _inject_failing_session(self, client: AsyncClient) -> None:
+        mock_session = AsyncMock()
+        mock_session.execute.side_effect = SQLAlchemyError("DB down")
+
+        mock_session_factory = MagicMock()
+        mock_session_factory.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session_factory.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        transport = client._transport
+        assert isinstance(transport, ASGITransport)
+        state = getattr(transport.app, "state", None)
+        assert state is not None
+        state.session_factory = mock_session_factory
+
+    async def test_db_error_returns_503(self, client: AsyncClient) -> None:
+        """label_detail_route must return 503 (not 200) when the DB is unavailable."""
+        self._inject_failing_session(client)
+        resp = await client.get("/labels/python")
+        assert resp.status_code == 503
+
+    async def test_db_error_has_retry_after_header(self, client: AsyncClient) -> None:
+        """label_detail_route 503 response must include Retry-After header."""
+        self._inject_failing_session(client)
+        resp = await client.get("/labels/python")
+        assert resp.headers.get("Retry-After") == "60"
+
+    async def test_db_error_returns_base_html_body(self, client: AsyncClient) -> None:
+        """label_detail_route 503 response body must still contain the base HTML."""
+        self._inject_failing_session(client)
+        resp = await client.get("/labels/python")
+        assert "text/html" in resp.headers["content-type"]
+        assert len(resp.text) > 0
+
+
+class TestQuotaExceededHandlerLogging:
+    """QuotaExceededError handler must log the request before returning 413."""
+
+    async def test_quota_exceeded_logs_info(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """When QuotaExceededError is raised, the handler must emit an info log."""
+        from httpx import ASGITransport, AsyncClient
+
+        from backend.main import create_app
+        from backend.services.storage_quota import QuotaExceededError
+
+        settings = Settings(
+            secret_key="test-secret-key-min-32-characters-long",
+            admin_password="testpassword",
+            debug=True,
+            frontend_dir=tmp_path / "no-frontend",
+        )
+        app = create_app(settings)
+
+        @app.get("/test-quota-exceeded")
+        async def _raise_quota() -> None:
+            raise QuotaExceededError("over limit")
+
+        with caplog.at_level(logging.INFO, logger="backend.main"):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+                resp = await ac.get("/test-quota-exceeded")
+
+        assert resp.status_code == 413
+        quota_records = [
+            r
+            for r in caplog.records
+            if "quota" in r.message.lower() or "storage" in r.message.lower()
+        ]
+        assert len(quota_records) >= 1
+        assert any(
+            "GET" in r.message and "/test-quota-exceeded" in r.message for r in quota_records
+        )
+
+
+class TestPageRouteRuntimeError:
+    """page_route must NOT catch RuntimeError — it must propagate to the global handler."""
+
+    async def test_runtime_error_propagates_from_page_route(self, client: AsyncClient) -> None:
+        """RuntimeError in page_route must reach the global exception handler (500 response)."""
+        with patch(
+            "backend.services.page_service.get_page",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("unexpected bug"),
+        ):
+            resp = await client.get("/page/about")
+
+        # RuntimeError must NOT be silently swallowed by the page_route except clause;
+        # it should propagate to the global RuntimeError handler → 500
+        assert resp.status_code == 500
+
+    async def test_sqlalchemy_error_still_returns_503_from_page_route(
+        self, client: AsyncClient
+    ) -> None:
+        """SQLAlchemyError must still be caught by page_route and return 503."""
+        mock_session = AsyncMock()
+        mock_session.execute.side_effect = SQLAlchemyError("DB down")
+
+        mock_session_factory = MagicMock()
+        mock_session_factory.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session_factory.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        transport = client._transport
+        assert isinstance(transport, ASGITransport)
+        state = getattr(transport.app, "state", None)
+        assert state is not None
+        state.session_factory = mock_session_factory
+
+        resp = await client.get("/page/about")
+        assert resp.status_code == 503
+
+
+class TestHomepageValueError:
+    """Homepage ValueError from invalid date params must return 200 with base HTML."""
+
+    async def test_invalid_date_params_return_200(self, client: AsyncClient) -> None:
+        """ValueError from list_posts (bad date param) must return 200 with base HTML."""
+        with patch(
+            "backend.services.post_service.list_posts",
+            new_callable=AsyncMock,
+            side_effect=ValueError("invalid date"),
+        ):
+            resp = await client.get("/?from=not-a-date")
+
+        assert resp.status_code == 200
+        assert "text/html" in resp.headers["content-type"]
+        assert len(resp.text) > 0
+
+    async def test_invalid_date_params_return_base_html(self, client: AsyncClient) -> None:
+        """ValueError response body must be the base HTML fallback (no SEO content)."""
+        with patch(
+            "backend.services.post_service.list_posts",
+            new_callable=AsyncMock,
+            side_effect=ValueError("invalid date"),
+        ):
+            resp = await client.get("/?to=bad-date")
+
+        # SEO-enriched post list must NOT appear — ValueError short-circuits rendering
+        assert "Hello World" not in resp.text
+
+
+class TestPostSeo:
+    """Post page must include article OG tags, JSON-LD BlogPosting, and preload data."""
+
+    async def test_og_type_is_article(self, client: AsyncClient) -> None:
+        """Post page must include og:type=article."""
+        resp = await client.get("/post/hello")
+        assert resp.status_code == 200
+        assert 'og:type" content="article"' in resp.text
+
+    async def test_json_ld_blogposting(self, client: AsyncClient) -> None:
+        """Post page must include JSON-LD BlogPosting structured data."""
+        resp = await client.get("/post/hello")
+        assert resp.status_code == 200
+        assert '"BlogPosting"' in resp.text
+
+    async def test_article_published_time_meta(self, client: AsyncClient) -> None:
+        """Post page must include article:published_time meta tag."""
+        resp = await client.get("/post/hello")
+        assert resp.status_code == 200
+        assert "article:published_time" in resp.text
+
+    async def test_article_modified_time_meta(self, client: AsyncClient) -> None:
+        """Post page must include article:modified_time meta tag."""
+        resp = await client.get("/post/hello")
+        assert resp.status_code == 200
+        assert "article:modified_time" in resp.text
+
+    async def test_preload_data_present(self, client: AsyncClient) -> None:
+        """Post page must include preload data with post metadata."""
+        resp = await client.get("/post/hello")
+        assert resp.status_code == 200
+        assert "__initial_data__" in resp.text
+        preload = _extract_initial_data(resp.text)
+        assert preload["title"] == "Hello World"
+        assert "file_path" in preload

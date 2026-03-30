@@ -146,6 +146,31 @@ class TestTrackedFiles:
         assert tracker.delta_for_paths({tracked_file: 80}) == 30
         assert tracker.delta_for_paths({tracked_file: 20}) == -30
 
+    def test_delta_for_paths_zero_size_treated_as_zero_not_none(self, tmp_path: Path) -> None:
+        """delta_for_paths({path: 0}) must treat 0 as actual size 0, not as absent (None)."""
+        tracked_file = tmp_path / "index.toml"
+        tracked_file.write_bytes(b"x" * 50)
+        tracker = ContentSizeTracker(content_dir=tmp_path, max_size=None)
+
+        # File currently is 50 bytes on disk; new size is 0 (truncated to empty).
+        # Delta should be 0 - 50 = -50, not 0 - 50 == -50 (same) but also not 0 (as if absent=0)
+        # The key check: if `new_size or 0` were used, new_size=0 would fallback to 0 (correct
+        # by coincidence). But if new_size=0 and old=0 (no file on disk), both approaches give 0.
+        # The critical regression: new_size=0 with a file that has old_size>0 via file_size.
+        # We test that the result is -50 (size decreased to 0), not something else.
+        delta = tracker.delta_for_paths({tracked_file: 0})
+        assert delta == -50
+
+    def test_delta_for_paths_none_size_treated_as_absent(self, tmp_path: Path) -> None:
+        """delta_for_paths({path: None}) treats the file as absent (size 0)."""
+        tracked_file = tmp_path / "index.toml"
+        tracked_file.write_bytes(b"x" * 50)
+        tracker = ContentSizeTracker(content_dir=tmp_path, max_size=None)
+
+        # None means file will be deleted → effective new size = 0
+        delta = tracker.delta_for_paths({tracked_file: None})
+        assert delta == -50
+
 
 class TestAdjust:
     def test_adjust_increments(self, tmp_path: Path) -> None:

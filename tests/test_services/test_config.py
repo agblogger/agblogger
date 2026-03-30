@@ -152,3 +152,12 @@ class TestMaxContentSize:
     def test_settings_zero_int_rejected(self) -> None:
         with pytest.raises(ValueError, match="positive"):
             Settings(_env_file=None, max_content_size=0)
+
+    def test_zero_error_message_is_generic(self) -> None:
+        """parse_human_size error should say 'Size' not 'max_content_size'."""
+        with pytest.raises(ValueError, match=r"^Size must be a positive integer"):
+            parse_human_size("0")
+
+    def test_negative_error_message_is_generic(self) -> None:
+        with pytest.raises(ValueError, match=r"^Size must be a positive integer"):
+            parse_human_size("-5M")

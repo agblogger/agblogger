@@ -585,6 +585,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.exception_handler(QuotaExceededError)
     async def quota_exceeded_handler(request: Request, exc: QuotaExceededError) -> JSONResponse:
+        logger.info("Storage quota exceeded: %s %s", request.method, request.url.path)
         return JSONResponse(status_code=413, content={"detail": "Storage limit reached"})
 
     @app.exception_handler(RenderError)
@@ -1015,19 +1016,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             async with session_factory() as session:
                 user = await get_current_admin(request, session=session)
                 is_authenticated = user is not None
-                post_list = await list_posts(
-                    session,
-                    page=page,
-                    per_page=10,
-                    label=label,
-                    labels=labels.split(",") if labels else None,
-                    label_mode=label_mode or "or",
-                    include_descendants=include_sublabels,
-                    author=author,
-                    from_date=from_date,
-                    to_date=to_date,
-                    include_drafts=is_authenticated,
-                )
+                try:
+                    post_list = await list_posts(
+                        session,
+                        page=page,
+                        per_page=10,
+                        label=label,
+                        labels=labels.split(",") if labels else None,
+                        label_mode=label_mode or "or",
+                        include_descendants=include_sublabels,
+                        author=author,
+                        from_date=from_date,
+                        to_date=to_date,
+                        include_drafts=is_authenticated,
+                    )
+                except ValueError:
+                    # list_posts raises ValueError on invalid date query parameters
+                    logger.warning("Invalid homepage query for SEO preload", exc_info=True)
+                    return HTMLResponse(base_html)
                 for post in post_list.posts:
                     slug = _public_post_slug(post.file_path)
                     if slug is None:
@@ -1050,11 +1056,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 )
         except SQLAlchemyError:
             logger.exception("DB error loading posts for homepage SEO")
-            return HTMLResponse(base_html)
-        except ValueError:
-            # list_posts raises ValueError on invalid date query parameters
-            logger.warning("Invalid homepage query for SEO preload", exc_info=True)
-            return HTMLResponse(base_html)
+            return HTMLResponse(base_html, status_code=503, headers={"Retry-After": "60"})
 
         rendered_body = render_post_list_html(posts_data, heading=site_title)
 
@@ -1096,9 +1098,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         try:
             page = await get_page(session_factory, content_manager, page_id)
-        except SQLAlchemyError, OSError, RuntimeError:
+        except SQLAlchemyError, OSError:
             logger.exception("Error loading page for SEO: %s", page_id)
-            return HTMLResponse(base_html)
+            return HTMLResponse(base_html, status_code=503, headers={"Retry-After": "60"})
 
         if page is None:
             return HTMLResponse(base_html)
@@ -1250,7 +1252,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         )
         except SQLAlchemyError:
             logger.exception("DB error loading label for SEO: %s", label_id)
-            return HTMLResponse(base_html)
+            return HTMLResponse(base_html, status_code=503, headers={"Retry-After": "60"})
 
         if label_row is None:
             return HTMLResponse(base_html)

@@ -819,3 +819,34 @@ class TestIssue17DeletePostSizeStatTOCTOU:
         assert resp.status_code == 204
         warning_messages = [r.message for r in caplog.records if r.levelno >= logging.WARNING]
         assert any("stat" in m.lower() for m in warning_messages)
+
+
+class TestSafeFileSize:
+    """Issue #3: _safe_file_size handles TOCTOU races gracefully."""
+
+    def test_returns_size_for_regular_file(self, tmp_path: Path) -> None:
+        from backend.api.posts import _safe_file_size
+
+        f = tmp_path / "test.txt"
+        f.write_text("hello")
+        assert _safe_file_size(f) == 5
+
+    def test_returns_zero_for_missing_file(self, tmp_path: Path) -> None:
+        from backend.api.posts import _safe_file_size
+
+        assert _safe_file_size(tmp_path / "nonexistent") == 0
+
+    def test_returns_zero_for_directory(self, tmp_path: Path) -> None:
+        from backend.api.posts import _safe_file_size
+
+        d = tmp_path / "subdir"
+        d.mkdir()
+        assert _safe_file_size(d) == 0
+
+    def test_returns_zero_on_permission_error(self, tmp_path: Path) -> None:
+        from backend.api.posts import _safe_file_size
+
+        f = tmp_path / "test.txt"
+        f.write_text("hello")
+        with patch.object(type(f), "stat", side_effect=PermissionError("denied")):
+            assert _safe_file_size(f) == 0

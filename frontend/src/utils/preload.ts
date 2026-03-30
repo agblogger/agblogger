@@ -2,25 +2,23 @@
  * Utilities for reading server-injected preload data on initial page load.
  *
  * The backend injects two sources of preloaded data:
- *   1. `<script id="__initial_data__" data-agblogger-preload type="application/json">`
- *      — structured metadata (no HTML fields)
+ *   1. `<script id="__initial_data__" type="application/json">` — structured metadata (no HTML fields)
  *   2. DOM elements inside `<div id="root">` with data attributes — rendered HTML content
  *
  * These utilities merge both sources into typed objects matching the API response shapes.
  * All reads are one-shot: `readPreloadedMeta` removes the script tag on first call.
  */
 
-const PRELOAD_SELECTOR = 'script[data-agblogger-preload][type="application/json"]'
-
 /**
- * Reads and removes the server-owned preload JSON script tag.
+ * Reads and removes the `#__initial_data__` JSON script tag.
  * Returns parsed object or null. One-time read — returns null on every subsequent call.
  */
 export function readPreloadedMeta(): Record<string, unknown> | null {
-  const el = document.querySelector<HTMLScriptElement>(PRELOAD_SELECTOR)
+  const el = document.getElementById('__initial_data__')
   if (el === null) return null
   const text = el.textContent
   el.remove()
+  if (text === null || text === '') return null
   try {
     return JSON.parse(text) as Record<string, unknown>
   } catch (e) {
@@ -45,10 +43,6 @@ export function readPreloadedHtml(selector: string): string | null {
  * Queries all elements matching `itemSelector` inside `#root`.
  * For each item, reads the `idAttr` attribute value and the innerHTML of the child
  * matching `contentSelector`. Returns a Map<id, innerHTML>.
- *
- * NOTE: `itemSelector` must be a simple `[attr]` attribute selector (e.g. `[data-id]`).
- * Compound selectors will produce an incorrect `idAttr` because the attribute name is derived
- * by stripping brackets. The `idAttr` is the bare attribute name used to read the value.
  */
 export function readPreloadedHtmlMap(
   itemSelector: string,
@@ -86,11 +80,11 @@ interface ListHtmlField {
   /** Target field name to set on each item, e.g. 'rendered_excerpt' */
   field: string
   /**
-   * CSS selector for list item elements inside #root.
-   * Must be a simple `[attr]` attribute selector (e.g. `[data-id]`). Compound selectors will
-   * produce an incorrect idAttr because the attribute name is derived by stripping brackets.
+   * CSS selector for list item elements inside #root, e.g. `[data-id]`.
+   * NOTE: must be a simple `[attr]` attribute selector; the brackets are stripped to derive
+   * the bare attribute name used to read the value (e.g. `[data-id]` → `data-id`).
    */
-  itemSelector: `[${string}]`
+  itemSelector: string
   /** CSS selector for the content element within each item, e.g. '[data-excerpt]' */
   contentSelector: string
 }
@@ -139,8 +133,7 @@ function setByPath(obj: Record<string, unknown>, path: string, value: unknown): 
  * merges rendered HTML from the DOM according to the provided spec.
  *
  * Returns the merged object, or null if no preload data was found (e.g. client navigation).
- * Cast the result to your expected type at the call site, e.g.:
- *   `readPreloaded(spec) as unknown as PostDetail | null`
+ * Cast the result to your expected type at the call site.
  */
 export function readPreloaded(spec: PreloadSpec): Record<string, unknown> | null {
   const meta = readPreloadedMeta()

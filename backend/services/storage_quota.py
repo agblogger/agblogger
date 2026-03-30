@@ -31,6 +31,8 @@ class ContentSizeTracker:
 
     recompute() performs blocking filesystem I/O (rglob + stat) and should
     only be called during startup or other infrequent operations.
+    When called via asyncio.to_thread(), the caller must hold the content write lock
+    to ensure exclusive access.
     """
 
     def __init__(self, *, content_dir: Path, max_size: int | None) -> None:
@@ -44,7 +46,7 @@ class ContentSizeTracker:
         return self._usage
 
     def _is_tracked_path(self, path: Path) -> bool:
-        """Return True when *path* is a managed, non-hidden file under content_dir."""
+        """Return True when *path* is a managed, non-hidden path under content_dir."""
         try:
             relative_parts = path.relative_to(self._content_dir).parts
         except ValueError:
@@ -64,11 +66,14 @@ class ContentSizeTracker:
         return 0
 
     def delta_for_paths(self, updated_sizes: dict[Path, int | None]) -> int:
-        """Return the net tracked-byte delta for a set of final file sizes."""
+        """Return the net tracked-byte delta for a set of final file sizes.
+
+        A value of None means the file will be absent (treated as size 0).
+        """
         delta = 0
         for path, new_size in updated_sizes.items():
             old_size = self.file_size(path)
-            delta += (new_size or 0) - old_size
+            delta += (0 if new_size is None else new_size) - old_size
         return delta
 
     def recompute(self) -> None:

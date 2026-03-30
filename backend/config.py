@@ -78,7 +78,7 @@ def parse_human_size(value: str) -> int:
 
     result = numeric * multiplier
     if result <= 0:
-        raise ValueError(f"max_content_size must be a positive integer, got {value!r}")
+        raise ValueError(f"Size must be a positive integer, got {value!r}")
     return result
 
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import pytest
@@ -423,3 +424,99 @@ class TestSeoContextImmutability:
         )
         with pytest.raises(FrozenInstanceError):
             ctx.og_type = "website"  # type: ignore[misc]
+
+
+class TestSeoContextJsonLdValidation:
+    """SeoContext must reject json_ld dicts that lack @context or @type."""
+
+    def test_accepts_valid_json_ld_with_context_and_type(self) -> None:
+        ctx = SeoContext(
+            title="Post",
+            description="Desc",
+            canonical_url="https://example.com/post/x",
+            json_ld={"@context": "https://schema.org", "@type": "WebPage"},
+        )
+        assert ctx.json_ld is not None
+        assert ctx.json_ld["@type"] == "WebPage"
+
+    def test_accepts_none_json_ld(self) -> None:
+        ctx = SeoContext(
+            title="Post",
+            description="Desc",
+            canonical_url="https://example.com/post/x",
+            json_ld=None,
+        )
+        assert ctx.json_ld is None
+
+    def test_rejects_json_ld_missing_context(self) -> None:
+        with pytest.raises(ValueError, match="@context"):
+            SeoContext(
+                title="Post",
+                description="Desc",
+                canonical_url="https://example.com/post/x",
+                json_ld={"@type": "WebPage", "name": "Test"},
+            )
+
+    def test_rejects_json_ld_missing_type(self) -> None:
+        with pytest.raises(ValueError, match="@type"):
+            SeoContext(
+                title="Post",
+                description="Desc",
+                canonical_url="https://example.com/post/x",
+                json_ld={"@context": "https://schema.org", "name": "Test"},
+            )
+
+    def test_rejects_json_ld_missing_both(self) -> None:
+        with pytest.raises(ValueError, match=r"@context|@type"):
+            SeoContext(
+                title="Post",
+                description="Desc",
+                canonical_url="https://example.com/post/x",
+                json_ld={"name": "Test", "url": "https://example.com"},
+            )
+
+
+class TestRenderSeoHtmlMissingMarkers:
+    """render_seo_html should log warnings when expected HTML markers are absent."""
+
+    def test_warns_when_head_close_missing(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        html_no_head = "<!DOCTYPE html><html><body><div id=\"root\"></div></body></html>"
+        with caplog.at_level(logging.WARNING, logger="backend.services.seo_service"):
+            render_seo_html(html_no_head, _make_ctx())
+        assert any("</head>" in r.message for r in caplog.records)
+
+    def test_warns_when_root_div_missing_and_rendered_body_set(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        html_no_root = "<!DOCTYPE html><html><head></head><body></body></html>"
+        with caplog.at_level(logging.WARNING, logger="backend.services.seo_service"):
+            render_seo_html(html_no_root, _make_ctx(rendered_body="<p>content</p>"))
+        assert any("root" in r.message for r in caplog.records)
+
+    def test_no_root_warning_when_rendered_body_is_none(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        html_no_root = "<!DOCTYPE html><html><head></head><body></body></html>"
+        with caplog.at_level(logging.WARNING, logger="backend.services.seo_service"):
+            render_seo_html(html_no_root, _make_ctx(rendered_body=None))
+        assert not any("root" in r.message for r in caplog.records)
+
+    def test_warns_when_body_close_missing_and_preload_set(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        html_no_body_close = (
+            "<!DOCTYPE html><html><head></head><body><div id=\"root\"></div></body"
+        )
+        with caplog.at_level(logging.WARNING, logger="backend.services.seo_service"):
+            render_seo_html(html_no_body_close, _make_ctx(preload_data={"key": "val"}))
+        assert any("</body>" in r.message for r in caplog.records)
+
+    def test_no_body_close_warning_when_preload_is_none(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        html_no_body_close = "<!DOCTYPE html><html><head></head><body><div id=\"root\"></div>"
+        with caplog.at_level(logging.WARNING, logger="backend.services.seo_service"):
+            render_seo_html(html_no_body_close, _make_ctx(preload_data=None))
+        assert not any("</body>" in r.message for r in caplog.records)

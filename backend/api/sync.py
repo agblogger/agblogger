@@ -84,7 +84,7 @@ def _remember_original_file(
 
 
 def _prune_empty_directories(start: Path, *, stop_at: Path) -> None:
-    """Remove empty parent directories created during sync, stopping at content_dir."""
+    """Remove empty parent directories from *start* upward, stopping at *stop_at*."""
     current = start
     while current != stop_at:
         try:
@@ -95,8 +95,14 @@ def _prune_empty_directories(start: Path, *, stop_at: Path) -> None:
         current = current.parent
 
 
-def _restore_original_files(*, content_dir: Path, original_files: dict[str, bytes | None]) -> None:
-    """Restore files touched by sync to their pre-commit state."""
+def _restore_original_files(
+    *, content_dir: Path, original_files: dict[str, bytes | None]
+) -> list[str]:
+    """Restore files touched by sync to their pre-commit state.
+
+    Returns a list of file paths that failed to restore (empty on full success).
+    """
+    failures: list[str] = []
     for file_path, original_bytes in original_files.items():
         full_path = content_dir / file_path
         if original_bytes is None:
@@ -105,10 +111,7 @@ def _restore_original_files(*, content_dir: Path, original_files: dict[str, byte
                     full_path.unlink()
             except OSError as exc:
                 logger.error("Sync: failed to remove reverted file %s: %s", file_path, exc)
-                raise HTTPException(
-                    status_code=500,
-                    detail="Failed to rollback sync changes",
-                ) from exc
+                failures.append(file_path)
             _prune_empty_directories(full_path.parent, stop_at=content_dir)
             continue
 
@@ -117,10 +120,8 @@ def _restore_original_files(*, content_dir: Path, original_files: dict[str, byte
             full_path.write_bytes(original_bytes)
         except OSError as exc:
             logger.error("Sync: failed to restore %s during rollback: %s", file_path, exc)
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to rollback sync changes",
-            ) from exc
+            failures.append(file_path)
+    return failures
 
 
 # ── Schemas ──────────────────────────────────────────
@@ -477,7 +478,9 @@ async def _sync_commit_inner(
 
     await asyncio.to_thread(content_size_tracker.recompute)
     if not content_size_tracker.check(0):
-        _restore_original_files(content_dir=content_dir, original_files=original_files)
+        failures = _restore_original_files(content_dir=content_dir, original_files=original_files)
+        if failures:
+            logger.error("Sync rollback incomplete, failed to restore: %s", failures)
         await asyncio.to_thread(content_size_tracker.recompute)
         raise HTTPException(status_code=413, detail="Storage limit reached")
 

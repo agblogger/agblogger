@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from backend.api.deps import get_content_manager, get_current_admin, get_session_factory
@@ -14,6 +16,8 @@ from backend.schemas.admin import PAGE_ID_PATTERN
 from backend.schemas.page import PageResponse, SiteConfigResponse
 from backend.services.analytics_service import fire_background_hit
 from backend.services.page_service import get_page, get_site_config
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/pages", tags=["pages"])
 
@@ -37,7 +41,11 @@ async def get_page_endpoint(
     """Get a top-level page with cached HTML."""
     if not PAGE_ID_PATTERN.match(page_id):
         raise HTTPException(status_code=400, detail="Invalid page ID")
-    page = await get_page(session_factory, content_manager, page_id)
+    try:
+        page = await get_page(session_factory, content_manager, page_id)
+    except SQLAlchemyError:
+        logger.exception("DB error loading page %s", page_id)
+        raise HTTPException(status_code=503, detail="Page temporarily unavailable") from None
     if page is None:
         raise HTTPException(status_code=404, detail="Page not found")
     fire_background_hit(

@@ -259,6 +259,78 @@ class TestPageOrderItemValidation:
         item = PageOrderItem(id="timeline", title="Timeline", file=None)
         assert item.file is None
 
+    def test_rejects_empty_id(self) -> None:
+        from pydantic import ValidationError
+
+        from backend.schemas.admin import PageOrderItem
+
+        with pytest.raises(ValidationError):
+            PageOrderItem(id="", title="Test")
+
+    def test_rejects_id_too_long(self) -> None:
+        from pydantic import ValidationError
+
+        from backend.schemas.admin import PageOrderItem
+
+        with pytest.raises(ValidationError):
+            PageOrderItem(id="a" * 51, title="Test")
+
+    def test_rejects_id_with_uppercase(self) -> None:
+        from pydantic import ValidationError
+
+        from backend.schemas.admin import PageOrderItem
+
+        with pytest.raises(ValidationError):
+            PageOrderItem(id="MyPage", title="Test")
+
+    def test_rejects_id_with_spaces(self) -> None:
+        from pydantic import ValidationError
+
+        from backend.schemas.admin import PageOrderItem
+
+        with pytest.raises(ValidationError):
+            PageOrderItem(id="my page", title="Test")
+
+    def test_rejects_id_starting_with_hyphen(self) -> None:
+        from pydantic import ValidationError
+
+        from backend.schemas.admin import PageOrderItem
+
+        with pytest.raises(ValidationError):
+            PageOrderItem(id="-mypage", title="Test")
+
+    def test_rejects_id_starting_with_underscore(self) -> None:
+        from pydantic import ValidationError
+
+        from backend.schemas.admin import PageOrderItem
+
+        with pytest.raises(ValidationError):
+            PageOrderItem(id="_mypage", title="Test")
+
+    def test_accepts_valid_id_alphanumeric(self) -> None:
+        from backend.schemas.admin import PageOrderItem
+
+        item = PageOrderItem(id="mypage123", title="Test")
+        assert item.id == "mypage123"
+
+    def test_accepts_valid_id_with_hyphen(self) -> None:
+        from backend.schemas.admin import PageOrderItem
+
+        item = PageOrderItem(id="my-page", title="Test")
+        assert item.id == "my-page"
+
+    def test_accepts_valid_id_with_underscore(self) -> None:
+        from backend.schemas.admin import PageOrderItem
+
+        item = PageOrderItem(id="my_page", title="Test")
+        assert item.id == "my_page"
+
+    def test_accepts_single_char_id(self) -> None:
+        from backend.schemas.admin import PageOrderItem
+
+        item = PageOrderItem(id="a", title="Test")
+        assert item.id == "a"
+
 
 class TestSiteConfigWithPages:
     """SiteConfig.with_pages() should return a copy with replaced pages."""
