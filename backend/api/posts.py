@@ -93,17 +93,17 @@ def _asset_upload_net_delta(
     final_sizes = {filename: len(data) for filename, data in asset_data}
     net_delta = 0
     for filename, final_size in final_sizes.items():
-        existing_size = 0
         existing_path = post_dir / filename
-        if existing_path.exists() and existing_path.is_file():
-            try:
-                existing_size = existing_path.stat().st_size
-            except OSError as exc:
-                logger.error("Failed to stat existing asset %s: %s", existing_path, exc)
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Failed to inspect existing asset: {filename}",
-                ) from exc
+        try:
+            existing_size = existing_path.stat().st_size
+        except FileNotFoundError:
+            existing_size = 0
+        except OSError as exc:
+            logger.error("Failed to stat existing asset %s: %s", existing_path, exc)
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to inspect existing asset: {filename}",
+            ) from exc
         net_delta += final_size - existing_size
     return net_delta
 
@@ -518,16 +518,21 @@ async def upload_assets(
         content_size_tracker.require_quota(net_delta)
 
         uploaded: list[str] = []
+        written_delta = 0
         for filename, data in asset_data:
             dest = post_dir / filename
+            old_size = dest.stat().st_size if dest.exists() and dest.is_file() else 0
             # Handle filesystem errors during asset write
             try:
                 dest.write_bytes(data)
             except OSError as exc:
                 logger.error("Failed to write asset %s: %s", dest, exc)
+                if written_delta:
+                    content_size_tracker.adjust(written_delta)
                 raise HTTPException(
                     status_code=500, detail=f"Failed to write asset: {filename}"
                 ) from exc
+            written_delta += len(data) - old_size
             uploaded.append(filename)
 
         if uploaded:
@@ -536,7 +541,7 @@ async def upload_assets(
                 response,
                 await git_service.try_commit(commit_message),
             )
-            content_size_tracker.adjust(net_delta)
+            content_size_tracker.adjust(written_delta)
 
         return {"uploaded": uploaded}
 
@@ -1101,9 +1106,11 @@ async def update_post_endpoint(
             existing.rendered_excerpt = new_rendered_excerpt
             existing.rendered_html = new_rendered_html
 
+        commit_failed = False
         try:
             await session.commit()
         except (OperationalError, IntegrityError) as exc:
+            commit_failed = True
             logger.error("DB commit failed for post update %s: %s", file_path, exc)
             if needs_rename:
                 if new_dir is None or old_dir is None:
@@ -1122,13 +1129,16 @@ async def update_post_endpoint(
                             mv_exc,
                         )
             raise
-        final_path = new_file_path if needs_rename else file_path
-        try:
-            new_size = (content_manager.content_dir / final_path).stat().st_size
-        except OSError:
-            logger.warning("Could not stat post file after update: %s", final_path)
-            new_size = old_size  # No adjustment if stat fails
-        content_size_tracker.adjust(new_size - old_size)
+        finally:
+            # Always adjust tracker after filesystem write, even on commit failure,
+            # so the tracker reflects actual disk state.
+            stat_path = file_path if commit_failed or not needs_rename else new_file_path
+            try:
+                new_size = (content_manager.content_dir / stat_path).stat().st_size
+            except OSError:
+                logger.warning("Could not stat post file after update: %s", stat_path)
+                new_size = old_size
+            content_size_tracker.adjust(new_size - old_size)
         await session.refresh(existing)
         set_git_warning(
             response,

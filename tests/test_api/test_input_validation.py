@@ -249,6 +249,33 @@ class TestPageIdErrorMessage:
         assert "lowercase" in detail or "a-z" in detail or "alphanumeric" in detail
 
 
+class TestPublicPageIdValidation:
+    """Public page endpoint rejects the same invalid IDs as admin endpoints."""
+
+    @pytest.mark.asyncio
+    async def test_public_page_rejects_uppercase_id(self, client: AsyncClient) -> None:
+        resp = await client.get("/api/pages/About")
+        assert resp.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_public_page_rejects_id_starting_with_hyphen(self, client: AsyncClient) -> None:
+        resp = await client.get("/api/pages/-test")
+        assert resp.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_public_page_rejects_id_starting_with_underscore(
+        self, client: AsyncClient
+    ) -> None:
+        resp = await client.get("/api/pages/_test")
+        assert resp.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_public_page_accepts_valid_lowercase_id(self, client: AsyncClient) -> None:
+        # Valid ID format should not be rejected by validation (404 means it passed validation)
+        resp = await client.get("/api/pages/about")
+        assert resp.status_code in (200, 404)
+
+
 class TestTimezoneValidation:
     """Admin site settings reject invalid timezone strings."""
 

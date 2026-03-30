@@ -234,6 +234,65 @@ class TestAssetUploadQuota:
         assert asset_path.read_bytes() == b"y" * replacement_size
 
 
+class TestAssetUploadPartialFailureTracking:
+    """Quota tracker must account for bytes written before a mid-upload failure."""
+
+    @pytest.mark.asyncio
+    async def test_tracker_adjusts_for_files_written_before_error(
+        self,
+        client_with_post: AsyncClient,
+        quota_settings_with_post: Settings,
+    ) -> None:
+        """When the 2nd asset write fails, the tracker still counts the 1st asset."""
+        token = await _login(client_with_post)
+        content_dir = quota_settings_with_post.content_dir
+        max_size = quota_settings_with_post.max_content_size
+        assert max_size is not None
+
+        usage_before = _content_usage(content_dir)
+        asset_a_size = 1000
+        asset_b_size = 2000
+
+        # Patch write_bytes to fail on the second file
+        original_write_bytes = type(content_dir / "x").write_bytes
+        call_count = 0
+
+        def write_bytes_side_effect(self: object, data: bytes) -> int:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 2:
+                raise OSError("Simulated disk failure")
+            return original_write_bytes(self, data)  # type: ignore[arg-type]
+
+        with patch.object(type(content_dir / "x"), "write_bytes", write_bytes_side_effect):
+            resp = await client_with_post.post(
+                f"/api/posts/{POST_PATH}/assets",
+                files=[
+                    ("files", ("a.bin", b"a" * asset_a_size, "application/octet-stream")),
+                    ("files", ("b.bin", b"b" * asset_b_size, "application/octet-stream")),
+                ],
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert resp.status_code == 500
+
+        # File a.bin was written to disk
+        asset_a_path = content_dir / "posts" / "2026-01-01-seed-post" / "a.bin"
+        assert asset_a_path.exists()
+        actual_usage = _content_usage(content_dir)
+        assert actual_usage == usage_before + asset_a_size
+
+        # Now fill remaining quota exactly — this should reject if tracker is correct
+        remaining = max_size - actual_usage
+        resp = await client_with_post.post(
+            f"/api/posts/{POST_PATH}/assets",
+            files=[("files", ("fill.bin", b"x" * (remaining + 1), "application/octet-stream"))],
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 413, (
+            "Tracker under-counted: accepted upload that exceeds real disk usage"
+        )
+
+
 class TestSyncQuota:
     @pytest.mark.asyncio
     async def test_sync_commit_exceeding_quota_returns_413(
@@ -685,6 +744,122 @@ class TestEditPostQuota:
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 200
+
+
+class TestUpdatePostCommitFailureTracking:
+    """Quota tracker must adjust even when DB commit fails after filesystem write."""
+
+    @pytest.mark.asyncio
+    async def test_tracker_adjusts_when_commit_fails(
+        self,
+        client_with_post: AsyncClient,
+        quota_settings_with_post: Settings,
+    ) -> None:
+        """Update grows the file on disk, then commit fails — tracker must reflect disk."""
+        from sqlalchemy.exc import OperationalError
+        from sqlalchemy.ext.asyncio import AsyncSession
+
+        token = await _login(client_with_post)
+        content_dir = quota_settings_with_post.content_dir
+        max_size = quota_settings_with_post.max_content_size
+        assert max_size is not None
+
+        usage_before = _content_usage(content_dir)
+
+        # A large body that significantly grows the post but stays within quota
+        large_body = "x" * 10_000
+
+        # Patch commit to fail once (login already done, so next commit is the update)
+        original_commit = AsyncSession.commit
+        failed = False
+
+        async def failing_commit(self: object) -> None:
+            nonlocal failed
+            if not failed:
+                failed = True
+                raise OperationalError("simulated", {}, Exception())
+            return await original_commit(self)  # type: ignore[arg-type]
+
+        with patch.object(AsyncSession, "commit", failing_commit):
+            resp = await client_with_post.put(
+                f"/api/posts/{POST_PATH}",
+                json={
+                    "title": "Seed Post",
+                    "body": large_body,
+                    "labels": [],
+                    "is_draft": False,
+                },
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        # OperationalError propagates to the global handler which returns 503
+        assert resp.status_code == 503
+
+        # The file was written to disk even though commit failed
+        actual_usage = _content_usage(content_dir)
+        assert actual_usage > usage_before
+
+        # Verify tracker reflects actual disk usage: uploading just past the limit
+        # should be rejected
+        remaining = max_size - actual_usage
+        resp = await client_with_post.post(
+            f"/api/posts/{POST_PATH}/assets",
+            files=[("files", ("fill.bin", b"x" * (remaining + 1), "application/octet-stream"))],
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 413, (
+            "Tracker under-counted after commit failure: "
+            "accepted upload that exceeds real disk usage"
+        )
+
+
+class TestSyncRecomputeNonBlocking:
+    """recompute() in sync must run off the event loop thread to avoid blocking."""
+
+    @pytest.mark.asyncio
+    async def test_sync_recompute_runs_in_worker_thread(
+        self,
+        client_with_post: AsyncClient,
+        quota_settings_with_post: Settings,
+    ) -> None:
+        import threading
+
+        token = await _login(client_with_post)
+        recompute_threads: list[str] = []
+
+        from backend.services.storage_quota import ContentSizeTracker
+
+        original_recompute = ContentSizeTracker.recompute
+
+        def tracking_recompute(self: ContentSizeTracker) -> None:
+            recompute_threads.append(threading.current_thread().name)
+            original_recompute(self)
+
+        with patch.object(ContentSizeTracker, "recompute", tracking_recompute):
+            resp = await client_with_post.post(
+                "/api/sync/commit",
+                data={"metadata": '{"deleted_files":[],"last_sync_commit":null}'},
+                files=[
+                    (
+                        "files",
+                        (
+                            "posts/2026-01-01-sync-test/index.md",
+                            b"---\ntitle: T\ncreated_at: 2026-01-01 00:00:00+00\n"
+                            b"author: admin\nlabels: []\n---\nBody.\n",
+                            "text/plain",
+                        ),
+                    )
+                ],
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert resp.status_code == 200
+
+        # recompute should have been called at least once, and always from a worker thread
+        assert len(recompute_threads) >= 1, "recompute was never called during sync"
+        main_thread_name = threading.main_thread().name
+        for thread_name in recompute_threads:
+            assert thread_name != main_thread_name, (
+                f"recompute() ran on the main thread ({thread_name}), blocking the event loop"
+            )
 
 
 class TestSyncRollbackFailure:

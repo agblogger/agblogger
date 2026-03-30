@@ -475,10 +475,10 @@ async def _sync_commit_inner(
         content_dir=content_dir,
     )
 
-    content_size_tracker.recompute()
+    await asyncio.to_thread(content_size_tracker.recompute)
     if not content_size_tracker.check(0):
         _restore_original_files(content_dir=content_dir, original_files=original_files)
-        content_size_tracker.recompute()
+        await asyncio.to_thread(content_size_tracker.recompute)
         raise HTTPException(status_code=413, detail="Storage limit reached")
 
     # ── Git commit ──
@@ -515,7 +515,7 @@ async def _sync_commit_inner(
         from backend.services.cache_service import rebuild_cache
 
         _post_count, cache_warnings = await rebuild_cache(session_factory, content_manager)
-        content_size_tracker.recompute()
+        await asyncio.to_thread(content_size_tracker.recompute)
     except (OSError, OperationalError, RuntimeError) as exc:
         logger.error("Cache rebuild failed during sync commit: %s", exc)
         sync_warnings.append(

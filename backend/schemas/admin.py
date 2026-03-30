@@ -2,9 +2,16 @@
 
 from __future__ import annotations
 
+import re
 import zoneinfo
 
 from pydantic import BaseModel, Field, field_validator, model_validator
+
+PAGE_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
+PAGE_ID_ERROR = (
+    "Invalid page ID: must start with a lowercase letter or digit, "
+    "and contain only lowercase alphanumeric characters, hyphens, or underscores."
+)
 
 
 class SiteSettingsUpdate(BaseModel):

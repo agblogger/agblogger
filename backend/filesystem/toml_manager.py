@@ -154,19 +154,22 @@ def parse_labels_config(content_dir: Path) -> dict[str, LabelDef]:
     return result
 
 
-def write_labels_config(content_dir: Path, labels: dict[str, LabelDef]) -> None:
-    """Write labels back to labels.toml."""
-    labels_bytes = serialize_labels_config(labels)
-    labels_path = content_dir / "labels.toml"
-    fd, tmp_path_str = tempfile.mkstemp(dir=content_dir, suffix=".tmp")
+def _atomic_write_bytes(target: Path, data: bytes) -> None:
+    """Atomically write *data* to *target* via a temp file in the same directory."""
+    fd, tmp_path_str = tempfile.mkstemp(dir=target.parent, suffix=".tmp")
     tmp_path = Path(tmp_path_str)
     try:
         with os.fdopen(fd, "wb") as f:
-            f.write(labels_bytes)
-        tmp_path.replace(labels_path)
+            f.write(data)
+        tmp_path.replace(target)
     except BaseException:
         tmp_path.unlink(missing_ok=True)
         raise
+
+
+def write_labels_config(content_dir: Path, labels: dict[str, LabelDef]) -> None:
+    """Write labels back to labels.toml."""
+    _atomic_write_bytes(content_dir / "labels.toml", serialize_labels_config(labels))
 
 
 def serialize_labels_config(labels: dict[str, LabelDef]) -> bytes:
@@ -185,17 +188,7 @@ def serialize_labels_config(labels: dict[str, LabelDef]) -> bytes:
 
 def write_site_config(content_dir: Path, config: SiteConfig) -> None:
     """Write site configuration back to index.toml."""
-    site_bytes = serialize_site_config(config)
-    index_path = content_dir / "index.toml"
-    fd, tmp_path_str = tempfile.mkstemp(dir=content_dir, suffix=".tmp")
-    tmp_path = Path(tmp_path_str)
-    try:
-        with os.fdopen(fd, "wb") as f:
-            f.write(site_bytes)
-        tmp_path.replace(index_path)
-    except BaseException:
-        tmp_path.unlink(missing_ok=True)
-        raise
+    _atomic_write_bytes(content_dir / "index.toml", serialize_site_config(config))
 
 
 def serialize_site_config(config: SiteConfig) -> bytes:

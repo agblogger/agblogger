@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import re
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
@@ -29,6 +28,8 @@ from backend.filesystem.content_manager import ContentManager
 from backend.filesystem.toml_manager import PageConfig, SiteConfig, serialize_site_config
 from backend.models.user import AdminUser
 from backend.schemas.admin import (
+    PAGE_ID_ERROR,
+    PAGE_ID_PATTERN,
     AdminPageConfig,
     AdminPagesResponse,
     PageCreate,
@@ -56,13 +57,6 @@ from backend.utils.datetime import format_iso, now_utc
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
-
-
-_PAGE_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
-_PAGE_ID_ERROR = (
-    "Invalid page ID: must start with a lowercase letter or digit, "
-    "and contain only lowercase alphanumeric characters, hyphens, or underscores."
-)
 
 
 @router.get("/site", response_model=SiteSettingsResponse)
@@ -230,8 +224,8 @@ async def update_page_endpoint(
     _user: Annotated[AdminUser, Depends(require_admin)],
 ) -> dict[str, str]:
     """Update a page's title and/or content."""
-    if not _PAGE_ID_PATTERN.match(page_id):
-        raise HTTPException(status_code=400, detail=_PAGE_ID_ERROR)
+    if not PAGE_ID_PATTERN.match(page_id):
+        raise HTTPException(status_code=400, detail=PAGE_ID_ERROR)
     async with content_write_lock:
         old_content_size = 0
         cfg = content_manager.site_config
@@ -299,8 +293,8 @@ async def delete_page_endpoint(
     delete_file: bool = Query(default=True),
 ) -> None:
     """Delete a page."""
-    if not _PAGE_ID_PATTERN.match(page_id):
-        raise HTTPException(status_code=400, detail=_PAGE_ID_ERROR)
+    if not PAGE_ID_PATTERN.match(page_id):
+        raise HTTPException(status_code=400, detail=PAGE_ID_ERROR)
     async with content_write_lock:
         # Read page file size before deletion so the tracker can be adjusted.
         page_size = 0

@@ -1,4 +1,3 @@
-import { useEffect } from 'react'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import { useParams, Link } from 'react-router-dom'
 import { Tag, Settings } from 'lucide-react'
@@ -9,8 +8,8 @@ import LabelChip from '@/components/labels/LabelChip'
 import ParentLabelLinks from '@/components/labels/ParentLabelLinks'
 import PostCard from '@/components/posts/PostCard'
 import { useAuthStore } from '@/stores/authStore'
-import { useSiteStore } from '@/stores/siteStore'
 import { HTTPError } from '@/api/client'
+import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { useLabelPosts } from '@/hooks/useLabelPosts'
 
 export default function LabelPostsPage() {
@@ -19,14 +18,10 @@ export default function LabelPostsPage() {
   const { data, error: fetchErr, isLoading: loading } = useLabelPosts(labelId ?? null)
   const label = data?.label ?? null
   const posts = data?.posts ?? null
-  const siteTitle = useSiteStore((s) => s.config?.title)
-
-  useEffect(() => {
-    if (label !== null && siteTitle !== undefined && siteTitle !== '') {
-      const name = label.names.length > 0 ? label.names[0] : label.id
-      document.title = `${name} — ${siteTitle}`
-    }
-  }, [label, siteTitle])
+  const labelName = label !== null
+    ? (label.names.length > 0 ? label.names[0] : label.id)
+    : undefined
+  useDocumentTitle(labelName)
 
   const error = fetchErr instanceof HTTPError && fetchErr.response.status === 404
     ? 'Label not found.'

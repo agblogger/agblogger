@@ -3,9 +3,9 @@ import { useSearchParams, Link } from 'react-router-dom'
 import { Search } from 'lucide-react'
 import { searchPosts } from '@/api/posts'
 import type { SearchResult } from '@/api/client'
+import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { useRenderedHtml } from '@/hooks/useKatex'
 import { useAuthStore } from '@/stores/authStore'
-import { useSiteStore } from '@/stores/siteStore'
 import { formatRelativeDate } from '@/utils/date'
 import { postUrl } from '@/utils/postUrl'
 
@@ -18,13 +18,7 @@ export default function SearchPage() {
   const [results, setResults] = useState<SearchResult[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const siteTitle = useSiteStore((s) => s.config?.title)
-
-  useEffect(() => {
-    if (siteTitle !== undefined && siteTitle !== '') {
-      document.title = `Search — ${siteTitle}`
-    }
-  }, [siteTitle])
+  useDocumentTitle('Search')
 
   useEffect(() => {
     setInputValue(query)

@@ -8,6 +8,7 @@ Hidden runtime state such as ``.git`` is intentionally excluded.
 from __future__ import annotations
 
 import logging
+import stat as _stat
 from typing import TYPE_CHECKING, Final
 
 if TYPE_CHECKING:
@@ -55,8 +56,9 @@ class ContentSizeTracker:
         if not self._is_tracked_path(path):
             return 0
         try:
-            if path.is_file() and not path.is_symlink():
-                return path.stat().st_size
+            st = path.lstat()
+            if _stat.S_ISREG(st.st_mode):
+                return st.st_size
         except OSError as exc:
             logger.warning("Failed to stat tracked path %s: %s", path, exc)
         return 0

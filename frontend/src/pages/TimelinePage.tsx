@@ -8,9 +8,9 @@ import { fetchPosts, uploadPost, type PostListParams } from '@/api/posts'
 import { HTTPError } from '@/api/client'
 import type { PostListResponse } from '@/api/client'
 import { useAuthStore } from '@/stores/authStore'
-import { useSiteStore } from '@/stores/siteStore'
 import { postUrl } from '@/utils/postUrl'
 import { localDateToUtcStart, localDateToUtcEnd, utcTimestampToLocalDateInput } from '@/utils/date'
+import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { readPreloaded } from '@/utils/preload'
 
 export default function TimelinePage() {
@@ -32,7 +32,6 @@ export default function TimelinePage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
-  const siteTitle = useSiteStore((s) => s.config?.title)
   const [data, setData] = useState<PostListResponse | null>(initialData)
   const [loading, setLoading] = useState(initialData === null)
   const [error, setError] = useState<string | null>(null)
@@ -62,11 +61,7 @@ export default function TimelinePage() {
     toDate: utcTimestampToLocalDateInput(urlToDate),
   }), [searchParams, parsedLabelMode, urlFromDate, urlToDate])
 
-  useEffect(() => {
-    if (siteTitle !== undefined && siteTitle !== '') {
-      document.title = siteTitle
-    }
-  }, [siteTitle])
+  useDocumentTitle()
 
   // Sync filters to URL
   const setFilter = useCallback(

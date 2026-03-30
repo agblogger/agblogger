@@ -21,6 +21,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Resp
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
+from sqlalchemy.orm import selectinload
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from backend.api.admin import router as admin_router
@@ -63,6 +64,12 @@ _DEFAULT_INDEX_TOML = (
     '[[pages]]\nid = "labels"\ntitle = "Labels"\n'
 )
 _DEFAULT_LABELS_TOML = "[labels]\n"
+
+_NOT_FOUND_HTML = "<html><body>Not found</body></html>"
+
+
+def _base_url(request: Request) -> str:
+    return str(request.base_url).rstrip("/")
 
 
 def _looks_like_post_asset_path(file_path: str) -> bool:
@@ -454,7 +461,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         content={"detail": "Multipart request body too large"},
                     )
             except ValueError:
-                # int() raises ValueError for non-numeric Content-Length header values
                 logger.warning("Invalid Content-Length header on %s", request.url.path)
 
         received = 0
@@ -852,7 +858,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def post_route(file_path: str, request: Request) -> HTMLResponse | RedirectResponse:
         if ".." in file_path.split("/"):
             logger.warning("Path traversal attempt in post asset URL: %s", file_path)
-            return HTMLResponse("<html><body>Not found</body></html>", status_code=404)
+            return HTMLResponse(_NOT_FOUND_HTML, status_code=404)
 
         content_path = request.app.state.settings.content_dir / "posts" / file_path
         if (
@@ -875,7 +881,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         base_html = await _get_base_html(request)
         if base_html is None:
-            return HTMLResponse("<html><body>Not found</body></html>", status_code=404)
+            return HTMLResponse(_NOT_FOUND_HTML, status_code=404)
 
         # Look up the post by public slug only.
         from backend.utils.slug import resolve_slug_candidates
@@ -911,7 +917,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         content_manager: ContentManager = request.app.state.content_manager
         site_name = content_manager.site_config.title
-        canonical = str(request.base_url).rstrip("/") + f"/post/{slug}"
+        canonical = _base_url(request) + f"/post/{slug}"
         published = format_iso(post.created_at)
         modified = format_iso(post.modified_at)
 
@@ -992,7 +998,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         base_html = await _get_base_html(request)
         if base_html is None:
-            return HTMLResponse("<html><body>Not found</body></html>", status_code=404)
+            return HTMLResponse(_NOT_FOUND_HTML, status_code=404)
 
         content_manager: ContentManager = request.app.state.content_manager
         site_title = content_manager.site_config.title
@@ -1052,7 +1058,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         rendered_body = render_post_list_html(posts_data, heading=site_title)
 
-        canonical_url = str(request.url)
+        canonical_url = _base_url(request) + "/"
 
         ctx = SeoContext(
             title=site_title,
@@ -1080,13 +1086,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         base_html = await _get_base_html(request)
         if base_html is None:
-            return HTMLResponse("<html><body>Not found</body></html>", status_code=404)
+            return HTMLResponse(_NOT_FOUND_HTML, status_code=404)
 
         content_manager: ContentManager = request.app.state.content_manager
         session_factory = request.app.state.session_factory
         site_name = content_manager.site_config.title
         site_desc = content_manager.site_config.description
-        base_url = str(request.base_url).rstrip("/")
+        base_url = _base_url(request)
 
         try:
             page = await get_page(session_factory, content_manager, page_id)
@@ -1130,11 +1136,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         base_html = await _get_base_html(request)
         if base_html is None:
-            return HTMLResponse("<html><body>Not found</body></html>", status_code=404)
+            return HTMLResponse(_NOT_FOUND_HTML, status_code=404)
 
         content_manager: ContentManager = request.app.state.content_manager
         site_name = content_manager.site_config.title
-        base_url = str(request.base_url).rstrip("/")
+        base_url = _base_url(request)
 
         ctx = SeoContext(
             title=f"Labels \u2014 {site_name}",
@@ -1148,12 +1154,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/labels/new", include_in_schema=False, response_model=None)
     async def labels_new_route(request: Request) -> HTMLResponse:
         base_html = await _get_base_html(request)
-        return HTMLResponse(base_html or "<html><body>Not found</body></html>")
+        return HTMLResponse(base_html or _NOT_FOUND_HTML)
 
     @app.get("/labels/{label_id}/settings", include_in_schema=False, response_model=None)
     async def label_settings_route(label_id: str, request: Request) -> HTMLResponse:
         base_html = await _get_base_html(request)
-        return HTMLResponse(base_html or "<html><body>Not found</body></html>")
+        return HTMLResponse(base_html or _NOT_FOUND_HTML)
 
     @app.get("/labels/{label_id}", include_in_schema=False, response_model=None)
     async def label_detail_route(label_id: str, request: Request) -> HTMLResponse:
@@ -1170,11 +1176,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         base_html = await _get_base_html(request)
         if base_html is None:
-            return HTMLResponse("<html><body>Not found</body></html>", status_code=404)
+            return HTMLResponse(_NOT_FOUND_HTML, status_code=404)
 
         content_manager: ContentManager = request.app.state.content_manager
         site_name = content_manager.site_config.title
-        base_url = str(request.base_url).rstrip("/")
+        base_url = _base_url(request)
 
         label_row: tuple[str, str, bool] | None = None
         label_parent_ids: list[str] = []
@@ -1210,12 +1216,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         .where(PostCache.is_draft.is_(False))
                         .order_by(PostCache.created_at.desc())
                         .limit(20)
+                        .options(selectinload(PostCache.labels))
                     )
                     result = await session.execute(posts_stmt)
                     posts = result.scalars().all()
 
                     for p in posts:
-                        await session.refresh(p, ["labels"])
                         excerpt = strip_html_tags(p.rendered_excerpt) if p.rendered_excerpt else ""
                         slug = _public_post_slug(p.file_path)
                         if slug is None:
@@ -1295,11 +1301,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         base_html = await _get_base_html(request)
         if base_html is None:
-            return HTMLResponse("<html><body>Not found</body></html>", status_code=404)
+            return HTMLResponse(_NOT_FOUND_HTML, status_code=404)
 
         content_manager: ContentManager = request.app.state.content_manager
         site_name = content_manager.site_config.title
-        base_url = str(request.base_url).rstrip("/")
+        base_url = _base_url(request)
 
         ctx = SeoContext(
             title=f"Search \u2014 {site_name}",
@@ -1316,7 +1322,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         from backend.models.post import PostCache
         from backend.utils.datetime import format_iso
 
-        base_url = str(request.base_url).rstrip("/")
+        base_url = _base_url(request)
         content_manager: ContentManager = request.app.state.content_manager
 
         urls: list[str] = []
@@ -1383,7 +1389,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/robots.txt", include_in_schema=False, response_model=None)
     async def robots_route(request: Request) -> Response:
-        base_url = str(request.base_url).rstrip("/")
+        base_url = _base_url(request)
         body = (
             "User-agent: *\n"
             "Allow: /\n"
@@ -1406,7 +1412,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         from backend.models.post import PostCache
         from backend.services.seo_service import strip_html_tags
 
-        base_url = str(request.base_url).rstrip("/")
+        base_url = _base_url(request)
         content_manager: ContentManager = request.app.state.content_manager
         site_title = html.escape(content_manager.site_config.title)
         site_desc = html.escape(content_manager.site_config.description)

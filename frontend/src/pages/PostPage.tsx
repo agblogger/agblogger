@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from 'react'
+import { useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { Calendar, User, PenLine, Trash2, Eye } from 'lucide-react'
@@ -6,13 +6,13 @@ import { deletePost, fetchPostForEdit, updatePost } from '@/api/posts'
 import AlertBanner from '@/components/AlertBanner'
 import BackLink from '@/components/BackLink'
 import { useAuthStore } from '@/stores/authStore'
-import { useSiteStore } from '@/stores/siteStore'
 import { HTTPError } from '@/api/client'
 import { parseErrorDetail } from '@/api/parseError'
 import LabelChip from '@/components/labels/LabelChip'
 import CrossPostSection from '@/components/crosspost/CrossPostSection'
 import ShareButton from '@/components/share/ShareButton'
 import ShareBar from '@/components/share/ShareBar'
+import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { useRenderedHtml } from '@/hooks/useKatex'
 import { useCodeBlockEnhance } from '@/hooks/useCodeBlockEnhance'
 import TableOfContents from '@/components/posts/TableOfContents'
@@ -42,13 +42,7 @@ export default function PostPage() {
   const contentRef = useRef<HTMLDivElement>(null)
   const renderedHtml = useRenderedHtml(post?.rendered_html)
   useCodeBlockEnhance(contentRef, renderedHtml)
-  const siteTitle = useSiteStore((s) => s.config?.title)
-
-  useEffect(() => {
-    if (post !== undefined && siteTitle !== undefined && siteTitle !== '') {
-      document.title = `${post.title} — ${siteTitle}`
-    }
-  }, [post, siteTitle])
+  useDocumentTitle(post?.title)
 
   async function handleDelete() {
     if (!post) return
