@@ -48,15 +48,13 @@ The backend treats the Pandoc server as runtime infrastructure, not a per-reques
 
 Content mutations are serialized through a shared application-level write boundary. This prevents filesystem updates, cache refreshes, and history updates from interleaving across posts, pages, labels, and sync operations.
 
-Content mutations can optionally be subject to a storage quota (`MAX_CONTENT_SIZE`) that caps the total size of files under `content/`. The quota is tracked by a running byte counter that is computed at startup and adjusted incrementally on writes and deletes.
-
 This favors correctness and consistency over high write concurrency.
 
 ## Database Schema Management
 
 The database uses two separate declarative bases to distinguish durable state from derived cache state:
 
-- **DurableBase** tables (admin users, admin refresh tokens, social accounts, cross-posts, analytics settings) are managed by Alembic migrations. Schema changes are applied programmatically during application startup via `alembic upgrade head`. These tables persist across restarts and upgrades.
+- **DurableBase** tables (admin users, admin refresh tokens, social accounts, cross-posts, analytics settings) are managed by Alembic migrations. Schema changes are applied programmatically during application startup. These tables persist across restarts and upgrades.
 - **CacheBase** tables (posts cache, pages cache, labels cache, label associations, sync manifest) are dropped and recreated on every startup. Their content is rebuilt from the filesystem.
 
 This separation means adding a column to a durable table requires an Alembic migration, while cache table schema changes take effect automatically on the next restart.
@@ -77,17 +75,7 @@ Public read paths are broad for published content, while mutations are concentra
 
 ## SEO and Server-Side Enrichment
 
-Public browsable routes are served by dedicated handlers registered before the StaticFiles catch-all. Each handler enriches the SPA shell with meta tags, structured data, server-rendered content, and preloaded API data so crawlers and no-JS browsers see real content without executing JavaScript. A shared SEO service provides the injection pipeline; individual route handlers supply the data.
-
-The homepage timeline SEO route reuses the same post-listing service as the JSON API for pagination and filtering, so query-string timeline variants (page, labels, author, date range) preload the same result set the SPA would fetch after hydration. Authenticated homepage preloads are marked private because draft visibility can change the rendered body.
-
-The backend also serves a dynamic sitemap, robots.txt, and an RSS feed.
-
-Top-level page reads split by page type:
-
-- file-backed custom pages are served from the derived pages cache
-- custom pages without a backing markdown file remain valid and resolve as empty-body pages from site config
-- built-in navigation pages such as timeline and labels are handled outside the cached page-content path
+Dedicated route handlers registered before the StaticFiles catch-all enrich the SPA shell with meta tags, structured data, server-rendered content, and preloaded API data so crawlers and no-JS browsers see real content without JavaScript. A shared SEO service provides the injection pipeline. The backend also serves a dynamic sitemap, robots.txt, and RSS feed.
 
 ## Failure Handling
 
@@ -104,7 +92,7 @@ The goal is to preserve content, preserve service availability where possible, a
 
 - `backend/main.py` is the main runtime entry point.
 - `backend/api/` contains the HTTP-facing modules grouped by feature area.
-- `backend/services/` contains the orchestration and business-logic layer, including services for page retrieval, page cache population, rendering, posts CRUD operations, authentication, cross-posting, sync, analytics, admin panel business logic, and SEO enrichment (`seo_service.py`).
+- `backend/services/` contains the orchestration and business-logic layer, including services for page retrieval, page cache population, rendering, posts CRUD operations, authentication, cross-posting, sync, analytics, admin panel business logic, and SEO enrichment.
 - `backend/models/` contains SQLAlchemy ORM models for both durable tables (admin users, admin refresh tokens, social accounts, cross-posts, analytics settings) and cache tables (posts, pages, labels, sync manifest).
 - `backend/schemas/` contains Pydantic request/response schemas that define the API contracts.
 - `backend/filesystem/` contains the canonical content model.
