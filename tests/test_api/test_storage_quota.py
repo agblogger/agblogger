@@ -51,6 +51,14 @@ async def _login(client: AsyncClient) -> str:
     return resp.json()["access_token"]
 
 
+def _content_usage(content_dir: Path) -> int:
+    return sum(
+        path.stat().st_size
+        for path in content_dir.rglob("*")
+        if path.is_file() and not path.is_symlink()
+    )
+
+
 class TestPostUploadQuota:
     @pytest.mark.asyncio
     async def test_upload_within_quota_succeeds(self, client: AsyncClient) -> None:
@@ -134,6 +142,42 @@ class TestAssetUploadQuota:
         assert resp.status_code == 413
         assert resp.json()["detail"] == "Storage limit reached"
 
+    @pytest.mark.asyncio
+    async def test_asset_overwrite_near_quota_uses_net_growth(
+        self,
+        client_with_post: AsyncClient,
+        quota_settings_with_post: Settings,
+    ) -> None:
+        token = await _login(client_with_post)
+        max_size = quota_settings_with_post.max_content_size
+        assert max_size is not None
+
+        remaining = max_size - _content_usage(quota_settings_with_post.content_dir)
+        assert remaining > 1024
+
+        initial_size = remaining - 256
+        replacement_size = 512
+        assert initial_size > replacement_size
+
+        resp = await client_with_post.post(
+            f"/api/posts/{POST_PATH}/assets",
+            files=[("files", ("photo.png", b"x" * initial_size, "image/png"))],
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+
+        resp = await client_with_post.post(
+            f"/api/posts/{POST_PATH}/assets",
+            files=[("files", ("photo.png", b"y" * replacement_size, "image/png"))],
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+
+        asset_path = (
+            quota_settings_with_post.content_dir / "posts" / "2026-01-01-seed-post" / "photo.png"
+        )
+        assert asset_path.read_bytes() == b"y" * replacement_size
+
 
 class TestSyncQuota:
     @pytest.mark.asyncio
@@ -156,6 +200,126 @@ class TestSyncQuota:
         )
         assert resp.status_code == 413
         assert resp.json()["detail"] == "Storage limit reached"
+
+    @pytest.mark.asyncio
+    async def test_sync_commit_allows_delete_then_upload_near_quota(
+        self,
+        client_with_post: AsyncClient,
+        quota_settings_with_post: Settings,
+    ) -> None:
+        token = await _login(client_with_post)
+        headers = {"Authorization": f"Bearer {token}"}
+        max_size = quota_settings_with_post.max_content_size
+        assert max_size is not None
+
+        remaining = max_size - _content_usage(quota_settings_with_post.content_dir)
+        assert remaining > 1024
+
+        existing_size = remaining - 256
+        replacement_size = 512
+        assert existing_size > replacement_size
+
+        resp = await client_with_post.post(
+            f"/api/posts/{POST_PATH}/assets",
+            files=[("files", ("delete-me.bin", b"x" * existing_size, "application/octet-stream"))],
+            headers=headers,
+        )
+        assert resp.status_code == 200
+
+        resp = await client_with_post.post(
+            "/api/sync/commit",
+            data={
+                "metadata": (
+                    '{"deleted_files":["posts/2026-01-01-seed-post/delete-me.bin"],'
+                    '"last_sync_commit":null}'
+                )
+            },
+            files=[
+                (
+                    "files",
+                    (
+                        "posts/2026-01-01-seed-post/new.bin",
+                        b"y" * replacement_size,
+                        "application/octet-stream",
+                    ),
+                )
+            ],
+            headers=headers,
+        )
+        assert resp.status_code == 200
+
+        deleted_path = (
+            quota_settings_with_post.content_dir
+            / "posts"
+            / "2026-01-01-seed-post"
+            / "delete-me.bin"
+        )
+        new_path = (
+            quota_settings_with_post.content_dir / "posts" / "2026-01-01-seed-post" / "new.bin"
+        )
+        assert not deleted_path.exists()
+        assert new_path.read_bytes() == b"y" * replacement_size
+
+        resp = await client_with_post.post(
+            f"/api/posts/{POST_PATH}/assets",
+            files=[("files", ("follow-up.bin", b"z" * 512, "application/octet-stream"))],
+            headers=headers,
+        )
+        assert resp.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_sync_commit_allows_overwrite_near_quota_and_resets_tracker(
+        self,
+        client_with_post: AsyncClient,
+        quota_settings_with_post: Settings,
+    ) -> None:
+        token = await _login(client_with_post)
+        headers = {"Authorization": f"Bearer {token}"}
+        max_size = quota_settings_with_post.max_content_size
+        assert max_size is not None
+
+        remaining = max_size - _content_usage(quota_settings_with_post.content_dir)
+        assert remaining > 1024
+
+        existing_size = remaining - 256
+        replacement_size = 512
+        assert existing_size > replacement_size
+
+        resp = await client_with_post.post(
+            f"/api/posts/{POST_PATH}/assets",
+            files=[("files", ("replace.bin", b"x" * existing_size, "application/octet-stream"))],
+            headers=headers,
+        )
+        assert resp.status_code == 200
+
+        resp = await client_with_post.post(
+            "/api/sync/commit",
+            data={"metadata": '{"deleted_files":[],"last_sync_commit":null}'},
+            files=[
+                (
+                    "files",
+                    (
+                        "posts/2026-01-01-seed-post/replace.bin",
+                        b"y" * replacement_size,
+                        "application/octet-stream",
+                    ),
+                )
+            ],
+            headers=headers,
+        )
+        assert resp.status_code == 200
+
+        asset_path = (
+            quota_settings_with_post.content_dir / "posts" / "2026-01-01-seed-post" / "replace.bin"
+        )
+        assert asset_path.read_bytes() == b"y" * replacement_size
+
+        resp = await client_with_post.post(
+            f"/api/posts/{POST_PATH}/assets",
+            files=[("files", ("follow-up.bin", b"z" * 512, "application/octet-stream"))],
+            headers=headers,
+        )
+        assert resp.status_code == 200
 
 
 class TestCreatePostQuota:

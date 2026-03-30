@@ -62,6 +62,66 @@ def _resolve_safe_path(content_dir: Path, file_path: str) -> Path:
     return full_path
 
 
+def _remember_original_file(
+    *,
+    original_files: dict[str, bytes | None],
+    file_path: str,
+    full_path: Path,
+) -> None:
+    """Capture the pre-sync file bytes for a path the first time it is touched."""
+    if file_path in original_files:
+        return
+
+    if full_path.exists() and full_path.is_file():
+        try:
+            original_files[file_path] = full_path.read_bytes()
+        except OSError as exc:
+            logger.error("Sync: failed to snapshot %s before mutation: %s", file_path, exc)
+            raise HTTPException(status_code=500, detail="File I/O error during sync") from exc
+        return
+
+    original_files[file_path] = None
+
+
+def _prune_empty_directories(start: Path, *, stop_at: Path) -> None:
+    """Remove empty parent directories created during sync, stopping at content_dir."""
+    current = start
+    while current != stop_at:
+        try:
+            current.rmdir()
+        except OSError:
+            break
+        current = current.parent
+
+
+def _restore_original_files(*, content_dir: Path, original_files: dict[str, bytes | None]) -> None:
+    """Restore files touched by sync to their pre-commit state."""
+    for file_path, original_bytes in original_files.items():
+        full_path = content_dir / file_path
+        if original_bytes is None:
+            try:
+                if full_path.exists() or full_path.is_symlink():
+                    full_path.unlink()
+            except OSError as exc:
+                logger.error("Sync: failed to remove reverted file %s: %s", file_path, exc)
+                raise HTTPException(
+                    status_code=500,
+                    detail="Failed to rollback sync changes",
+                ) from exc
+            _prune_empty_directories(full_path.parent, stop_at=content_dir)
+            continue
+
+        try:
+            full_path.parent.mkdir(parents=True, exist_ok=True)
+            full_path.write_bytes(original_bytes)
+        except OSError as exc:
+            logger.error("Sync: failed to restore %s during rollback: %s", file_path, exc)
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to rollback sync changes",
+            ) from exc
+
+
 # ── Schemas ──────────────────────────────────────────
 
 
@@ -257,9 +317,8 @@ async def _sync_commit_inner(
 
     sync_warnings: list[str] = []
 
-    # ── Pre-read uploads and quota check ──
-    upload_data: dict[str, tuple[UploadFile, bytes]] = {}
-    total_incoming = 0
+    # ── Pre-read uploads ──
+    upload_data: dict[str, bytes] = {}
     for upload in upload_files:
         if upload.filename is None:
             continue
@@ -269,16 +328,20 @@ async def _sync_commit_inner(
                 status_code=413,
                 detail=f"File too large (max 10 MB): {upload.filename.lstrip('/')}",
             )
-        upload_data[upload.filename] = (upload, content)
-        total_incoming += len(content)
-    if not content_size_tracker.check(total_incoming):
-        raise HTTPException(status_code=413, detail="Storage limit reached")
+        upload_data[upload.filename] = content
+
+    original_files: dict[str, bytes | None] = {}
 
     # ── Apply deletions ──
     successful_deletions = 0
     for file_path in deleted_files:
         full_path = _resolve_safe_path(content_dir, file_path)
         if full_path.exists() and full_path.is_file():
+            _remember_original_file(
+                original_files=original_files,
+                file_path=file_path,
+                full_path=full_path,
+            )
             try:
                 full_path.unlink()
             except OSError as exc:
@@ -293,9 +356,14 @@ async def _sync_commit_inner(
     to_download: list[str] = []
     uploaded_paths: list[str] = []
 
-    for filename, (_upload, upload_content) in upload_data.items():
+    for filename, upload_content in upload_data.items():
         target_path = filename.lstrip("/")
         full_path = _resolve_safe_path(content_dir, target_path)
+        _remember_original_file(
+            original_files=original_files,
+            file_path=target_path,
+            full_path=full_path,
+        )
 
         # Read server's current content BEFORE writing upload
         server_content: str | None = None
@@ -405,6 +473,12 @@ async def _sync_commit_inner(
         old_manifest=old_manifest,
         content_dir=content_dir,
     )
+
+    content_size_tracker.recompute()
+    if not content_size_tracker.check(0):
+        _restore_original_files(content_dir=content_dir, original_files=original_files)
+        content_size_tracker.recompute()
+        raise HTTPException(status_code=413, detail="Storage limit reached")
 
     # ── Git commit ──
     git_failed = False

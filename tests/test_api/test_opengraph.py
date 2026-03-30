@@ -121,6 +121,15 @@ class TestPostOgTagsMissing:
         assert "og:title" not in resp.text
         assert "<title>AgBlogger</title>" in resp.text
 
+    async def test_canonical_file_path_does_not_resolve_as_public_post_url(
+        self, client: AsyncClient
+    ) -> None:
+        resp = await client.get("/post/posts/hello/index.md")
+        assert resp.status_code == 200
+        assert "og:title" not in resp.text
+        assert "Hello World" not in resp.text
+        assert "<title>AgBlogger</title>" in resp.text
+
 
 class TestPostOgTagsDraft:
     """No OG tags leaked for draft posts."""

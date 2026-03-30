@@ -24,6 +24,14 @@ RUN apk add --no-cache curl \
        | tar xz -C /tmp \
     && mv "/tmp/pandoc-${PANDOC_VERSION}/bin/pandoc" /usr/local/bin/pandoc
 
+# ── Stage 3b: Collect runtime version metadata ───────────────────────
+FROM alpine:3.21 AS version-metadata
+WORKDIR /src
+COPY . /src/
+RUN mkdir -p /out \
+    && cp VERSION /out/VERSION \
+    && if [ -f BUILD ]; then cp BUILD /out/BUILD; fi
+
 # ── Stage 4: Production image ───────────────────────────────────────
 FROM python:3.14-alpine
 
@@ -54,9 +62,9 @@ COPY backend/migrations ./backend/migrations
 # Copy built frontend
 COPY --from=frontend-build /app/frontend/dist ./frontend/dist
 
-# Copy the version file for runtime version detection.
-# BUILD is optional and must not block fresh-checkout image builds.
-COPY VERSION ./
+# Copy runtime version metadata.
+# BUILD is copied when present without making fresh-checkout builds fail.
+COPY --from=version-metadata /out/ ./
 
 # Create data directories
 RUN mkdir -p /data/content /data/db && chown -R agblogger:agblogger /data

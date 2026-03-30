@@ -871,8 +871,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if base_html is None:
             return HTMLResponse("<html><body>Not found</body></html>", status_code=404)
 
-        # Look up the post by exact canonical file path or canonical slug.
-        from backend.utils.slug import is_directory_post_path, resolve_slug_candidates
+        # Look up the post by public slug only.
+        from backend.utils.slug import resolve_slug_candidates
 
         slug = file_path
         post = None
@@ -880,15 +880,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         try:
             session_factory = request.app.state.session_factory
             async with session_factory() as session:
-                candidates: tuple[str, ...]
-                if is_directory_post_path(file_path):
-                    candidates = (file_path,)
-                elif file_path.startswith("posts/"):
-                    candidates = ()
-                else:
-                    candidates = resolve_slug_candidates(slug)
-
-                for candidate in candidates:
+                for candidate in resolve_slug_candidates(slug):
                     stmt = select(PostCache).where(PostCache.file_path == candidate)
                     result = await session.execute(stmt)
                     post = result.scalar_one_or_none()

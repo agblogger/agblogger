@@ -84,6 +84,30 @@ def _get_post_asset_directory(file_path: str, content_manager: ContentManager) -
     return post_file.parent
 
 
+def _asset_upload_net_delta(
+    *,
+    asset_data: list[tuple[str, bytes]],
+    post_dir: FilePath,
+) -> int:
+    """Return the final on-disk size delta for an asset upload request."""
+    final_sizes = {filename: len(data) for filename, data in asset_data}
+    net_delta = 0
+    for filename, final_size in final_sizes.items():
+        existing_size = 0
+        existing_path = post_dir / filename
+        if existing_path.exists() and existing_path.is_file():
+            try:
+                existing_size = existing_path.stat().st_size
+            except OSError as exc:
+                logger.error("Failed to stat existing asset %s: %s", existing_path, exc)
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to inspect existing asset: {filename}",
+                ) from exc
+        net_delta += final_size - existing_size
+    return net_delta
+
+
 async def _replace_post_labels(
     session: AsyncSession,
     *,
@@ -483,10 +507,11 @@ async def upload_assets(
         if post is None:
             raise HTTPException(status_code=404, detail="Post not found")
 
-        if not content_size_tracker.check(total_size):
+        post_dir = _get_post_asset_directory(file_path, content_manager)
+        net_delta = _asset_upload_net_delta(asset_data=asset_data, post_dir=post_dir)
+        if net_delta > 0 and not content_size_tracker.check(net_delta):
             raise HTTPException(status_code=413, detail="Storage limit reached")
 
-        post_dir = _get_post_asset_directory(file_path, content_manager)
         uploaded: list[str] = []
         for filename, data in asset_data:
             dest = post_dir / filename
@@ -506,7 +531,7 @@ async def upload_assets(
                 response,
                 await git_service.try_commit(commit_message),
             )
-            content_size_tracker.adjust(total_size)
+            content_size_tracker.adjust(net_delta)
 
         return {"uploaded": uploaded}
 

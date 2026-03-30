@@ -39,8 +39,11 @@ def test_dockerfile_installs_server_wheel_without_copying_cli_sources() -> None:
     assert "COPY backend/ ./backend/" not in dockerfile
 
 
-def test_dockerfile_does_not_require_optional_build_file() -> None:
+def test_dockerfile_copies_version_and_optional_build_file() -> None:
     dockerfile = (PROJECT_ROOT / "Dockerfile").read_text(encoding="utf-8")
 
     assert "COPY VERSION BUILD* ./" not in dockerfile
-    assert "COPY VERSION ./" in dockerfile
+    assert "FROM alpine:3.21 AS version-metadata" in dockerfile
+    assert "cp VERSION /out/VERSION" in dockerfile
+    assert "if [ -f BUILD ]; then cp BUILD /out/BUILD; fi" in dockerfile
+    assert "COPY --from=version-metadata /out/ ./" in dockerfile
