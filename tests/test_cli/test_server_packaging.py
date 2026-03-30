@@ -14,6 +14,7 @@ def test_server_wheel_manifest_builds_backend_only() -> None:
 
     assert manifest["project"]["name"] == "agblogger-server"
     assert manifest["project"]["scripts"] == {"agblogger-server": "backend.__main__:main"}
+    assert "crawlerdetect>=0.3" in manifest["project"]["dependencies"]
     assert manifest["tool"]["hatch"]["build"]["targets"]["wheel"]["packages"] == ["backend"]
 
 

@@ -1319,7 +1319,7 @@ if [ ! -f "$TOKEN_FILE" ]; then
     mkdir -p /data/goatcounter
 
     # Create site with database
-    goatcounter db create-site \
+    goatcounter db create site \
         -createdb \
         -db "sqlite+$GOATCOUNTER_DB" \
         -vhost stats.internal \

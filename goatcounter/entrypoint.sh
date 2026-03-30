@@ -11,7 +11,7 @@ mkdir -p /data/goatcounter-token
 if [ ! -f "$TOKEN_FILE" ] || [ ! -s "$GOATCOUNTER_DB" ]; then
 
     echo "Provisioning GoatCounter: creating site..."
-    if ! output=$(goatcounter db create-site \
+    if ! output=$(goatcounter db create site \
         -createdb \
         -db "sqlite+$GOATCOUNTER_DB" \
         -vhost stats.internal \
@@ -28,7 +28,7 @@ if [ ! -f "$TOKEN_FILE" ] || [ ! -s "$GOATCOUNTER_DB" ]; then
     fi
 
     echo "Provisioning GoatCounter: creating API token..."
-    TOKEN=$(goatcounter db create-apitoken \
+    TOKEN=$(goatcounter db create apitoken \
         -db "sqlite+$GOATCOUNTER_DB" \
         -site-id 1 \
         -perm 3)  # bitmask: 1 (read stats) + 2 (record hits)
