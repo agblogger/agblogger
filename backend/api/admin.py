@@ -105,8 +105,7 @@ async def update_settings(
         old_index_size = content_size_tracker.file_size(index_path)
         projected_index_size = len(serialize_site_config(projected_cfg))
         projected_delta = projected_index_size - old_index_size
-        if projected_delta > 0 and not content_size_tracker.check(projected_delta):
-            raise HTTPException(status_code=413, detail="Storage limit reached")
+        content_size_tracker.require_quota(projected_delta)
         try:
             cfg = update_site_settings(
                 content_manager,
@@ -165,8 +164,7 @@ async def create_page_endpoint(
             + len(serialize_site_config(projected_cfg))
             - old_index_size
         )
-        if projected_delta > 0 and not content_size_tracker.check(projected_delta):
-            raise HTTPException(status_code=413, detail="Storage limit reached")
+        content_size_tracker.require_quota(projected_delta)
         try:
             page = await create_page(
                 session_factory, content_manager, page_id=body.id, title=body.title, body=body.body
@@ -207,8 +205,7 @@ async def update_order(
         index_path = content_manager.content_dir / "index.toml"
         old_index_size = content_size_tracker.file_size(index_path)
         projected_delta = len(serialize_site_config(cfg.with_pages(pages))) - old_index_size
-        if projected_delta > 0 and not content_size_tracker.check(projected_delta):
-            raise HTTPException(status_code=413, detail="Storage limit reached")
+        content_size_tracker.require_quota(projected_delta)
         try:
             update_page_order(content_manager, pages)
         except OSError as exc:
@@ -268,8 +265,7 @@ async def update_page_endpoint(
         else:
             projected_index_size = old_index_size
         projected_delta = (new_size - old_content_size) + (projected_index_size - old_index_size)
-        if projected_delta > 0 and not content_size_tracker.check(projected_delta):
-            raise HTTPException(status_code=413, detail="Storage limit reached")
+        content_size_tracker.require_quota(projected_delta)
         try:
             await update_page(
                 session_factory, content_manager, page_id, title=body.title, content=body.content

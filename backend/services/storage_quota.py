@@ -8,12 +8,16 @@ Hidden runtime state such as ``.git`` is intentionally excluded.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 if TYPE_CHECKING:
     from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+
+class QuotaExceededError(Exception):
+    """Raised when a write would exceed the storage quota."""
 
 
 class ContentSizeTracker:
@@ -29,8 +33,8 @@ class ContentSizeTracker:
     """
 
     def __init__(self, *, content_dir: Path, max_size: int | None) -> None:
-        self._content_dir = content_dir
-        self._max_size = max_size
+        self._content_dir: Final = content_dir
+        self._max_size: Final = max_size
         self._usage: int = 0
 
     @property
@@ -107,6 +111,15 @@ class ContentSizeTracker:
         if self._max_size is None:
             return True
         return self._usage + incoming_bytes <= self._max_size
+
+    def require_quota(self, delta: int) -> None:
+        """Raise QuotaExceededError if a positive delta would push usage over the limit.
+
+        Negative deltas (deletions/shrinkages) are always allowed.
+        A zero delta is a no-op: it neither consumes space nor triggers a limit check.
+        """
+        if delta > 0 and not self.check(delta):
+            raise QuotaExceededError()
 
     def adjust(self, delta: int) -> None:
         """Add delta to the tracked counter. Clamps to 0 (never goes negative)."""

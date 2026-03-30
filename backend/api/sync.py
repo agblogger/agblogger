@@ -90,6 +90,7 @@ def _prune_empty_directories(start: Path, *, stop_at: Path) -> None:
         try:
             current.rmdir()
         except OSError:
+            logger.debug("Could not remove directory %s during pruning", current)
             break
         current = current.parent
 

@@ -6,6 +6,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import delete as sa_delete
+from sqlalchemy.exc import SQLAlchemyError
 
 from backend.exceptions import BuiltinPageError, InternalServerError
 from backend.filesystem.toml_manager import (
@@ -184,7 +185,7 @@ async def create_page(
 
     try:
         await _refresh_page_cache(session_factory, cm, page_id=page_id, title=title)
-    except Exception as exc:
+    except (SQLAlchemyError, RuntimeError, InternalServerError) as exc:
         logger.error("Failed to refresh page cache for page %s", page_id, exc_info=exc)
         try:
             write_site_config(cm.content_dir, cfg)
@@ -284,7 +285,7 @@ async def update_page(
                     page_id=page_id,
                     title=updated_page.title,
                 )
-        except Exception as exc:
+        except (SQLAlchemyError, RuntimeError, InternalServerError) as exc:
             logger.error("Failed to refresh page cache for page %s", page_id, exc_info=exc)
             if content is not None and page_path is not None and original_content is not None:
                 try:
@@ -357,7 +358,7 @@ async def delete_page(
             async with session_factory() as session:
                 await session.execute(sa_delete(PageCache).where(PageCache.page_id == page_id))
                 await session.commit()
-        except Exception:
+        except SQLAlchemyError, OSError:
             logger.warning(
                 "Failed to remove cache for page %s; will clean on rebuild",
                 page_id,

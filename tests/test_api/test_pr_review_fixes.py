@@ -677,3 +677,145 @@ class TestIssue14SyncDeletionFailureCount:
         data = resp.json()
         # Failed deletion should NOT count as synced
         assert data["files_synced"] == 0
+
+
+# ── Issue 15: TOCTOU stat() race in delete_asset ──
+
+
+class TestIssue15DeleteAssetStatTOCTOU:
+    """delete_asset must not crash when stat() raises OSError after is_file() passes."""
+
+    async def test_delete_asset_stat_oserror_does_not_crash(
+        self, client: AsyncClient, app_settings: Settings, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        headers = await _login(client)
+
+        # Place a real asset file next to index.md so is_file() passes
+        post_dir = app_settings.content_dir / "posts" / "2026-02-02-hello-world"
+        asset_file = post_dir / "photo.png"
+        asset_file.write_bytes(b"fake image data")
+
+        file_path = "posts/2026-02-02-hello-world/index.md"
+
+        stat_call_count = 0
+
+        def _always_fail_stat(self, *args, **kwargs):
+            nonlocal stat_call_count
+            stat_call_count += 1
+            raise OSError("file vanished between is_file and stat")
+
+        with (
+            patch.object(type(asset_file), "stat", _always_fail_stat),
+            caplog.at_level(logging.WARNING, logger="backend.api.posts"),
+        ):
+            resp = await client.delete(
+                f"/api/posts/{file_path}/assets/photo.png",
+                headers=headers,
+            )
+
+        # Handler must NOT crash with 500 — a stat race should be treated as
+        # size=0 and the delete should still succeed (204).
+        assert resp.status_code == 204
+        assert stat_call_count >= 1
+        warning_messages = [r.message for r in caplog.records if r.levelno >= logging.WARNING]
+        assert any("stat" in m.lower() for m in warning_messages)
+
+
+# ── Issue 16: TOCTOU stat() race in update_post quota check ──
+
+
+class TestIssue16UpdatePostQuotaStatTOCTOU:
+    """update_post quota check must not crash when stat() raises OSError after exists()."""
+
+    async def test_update_post_stat_oserror_is_handled(
+        self, client: AsyncClient, app_settings: Settings, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        headers = await _login(client)
+
+        file_path = "posts/2026-02-02-hello-world/index.md"
+        post_file = app_settings.content_dir / file_path
+
+        def _always_fail_stat(self, *args, **kwargs):
+            raise OSError("file vanished between exists and stat")
+
+        with (
+            patch.object(type(post_file), "stat", _always_fail_stat),
+            caplog.at_level(logging.WARNING, logger="backend.api.posts"),
+        ):
+            resp = await client.put(
+                f"/api/posts/{file_path}",
+                json={
+                    "title": "Hello World",
+                    "body": "Updated content.",
+                    "labels": [],
+                    "is_draft": False,
+                },
+                headers=headers,
+            )
+
+        # Handler must NOT crash with 500 due to OSError — it should treat
+        # old_size as 0 and proceed normally.
+        assert resp.status_code in {200, 204}
+        warning_messages = [r.message for r in caplog.records if r.levelno >= logging.WARNING]
+        assert any("stat" in m.lower() for m in warning_messages)
+
+
+# ── Issue 17: TOCTOU stat() race in delete_post size computation ──
+
+
+class TestIssue17DeletePostSizeStatTOCTOU:
+    """delete_post size computation must not crash when stat() raises OSError."""
+
+    async def test_delete_post_rglob_stat_oserror_is_handled(
+        self, client: AsyncClient, app_settings: Settings, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """OSError from stat() inside rglob loop should not crash the handler."""
+        headers = await _login(client)
+
+        post_dir = app_settings.content_dir / "posts" / "2026-02-02-hello-world"
+        (post_dir / "asset.txt").write_bytes(b"some asset")
+
+        file_path = "posts/2026-02-02-hello-world/index.md"
+        index_path = post_dir / "index.md"
+
+        def _always_fail_stat(self, *args, **kwargs):
+            raise OSError("file vanished during rglob stat")
+
+        with (
+            patch.object(type(index_path), "stat", _always_fail_stat),
+            caplog.at_level(logging.WARNING, logger="backend.api.posts"),
+        ):
+            resp = await client.delete(
+                f"/api/posts/{file_path}?delete_assets=true",
+                headers=headers,
+            )
+
+        # Handler must NOT crash — size defaults to 0 and deletion proceeds.
+        assert resp.status_code == 204
+        warning_messages = [r.message for r in caplog.records if r.levelno >= logging.WARNING]
+        assert any("stat" in m.lower() for m in warning_messages)
+
+    async def test_delete_post_single_file_stat_oserror_is_handled(
+        self, client: AsyncClient, app_settings: Settings, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """OSError from stat() in the single-file (no-assets) branch should not crash."""
+        headers = await _login(client)
+
+        file_path = "posts/2026-02-02-hello-world/index.md"
+        post_file = app_settings.content_dir / file_path
+
+        def _always_fail_stat(self, *args, **kwargs):
+            raise OSError("file vanished between exists and stat")
+
+        with (
+            patch.object(type(post_file), "stat", _always_fail_stat),
+            caplog.at_level(logging.WARNING, logger="backend.api.posts"),
+        ):
+            resp = await client.delete(
+                f"/api/posts/{file_path}?delete_assets=false",
+                headers=headers,
+            )
+
+        assert resp.status_code == 204
+        warning_messages = [r.message for r in caplog.records if r.levelno >= logging.WARNING]
+        assert any("stat" in m.lower() for m in warning_messages)

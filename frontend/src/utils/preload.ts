@@ -46,8 +46,9 @@ export function readPreloadedHtml(selector: string): string | null {
  * For each item, reads the `idAttr` attribute value and the innerHTML of the child
  * matching `contentSelector`. Returns a Map<id, innerHTML>.
  *
- * NOTE: `itemSelector` must be a simple `[attr]` attribute selector, e.g. `[data-id]`.
- * The `idAttr` is the bare attribute name used to read the value, e.g. `data-id`.
+ * NOTE: `itemSelector` must be a simple `[attr]` attribute selector (e.g. `[data-id]`).
+ * Compound selectors will produce an incorrect `idAttr` because the attribute name is derived
+ * by stripping brackets. The `idAttr` is the bare attribute name used to read the value.
  */
 export function readPreloadedHtmlMap(
   itemSelector: string,
@@ -84,8 +85,12 @@ interface ListHtmlField {
   key: string
   /** Target field name to set on each item, e.g. 'rendered_excerpt' */
   field: string
-  /** CSS selector for list item elements inside #root, e.g. '[data-id]' */
-  itemSelector: string
+  /**
+   * CSS selector for list item elements inside #root.
+   * Must be a simple `[attr]` attribute selector (e.g. `[data-id]`). Compound selectors will
+   * produce an incorrect idAttr because the attribute name is derived by stripping brackets.
+   */
+  itemSelector: `[${string}]`
   /** CSS selector for the content element within each item, e.g. '[data-excerpt]' */
   contentSelector: string
 }
@@ -134,7 +139,8 @@ function setByPath(obj: Record<string, unknown>, path: string, value: unknown): 
  * merges rendered HTML from the DOM according to the provided spec.
  *
  * Returns the merged object, or null if no preload data was found (e.g. client navigation).
- * Cast the result to your expected type at the call site.
+ * Cast the result to your expected type at the call site, e.g.:
+ *   `readPreloaded(spec) as unknown as PostDetail | null`
  */
 export function readPreloaded(spec: PreloadSpec): Record<string, unknown> | null {
   const meta = readPreloadedMeta()

@@ -294,3 +294,32 @@ describe('lazy preload pattern', () => {
     expect(second).toBeNull()
   })
 })
+
+// === readPreloaded cast pattern ===
+
+describe('readPreloaded cast at call site', () => {
+  interface PostStub {
+    id: number
+    title: string
+    rendered_html: string
+  }
+
+  it('returns null when no data is present', () => {
+    const result = readPreloaded({})
+    expect(result).toBeNull()
+  })
+
+  it('allows casting to a concrete type via shape-guard', () => {
+    injectScriptTag({ id: 1, title: 'Hello', rendered_html: '' })
+    injectRootHtml('<div data-content><p>Body</p></div>')
+    const raw = readPreloaded({
+      html: { field: 'rendered_html', selector: '[data-content]' },
+    })
+    // Shape guard then cast to the expected type at the call site
+    const post = raw !== null && 'id' in raw ? (raw as unknown as PostStub) : null
+    expect(post).not.toBeNull()
+    expect(post!.id).toBe(1)
+    expect(post!.title).toBe('Hello')
+    expect(post!.rendered_html).toBe('<p>Body</p>')
+  })
+})

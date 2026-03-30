@@ -584,3 +584,65 @@ class TestDeletePageQuotaTracking:
 
         # After deletion, tracker usage should have decreased by the file size
         assert tracker.current_usage == 0
+
+
+class TestExceptionNarrowingCreatePage:
+    """Unexpected exceptions (e.g. AttributeError) from cache refresh must NOT be caught.
+
+    Only SQLAlchemyError, RuntimeError, and InternalServerError are expected
+    failure modes.  Catching bare Exception would silently swallow programming
+    errors.
+    """
+
+    async def test_unexpected_exception_propagates_in_create_page(
+        self, cm: ContentManager, session_factory: async_sessionmaker[AsyncSession]
+    ) -> None:
+        """AttributeError from cache refresh must propagate, not be swallowed."""
+        with (
+            patch(
+                "backend.services.cache_service.render_markdown",
+                new_callable=AsyncMock,
+                side_effect=AttributeError("unexpected attr error"),
+            ),
+            pytest.raises(AttributeError, match="unexpected attr error"),
+        ):
+            await create_page(session_factory, cm, page_id="contact", title="Contact")
+
+
+class TestExceptionNarrowingUpdatePage:
+    """Unexpected exceptions from cache refresh in update_page must NOT be caught."""
+
+    async def test_unexpected_exception_propagates_in_update_page(
+        self, cm: ContentManager, session_factory: async_sessionmaker[AsyncSession]
+    ) -> None:
+        """AttributeError from cache refresh must propagate, not be swallowed."""
+        async with session_factory() as session:
+            session.add(PageCache(page_id="about", title="About", rendered_html="<p>x</p>"))
+            await session.commit()
+
+        with (
+            patch(
+                "backend.services.cache_service.render_markdown",
+                new_callable=AsyncMock,
+                side_effect=AttributeError("unexpected attr error"),
+            ),
+            pytest.raises(AttributeError, match="unexpected attr error"),
+        ):
+            await update_page(session_factory, cm, "about", content="new content")
+
+
+class TestExceptionNarrowingDeletePage:
+    """Unexpected exceptions from DB cleanup in delete_page must NOT be caught."""
+
+    async def test_unexpected_exception_propagates_in_delete_page(
+        self, cm: ContentManager, session_factory: async_sessionmaker[AsyncSession]
+    ) -> None:
+        """TypeError from cache cleanup must propagate, not be swallowed."""
+        with (
+            patch(
+                "backend.services.admin_service.sa_delete",
+                side_effect=TypeError("unexpected type error"),
+            ),
+            pytest.raises(TypeError, match="unexpected type error"),
+        ):
+            await delete_page(session_factory, cm, page_id="about", delete_file=True)

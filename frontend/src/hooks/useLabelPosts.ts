@@ -14,8 +14,6 @@ export function useLabelPosts(labelId: string | null) {
   const userId = useAuthStore((state) => state.user?.id ?? null)
   const key = labelId !== null ? ['labelPosts', labelId, userId] as const : null
 
-  // Lazy initializer: reads and removes the preloaded script tag once per mount.
-  // Returns null on subsequent mounts (tag already gone) — safe for SWR fallbackData.
   const fallback = useScopedPreloadedFallback<LabelPostsData>(key, () => {
     const raw = readPreloaded({
       listHtml: {
@@ -26,8 +24,7 @@ export function useLabelPosts(labelId: string | null) {
         contentSelector: '[data-excerpt]',
       },
     })
-    const data = raw && typeof raw === 'object' && 'posts' in raw ? (raw as unknown as LabelPostsData) : null
-    return data
+    return raw !== null && 'posts' in raw ? (raw as unknown as LabelPostsData) : null
   })
 
   return useSWR<LabelPostsData, Error>(

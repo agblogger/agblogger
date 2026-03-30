@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+from unittest.mock import patch
 
 import pytest
 import tomli_w
@@ -235,8 +236,17 @@ class TestAssetUploadQuota:
 
 class TestSyncQuota:
     @pytest.mark.asyncio
-    async def test_sync_commit_exceeding_quota_returns_413(self, client: AsyncClient) -> None:
+    async def test_sync_commit_exceeding_quota_returns_413(
+        self, client: AsyncClient, quota_settings: Settings
+    ) -> None:
         token = await _login(client)
+        content_dir = quota_settings.content_dir
+        new_post_dir = content_dir / "posts" / "2026-01-01-huge"
+        new_post_file = new_post_dir / "index.md"
+
+        # Capture pre-sync filesystem state
+        pre_sync_files = {p for p in content_dir.rglob("*") if p.is_file() and not p.is_symlink()}
+
         big_content = (
             "---\ntitle: Huge Sync Post\ncreated_at: 2026-01-01 00:00:00+00\n"
             "author: admin\nlabels: []\n---\n\n" + "x" * 50_000
@@ -254,6 +264,26 @@ class TestSyncQuota:
         )
         assert resp.status_code == 413
         assert resp.json()["detail"] == "Storage limit reached"
+
+        # Verify rollback: the new post file must not exist
+        assert not new_post_file.exists(), (
+            "Rollback failed: new post file was not removed after 413"
+        )
+        assert not new_post_dir.exists(), (
+            "Rollback failed: new post directory was not removed after 413"
+        )
+
+        # Verify rollback: the set of files on disk is the same as before the sync
+        post_sync_files = {p for p in content_dir.rglob("*") if p.is_file() and not p.is_symlink()}
+        assert post_sync_files == pre_sync_files, (
+            f"Rollback failed: filesystem state changed.\n"
+            f"New files: {post_sync_files - pre_sync_files}\n"
+            f"Removed files: {pre_sync_files - post_sync_files}"
+        )
+
+        # Verify rollback: all pre-existing files still exist
+        for path in pre_sync_files:
+            assert path.exists(), f"Rollback failed: pre-existing file {path} was removed"
 
     @pytest.mark.asyncio
     async def test_sync_commit_allows_delete_then_upload_near_quota(
@@ -655,3 +685,207 @@ class TestEditPostQuota:
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 200
+
+
+class TestSyncRollbackFailure:
+    """Tests for _restore_original_files double-failure scenario.
+
+    When a sync commit exceeds the quota AND the rollback itself fails (e.g. a
+    permission error writing a file), the server must return a 500 error rather
+    than silently swallowing the failure.
+    """
+
+    @pytest.mark.asyncio
+    async def test_sync_rollback_failure_returns_500(self, client: AsyncClient) -> None:
+        """When rollback of an over-quota sync fails, the server returns 500."""
+        token = await _login(client)
+        big_content = (
+            "---\ntitle: Huge Sync Post\ncreated_at: 2026-01-01 00:00:00+00\n"
+            "author: admin\nlabels: []\n---\n\n" + "x" * 50_000
+        )
+
+        # The new post file did not exist before sync, so _restore_original_files
+        # calls Path.unlink() to remove it.  We patch unlink to raise OSError for
+        # that specific path, simulating a permission error during rollback.
+        original_unlink = __import__("pathlib").Path.unlink
+
+        def _failing_unlink(self, missing_ok: bool = False) -> None:
+            if "2026-01-01-huge" in str(self):
+                raise OSError("Permission denied (mocked for rollback test)")
+            original_unlink(self, missing_ok=missing_ok)
+
+        with patch("pathlib.Path.unlink", _failing_unlink):
+            resp = await client.post(
+                "/api/sync/commit",
+                data={"metadata": '{"deleted_files":[],"last_sync_commit":null}'},
+                files=[
+                    (
+                        "files",
+                        ("posts/2026-01-01-huge/index.md", big_content.encode(), "text/plain"),
+                    )
+                ],
+                headers={"Authorization": f"Bearer {token}"},
+            )
+
+        # Quota is exceeded so rollback is attempted; rollback fails → 500
+        assert resp.status_code == 500
+        assert resp.json()["detail"] == "Failed to rollback sync changes"
+
+
+class TestUpdateSettingsQuota:
+    """Tests for quota enforcement in the PUT /api/admin/site endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_update_settings_within_quota_succeeds(self, client: AsyncClient) -> None:
+        token = await _login(client)
+        resp = await client.put(
+            "/api/admin/site",
+            json={"title": "My Blog", "description": "Short desc.", "timezone": "UTC"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_update_settings_exceeding_quota_returns_413(
+        self,
+        client_with_post: AsyncClient,
+        quota_settings_with_post: Settings,
+    ) -> None:
+        """PUT /api/admin/site returns 413 when the new index.toml would exceed the quota.
+
+        Strategy: compute the projected index.toml growth for a valid (within schema
+        limits) update that adds a maximum-length description, then fill the quota
+        so that only those additional bytes would push usage over the limit.
+        """
+        from backend.filesystem.content_manager import ContentManager
+        from backend.filesystem.toml_manager import SiteConfig, serialize_site_config
+        from backend.services.admin_service import get_site_settings
+
+        token = await _login(client_with_post)
+        max_size = quota_settings_with_post.max_content_size
+        content_dir = quota_settings_with_post.content_dir
+        assert max_size is not None
+
+        # Compute the projected index.toml delta for the maximum-allowed description
+        # (1 000 chars per the SiteSettingsUpdate schema).
+        cm = ContentManager(content_dir=content_dir)
+        old_cfg = get_site_settings(cm)
+        new_description = "x" * 1000
+        projected_cfg = SiteConfig(
+            title=old_cfg.title,
+            description=new_description,
+            timezone=old_cfg.timezone,
+            pages=old_cfg.pages,
+        )
+        index_path = content_dir / "index.toml"
+        old_index_size = index_path.stat().st_size
+        projected_index_size = len(serialize_site_config(projected_cfg))
+        projected_delta = projected_index_size - old_index_size
+        assert projected_delta > 0, "Expected description growth to increase index.toml size"
+
+        # Fill the quota so that only projected_delta - 1 bytes remain free, which
+        # is not enough to absorb the index.toml growth.  Use asset upload on the
+        # pre-existing seed post so no additional index.toml overhead is incurred.
+        remaining = max_size - _content_usage(content_dir)
+        filler_bytes = remaining - (projected_delta - 1)
+        assert filler_bytes > 0, "Quota too small to execute this test"
+
+        resp = await client_with_post.post(
+            f"/api/posts/{POST_PATH}/assets",
+            files=[("files", ("filler.bin", b"x" * filler_bytes, "application/octet-stream"))],
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+
+        # The site-settings update with the large description must now be rejected.
+        resp = await client_with_post.put(
+            "/api/admin/site",
+            json={"title": old_cfg.title, "description": new_description, "timezone": "UTC"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 413
+        assert resp.json()["detail"] == "Storage limit reached"
+
+
+class TestUpdatePageOrderQuota:
+    """Tests for quota enforcement in the PUT /api/admin/pages/order endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_update_page_order_same_order_succeeds(self, client: AsyncClient) -> None:
+        """Re-ordering with the identical page list (no delta) must succeed."""
+        token = await _login(client)
+        resp = await client.get(
+            "/api/admin/pages",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+        pages = resp.json()["pages"]
+        # Send the same order back — no size delta, must always succeed.
+        order_payload = [
+            {"id": p["id"], "title": p["title"], "file": p.get("file")}
+            for p in pages
+            if not p.get("is_builtin")
+        ]
+        resp = await client.put(
+            "/api/admin/pages/order",
+            json={"pages": order_payload},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_update_page_order_exceeding_quota_returns_413(
+        self,
+        client_with_post: AsyncClient,
+        quota_settings_with_post: Settings,
+    ) -> None:
+        """PUT /api/admin/pages/order returns 413 when index.toml growth exceeds quota."""
+        from backend.filesystem.content_manager import ContentManager
+        from backend.filesystem.toml_manager import PageConfig, SiteConfig, serialize_site_config
+        from backend.services.admin_service import get_site_settings
+
+        token = await _login(client_with_post)
+        max_size = quota_settings_with_post.max_content_size
+        content_dir = quota_settings_with_post.content_dir
+        assert max_size is not None
+
+        # Build a page list with many long titles that would substantially grow
+        # index.toml compared to the current single-page list.
+        many_pages = [
+            PageConfig(id=f"page-{i}", title="x" * 190, file=f"page-{i}.md") for i in range(20)
+        ]
+        cm = ContentManager(content_dir=content_dir)
+        old_cfg = get_site_settings(cm)
+        projected_cfg = SiteConfig(
+            title=old_cfg.title,
+            description=old_cfg.description,
+            timezone=old_cfg.timezone,
+            pages=many_pages,
+        )
+        index_path = content_dir / "index.toml"
+        old_index_size = index_path.stat().st_size
+        projected_delta = len(serialize_site_config(projected_cfg)) - old_index_size
+        assert projected_delta > 0, "Expected many long-title pages to grow index.toml"
+
+        # Fill quota so that only projected_delta - 1 bytes remain.  Use asset
+        # upload on the pre-existing seed post so no extra index.toml overhead.
+        remaining = max_size - _content_usage(content_dir)
+        filler_bytes = remaining - (projected_delta - 1)
+        assert filler_bytes > 0, "Quota too small to execute this test"
+
+        resp = await client_with_post.post(
+            f"/api/posts/{POST_PATH}/assets",
+            files=[("files", ("filler.bin", b"x" * filler_bytes, "application/octet-stream"))],
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+
+        # The page-order update that grows index.toml must now be rejected.
+        order_payload = [{"id": p.id, "title": p.title, "file": p.file} for p in many_pages]
+        resp = await client_with_post.put(
+            "/api/admin/pages/order",
+            json={"pages": order_payload},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 413
+        assert resp.json()["detail"] == "Storage limit reached"

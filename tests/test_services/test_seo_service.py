@@ -4,8 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
 from backend.services.seo_service import (
     SeoContext,
+    SeoPostItem,
     blogposting_ld,
     render_post_list_html,
     render_seo_html,
@@ -310,7 +313,7 @@ class TestJsonLdHelpers:
 
 class TestRenderPostListHtml:
     def test_renders_post_links(self) -> None:
-        posts = [
+        posts: list[SeoPostItem] = [
             {
                 "id": "1",
                 "title": "First Post",
@@ -343,26 +346,80 @@ class TestRenderPostListHtml:
         assert "<li" not in result
 
     def test_escapes_html_in_title(self) -> None:
-        posts = [
+        posts: list[SeoPostItem] = [
             {"id": "1", "title": "<script>XSS</script>", "slug": "x", "date": "D", "excerpt": "E"}
         ]
         result = render_post_list_html(posts, heading="Blog")
         assert "<script>" not in result
 
     def test_escapes_html_in_excerpt(self) -> None:
-        posts = [
-            {"id": "1", "title": "T", "slug": "x", "date": "D", "excerpt": "<img onerror=alert(1)>"}
+        posts: list[SeoPostItem] = [
+            {
+                "id": "1",
+                "title": "T",
+                "slug": "x",
+                "date": "D",
+                "excerpt": "<img onerror=alert(1)>",
+            }
         ]
         result = render_post_list_html(posts, heading="Blog")
         assert "onerror" not in result
 
     def test_includes_data_id_attribute(self) -> None:
-        posts = [{"id": "42", "title": "T", "slug": "s", "date": "D", "excerpt": "E"}]
+        posts: list[SeoPostItem] = [
+            {"id": "42", "title": "T", "slug": "s", "date": "D", "excerpt": "E"}
+        ]
         result = render_post_list_html(posts, heading="Blog")
         assert 'data-id="42"' in result
 
     def test_includes_data_excerpt_marker(self) -> None:
-        posts = [{"id": "1", "title": "T", "slug": "s", "date": "D", "excerpt": "My excerpt text"}]
+        posts: list[SeoPostItem] = [
+            {"id": "1", "title": "T", "slug": "s", "date": "D", "excerpt": "My excerpt text"}
+        ]
         result = render_post_list_html(posts, heading="Blog")
         assert "data-excerpt" in result
         assert "My excerpt text" in result
+
+    def test_accepts_seo_post_item_typed_dicts(self) -> None:
+        """render_post_list_html must work with properly typed SeoPostItem dicts."""
+        posts: list[SeoPostItem] = [
+            {
+                "id": "10",
+                "title": "Typed Post",
+                "slug": "typed-post",
+                "date": "2026-01-01",
+                "excerpt": "Typed excerpt",
+            },
+        ]
+        result = render_post_list_html(posts, heading="Typed Blog")
+        assert "Typed Post" in result
+        assert 'href="/post/typed-post"' in result
+
+
+class TestSeoContextImmutability:
+    """SeoContext must be frozen so callers cannot accidentally mutate shared instances."""
+
+    def test_frozen_raises_on_assignment(self) -> None:
+        """Assigning to a field of a frozen SeoContext must raise FrozenInstanceError."""
+        from dataclasses import FrozenInstanceError
+
+        ctx = SeoContext(
+            title="My Post",
+            description="A description",
+            canonical_url="https://example.com/post/my-post",
+        )
+        with pytest.raises(FrozenInstanceError):
+            ctx.title = "mutated"  # type: ignore[misc]
+
+    def test_frozen_og_type_cannot_be_changed(self) -> None:
+        """og_type field of a frozen SeoContext must raise FrozenInstanceError on assignment."""
+        from dataclasses import FrozenInstanceError
+
+        ctx = SeoContext(
+            title="Post",
+            description="Desc",
+            canonical_url="https://example.com/post/x",
+            og_type="article",
+        )
+        with pytest.raises(FrozenInstanceError):
+            ctx.og_type = "website"  # type: ignore[misc]

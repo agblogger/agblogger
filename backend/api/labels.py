@@ -41,7 +41,7 @@ from backend.services.label_service import (
     update_label,
 )
 from backend.services.post_service import MAX_SAFE_PAGE, get_posts_by_label
-from backend.services.storage_quota import ContentSizeTracker
+from backend.services.storage_quota import ContentSizeTracker, QuotaExceededError
 
 logger = logging.getLogger(__name__)
 
@@ -150,9 +150,11 @@ async def create_label_endpoint(
         labels_path = content_manager.content_dir / "labels.toml"
         old_labels_size = content_size_tracker.file_size(labels_path)
         projected_delta = len(serialize_labels_config(labels)) - old_labels_size
-        if projected_delta > 0 and not content_size_tracker.check(projected_delta):
+        try:
+            content_size_tracker.require_quota(projected_delta)
+        except QuotaExceededError:
             await session.rollback()
-            raise HTTPException(status_code=413, detail="Storage limit reached")
+            raise
         await _persist_labels_and_commit(
             session,
             content_manager,
@@ -207,9 +209,11 @@ async def update_label_endpoint(
         labels_path = content_manager.content_dir / "labels.toml"
         old_labels_size = content_size_tracker.file_size(labels_path)
         projected_delta = len(serialize_labels_config(labels)) - old_labels_size
-        if projected_delta > 0 and not content_size_tracker.check(projected_delta):
+        try:
+            content_size_tracker.require_quota(projected_delta)
+        except QuotaExceededError:
             await session.rollback()
-            raise HTTPException(status_code=413, detail="Storage limit reached")
+            raise
         await _persist_labels_and_commit(
             session,
             content_manager,

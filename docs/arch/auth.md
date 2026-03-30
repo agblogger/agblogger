@@ -19,7 +19,7 @@ There is only one user: the admin. Every authenticated user is the admin — the
 
 ## Auth-Sensitive Caching
 
-Frontend caches for reads whose response depends on admin authentication, including draft-only content and admin-scoped account data, are scoped to the current browser session, so session changes force revalidation instead of reusing stale authorized responses.
+Frontend caches for reads whose response depends on admin authentication, including draft-only content and admin-scoped account data, are scoped by user identity in the cache key, so auth state changes force revalidation instead of reusing stale authorized responses.
 
 Backend read endpoints whose payload changes when admin authentication is present mark responses as auth-sensitive at the HTTP layer so draft-bearing JSON is not shared by intermediaries.
 

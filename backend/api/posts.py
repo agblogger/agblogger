@@ -373,8 +373,7 @@ async def upload_post(
         )
         projected_delta = serialized_size + asset_net_delta
 
-        if projected_delta > 0 and not content_size_tracker.check(projected_delta):
-            raise HTTPException(status_code=413, detail="Storage limit reached")
+        content_size_tracker.require_quota(projected_delta)
 
         # Write asset files to directory
         written_assets: list[FilePath] = []
@@ -516,8 +515,7 @@ async def upload_assets(
 
         post_dir = _get_post_asset_directory(file_path, content_manager)
         net_delta = _asset_upload_net_delta(asset_data=asset_data, post_dir=post_dir)
-        if net_delta > 0 and not content_size_tracker.check(net_delta):
-            raise HTTPException(status_code=413, detail="Storage limit reached")
+        content_size_tracker.require_quota(net_delta)
 
         uploaded: list[str] = []
         for filename, data in asset_data:
@@ -616,7 +614,15 @@ async def delete_asset(
         if not asset_path.is_file():
             raise HTTPException(status_code=404, detail="Asset not found")
 
-        asset_size = asset_path.stat().st_size
+        try:
+            asset_size = asset_path.stat().st_size
+        except OSError as exc:
+            logger.warning(
+                "Could not stat asset %s before deletion (treating size as 0): %s",
+                asset_path,
+                exc,
+            )
+            asset_size = 0
         try:
             asset_path.unlink()
         except OSError as exc:
@@ -860,8 +866,7 @@ async def create_post_endpoint(
 
         serialized = serialize_post(post_data)
         serialized_size = len(serialized.encode("utf-8"))
-        if not content_size_tracker.check(serialized_size):
-            raise HTTPException(status_code=413, detail="Storage limit reached")
+        content_size_tracker.require_quota(serialized_size)
 
         post = PostCache(
             file_path=file_path,
@@ -1040,11 +1045,21 @@ async def update_post_endpoint(
         )
 
         old_post_path = content_manager.content_dir / file_path
-        old_size = old_post_path.stat().st_size if old_post_path.exists() else 0
+        if old_post_path.exists():
+            try:
+                old_size = old_post_path.stat().st_size
+            except OSError as exc:
+                logger.warning(
+                    "Could not stat post %s for quota check (treating size as 0): %s",
+                    old_post_path,
+                    exc,
+                )
+                old_size = 0
+        else:
+            old_size = 0
         new_serialized_size = len(serialized.encode("utf-8"))
         edit_delta = new_serialized_size - old_size
-        if edit_delta > 0 and not content_size_tracker.check(edit_delta):
-            raise HTTPException(status_code=413, detail="Storage limit reached")
+        content_size_tracker.require_quota(edit_delta)
 
         try:
             content_manager.write_post(file_path, post_data)
@@ -1175,12 +1190,32 @@ async def delete_post_endpoint(
         # Compute size to free before deletion so the tracker stays accurate.
         post_dir = (content_manager.content_dir / file_path).parent
         if should_delete_assets and post_dir.is_dir():
-            dir_size = sum(
-                f.stat().st_size for f in post_dir.rglob("*") if f.is_file() and not f.is_symlink()
-            )
+            dir_size = 0
+            for f in post_dir.rglob("*"):
+                if f.is_file() and not f.is_symlink():
+                    try:
+                        dir_size += f.stat().st_size
+                    except OSError as exc:
+                        logger.warning(
+                            "Could not stat %s during delete_post size computation"
+                            " (treating size as 0): %s",
+                            f,
+                            exc,
+                        )
         else:
             full_path = content_manager.content_dir / file_path
-            dir_size = full_path.stat().st_size if full_path.exists() else 0
+            if full_path.exists():
+                try:
+                    dir_size = full_path.stat().st_size
+                except OSError as exc:
+                    logger.warning(
+                        "Could not stat post %s for size accounting (treating size as 0): %s",
+                        full_path,
+                        exc,
+                    )
+                    dir_size = 0
+            else:
+                dir_size = 0
 
         # Delete the file after DB commit. If this fails, the DB is already
         # correct and the next cache rebuild will clean up any stale references.

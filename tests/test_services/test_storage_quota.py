@@ -6,12 +6,12 @@ import logging
 from typing import TYPE_CHECKING
 from unittest.mock import patch
 
-from backend.services.storage_quota import ContentSizeTracker
+import pytest
+
+from backend.services.storage_quota import ContentSizeTracker, QuotaExceededError
 
 if TYPE_CHECKING:
     from pathlib import Path
-
-    import pytest
 
 
 class TestRecompute:
@@ -167,3 +167,51 @@ class TestAdjust:
         tracker.recompute()
         tracker.adjust(-9999)
         assert tracker.current_usage == 0
+
+
+class TestRequireQuota:
+    def test_require_quota_does_nothing_when_quota_allows(self, tmp_path: Path) -> None:
+        """require_quota does not raise when the delta fits within the limit."""
+        (tmp_path / "file.md").write_bytes(b"x" * 100)
+        tracker = ContentSizeTracker(content_dir=tmp_path, max_size=1000)
+        tracker.recompute()
+        # 100 used, 800 requested — fits within 1000
+        tracker.require_quota(800)  # must not raise
+
+    def test_require_quota_raises_when_delta_exceeds_remaining(self, tmp_path: Path) -> None:
+        """require_quota raises QuotaExceeded when a positive delta would exceed the limit."""
+        (tmp_path / "file.md").write_bytes(b"x" * 100)
+        tracker = ContentSizeTracker(content_dir=tmp_path, max_size=1000)
+        tracker.recompute()
+        # 100 used, 901 requested — would reach 1001, over the 1000 limit
+        with pytest.raises(QuotaExceededError):
+            tracker.require_quota(901)
+
+    def test_require_quota_allows_negative_delta(self, tmp_path: Path) -> None:
+        """Negative deltas (deletions/shrinkages) are always allowed."""
+        (tmp_path / "file.md").write_bytes(b"x" * 100)
+        tracker = ContentSizeTracker(content_dir=tmp_path, max_size=50)
+        tracker.recompute()
+        # Already over limit, but negative delta should be allowed
+        tracker.require_quota(-10)  # must not raise
+
+    def test_require_quota_zero_delta_does_nothing_when_within_limit(self, tmp_path: Path) -> None:
+        """require_quota(0) does not raise when usage is within the limit."""
+        (tmp_path / "file.md").write_bytes(b"x" * 100)
+        tracker = ContentSizeTracker(content_dir=tmp_path, max_size=1000)
+        tracker.recompute()
+        tracker.require_quota(0)  # must not raise
+
+    def test_require_quota_no_limit_always_passes(self, tmp_path: Path) -> None:
+        """require_quota never raises when max_size is None (unlimited)."""
+        tracker = ContentSizeTracker(content_dir=tmp_path, max_size=None)
+        tracker.recompute()
+        tracker.require_quota(10**9)  # must not raise
+
+    def test_require_quota_exact_limit_passes(self, tmp_path: Path) -> None:
+        """require_quota does not raise when usage would land exactly at the limit."""
+        (tmp_path / "file.md").write_bytes(b"x" * 100)
+        tracker = ContentSizeTracker(content_dir=tmp_path, max_size=1000)
+        tracker.recompute()
+        # 100 + 900 == 1000 exactly — should pass
+        tracker.require_quota(900)  # must not raise

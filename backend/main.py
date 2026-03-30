@@ -48,6 +48,7 @@ from backend.version import get_version
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Awaitable, Callable
+    from datetime import datetime
     from pathlib import Path
 
     from sqlalchemy import Connection
@@ -91,8 +92,8 @@ def _public_post_slug(file_path: str) -> str | None:
         return None
 
 
-def format_human_date(value: str) -> str:
-    """Format an ISO-like datetime string as 'Month D, Year' for SEO HTML output."""
+def format_human_date(value: str | datetime) -> str:
+    """Format a datetime string or object as 'Month D, Year' for SEO HTML output."""
     from backend.utils.datetime import parse_datetime
 
     dt = parse_datetime(value)
@@ -574,6 +575,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return JSONResponse(status_code=422, content={"detail": errors})
 
     from backend.pandoc.renderer import RenderError
+    from backend.services.storage_quota import QuotaExceededError
+
+    @app.exception_handler(QuotaExceededError)
+    async def quota_exceeded_handler(request: Request, exc: QuotaExceededError) -> JSONResponse:
+        return JSONResponse(status_code=413, content={"detail": "Storage limit reached"})
 
     @app.exception_handler(RenderError)
     async def render_error_handler(request: Request, exc: RenderError) -> JSONResponse:
@@ -911,8 +917,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         rendered_body = None
         if post.rendered_html:
-            _dt = post.created_at
-            date_str = f"{_dt.strftime('%B')} {_dt.day}, {_dt.strftime('%Y')}"
+            date_str = format_human_date(post.created_at)
             author_line = f" \u00b7 {post.author}" if post.author else ""
             rendered_body = (
                 f"<article>"
@@ -978,6 +983,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         from backend.services.post_service import MAX_SAFE_PAGE, list_posts
         from backend.services.seo_service import (
             SeoContext,
+            SeoPostItem,
             render_post_list_html,
             render_seo_html,
             strip_html_tags,
@@ -995,7 +1001,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if page > MAX_SAFE_PAGE:
             return HTMLResponse(base_html)
 
-        posts_data: list[dict[str, str]] = []
+        posts_data: list[SeoPostItem] = []
         preload_data: dict[str, Any] | None = None
         is_authenticated = False
         try:
@@ -1155,6 +1161,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         from backend.models.post import PostCache
         from backend.services.seo_service import (
             SeoContext,
+            SeoPostItem,
             render_post_list_html,
             render_seo_html,
             strip_html_tags,
@@ -1172,7 +1179,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         label_row: tuple[str, str, bool] | None = None
         label_parent_ids: list[str] = []
         label_child_ids: list[str] = []
-        posts_data_ld: list[dict[str, str]] = []
+        posts_data_ld: list[SeoPostItem] = []
         preload_posts_ld: list[dict[str, Any]] = []
         total_ld = 0
         try:
@@ -1213,13 +1220,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         slug = _public_post_slug(p.file_path)
                         if slug is None:
                             continue
-                        _dt = p.created_at
                         posts_data_ld.append(
                             {
                                 "id": str(p.id),
                                 "title": p.title,
                                 "slug": slug,
-                                "date": f"{_dt.strftime('%B')} {_dt.day}, {_dt.strftime('%Y')}",
+                                "date": format_human_date(p.created_at),
                                 "excerpt": excerpt,
                             }
                         )

@@ -17,7 +17,7 @@ export default function TimelinePage() {
   // Lazy initializer: reads and removes the preloaded script tag once per mount.
   // Returns null on subsequent mounts (tag already gone).
   const [initialData] = useState<PostListResponse | null>(() => {
-    const data = readPreloaded({
+    const raw = readPreloaded({
       listHtml: {
         path: 'posts',
         key: 'id',
@@ -26,7 +26,7 @@ export default function TimelinePage() {
         contentSelector: '[data-excerpt]',
       },
     })
-    return data as PostListResponse | null
+    return raw !== null ? (raw as unknown as PostListResponse) : null
   })
 
   const [searchParams, setSearchParams] = useSearchParams()

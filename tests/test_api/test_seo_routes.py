@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, cast
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from httpx import ASGITransport
+from sqlalchemy.exc import SQLAlchemyError
 
 from backend.config import Settings
 from tests.conftest import create_test_client
@@ -482,3 +486,49 @@ class TestMissingIndexHtml:
         resp = await no_index_client.get("/labels")
         assert resp.status_code in (404, 200)
         assert len(resp.text) > 0
+
+
+class TestFormatHumanDateWithDatetime:
+    """format_human_date must accept a datetime object, not just a str."""
+
+    def test_accepts_datetime_object(self) -> None:
+        """format_human_date(datetime(...)) must return the correct human-readable date."""
+        from backend.main import format_human_date
+
+        dt = datetime(2026, 1, 5, 12, 0, 0, tzinfo=UTC)
+        result = format_human_date(dt)
+        assert result == "January 5, 2026"
+
+    def test_accepts_string(self) -> None:
+        """format_human_date must continue to accept an ISO datetime string."""
+        from backend.main import format_human_date
+
+        result = format_human_date("2026-01-05 12:00:00+00")
+        assert result == "January 5, 2026"
+
+
+class TestHomepageDatabaseError:
+    """Homepage SEO route must degrade gracefully when the DB raises SQLAlchemyError."""
+
+    async def test_db_error_returns_plain_html(self, client: AsyncClient) -> None:
+        """Homepage must return plain HTML (200) and not crash when the DB is unavailable."""
+        mock_session = AsyncMock()
+        mock_session.execute.side_effect = SQLAlchemyError("DB down")
+
+        mock_session_factory = MagicMock()
+        mock_session_factory.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session_factory.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        transport = client._transport
+        assert isinstance(transport, ASGITransport)
+        state = getattr(transport.app, "state", None)
+        assert state is not None
+        state.session_factory = mock_session_factory
+
+        resp = await client.get("/")
+        assert resp.status_code == 200
+        assert "text/html" in resp.headers["content-type"]
+        # The response must be non-empty plain HTML (the base index.html fallback)
+        assert len(resp.text) > 0
+        # SEO-enriched content (rendered post list) must NOT be present on DB error
+        assert "Hello World" not in resp.text

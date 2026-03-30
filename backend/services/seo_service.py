@@ -6,7 +6,7 @@ import html
 import json
 import re
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal, TypedDict
 
 _MAX_DESCRIPTION_LENGTH = 200
 
@@ -25,14 +25,24 @@ def strip_html_tags(text: str) -> str:
     return text.strip()
 
 
-@dataclass
+class SeoPostItem(TypedDict):
+    """Typed dict for a single post entry in render_post_list_html."""
+
+    id: str
+    title: str
+    slug: str
+    date: str
+    excerpt: str
+
+
+@dataclass(frozen=True)
 class SeoContext:
     """All SEO metadata for a single page response."""
 
     title: str
     description: str
     canonical_url: str
-    og_type: str = "website"
+    og_type: Literal["website", "article"] = "website"
     site_name: str | None = None
     author: str | None = None
     published_time: str | None = None
@@ -156,7 +166,7 @@ def website_ld(*, name: str, description: str, url: str) -> dict[str, Any]:
 
 
 def render_post_list_html(
-    posts: list[dict[str, str]],
+    posts: list[SeoPostItem],
     *,
     heading: str,
 ) -> str:

@@ -8,14 +8,11 @@ import { readPreloaded } from '@/utils/preload'
 export function usePage(pageId: string | null) {
   const key = pageId !== null ? `pages/${pageId}` : null
 
-  // Lazy initializer: reads and removes the preloaded script tag once per mount.
-  // Returns null on subsequent mounts (tag already gone) — safe for SWR fallbackData.
   const fallback = useScopedPreloadedFallback<PageResponse>(key, () => {
     const raw = readPreloaded({
       html: { field: 'rendered_html', selector: '[data-content]' },
     })
-    const data = raw && typeof raw === 'object' && 'title' in raw ? (raw as unknown as PageResponse) : null
-    return data
+    return raw !== null && 'title' in raw ? (raw as unknown as PageResponse) : null
   })
 
   const config: SWRConfiguration<PageResponse, Error> | undefined =
