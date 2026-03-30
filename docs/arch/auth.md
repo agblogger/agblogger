@@ -25,6 +25,10 @@ Backend read endpoints whose payload changes when admin authentication is presen
 
 AgBlogger is a closed, single-admin deployment with no registration flow. The admin account is bootstrapped from environment configuration during startup, and durable auth state is converged to a single live admin identity before the app begins serving requests.
 
+## Feature Flags
+
+The `DISABLE_PASSWORD_CHANGE` environment variable prevents admin password changes through the web UI. When set to `true`, the `PUT /api/admin/password` endpoint returns 403 and the frontend hides the password change form. The flag is exposed in the `GET /api/admin/site` response as `password_change_disabled`. Intended for public demo deployments with shared admin access.
+
 ## Code Entry Points
 
 - `backend/api/auth.py` exposes the authentication and account-management endpoints.
