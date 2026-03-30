@@ -61,6 +61,7 @@ services:
 
   goatcounter:
     image: arp242/goatcounter:latest
+    user: root
     expose:
       - "8080"
     entrypoint: ["/bin/sh", "/entrypoint.sh"]

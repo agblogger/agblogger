@@ -948,6 +948,7 @@ def _goatcounter_service_section(
     block = (
         "  goatcounter:\n"
         "    image: arp242/goatcounter:latest\n"
+        "    user: root\n"
         "    expose:\n"
         '      - "8080"\n'
         '    entrypoint: ["/bin/sh", "/entrypoint.sh"]\n'

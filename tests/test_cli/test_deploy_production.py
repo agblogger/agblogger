@@ -5528,6 +5528,7 @@ def test_build_direct_compose_includes_goatcounter_service() -> None:
     content = build_direct_compose_content()
     assert "goatcounter:" in content
     assert "arp242/goatcounter:latest" in content
+    assert "user: root" in content
     assert "goatcounter-db:/data/goatcounter" in content
     assert "goatcounter-token:/data/goatcounter-token:ro" in content
 
@@ -5536,6 +5537,7 @@ def test_build_image_compose_includes_goatcounter_service() -> None:
     content = build_image_compose_content()
     assert "goatcounter:" in content
     assert "arp242/goatcounter:latest" in content
+    assert "user: root" in content
     assert "goatcounter-db:/data/goatcounter" in content
     assert "goatcounter-token:/data/goatcounter-token:ro" in content
     assert GOATCOUNTER_STATIC_IP in content
@@ -5544,6 +5546,7 @@ def test_build_image_compose_includes_goatcounter_service() -> None:
 def test_build_image_direct_compose_includes_goatcounter_service() -> None:
     content = build_image_direct_compose_content()
     assert "goatcounter:" in content
+    assert "user: root" in content
     assert "goatcounter-db:/data/goatcounter" in content
     assert "goatcounter-token:/data/goatcounter-token:ro" in content
 
@@ -5564,6 +5567,7 @@ def test_all_compose_builders_share_only_the_goatcounter_token_with_agblogger() 
         assert "goatcounter-token:/data/goatcounter-token:ro" in content, (
             f"{name} missing read-only GoatCounter token mount"
         )
+        assert "user: root" in content, f"{name} should run GoatCounter as root"
         assert content.count("goatcounter-db:/data/goatcounter") == 1, (
             f"{name} should keep GoatCounter DB private to the GoatCounter service"
         )

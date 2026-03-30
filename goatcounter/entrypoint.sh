@@ -15,7 +15,7 @@ if [ ! -f "$TOKEN_FILE" ] || [ ! -s "$GOATCOUNTER_DB" ]; then
         -createdb \
         -db "sqlite+$GOATCOUNTER_DB" \
         -vhost stats.internal \
-        -user.email admin@localhost \
+        -user.email admin@example.com \
         -user.password "$(head -c 32 /dev/urandom | base64)" \
         2>&1); then
         case "$output" in
