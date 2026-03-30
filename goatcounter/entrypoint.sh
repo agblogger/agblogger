@@ -22,8 +22,8 @@ site_exists() {
 create_api_token() {
     TOKEN=$(goatcounter db create apitoken \
         -db "sqlite+$GOATCOUNTER_DB" \
-        -site-id 1 \
-        -perm 3)  # bitmask: 1 (read stats) + 2 (record hits)
+        -user admin@example.com \
+        -perm count,site_read)
 
     if [ -z "$TOKEN" ]; then
         echo "ERROR: Failed to create GoatCounter API token" >&2

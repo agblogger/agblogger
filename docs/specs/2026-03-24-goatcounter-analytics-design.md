@@ -21,8 +21,8 @@ GoatCounter runs alongside the existing `agblogger` and `caddy` services in dock
 GoatCounter requires an API token for stat queries. A custom entrypoint script handles first-boot provisioning:
 
 1. Check if the site already exists (presence of `/data/goatcounter/token` file)
-2. If not, run `goatcounter db create-site -createdb -vhost=stats.internal -user.email=admin@localhost` to create the site with its SQLite database
-3. Run `goatcounter db create-apitoken -site-id=1 -perm=2` to generate a read+write API token
+2. If not, run `goatcounter db create site -createdb -vhost=stats.internal -user.email=admin@example.com` to create the site with its SQLite database
+3. Run `goatcounter db create apitoken -user=admin@example.com -perm=count,site_read` to generate the API token needed for hit recording and stats reads
 4. Write the token to `/data/goatcounter/token` (a shared volume mounted by both containers)
 5. On subsequent boots, skip steps 2-4 if the token file already exists
 

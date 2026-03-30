@@ -1326,11 +1326,11 @@ if [ ! -f "$TOKEN_FILE" ]; then
         -user.email admin@localhost \
         -user.password "$(head -c 32 /dev/urandom | base64)"
 
-    # Create API token (permission level 2 = read+write)
-    TOKEN=$(goatcounter db create-apitoken \
+    # Create API token (needs hit recording plus stats read permissions)
+    TOKEN=$(goatcounter db create apitoken \
         -db "sqlite+$GOATCOUNTER_DB" \
-        -site-id 1 \
-        -perm 2)
+        -user admin@example.com \
+        -perm count,site_read)
 
     echo "$TOKEN" > "$TOKEN_FILE"
     echo "GoatCounter provisioned. Token written to $TOKEN_FILE"
@@ -1343,7 +1343,7 @@ exec goatcounter serve \
     -tls none
 ```
 
-Note: The exact `goatcounter` CLI flags may need adjustment. Check the GoatCounter Docker image docs and `goatcounter help` for the correct invocation. The token output format from `create-apitoken` may also need parsing.
+Note: The exact `goatcounter` CLI flags may need adjustment. Check the GoatCounter Docker image docs and `goatcounter help` for the correct invocation. The token output format from `create apitoken` may also need parsing.
 
 - [ ] **Step 2: Add GoatCounter to docker-compose.yml**
 

@@ -49,6 +49,8 @@ def test_entrypoint_site_creation_exits_on_unexpected_failure() -> None:
 
 
 def test_entrypoint_perm_flag_has_bitmask_comment() -> None:
-    """The -perm 3 flag must have a comment explaining the bitmask value."""
+    """The API token must request the explicit GoatCounter permissions it needs."""
     entrypoint = Path("goatcounter/entrypoint.sh").read_text()
-    assert "-perm 3)  # bitmask:" in entrypoint
+    assert "-perm count,site_read" in entrypoint
+    assert "-site-id 1" not in entrypoint
+    assert "-user admin@example.com" in entrypoint
