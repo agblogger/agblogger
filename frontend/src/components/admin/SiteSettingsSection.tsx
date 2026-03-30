@@ -23,6 +23,7 @@ function normalizeSiteSettings(
     title: settings?.title ?? '',
     description: settings?.description ?? '',
     timezone: settings?.timezone ?? '',
+    password_change_disabled: settings?.password_change_disabled ?? false,
   }
 }
 

@@ -485,9 +485,7 @@ class TestPasswordChangeDisabled:
             yield ac
 
     @pytest.mark.asyncio
-    async def test_password_change_returns_403_when_disabled(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_password_change_returns_403_when_disabled(self, client: AsyncClient) -> None:
         """PUT /api/admin/password returns 403 when disable_password_change is set."""
         token_resp = await client.post(
             "/api/auth/token-login",

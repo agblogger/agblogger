@@ -146,6 +146,7 @@ class DeployConfig:
     shared_caddy_config: SharedCaddyConfig | None = None
     scan_image: bool = True
     max_content_size: str | None = None
+    disable_password_change: bool = False
 
     @property
     def use_bundled_caddy(self) -> bool:
@@ -282,6 +283,8 @@ def build_env_content(config: DeployConfig) -> str:
     )
     if config.max_content_size is not None:
         lines.append(f"MAX_CONTENT_SIZE={config.max_content_size}")
+    if config.disable_password_change:
+        lines.append("DISABLE_PASSWORD_CHANGE=true")
     if config.image_ref is not None:
         lines.append(f"AGBLOGGER_IMAGE={_quote_env_value(config.image_ref)}")
     return "\n".join(lines) + "\n"
@@ -847,7 +850,11 @@ def build_setup_script_content(config: DeployConfig) -> str:
             "        fi",
             '        echo ""',
             '        echo "Note: ADMIN_PASSWORD in .env.production is stored in plaintext."',
-            '        echo "Change your password through the app after first login."',
+            *(
+                ['        echo "Note: Admin password changes are disabled in the web UI."']
+                if config.disable_password_change
+                else ['        echo "Change your password through the app after first login."']
+            ),
             "        # Record current compose flags so next run can detect mode changes.",
             "        printf '%s' \"$CURRENT_COMPOSE_FLAGS\" > .last-teardown",
             "        exit 0",
@@ -2429,6 +2436,11 @@ def collect_config(project_dir: Path | None = None) -> DeployConfig:
     max_content_size_raw = input("Max content storage size (e.g., 2G, 500M) [unlimited]: ").strip()
     max_content_size = max_content_size_raw or None
 
+    disable_password_change = _prompt_yes_no(
+        "Disable admin password changes in the web UI? (for public demos)",
+        default=False,
+    )
+
     do_scan = False
     if shutil.which("trivy") is not None:
         do_scan = _prompt_yes_no(
@@ -2449,6 +2461,7 @@ def collect_config(project_dir: Path | None = None) -> DeployConfig:
         caddy_public=caddy_public,
         expose_docs=expose_docs,
         max_content_size=max_content_size,
+        disable_password_change=disable_password_change,
         deployment_mode=deployment_mode,
         image_ref=image_ref,
         bundle_dir=DEFAULT_BUNDLE_DIR,
@@ -2531,6 +2544,7 @@ def config_from_args(args: argparse.Namespace) -> DeployConfig:
         caddy_public=caddy_public,
         expose_docs=args.expose_docs,
         max_content_size=args.max_content_size,
+        disable_password_change=args.disable_password_change,
         deployment_mode=args.deployment_mode,
         image_ref=image_ref,
         bundle_dir=args.bundle_dir,
@@ -2637,6 +2651,12 @@ def _parse_args() -> argparse.Namespace:
     config_group.add_argument(
         "--max-content-size",
         help="Maximum total content storage size (e.g., 2G, 500M). Unlimited if omitted.",
+    )
+    config_group.add_argument(
+        "--disable-password-change",
+        action="store_true",
+        default=False,
+        help="Disable admin password changes in the web UI (for public demos).",
     )
     config_group.add_argument(
         "--deployment-mode",
