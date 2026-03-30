@@ -947,7 +947,7 @@ def _goatcounter_service_section(
     """Return the GoatCounter sidecar service YAML block."""
     block = (
         "  goatcounter:\n"
-        "    image: goatcounter/goatcounter:latest\n"
+        "    image: arp242/goatcounter:latest\n"
         "    expose:\n"
         '      - "8080"\n'
         '    entrypoint: ["/bin/sh", "/entrypoint.sh"]\n'

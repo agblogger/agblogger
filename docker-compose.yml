@@ -27,7 +27,13 @@ services:
       - BLUESKY_CLIENT_URL=${BLUESKY_CLIENT_URL:-}
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')",
+        ]
       interval: 30s
       timeout: 5s
       start_period: 10s
@@ -54,7 +60,7 @@ services:
         ipv4_address: 172.30.0.2
 
   goatcounter:
-    image: goatcounter/goatcounter:latest
+    image: arp242/goatcounter:latest
     expose:
       - "8080"
     entrypoint: ["/bin/sh", "/entrypoint.sh"]
@@ -64,7 +70,7 @@ services:
       - ./goatcounter/entrypoint.sh:/entrypoint.sh:ro
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080"]  # nosemgrep: wget-unencrypted-url
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080"] # nosemgrep: wget-unencrypted-url
       interval: 30s
       timeout: 5s
       start_period: 15s

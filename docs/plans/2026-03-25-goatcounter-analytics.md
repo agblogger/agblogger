@@ -1351,7 +1351,7 @@ Add to `docker-compose.yml`:
 
 ```yaml
   goatcounter:
-    image: goatcounter/goatcounter:latest  # or build from goatcounter/Dockerfile
+    image: arp242/goatcounter:latest  # or build from goatcounter/Dockerfile
     expose:
       - "8080"
     entrypoint: ["/bin/sh", "/entrypoint.sh"]

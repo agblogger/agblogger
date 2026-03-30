@@ -5527,7 +5527,7 @@ def test_setup_script_teardown_warns_on_failure() -> None:
 def test_build_direct_compose_includes_goatcounter_service() -> None:
     content = build_direct_compose_content()
     assert "goatcounter:" in content
-    assert "goatcounter/goatcounter:latest" in content
+    assert "arp242/goatcounter:latest" in content
     assert "goatcounter-db:/data/goatcounter" in content
     assert "goatcounter-token:/data/goatcounter-token:ro" in content
 
@@ -5535,7 +5535,7 @@ def test_build_direct_compose_includes_goatcounter_service() -> None:
 def test_build_image_compose_includes_goatcounter_service() -> None:
     content = build_image_compose_content()
     assert "goatcounter:" in content
-    assert "goatcounter/goatcounter:latest" in content
+    assert "arp242/goatcounter:latest" in content
     assert "goatcounter-db:/data/goatcounter" in content
     assert "goatcounter-token:/data/goatcounter-token:ro" in content
     assert GOATCOUNTER_STATIC_IP in content
@@ -5572,7 +5572,7 @@ def test_all_compose_builders_share_only_the_goatcounter_token_with_agblogger() 
 def test_build_external_caddy_compose_includes_goatcounter_on_caddy_network() -> None:
     content = build_external_caddy_compose_content()
     assert "goatcounter:" in content
-    assert "goatcounter/goatcounter:latest" in content
+    assert "arp242/goatcounter:latest" in content
     # GoatCounter must be on the same network as agblogger
     assert EXTERNAL_CADDY_NETWORK_NAME in content
 
