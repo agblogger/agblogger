@@ -506,6 +506,43 @@ class TestPasswordChangeDisabled:
         assert resp.status_code == 403
         assert resp.json()["detail"] == "Password changes are disabled by server configuration"
 
+    @pytest.mark.asyncio
+    async def test_site_settings_includes_password_change_disabled(
+        self, client: AsyncClient
+    ) -> None:
+        """GET /api/admin/site should include password_change_disabled flag."""
+        token_resp = await client.post(
+            "/api/auth/token-login",
+            json={"username": "admin", "password": "admin123"},
+        )
+        access_token = token_resp.json()["access_token"]
+        resp = await client.get(
+            "/api/admin/site",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["password_change_disabled"] is True
+
+
+class TestPasswordChangeEnabled:
+    """Verify password_change_disabled defaults to false in site settings."""
+
+    @pytest.mark.asyncio
+    async def test_site_settings_password_change_disabled_defaults_false(
+        self, client: AsyncClient
+    ) -> None:
+        token_resp = await client.post(
+            "/api/auth/token-login",
+            json={"username": "admin", "password": "admin123"},
+        )
+        access_token = token_resp.json()["access_token"]
+        resp = await client.get(
+            "/api/admin/site",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["password_change_disabled"] is False
+
 
 class TestGetCurrentAdminLogging:
     """get_current_admin must log differentiated messages for different auth failure modes.

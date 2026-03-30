@@ -30,6 +30,7 @@ class SiteSettingsResponse(BaseModel):
     title: str
     description: str
     timezone: str
+    password_change_disabled: bool
 
 
 class AdminPageConfig(BaseModel):

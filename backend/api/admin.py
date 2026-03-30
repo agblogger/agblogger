@@ -67,6 +67,7 @@ _PAGE_ID_ERROR = (
 async def get_settings(
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
     _user: Annotated[AdminUser, Depends(require_admin)],
+    settings: Annotated[Settings, Depends(get_settings_dep)],
 ) -> SiteSettingsResponse:
     """Get current site settings."""
     cfg = get_site_settings(content_manager)
@@ -74,6 +75,7 @@ async def get_settings(
         title=cfg.title,
         description=cfg.description,
         timezone=cfg.timezone,
+        password_change_disabled=settings.disable_password_change,
     )
 
 
