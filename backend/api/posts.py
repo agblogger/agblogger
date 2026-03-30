@@ -364,11 +364,19 @@ async def upload_post(
         rendered_excerpt = rewrite_relative_urls(raw_excerpt, file_path)
         rendered_html = rewrite_relative_urls(raw_html, file_path)
 
-        if not content_size_tracker.check(total_size):
+        serialized = serialize_post(post_data)
+        serialized_size = len(serialized.encode("utf-8"))
+        post_dir = post_path.parent
+        asset_net_delta = _asset_upload_net_delta(
+            asset_data=[(name, data) for name, data in file_data if name != md_filename],
+            post_dir=post_dir,
+        )
+        projected_delta = serialized_size + asset_net_delta
+
+        if projected_delta > 0 and not content_size_tracker.check(projected_delta):
             raise HTTPException(status_code=413, detail="Storage limit reached")
 
         # Write asset files to directory
-        post_dir = post_path.parent
         written_assets: list[FilePath] = []
         try:
             post_dir.mkdir(parents=True, exist_ok=True)
@@ -387,7 +395,6 @@ async def upload_post(
             raise HTTPException(status_code=500, detail="Failed to write upload files") from exc
 
         try:
-            serialized = serialize_post(post_data)
             post = PostCache(
                 file_path=file_path,
                 title=post_data.title,
@@ -428,7 +435,7 @@ async def upload_post(
             raise
 
         await session.commit()
-        content_size_tracker.adjust(total_size)
+        content_size_tracker.adjust(serialized_size + asset_net_delta)
         await session.refresh(post)
         set_git_warning(response, await git_service.try_commit(f"Upload post: {file_path}"))
 

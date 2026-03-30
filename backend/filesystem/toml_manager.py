@@ -156,6 +156,21 @@ def parse_labels_config(content_dir: Path) -> dict[str, LabelDef]:
 
 def write_labels_config(content_dir: Path, labels: dict[str, LabelDef]) -> None:
     """Write labels back to labels.toml."""
+    labels_bytes = serialize_labels_config(labels)
+    labels_path = content_dir / "labels.toml"
+    fd, tmp_path_str = tempfile.mkstemp(dir=content_dir, suffix=".tmp")
+    tmp_path = Path(tmp_path_str)
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(labels_bytes)
+        tmp_path.replace(labels_path)
+    except BaseException:
+        tmp_path.unlink(missing_ok=True)
+        raise
+
+
+def serialize_labels_config(labels: dict[str, LabelDef]) -> bytes:
+    """Serialize labels.toml content for a label mapping."""
     labels_data: dict[str, Any] = {}
     for label_id, label_def in labels.items():
         entry: dict[str, Any] = {"names": label_def.names}
@@ -165,20 +180,26 @@ def write_labels_config(content_dir: Path, labels: dict[str, LabelDef]) -> None:
             entry["parents"] = [f"#{p}" for p in label_def.parents]
         labels_data[label_id] = entry
 
-    labels_path = content_dir / "labels.toml"
+    return tomli_w.dumps({"labels": labels_data}).encode("utf-8")
+
+
+def write_site_config(content_dir: Path, config: SiteConfig) -> None:
+    """Write site configuration back to index.toml."""
+    site_bytes = serialize_site_config(config)
+    index_path = content_dir / "index.toml"
     fd, tmp_path_str = tempfile.mkstemp(dir=content_dir, suffix=".tmp")
     tmp_path = Path(tmp_path_str)
     try:
         with os.fdopen(fd, "wb") as f:
-            f.write(tomli_w.dumps({"labels": labels_data}).encode("utf-8"))
-        tmp_path.replace(labels_path)
+            f.write(site_bytes)
+        tmp_path.replace(index_path)
     except BaseException:
         tmp_path.unlink(missing_ok=True)
         raise
 
 
-def write_site_config(content_dir: Path, config: SiteConfig) -> None:
-    """Write site configuration back to index.toml."""
+def serialize_site_config(config: SiteConfig) -> bytes:
+    """Serialize index.toml content for a site configuration."""
     site_data: dict[str, Any] = {
         "title": config.title,
         "description": config.description,
@@ -192,13 +213,4 @@ def write_site_config(content_dir: Path, config: SiteConfig) -> None:
             entry["file"] = page.file
         pages_data.append(entry)
 
-    index_path = content_dir / "index.toml"
-    fd, tmp_path_str = tempfile.mkstemp(dir=content_dir, suffix=".tmp")
-    tmp_path = Path(tmp_path_str)
-    try:
-        with os.fdopen(fd, "wb") as f:
-            f.write(tomli_w.dumps({"site": site_data, "pages": pages_data}).encode("utf-8"))
-        tmp_path.replace(index_path)
-    except BaseException:
-        tmp_path.unlink(missing_ok=True)
-        raise
+    return tomli_w.dumps({"site": site_data, "pages": pages_data}).encode("utf-8")

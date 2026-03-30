@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.api.deps import (
     AsyncWriteLock,
     get_content_manager,
+    get_content_size_tracker,
     get_content_write_lock,
     get_current_admin,
     get_git_service,
@@ -20,7 +21,7 @@ from backend.api.deps import (
     require_admin,
 )
 from backend.filesystem.content_manager import ContentManager
-from backend.filesystem.toml_manager import LabelDef, write_labels_config
+from backend.filesystem.toml_manager import LabelDef, serialize_labels_config, write_labels_config
 from backend.models.user import AdminUser
 from backend.schemas.label import (
     LabelCreate,
@@ -40,6 +41,7 @@ from backend.services.label_service import (
     update_label,
 )
 from backend.services.post_service import MAX_SAFE_PAGE, get_posts_by_label
+from backend.services.storage_quota import ContentSizeTracker
 
 logger = logging.getLogger(__name__)
 
@@ -119,6 +121,7 @@ async def create_label_endpoint(
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
     git_service: Annotated[GitService, Depends(get_git_service)],
     content_write_lock: Annotated[AsyncWriteLock, Depends(get_content_write_lock)],
+    content_size_tracker: Annotated[ContentSizeTracker, Depends(get_content_size_tracker)],
     _user: Annotated[AdminUser, Depends(require_admin)],
 ) -> LabelResponse:
     """Create a new label."""
@@ -144,6 +147,12 @@ async def create_label_endpoint(
             names=body.names,
             parents=body.parents,
         )
+        labels_path = content_manager.content_dir / "labels.toml"
+        old_labels_size = content_size_tracker.file_size(labels_path)
+        projected_delta = len(serialize_labels_config(labels)) - old_labels_size
+        if projected_delta > 0 and not content_size_tracker.check(projected_delta):
+            await session.rollback()
+            raise HTTPException(status_code=413, detail="Storage limit reached")
         await _persist_labels_and_commit(
             session,
             content_manager,
@@ -152,6 +161,7 @@ async def create_label_endpoint(
             f"Create label: {body.id}",
             f"label {body.id}",
         )
+        content_size_tracker.adjust(content_size_tracker.file_size(labels_path) - old_labels_size)
         return result
 
 
@@ -163,6 +173,7 @@ async def update_label_endpoint(
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
     git_service: Annotated[GitService, Depends(get_git_service)],
     content_write_lock: Annotated[AsyncWriteLock, Depends(get_content_write_lock)],
+    content_size_tracker: Annotated[ContentSizeTracker, Depends(get_content_size_tracker)],
     _user: Annotated[AdminUser, Depends(require_admin)],
 ) -> LabelResponse:
     """Update a label's names and parents."""
@@ -193,6 +204,12 @@ async def update_label_endpoint(
             names=body.names,
             parents=body.parents,
         )
+        labels_path = content_manager.content_dir / "labels.toml"
+        old_labels_size = content_size_tracker.file_size(labels_path)
+        projected_delta = len(serialize_labels_config(labels)) - old_labels_size
+        if projected_delta > 0 and not content_size_tracker.check(projected_delta):
+            await session.rollback()
+            raise HTTPException(status_code=413, detail="Storage limit reached")
         await _persist_labels_and_commit(
             session,
             content_manager,
@@ -201,6 +218,7 @@ async def update_label_endpoint(
             f"Update label: {label_id}",
             f"label {label_id}",
         )
+        content_size_tracker.adjust(content_size_tracker.file_size(labels_path) - old_labels_size)
         return result
 
 
@@ -211,6 +229,7 @@ async def delete_label_endpoint(
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
     git_service: Annotated[GitService, Depends(get_git_service)],
     content_write_lock: Annotated[AsyncWriteLock, Depends(get_content_write_lock)],
+    content_size_tracker: Annotated[ContentSizeTracker, Depends(get_content_size_tracker)],
     _user: Annotated[AdminUser, Depends(require_admin)],
 ) -> LabelDeleteResponse:
     """Delete a label."""
@@ -229,6 +248,8 @@ async def delete_label_endpoint(
                     names=label_def.names,
                     parents=[p for p in label_def.parents if p != label_id],
                 )
+        labels_path = content_manager.content_dir / "labels.toml"
+        old_labels_size = content_size_tracker.file_size(labels_path)
         await _persist_labels_and_commit(
             session,
             content_manager,
@@ -237,6 +258,7 @@ async def delete_label_endpoint(
             f"Delete label: {label_id}",
             f"deleting {label_id}",
         )
+        content_size_tracker.adjust(content_size_tracker.file_size(labels_path) - old_labels_size)
         return LabelDeleteResponse(id=label_id)
 
 

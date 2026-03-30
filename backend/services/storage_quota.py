@@ -1,7 +1,8 @@
 """Content storage quota tracker.
 
-Tracks total byte usage under the content directory so API handlers can
-enforce a configurable size limit before accepting new uploads or posts.
+Tracks managed, non-hidden content files under the content directory so API
+handlers can enforce a configurable size limit before accepting new writes.
+Hidden runtime state such as ``.git`` is intentionally excluded.
 """
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 class ContentSizeTracker:
-    """Track cumulative file-size usage under a content directory.
+    """Track cumulative file-size usage for managed files under a content directory.
 
     Designed for asyncio's single-threaded cooperative model. All public
     methods are synchronous with no await points, so no interleaving can
@@ -37,8 +38,35 @@ class ContentSizeTracker:
         """Current tracked byte usage."""
         return self._usage
 
+    def _is_tracked_path(self, path: Path) -> bool:
+        """Return True when *path* is a managed, non-hidden file under content_dir."""
+        try:
+            relative_parts = path.relative_to(self._content_dir).parts
+        except ValueError:
+            return False
+        return bool(relative_parts) and all(not part.startswith(".") for part in relative_parts)
+
+    def file_size(self, path: Path) -> int:
+        """Return the tracked size of a managed file path, or 0 when absent/untracked."""
+        if not self._is_tracked_path(path):
+            return 0
+        try:
+            if path.is_file() and not path.is_symlink():
+                return path.stat().st_size
+        except OSError as exc:
+            logger.warning("Failed to stat tracked path %s: %s", path, exc)
+        return 0
+
+    def delta_for_paths(self, updated_sizes: dict[Path, int | None]) -> int:
+        """Return the net tracked-byte delta for a set of final file sizes."""
+        delta = 0
+        for path, new_size in updated_sizes.items():
+            old_size = self.file_size(path)
+            delta += (new_size or 0) - old_size
+        return delta
+
     def recompute(self) -> None:
-        """Walk content_dir, sum file sizes (skipping symlinks).
+        """Walk content_dir, sum tracked file sizes (skipping hidden paths and symlinks).
 
         Catches individual OSError on stat() calls (skips unreadable files).
         Catches top-level OSError on rglob (logs the error, preserves previous
@@ -54,7 +82,7 @@ class ContentSizeTracker:
 
         total = 0
         for path in paths:
-            if path.is_file() and not path.is_symlink():
+            if self._is_tracked_path(path) and path.is_file() and not path.is_symlink():
                 try:
                     total += path.stat().st_size
                 except OSError as exc:

@@ -26,7 +26,7 @@ User-authored content is treated as untrusted input. Rendering and sanitization 
 
 ## Filesystem and Sync Boundaries
 
-Filesystem access is constrained to managed content paths, and sync exposes only the subset of the content tree that belongs to the portable authoring model. Private runtime state and hidden files are outside that boundary.
+Filesystem access is constrained to managed content paths, and sync exposes only the subset of the content tree that belongs to the portable authoring model. Private runtime state and hidden files are outside that boundary. Storage quota enforcement follows the same rule: it counts managed non-hidden content files and excludes hidden runtime state such as embedded git metadata.
 
 ## External Integration Security
 
@@ -53,4 +53,5 @@ Security checks are part of normal engineering workflow rather than a separate l
 - `backend/main.py` wires up security-relevant middleware and global request handling.
 - `backend/api/deps.py` contains shared authorization dependencies.
 - `backend/services/csrf_service.py` and `backend/services/rate_limit_service.py` cover request-boundary protections.
+- `backend/services/storage_quota.py` contains the managed-content quota boundary used by write paths.
 - `backend/crosspost/ssrf.py` and related integration code cover external-request hardening for provider integrations.

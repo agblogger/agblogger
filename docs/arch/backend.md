@@ -28,6 +28,7 @@ Several long-lived services define the runtime architecture:
 
 - **content management** for canonical files
 - **git-backed versioning** for history and merge support
+- **managed-content quota tracking** for write-time capacity enforcement
 - **shared rendering** for preview and published HTML
 - **cache rebuild and indexing** for searchable derived state
 
@@ -48,7 +49,7 @@ The backend treats the Pandoc server as runtime infrastructure, not a per-reques
 
 Content mutations are serialized through a shared application-level write boundary. This prevents filesystem updates, cache refreshes, and history updates from interleaving across posts, pages, labels, and sync operations.
 
-This favors correctness and consistency over high write concurrency.
+Write paths also enforce storage quota checks against the managed non-hidden content tree before committing filesystem changes. This favors correctness and consistency over high write concurrency.
 
 ## Database Schema Management
 
@@ -92,7 +93,7 @@ The goal is to preserve content, preserve service availability where possible, a
 
 - `backend/main.py` is the main runtime entry point.
 - `backend/api/` contains the HTTP-facing modules grouped by feature area.
-- `backend/services/` contains the orchestration and business-logic layer, including services for page retrieval, page cache population, rendering, posts CRUD operations, authentication, cross-posting, sync, analytics, admin panel business logic, and SEO enrichment.
+- `backend/services/` contains the orchestration and business-logic layer, including services for page retrieval, page cache population, rendering, posts CRUD operations, authentication, cross-posting, sync, analytics, admin panel business logic, storage quota tracking, and SEO enrichment.
 - `backend/models/` contains SQLAlchemy ORM models for both durable tables (admin users, admin refresh tokens, social accounts, cross-posts, analytics settings) and cache tables (posts, pages, labels, sync manifest).
 - `backend/schemas/` contains Pydantic request/response schemas that define the API contracts.
 - `backend/filesystem/` contains the canonical content model.

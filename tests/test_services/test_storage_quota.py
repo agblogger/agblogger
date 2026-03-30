@@ -42,6 +42,17 @@ class TestRecompute:
         # Only the real file should be counted
         assert tracker.current_usage == 50
 
+    def test_recompute_skips_hidden_runtime_state(self, tmp_path: Path) -> None:
+        (tmp_path / "index.toml").write_bytes(b"x" * 50)
+        hidden_dir = tmp_path / ".git"
+        hidden_dir.mkdir()
+        (hidden_dir / "objects.bin").write_bytes(b"y" * 100)
+
+        tracker = ContentSizeTracker(content_dir=tmp_path, max_size=None)
+        tracker.recompute()
+
+        assert tracker.current_usage == 50
+
     def test_recompute_resets_to_actual(self, tmp_path: Path) -> None:
         """Drift in the counter is corrected when recompute is called."""
         (tmp_path / "a.md").write_bytes(b"x" * 200)
@@ -115,6 +126,25 @@ class TestCheck:
         tracker.recompute()
         # 100 + 900 == 1000 exactly
         assert tracker.check(900) is True
+
+
+class TestTrackedFiles:
+    def test_file_size_ignores_hidden_paths(self, tmp_path: Path) -> None:
+        tracker = ContentSizeTracker(content_dir=tmp_path, max_size=None)
+        hidden_dir = tmp_path / ".git"
+        hidden_dir.mkdir()
+        hidden_file = hidden_dir / "objects.bin"
+        hidden_file.write_bytes(b"x" * 100)
+
+        assert tracker.file_size(hidden_file) == 0
+
+    def test_delta_for_paths_uses_current_tracked_sizes(self, tmp_path: Path) -> None:
+        tracked_file = tmp_path / "index.toml"
+        tracked_file.write_bytes(b"x" * 50)
+        tracker = ContentSizeTracker(content_dir=tmp_path, max_size=None)
+
+        assert tracker.delta_for_paths({tracked_file: 80}) == 30
+        assert tracker.delta_for_paths({tracked_file: 20}) == -30
 
 
 class TestAdjust:

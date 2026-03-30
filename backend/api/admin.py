@@ -26,7 +26,7 @@ from backend.api.deps import (
 from backend.config import Settings
 from backend.exceptions import BuiltinPageError
 from backend.filesystem.content_manager import ContentManager
-from backend.filesystem.toml_manager import PageConfig
+from backend.filesystem.toml_manager import PageConfig, SiteConfig, serialize_site_config
 from backend.models.user import AdminUser
 from backend.schemas.admin import (
     AdminPageConfig,
@@ -88,11 +88,25 @@ async def update_settings(
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
     git_service: Annotated[GitService, Depends(get_git_service)],
     content_write_lock: Annotated[AsyncWriteLock, Depends(get_content_write_lock)],
+    content_size_tracker: Annotated[ContentSizeTracker, Depends(get_content_size_tracker)],
     _user: Annotated[AdminUser, Depends(require_admin)],
     settings: Annotated[Settings, Depends(get_settings_dep)],
 ) -> SiteSettingsResponse:
     """Update site settings."""
     async with content_write_lock:
+        old_cfg = get_site_settings(content_manager)
+        projected_cfg = SiteConfig(
+            title=body.title,
+            description=body.description,
+            timezone=body.timezone,
+            pages=old_cfg.pages,
+        )
+        index_path = content_manager.content_dir / "index.toml"
+        old_index_size = content_size_tracker.file_size(index_path)
+        projected_index_size = len(serialize_site_config(projected_cfg))
+        projected_delta = projected_index_size - old_index_size
+        if projected_delta > 0 and not content_size_tracker.check(projected_delta):
+            raise HTTPException(status_code=413, detail="Storage limit reached")
         try:
             cfg = update_site_settings(
                 content_manager,
@@ -103,6 +117,7 @@ async def update_settings(
         except OSError as exc:
             logger.error("Failed to update site settings: %s", exc)
             raise HTTPException(status_code=500, detail="Failed to write site settings") from exc
+        content_size_tracker.adjust(content_size_tracker.file_size(index_path) - old_index_size)
         set_git_warning(response, await git_service.try_commit("Update site settings"))
         return SiteSettingsResponse(
             title=cfg.title,
@@ -136,8 +151,21 @@ async def create_page_endpoint(
     """Create a new page."""
     initial_content = body.body if body.body is not None else f"# {body.title}\n"
     async with content_write_lock:
-        page_size = len(initial_content.encode("utf-8"))
-        if not content_size_tracker.check(page_size):
+        cfg = content_manager.site_config
+        page_path = content_manager.content_dir / f"{body.id}.md"
+        index_path = content_manager.content_dir / "index.toml"
+        old_page_size = content_size_tracker.file_size(page_path)
+        old_index_size = content_size_tracker.file_size(index_path)
+        projected_cfg = cfg.with_pages(
+            [*cfg.pages, PageConfig(id=body.id, title=body.title, file=f"{body.id}.md")]
+        )
+        projected_delta = (
+            len(initial_content.encode("utf-8"))
+            - old_page_size
+            + len(serialize_site_config(projected_cfg))
+            - old_index_size
+        )
+        if projected_delta > 0 and not content_size_tracker.check(projected_delta):
             raise HTTPException(status_code=413, detail="Storage limit reached")
         try:
             page = await create_page(
@@ -148,8 +176,10 @@ async def create_page_endpoint(
         except OSError as exc:
             logger.error("Failed to create page %s: %s", body.id, exc)
             raise HTTPException(status_code=500, detail="Failed to create page") from exc
-        md_path = content_manager.content_dir / f"{body.id}.md"
-        content_size_tracker.adjust(md_path.stat().st_size)
+        content_size_tracker.adjust(
+            (content_size_tracker.file_size(page_path) - old_page_size)
+            + (content_size_tracker.file_size(index_path) - old_index_size)
+        )
         set_git_warning(response, await git_service.try_commit(f"Create page: {body.id}"))
         return AdminPageConfig(
             id=page.id,
@@ -167,16 +197,24 @@ async def update_order(
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
     git_service: Annotated[GitService, Depends(get_git_service)],
     content_write_lock: Annotated[AsyncWriteLock, Depends(get_content_write_lock)],
+    content_size_tracker: Annotated[ContentSizeTracker, Depends(get_content_size_tracker)],
     _user: Annotated[AdminUser, Depends(require_admin)],
 ) -> AdminPagesResponse:
     """Update page order."""
     async with content_write_lock:
         pages = [PageConfig(id=p.id, title=p.title, file=p.file) for p in body.pages]
+        cfg = content_manager.site_config
+        index_path = content_manager.content_dir / "index.toml"
+        old_index_size = content_size_tracker.file_size(index_path)
+        projected_delta = len(serialize_site_config(cfg.with_pages(pages))) - old_index_size
+        if projected_delta > 0 and not content_size_tracker.check(projected_delta):
+            raise HTTPException(status_code=413, detail="Storage limit reached")
         try:
             update_page_order(content_manager, pages)
         except OSError as exc:
             logger.error("Failed to update page order: %s", exc)
             raise HTTPException(status_code=500, detail="Failed to update page order") from exc
+        content_size_tracker.adjust(content_size_tracker.file_size(index_path) - old_index_size)
         set_git_warning(response, await git_service.try_commit("Update page order"))
         admin_pages = get_admin_pages(content_manager)
         return AdminPagesResponse(pages=[AdminPageConfig(**p) for p in admin_pages])
@@ -199,19 +237,39 @@ async def update_page_endpoint(
         raise HTTPException(status_code=400, detail=_PAGE_ID_ERROR)
     async with content_write_lock:
         old_content_size = 0
+        cfg = content_manager.site_config
+        page_cfg = next((p for p in cfg.pages if p.id == page_id), None)
+        page_path = None
+        if page_cfg is not None and page_cfg.file is not None:
+            try:
+                page_path = content_manager._validate_path(page_cfg.file)
+                old_content_size = content_size_tracker.file_size(page_path)
+            except ValueError, OSError:
+                page_path = None
+                old_content_size = 0
+        index_path = content_manager.content_dir / "index.toml"
+        old_index_size = content_size_tracker.file_size(index_path)
         if body.content is not None:
-            cfg = content_manager.site_config
-            page_cfg = next((p for p in cfg.pages if p.id == page_id), None)
-            if page_cfg is not None and page_cfg.file is not None:
-                try:
-                    page_path = content_manager._validate_path(page_cfg.file)
-                    old_content_size = page_path.stat().st_size if page_path.exists() else 0
-                except ValueError, OSError:
-                    old_content_size = 0
             new_size = len(body.content.encode("utf-8"))
-            edit_delta = new_size - old_content_size
-            if edit_delta > 0 and not content_size_tracker.check(edit_delta):
-                raise HTTPException(status_code=413, detail="Storage limit reached")
+        else:
+            new_size = old_content_size
+        if body.title is not None and page_cfg is not None:
+            projected_cfg = cfg.with_pages(
+                [
+                    PageConfig(
+                        id=p.id,
+                        title=body.title if p.id == page_id else p.title,
+                        file=p.file,
+                    )
+                    for p in cfg.pages
+                ]
+            )
+            projected_index_size = len(serialize_site_config(projected_cfg))
+        else:
+            projected_index_size = old_index_size
+        projected_delta = (new_size - old_content_size) + (projected_index_size - old_index_size)
+        if projected_delta > 0 and not content_size_tracker.check(projected_delta):
+            raise HTTPException(status_code=413, detail="Storage limit reached")
         try:
             await update_page(
                 session_factory, content_manager, page_id, title=body.title, content=body.content
@@ -221,18 +279,13 @@ async def update_page_endpoint(
         except OSError as exc:
             logger.error("Failed to update page %s: %s", page_id, exc)
             raise HTTPException(status_code=500, detail="Failed to update page") from exc
-        if body.content is not None:
-            cfg = content_manager.site_config
-            page_cfg = next((p for p in cfg.pages if p.id == page_id), None)
-            if page_cfg is not None and page_cfg.file is not None:
-                try:
-                    page_path = content_manager._validate_path(page_cfg.file)
-                    final_size = page_path.stat().st_size if page_path.exists() else 0
-                    content_size_tracker.adjust(final_size - old_content_size)
-                except (ValueError, OSError) as exc:
-                    logger.warning(
-                        "Failed to adjust page quota after update for %s: %s", page_id, exc
-                    )
+        final_content_size = (
+            old_content_size if page_path is None else content_size_tracker.file_size(page_path)
+        )
+        content_size_tracker.adjust(
+            (final_content_size - old_content_size)
+            + (content_size_tracker.file_size(index_path) - old_index_size)
+        )
         set_git_warning(response, await git_service.try_commit(f"Update page: {page_id}"))
         return {"status": "ok"}
 
@@ -255,13 +308,15 @@ async def delete_page_endpoint(
     async with content_write_lock:
         # Read page file size before deletion so the tracker can be adjusted.
         page_size = 0
+        index_path = content_manager.content_dir / "index.toml"
+        old_index_size = content_size_tracker.file_size(index_path)
         if delete_file:
             cfg = content_manager.site_config
             page_cfg = next((p for p in cfg.pages if p.id == page_id), None)
             if page_cfg is not None and page_cfg.file is not None:
                 try:
                     page_path = content_manager._validate_path(page_cfg.file)
-                    page_size = page_path.stat().st_size if page_path.exists() else 0
+                    page_size = content_size_tracker.file_size(page_path)
                 except (ValueError, OSError) as exc:
                     logger.warning(
                         "Failed to read page size before deletion for %s: %s", page_id, exc
@@ -275,8 +330,9 @@ async def delete_page_endpoint(
         except OSError as exc:
             logger.error("Failed to delete page %s: %s", page_id, exc)
             raise HTTPException(status_code=500, detail="Failed to delete page") from exc
-        if delete_file and page_size > 0:
-            content_size_tracker.adjust(-page_size)
+        content_size_tracker.adjust(
+            (content_size_tracker.file_size(index_path) - old_index_size) - page_size
+        )
         set_git_warning(response, await git_service.try_commit(f"Delete page: {page_id}"))
 
 

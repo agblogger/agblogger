@@ -5,8 +5,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pytest
+import tomli_w
 
 from backend.config import Settings
+from backend.filesystem.frontmatter import PostData, serialize_post
+from backend.filesystem.toml_manager import PageConfig, parse_site_config
+from backend.utils.datetime import now_utc
 from tests.conftest import create_test_client
 
 if TYPE_CHECKING:
@@ -20,9 +24,8 @@ if TYPE_CHECKING:
 def quota_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
     """Settings with a small storage quota.
 
-    The quota is set to 50 000 bytes — well above the ~30 KB of git bookkeeping
-    that ends up under content_dir during test setup, but small enough that a
-    50 000-byte payload pushes total usage over the limit.
+    The quota is set to 50 000 bytes, which is small enough that a 50 000-byte
+    managed-content payload pushes total usage over the limit.
     """
     db_path = tmp_path / "test.db"
     return Settings(
@@ -55,7 +58,9 @@ def _content_usage(content_dir: Path) -> int:
     return sum(
         path.stat().st_size
         for path in content_dir.rglob("*")
-        if path.is_file() and not path.is_symlink()
+        if path.is_file()
+        and not path.is_symlink()
+        and all(not part.startswith(".") for part in path.relative_to(content_dir).parts)
     )
 
 
@@ -79,6 +84,55 @@ class TestPostUploadQuota:
         resp = await client.post(
             "/api/posts/upload",
             files=[("files", ("index.md", md, "text/markdown"))],
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 413
+        assert resp.json()["detail"] == "Storage limit reached"
+
+    @pytest.mark.asyncio
+    async def test_upload_rejects_when_serialized_post_exceeds_remaining_quota(
+        self,
+        client_with_post: AsyncClient,
+        quota_settings_with_post: Settings,
+    ) -> None:
+        token = await _login(client_with_post)
+        max_size = quota_settings_with_post.max_content_size
+        assert max_size is not None
+
+        remaining = max_size - _content_usage(quota_settings_with_post.content_dir)
+        assert remaining > 512
+
+        filler_size = remaining - 80
+        resp = await client_with_post.post(
+            f"/api/posts/{POST_PATH}/assets",
+            files=[("files", ("fill.bin", b"x" * filler_size, "application/octet-stream"))],
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+
+        tiny_markdown = "# Tiny\n"
+        now = now_utc()
+        serialized_size = len(
+            serialize_post(
+                PostData(
+                    title="Tiny",
+                    content="",
+                    raw_content=tiny_markdown,
+                    created_at=now,
+                    modified_at=now,
+                    author="admin",
+                    file_path="posts/tiny/index.md",
+                )
+            ).encode("utf-8")
+        )
+        raw_size = len(tiny_markdown.encode("utf-8"))
+
+        remaining_after_fill = max_size - _content_usage(quota_settings_with_post.content_dir)
+        assert raw_size <= remaining_after_fill < serialized_size
+
+        resp = await client_with_post.post(
+            "/api/posts/upload",
+            files=[("files", ("index.md", tiny_markdown.encode("utf-8"), "text/markdown"))],
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 413
@@ -390,8 +444,7 @@ class TestPageQuota:
     async def test_update_page_that_shrinks_succeeds(self, client: AsyncClient) -> None:
         """Updating a page to make it smaller should always succeed near the quota limit."""
         token = await _login(client)
-        # Create a page with substantial content — quota is 50 000 B, git overhead ~26-27 KB,
-        # so a 15 000-byte body stays within quota on creation.
+        # Create a page with substantial content so the next edit runs near the limit.
         resp = await client.post(
             "/api/admin/pages",
             json={"id": "shrink-page", "title": "Shrink Page", "body": "x" * 15_000},
@@ -406,25 +459,144 @@ class TestPageQuota:
         )
         assert resp.status_code == 200
 
+    @pytest.mark.asyncio
+    async def test_create_page_rejects_when_index_toml_growth_exceeds_remaining_quota(
+        self,
+        client: AsyncClient,
+        quota_settings: Settings,
+    ) -> None:
+        token = await _login(client)
+        max_size = quota_settings.max_content_size
+        assert max_size is not None
+
+        page_id = "tiny-page"
+        page_title = "Tiny Page"
+        page_body = "x"
+        page_size = len(page_body.encode("utf-8"))
+
+        cfg = parse_site_config(quota_settings.content_dir)
+        old_index_size = (quota_settings.content_dir / "index.toml").stat().st_size
+        updated_cfg = cfg.with_pages(
+            [*cfg.pages, PageConfig(id=page_id, title=page_title, file=f"{page_id}.md")]
+        )
+        projected_index_size = len(
+            tomli_w.dumps(
+                {
+                    "site": {
+                        "title": updated_cfg.title,
+                        "description": updated_cfg.description,
+                        "timezone": updated_cfg.timezone,
+                    },
+                    "pages": [
+                        {
+                            key: value
+                            for key, value in {
+                                "id": page.id,
+                                "title": page.title,
+                                "file": page.file,
+                            }.items()
+                            if value is not None
+                        }
+                        for page in updated_cfg.pages
+                    ],
+                }
+            ).encode("utf-8")
+        )
+        projected_delta = page_size + (projected_index_size - old_index_size)
+        assert projected_delta > page_size
+
+        remaining = max_size - _content_usage(quota_settings.content_dir)
+        assert remaining > projected_delta
+
+        filler_body_size = remaining - page_size
+        filler_now = now_utc()
+        filler_title = "Quota Filler"
+        filler_serialized_size = len(
+            serialize_post(
+                PostData(
+                    title=filler_title,
+                    content="x" * 1,
+                    raw_content="",
+                    created_at=filler_now,
+                    modified_at=filler_now,
+                    author="admin",
+                    file_path="posts/filler/index.md",
+                )
+            ).encode("utf-8")
+        )
+        filler_body_size = max(1, filler_body_size - (filler_serialized_size - 1))
+
+        resp = await client.post(
+            "/api/posts",
+            json={
+                "title": filler_title,
+                "body": "x" * filler_body_size,
+                "labels": [],
+                "is_draft": False,
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 201
+
+        remaining_after_fill = max_size - _content_usage(quota_settings.content_dir)
+        assert page_size <= remaining_after_fill < projected_delta
+
+        resp = await client.post(
+            "/api/admin/pages",
+            json={"id": page_id, "title": page_title, "body": page_body},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 413
+        assert resp.json()["detail"] == "Storage limit reached"
+
 
 class TestDeleteFreesQuota:
     @pytest.mark.asyncio
     async def test_delete_post_frees_space_for_new_upload(
         self,
         client_with_post: AsyncClient,
+        quota_settings_with_post: Settings,
     ) -> None:
         token = await _login(client_with_post)
-        # Upload an asset that fills the quota leaving only ~3 500 bytes free
-        # (quota=50 000; git init overhead is ~26-27 KB; 20 000 B asset ~= 46 500 B total)
+        max_size = quota_settings_with_post.max_content_size
+        assert max_size is not None
+
+        md_big = b"---\ntitle: Too Big\n---\n\n" + b"x" * 5_000
+        upload_now = now_utc()
+        upload_serialized_size = len(
+            serialize_post(
+                PostData(
+                    title="Too Big",
+                    content="",
+                    raw_content=md_big.decode("utf-8"),
+                    created_at=upload_now,
+                    modified_at=upload_now,
+                    author="admin",
+                    file_path="posts/too-big/index.md",
+                )
+            ).encode("utf-8")
+        )
+
+        seed_post_path = quota_settings_with_post.content_dir / POST_PATH
+        seed_post_size = seed_post_path.stat().st_size
+        initial_remaining = max_size - _content_usage(quota_settings_with_post.content_dir)
+        assert initial_remaining + seed_post_size >= upload_serialized_size
+
+        asset_size = initial_remaining - (upload_serialized_size - 1)
+        assert asset_size > 0
+
+        # Fill the managed-content quota so the next upload is one byte over budget.
         resp = await client_with_post.post(
             f"/api/posts/{POST_PATH}/assets",
-            files=[("files", ("big.bin", b"x" * 20_000, "application/octet-stream"))],
+            files=[("files", ("big.bin", b"x" * asset_size, "application/octet-stream"))],
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 200
 
-        # A further 5 000-byte upload should now be rejected (quota nearly exhausted)
-        md_big = b"---\ntitle: Too Big\n---\n\n" + b"x" * 5_000
+        remaining_after_fill = max_size - _content_usage(quota_settings_with_post.content_dir)
+        assert remaining_after_fill == upload_serialized_size - 1
+
+        # The next upload should be rejected while the seed post and its assets still exist.
         resp = await client_with_post.post(
             "/api/posts/upload",
             files=[("files", ("index.md", md_big, "text/markdown"))],

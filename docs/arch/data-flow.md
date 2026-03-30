@@ -15,7 +15,7 @@ This gives the application fast reads without moving ownership of content into t
 
 ## Mutation Paths
 
-The editor, uploads, administrative configuration changes, and sync all converge on the same content model. Different entry points may collect different inputs, but they update the same on-disk structures and then refresh derived state.
+The editor, uploads, administrative configuration changes, and sync all converge on the same content model. Different entry points may collect different inputs, but they update the same on-disk structures and then refresh derived state. Before committed writes land, mutation paths also evaluate storage quota impact against the managed non-hidden content tree so runtime-only hidden state does not change the authoring boundary.
 
 ## Read Paths
 
@@ -36,5 +36,6 @@ These remain derived views of the same content system, not separate content stor
 
 - `backend/api/posts.py`, `backend/api/pages.py`, and related API modules define the entry points for reads and mutations.
 - `backend/filesystem/content_manager.py` owns the canonical on-disk content operations.
+- `backend/services/storage_quota.py` provides the managed-content size accounting used by write paths.
 - `backend/services/cache_service.py`, `backend/services/post_service.py`, and `backend/services/page_service.py` expose the main derived read models.
 - `backend/pandoc/renderer.py` and related rendering code handle the shared HTML rendering path.
