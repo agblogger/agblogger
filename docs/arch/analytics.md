@@ -14,7 +14,7 @@ The feature is built around a sidecar model:
 - the backend service records hits, proxies stats, and manages persisted settings
 - the frontend surfaces stats in an admin dashboard tab and optional public view counts on posts
 
-The backend communicates with GoatCounter through its internal HTTP API using an API token scoped to hit recording and stats reads. The GoatCounter database stays private to the sidecar. The token and database live on separate named volumes so the sidecar can recover when either is independently replaced.
+The backend communicates with GoatCounter through its internal HTTP API using an API token scoped to hit recording and stats reads. Requests connect over the internal Docker service name, but they present the GoatCounter site host expected by the sidecar so the analytics site resolves consistently. The GoatCounter database stays private to the sidecar. The token and database live on separate named volumes so the sidecar can recover when either is independently replaced.
 
 Two admin-controlled toggles -- analytics-enabled and show-views-on-posts -- are stored as a singleton row in a durable Alembic-managed table (enforced by a `CHECK(id = 1)` constraint) and persist independently of GoatCounter's availability.
 

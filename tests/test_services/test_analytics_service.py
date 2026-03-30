@@ -405,6 +405,36 @@ async def test_stats_request_returns_none_when_token_is_none() -> None:
     mock_client.get.assert_not_called()
 
 
+# ── GoatCounter host header handling ──────────────────────────────────────────
+
+
+async def test_stats_request_sends_goatcounter_site_host_header() -> None:
+    """GoatCounter requests must present the provisioned site host."""
+    from backend.services.analytics_service import _stats_request
+
+    mock_response = MagicMock()
+    mock_response.raise_for_status.return_value = None
+    mock_response.json.return_value = {"total": 0}
+    mock_client = MagicMock()
+    mock_client.get = AsyncMock(return_value=mock_response)
+
+    with (
+        patch(
+            "backend.services.analytics_service._get_http_client",
+            return_value=mock_client,
+        ),
+        patch(
+            "backend.services.analytics_service._load_token",
+            return_value="test-token",
+        ),
+    ):
+        await _stats_request("/api/v0/stats/total")
+
+    headers = mock_client.get.call_args.kwargs["headers"]
+    assert headers["Host"] == "stats.internal"
+    assert headers["Authorization"] == "Bearer test-token"
+
+
 # ── Suggestion 3: _stats_request log includes params ──────────────────────────
 
 

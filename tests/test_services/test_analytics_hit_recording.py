@@ -83,6 +83,7 @@ async def test_record_hit_sends_to_goatcounter(
     payload = call_kwargs.kwargs["json"]
     assert payload["hits"][0]["path"] == "/post/hello-world"
     assert payload["hits"][0]["ip"] == "1.2.3.4"
+    assert call_kwargs.kwargs["headers"]["Host"] == "stats.internal"
 
 
 async def test_record_hit_skips_authenticated_user(

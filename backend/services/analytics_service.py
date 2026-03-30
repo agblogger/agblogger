@@ -37,6 +37,9 @@ logger = logging.getLogger(__name__)
 
 # Internal Docker network address; matches the goatcounter service in docker-compose.yml
 GOATCOUNTER_URL = "http://goatcounter:8080"
+# GoatCounter provisions the site under this host, so requests must present it
+# explicitly even when they connect to the service by its Docker DNS name.
+GOATCOUNTER_SITE_HOST = "stats.internal"
 GOATCOUNTER_AUTH_FILE = "/data/goatcounter-token/token"
 _HIT_TIMEOUT = 2.0
 _STATS_TIMEOUT = 5.0
@@ -55,6 +58,14 @@ _token_warning_issued: bool = False
 
 # Strong references to fire-and-forget analytics tasks, preventing GC before completion.
 _background_tasks: set[asyncio.Task[None]] = set()
+
+
+def _goatcounter_headers(token: str) -> dict[str, str]:
+    """Return headers required for authenticated GoatCounter requests."""
+    return {
+        "Authorization": f"Bearer {token}",
+        "Host": GOATCOUNTER_SITE_HOST,
+    }
 
 
 def _get_http_client() -> httpx.AsyncClient:
@@ -230,7 +241,7 @@ async def record_hit(
                     }
                 ]
             },
-            headers={"Authorization": f"Bearer {token}"},
+            headers=_goatcounter_headers(token),
             timeout=_HIT_TIMEOUT,
         )
         response.raise_for_status()
@@ -258,7 +269,7 @@ async def _stats_request(
         response = await client.get(
             f"{GOATCOUNTER_URL}{endpoint}",
             params=params,
-            headers={"Authorization": f"Bearer {token}"},
+            headers=_goatcounter_headers(token),
             timeout=_STATS_TIMEOUT,
         )
         response.raise_for_status()
