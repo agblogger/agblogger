@@ -136,6 +136,9 @@ class Settings(BaseSettings):
     admin_password: str = INSECURE_BOOTSTRAP_SENTINEL
     admin_display_name: str = ""
 
+    # Feature flags
+    disable_password_change: bool = False
+
     # Content limits
     max_content_size: int | None = None
 
