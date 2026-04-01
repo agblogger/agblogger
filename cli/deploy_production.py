@@ -1444,20 +1444,21 @@ def build_lifecycle_commands(
         deploy_goatcounter,
         caddy_mode=caddy_mode,
     )
+    start_command = f"{base} up -d --remove-orphans"
     commands = {
-        "start": f"{base} up -d",
+        "start": start_command,
         "stop": f"{base} down",
         "status": f"{base} ps",
         "logs": f"{base} logs -f",
     }
     if deployment_mode == DEPLOY_MODE_LOCAL:
-        commands["upgrade"] = f"{base} up -d --build"
+        commands["upgrade"] = f"{start_command} --build"
     elif deployment_mode == DEPLOY_MODE_REGISTRY:
         commands["pull"] = f"{base} pull"
-        commands["upgrade"] = f"{base} pull && {base} up -d"
+        commands["upgrade"] = f"{base} pull && {start_command}"
     elif deployment_mode == DEPLOY_MODE_TARBALL:
         commands["load"] = f"docker load -i {tarball_filename}"
-        commands["upgrade"] = f"docker load -i {tarball_filename} && {base} up -d"
+        commands["upgrade"] = f"docker load -i {tarball_filename} && {start_command}"
     return commands
 
 

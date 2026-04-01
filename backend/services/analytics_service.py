@@ -71,6 +71,23 @@ def _analytics_enabled_default() -> bool:
     return raw not in {"0", "false", "no", "off"}
 
 
+def _effective_analytics_enabled(persisted_enabled: bool) -> bool:
+    """Return the effective analytics state for the current deployment."""
+    return _analytics_enabled_default() and persisted_enabled
+
+
+def _settings_response(
+    *,
+    analytics_enabled: bool,
+    show_views_on_posts: bool,
+) -> AnalyticsSettingsResponse:
+    """Build the API response for analytics settings."""
+    return AnalyticsSettingsResponse(
+        analytics_enabled=_effective_analytics_enabled(analytics_enabled),
+        show_views_on_posts=show_views_on_posts,
+    )
+
+
 def _goatcounter_headers(token: str) -> dict[str, str]:
     """Return headers required for authenticated GoatCounter requests."""
     return {
@@ -148,11 +165,11 @@ async def get_analytics_settings(session: AsyncSession) -> AnalyticsSettingsResp
     result = await session.execute(select(AnalyticsSettings).limit(1))
     row = result.scalar_one_or_none()
     if row is None:
-        return AnalyticsSettingsResponse(
+        return _settings_response(
             analytics_enabled=_analytics_enabled_default(),
             show_views_on_posts=False,
         )
-    return AnalyticsSettingsResponse(
+    return _settings_response(
         analytics_enabled=row.analytics_enabled,
         show_views_on_posts=row.show_views_on_posts,
     )
@@ -202,7 +219,7 @@ async def update_analytics_settings(
 
     await session.commit()
     await session.refresh(row)
-    return AnalyticsSettingsResponse(
+    return _settings_response(
         analytics_enabled=row.analytics_enabled,
         show_views_on_posts=row.show_views_on_posts,
     )

@@ -435,7 +435,8 @@ def test_build_lifecycle_commands_for_default_caddy() -> None:
         caddy_public=False,
     )
     assert (
-        commands["start"] == "docker compose --env-file .env.production -f docker-compose.yml up -d"
+        commands["start"]
+        == "docker compose --env-file .env.production -f docker-compose.yml up -d --remove-orphans"
     )
     assert (
         commands["stop"] == "docker compose --env-file .env.production -f docker-compose.yml down"
@@ -454,7 +455,7 @@ def test_build_lifecycle_commands_for_default_caddy_without_goatcounter() -> Non
     )
     assert (
         commands["start"] == "docker compose --env-file .env.production "
-        f"-f {DEFAULT_BUNDLED_CADDY_COMPOSE_FILE} up -d"
+        f"-f {DEFAULT_BUNDLED_CADDY_COMPOSE_FILE} up -d --remove-orphans"
     )
 
 
@@ -466,7 +467,7 @@ def test_build_lifecycle_commands_for_public_caddy_override() -> None:
     )
     assert (
         commands["start"] == "docker compose --env-file .env.production -f docker-compose.yml "
-        "-f docker-compose.caddy-public.yml up -d"
+        "-f docker-compose.caddy-public.yml up -d --remove-orphans"
     )
 
 
@@ -477,8 +478,8 @@ def test_build_lifecycle_commands_for_no_caddy_file() -> None:
         caddy_public=False,
     )
     assert (
-        commands["start"]
-        == "docker compose --env-file .env.production -f docker-compose.nocaddy.yml up -d"
+        commands["start"] == "docker compose --env-file .env.production "
+        "-f docker-compose.nocaddy.yml up -d --remove-orphans"
     )
 
 
@@ -494,8 +495,8 @@ def test_build_lifecycle_commands_for_registry_bundle() -> None:
         == "docker compose --env-file .env.production -f docker-compose.image.yml pull"
     )
     assert (
-        commands["start"]
-        == "docker compose --env-file .env.production -f docker-compose.image.yml up -d"
+        commands["start"] == "docker compose --env-file .env.production "
+        "-f docker-compose.image.yml up -d --remove-orphans"
     )
 
 
@@ -509,8 +510,8 @@ def test_build_lifecycle_commands_for_tarball_bundle() -> None:
 
     assert commands["load"] == "docker load -i custom-image.tar"
     assert (
-        commands["start"]
-        == "docker compose --env-file .env.production -f docker-compose.image.nocaddy.yml up -d"
+        commands["start"] == "docker compose --env-file .env.production "
+        "-f docker-compose.image.nocaddy.yml up -d --remove-orphans"
     )
 
 
@@ -651,8 +652,8 @@ def test_deploy_writes_env_file_and_runs_docker_compose_without_caddy(
 
     assert result.env_path == tmp_path / ".env.production"
     assert (
-        result.commands["start"]
-        == "docker compose --env-file .env.production -f docker-compose.nocaddy.yml up -d"
+        result.commands["start"] == "docker compose --env-file .env.production "
+        "-f docker-compose.nocaddy.yml up -d --remove-orphans"
     )
     assert result.bundle_path is None
     assert (tmp_path / DEFAULT_NO_CADDY_COMPOSE_FILE).exists()
@@ -710,7 +711,7 @@ def test_deploy_with_public_caddy_writes_override_and_runs_multi_file_compose(
     assert (
         result.commands["start"]
         == "docker compose --env-file .env.production -f docker-compose.yml "
-        "-f docker-compose.caddy-public.yml up -d"
+        "-f docker-compose.caddy-public.yml up -d --remove-orphans"
     )
     assert commands == [
         (
@@ -762,7 +763,7 @@ def test_deploy_with_local_caddy_runs_base_compose(
 
     assert (
         result.commands["start"]
-        == "docker compose --env-file .env.production -f docker-compose.yml up -d"
+        == "docker compose --env-file .env.production -f docker-compose.yml up -d --remove-orphans"
     )
     assert commands == [
         (
@@ -813,7 +814,7 @@ def test_deploy_with_local_caddy_and_disabled_goatcounter_runs_generated_compose
 
     assert (
         result.commands["start"] == "docker compose --env-file .env.production "
-        f"-f {DEFAULT_BUNDLED_CADDY_COMPOSE_FILE} up -d"
+        f"-f {DEFAULT_BUNDLED_CADDY_COMPOSE_FILE} up -d --remove-orphans"
     )
     compose_content = (tmp_path / DEFAULT_BUNDLED_CADDY_COMPOSE_FILE).read_text(encoding="utf-8")
     assert "goatcounter:" not in compose_content
@@ -2764,7 +2765,7 @@ class TestUpgradeLifecycleCommand:
         )
         assert "upgrade" in commands
         assert "pull" in commands["upgrade"]
-        assert "up -d" in commands["upgrade"]
+        assert "up -d --remove-orphans" in commands["upgrade"]
 
     def test_tarball_mode_upgrade_loads_then_starts(self) -> None:
         commands = build_lifecycle_commands(
@@ -2774,7 +2775,7 @@ class TestUpgradeLifecycleCommand:
         )
         assert "upgrade" in commands
         assert "load" in commands["upgrade"]
-        assert "up -d" in commands["upgrade"]
+        assert "up -d --remove-orphans" in commands["upgrade"]
 
 
 # ── DEPLOY-REMOTE.md improvements ────────────────────────────────────

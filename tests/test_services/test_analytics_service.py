@@ -54,6 +54,20 @@ async def test_get_default_settings_respects_disabled_env_default(
     assert result.show_views_on_posts is False
 
 
+async def test_get_persisted_settings_respects_disabled_env_default(
+    session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Deployments without GoatCounter force analytics off even for stored enabled rows."""
+    monkeypatch.setenv("ANALYTICS_ENABLED_DEFAULT", "false")
+    await update_analytics_settings(session, analytics_enabled=True, show_views_on_posts=True)
+
+    result = await get_analytics_settings(session)
+
+    assert result.analytics_enabled is False
+    assert result.show_views_on_posts is True
+
+
 async def test_update_settings_creates_row(session: AsyncSession) -> None:
     """update_analytics_settings creates a row on first call."""
     result = await update_analytics_settings(
@@ -76,6 +90,23 @@ async def test_update_settings_uses_env_default_for_first_row(
     monkeypatch.setenv("ANALYTICS_ENABLED_DEFAULT", "false")
 
     result = await update_analytics_settings(session, show_views_on_posts=True)
+
+    assert result.analytics_enabled is False
+    assert result.show_views_on_posts is True
+
+
+async def test_update_settings_returns_effective_disabled_state_when_env_default_is_disabled(
+    session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Explicit enable requests still report disabled while the sidecar is omitted."""
+    monkeypatch.setenv("ANALYTICS_ENABLED_DEFAULT", "false")
+
+    result = await update_analytics_settings(
+        session,
+        analytics_enabled=True,
+        show_views_on_posts=True,
+    )
 
     assert result.analytics_enabled is False
     assert result.show_views_on_posts is True
