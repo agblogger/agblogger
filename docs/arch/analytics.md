@@ -4,7 +4,7 @@
 
 Analytics gives AgBlogger page-view tracking and statistics without depending on third-party hosted services. A self-hosted GoatCounter sidecar collects hits, and the backend proxies stats to the admin dashboard and optionally exposes per-post view counts to readers.
 
-GoatCounter is treated as a soft dependency — the backend starts and serves content normally when GoatCounter is unavailable.
+GoatCounter is treated as a soft dependency — the backend starts and serves content normally when GoatCounter is unavailable. Deployments can also omit the sidecar entirely; in that mode analytics requests continue to follow the existing missing-token/offline-sidecar path without affecting core traffic.
 
 ## Architecture
 
@@ -48,4 +48,4 @@ The GoatCounter sidecar is internal to the deployment. Its API token never leave
 - `backend/models/analytics.py` contains the durable analytics settings table model.
 - `frontend/src/components/admin/AnalyticsPanel.tsx` is the lazy-loaded admin dashboard tab.
 - `frontend/src/api/analytics.ts` contains the analytics API client functions for admin and public use.
-- `goatcounter/entrypoint.sh` is the sidecar's provisioning and startup script.
+- `goatcounter/entrypoint.sh` is the sidecar's provisioning and startup script, including site-host normalization from deployment-provided environment.

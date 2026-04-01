@@ -12,10 +12,10 @@ This matches the project's self-hosted deployment model.
 
 ## Runtime Topology
 
-The preferred production topology places a reverse proxy in front of the application, with a GoatCounter analytics sidecar on the internal network:
+The preferred production topology places a reverse proxy in front of the application, with an optional GoatCounter analytics sidecar on the internal network:
 
 - one application container serving the API and SPA
-- a GoatCounter container for page view analytics (soft dependency, internal network only, no public exposure)
+- an optional GoatCounter container for page view analytics (soft dependency, internal network only, no public exposure)
 - an optional reverse proxy in front for TLS termination and public ingress
 - persistent volumes for content, database state, GoatCounter database state, and a separate GoatCounter token volume
 
@@ -31,7 +31,7 @@ Database schema migrations run programmatically during application startup, befo
 
 The repository includes deployment tooling for local and remote deployments. These workflows differ in how they deliver the image and configuration, but they converge on the same runtime architecture.
 
-Remote deployment bundles include a `setup.sh` deployment orchestrator script. The script handles file placement, image loading/pulling, external Caddy bootstrapping, old-stack teardown on mode switches, container startup, and health checking. The script is idempotent — safe to run on both fresh installs and upgrades.
+Remote deployment bundles include a `setup.sh` deployment orchestrator script. The script handles file placement, image loading/pulling, external Caddy bootstrapping, old-stack teardown on mode switches, container startup, and health checking. GoatCounter remains outside the deployment success gate: the script only blocks on core application readiness, generated bundles can disable the sidecar entirely, and that disabled mode seeds the backend analytics default to off for fresh installs. The script is idempotent — safe to run on both fresh installs and upgrades.
 
 The upgrade workflow is: regenerate the bundle locally, copy all files to the server, run `bash setup.sh`.
 
@@ -43,7 +43,7 @@ The deployment helper supports three Caddy configurations:
 - **External**: AgBlogger joins a shared Caddy instance that lives in a separate compose stack at a configurable host directory (default `/opt/caddy`). Each service drops a site snippet into the shared `sites/` directory. Local deploys resolve the live shared-network subnet into `TRUSTED_PROXY_IPS`, and remote bundles do the same during `setup.sh` using the first configured shared-network subnet before the app starts. Suitable for multi-service servers with distinct subdomains.
 - **None**: no Caddy; AgBlogger is exposed directly. Suitable when another reverse proxy is already in place.
 
-Switching between Caddy modes is handled automatically by `setup.sh`.
+Switching between Caddy modes is handled automatically by `setup.sh`. The deployment helper also derives a GoatCounter site host from the configured public domain when possible, sanitizes direct trusted-host values to a bare domain, and passes that host into both the app container and the sidecar.
 
 ## Verification Path
 
@@ -53,7 +53,7 @@ The project also supports a packaged local deployment profile for deployment-sty
 
 - `Dockerfile` defines the production image.
 - `docker-compose.yml` defines the standard container topology (application, Caddy, GoatCounter).
-- `goatcounter/entrypoint.sh` is the GoatCounter container's idempotent provisioning and startup script.
+- `goatcounter/entrypoint.sh` is the GoatCounter container's idempotent provisioning and startup script, parameterized by deployment-provided site host environment.
 - `cli/deploy_production.py` contains the deployment helper, configuration generation, and `setup.sh` script generation workflow.
 - `cli/release.py` contains release workflow tooling.
 - `tests/test_cli/test_deploy_production.py` covers the deployment helper behavior.

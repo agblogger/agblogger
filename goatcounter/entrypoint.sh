@@ -3,7 +3,12 @@ set -eu
 
 GOATCOUNTER_DB="/data/goatcounter/goatcounter.db"
 TOKEN_FILE="/data/goatcounter-token/token"
-GOATCOUNTER_VHOST="stats.internal"
+GOATCOUNTER_SITE_HOST_RAW="${GOATCOUNTER_SITE_HOST:-stats.internal}"
+GOATCOUNTER_SITE_HOST_RAW="${GOATCOUNTER_SITE_HOST_RAW#http://}"
+GOATCOUNTER_SITE_HOST_RAW="${GOATCOUNTER_SITE_HOST_RAW#https://}"
+GOATCOUNTER_SITE_HOST_RAW="${GOATCOUNTER_SITE_HOST_RAW%%/*}"
+GOATCOUNTER_SITE_HOST_RAW="${GOATCOUNTER_SITE_HOST_RAW%%:*}"
+GOATCOUNTER_VHOST="${GOATCOUNTER_SITE_HOST_RAW:-stats.internal}"
 
 mkdir -p /data/goatcounter
 mkdir -p /data/goatcounter-token

@@ -24,6 +24,8 @@ services:
       - AUTH_ENFORCE_LOGIN_ORIGIN=${AUTH_ENFORCE_LOGIN_ORIGIN:-true}
       - AUTH_LOGIN_MAX_FAILURES=${AUTH_LOGIN_MAX_FAILURES:-5}
       - AUTH_RATE_LIMIT_WINDOW_SECONDS=${AUTH_RATE_LIMIT_WINDOW_SECONDS:-300}
+      - ANALYTICS_ENABLED_DEFAULT=${ANALYTICS_ENABLED_DEFAULT:-true}
+      - GOATCOUNTER_SITE_HOST=${GOATCOUNTER_SITE_HOST:-stats.internal}
       - BLUESKY_CLIENT_URL=${BLUESKY_CLIENT_URL:-}
     restart: unless-stopped
     healthcheck:
@@ -65,6 +67,8 @@ services:
     expose:
       - "8080"
     entrypoint: ["/bin/sh", "/entrypoint.sh"]
+    environment:
+      - GOATCOUNTER_SITE_HOST=${GOATCOUNTER_SITE_HOST:-stats.internal}
     volumes:
       - goatcounter-db:/data/goatcounter
       - goatcounter-token:/data/goatcounter-token

@@ -41,6 +41,19 @@ async def test_get_default_settings(session: AsyncSession) -> None:
     assert result.show_views_on_posts is False
 
 
+async def test_get_default_settings_respects_disabled_env_default(
+    session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Deployments can default analytics off when GoatCounter is omitted."""
+    monkeypatch.setenv("ANALYTICS_ENABLED_DEFAULT", "false")
+
+    result = await get_analytics_settings(session)
+
+    assert result.analytics_enabled is False
+    assert result.show_views_on_posts is False
+
+
 async def test_update_settings_creates_row(session: AsyncSession) -> None:
     """update_analytics_settings creates a row on first call."""
     result = await update_analytics_settings(
@@ -53,6 +66,19 @@ async def test_update_settings_creates_row(session: AsyncSession) -> None:
     fetched = await get_analytics_settings(session)
     assert fetched.analytics_enabled is False
     assert fetched.show_views_on_posts is True
+
+
+async def test_update_settings_uses_env_default_for_first_row(
+    session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """First persisted settings row should inherit the deploy default when unset."""
+    monkeypatch.setenv("ANALYTICS_ENABLED_DEFAULT", "false")
+
+    result = await update_analytics_settings(session, show_views_on_posts=True)
+
+    assert result.analytics_enabled is False
+    assert result.show_views_on_posts is True
 
 
 async def test_update_settings_partial(session: AsyncSession) -> None:
@@ -433,6 +459,26 @@ async def test_stats_request_sends_goatcounter_site_host_header() -> None:
     headers = mock_client.get.call_args.kwargs["headers"]
     assert headers["Host"] == "stats.internal"
     assert headers["Authorization"] == "Bearer test-token"
+
+
+def test_goatcounter_headers_use_environment_host(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Deployment can override the GoatCounter site host through the environment."""
+    import importlib
+
+    import backend.services.analytics_service as analytics_service
+
+    monkeypatch.setenv("GOATCOUNTER_SITE_HOST", "blog.example.com")
+    reloaded = importlib.reload(analytics_service)
+
+    try:
+        headers = reloaded._goatcounter_headers("test-token")
+        assert headers["Host"] == "blog.example.com"
+        assert headers["Authorization"] == "Bearer test-token"
+    finally:
+        monkeypatch.delenv("GOATCOUNTER_SITE_HOST", raising=False)
+        importlib.reload(reloaded)
 
 
 # ── Suggestion 3: _stats_request log includes params ──────────────────────────

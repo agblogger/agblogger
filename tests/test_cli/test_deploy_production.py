@@ -55,6 +55,7 @@ from cli.deploy_production import (
     SharedCaddyConfig,
     _bash_quote,
     _build_remote_readme_content,
+    _goatcounter_site_host,
     _is_valid_caddy_domain,
     _read_version,
     _unquote_env_value,
@@ -96,6 +97,7 @@ def _make_config(
     caddy_config: CaddyConfig | None = None,
     caddy_public: bool = False,
     host_bind_ip: str = PUBLIC_BIND_IP,
+    trusted_hosts: list[str] | None = None,
     expose_docs: bool = False,
     deployment_mode: str = DEPLOY_MODE_LOCAL,
     image_ref: str | None = None,
@@ -106,13 +108,14 @@ def _make_config(
     scan_image: bool = True,
     max_content_size: str | None = None,
     disable_password_change: bool = False,
+    deploy_goatcounter: bool = True,
 ) -> DeployConfig:
     """Build a valid DeployConfig with sensible defaults for tests."""
     return DeployConfig(
         secret_key="x" * 64,
         admin_username="admin",
         admin_password="very-strong-password",
-        trusted_hosts=["example.com"],
+        trusted_hosts=trusted_hosts or ["example.com"],
         trusted_proxy_ips=trusted_proxy_ips or [],
         host_port=8000,
         host_bind_ip=host_bind_ip,
@@ -129,6 +132,7 @@ def _make_config(
         scan_image=scan_image,
         max_content_size=max_content_size,
         disable_password_change=disable_password_change,
+        deploy_goatcounter=deploy_goatcounter,
     )
 
 
@@ -224,6 +228,8 @@ def test_build_env_content_includes_required_production_values() -> None:
     assert f"HOST_BIND_IP={PUBLIC_BIND_IP}" in content
     assert 'TRUSTED_HOSTS=["example.com","www.example.com"]' in content
     assert 'TRUSTED_PROXY_IPS=["172.16.0.1"]' in content
+    assert 'GOATCOUNTER_SITE_HOST="example.com"' in content
+    assert "ANALYTICS_ENABLED_DEFAULT=true" in content
 
 
 def test_build_env_content_quotes_special_characters() -> None:
@@ -253,6 +259,35 @@ def test_build_env_content_includes_auth_hardening_settings() -> None:
     assert "AUTH_ENFORCE_LOGIN_ORIGIN=true" in content
     assert "AUTH_LOGIN_MAX_FAILURES=5" in content
     assert "AUTH_RATE_LIMIT_WINDOW_SECONDS=300" in content
+
+
+def test_build_env_content_disables_analytics_default_when_goatcounter_disabled() -> None:
+    config = _make_config(deploy_goatcounter=False)
+
+    content = build_env_content(config)
+
+    assert "ANALYTICS_ENABLED_DEFAULT=false" in content
+
+
+def test_goatcounter_site_host_prefers_caddy_domain() -> None:
+    config = _make_config(
+        caddy_config=CaddyConfig(domain="blog.example.com", email=None),
+        trusted_hosts=["example.com:8443"],
+    )
+
+    assert _goatcounter_site_host(config) == "blog.example.com"
+
+
+def test_goatcounter_site_host_sanitizes_trusted_host_port() -> None:
+    config = _make_config(trusted_hosts=["example.com:8443"])
+
+    assert _goatcounter_site_host(config) == "example.com"
+
+
+def test_goatcounter_site_host_falls_back_for_non_domain_trusted_hosts() -> None:
+    config = _make_config(trusted_hosts=["127.0.0.1:8000", "*.example.com"])
+
+    assert _goatcounter_site_host(config) == "stats.internal"
 
 
 def test_build_env_content_includes_image_reference_for_remote_deployments() -> None:
@@ -1056,6 +1091,7 @@ def test_config_from_args_builds_config_without_caddy() -> None:
         skip_scan=False,
         max_content_size=None,
         disable_password_change=False,
+        disable_goatcounter=False,
     )
 
     config = config_from_args(args)
@@ -1093,6 +1129,7 @@ def test_config_from_args_builds_config_with_caddy() -> None:
         skip_scan=False,
         max_content_size=None,
         disable_password_change=False,
+        disable_goatcounter=False,
     )
 
     config = config_from_args(args)
@@ -1130,6 +1167,7 @@ def test_config_from_args_auto_generates_secret_key() -> None:
         skip_scan=False,
         max_content_size=None,
         disable_password_change=False,
+        disable_goatcounter=False,
     )
 
     config = config_from_args(args)
@@ -1161,6 +1199,7 @@ def test_config_from_args_auto_appends_caddy_domain_to_trusted_hosts() -> None:
         skip_scan=False,
         max_content_size=None,
         disable_password_change=False,
+        disable_goatcounter=False,
     )
 
     config = config_from_args(args)
@@ -1192,6 +1231,7 @@ def test_config_from_args_raises_on_missing_admin_username() -> None:
         skip_scan=False,
         max_content_size=None,
         disable_password_change=False,
+        disable_goatcounter=False,
     )
 
     with pytest.raises(DeployError, match="--admin-username"):
@@ -1226,6 +1266,7 @@ def test_config_from_args_raises_on_missing_admin_password(
         skip_scan=False,
         max_content_size=None,
         disable_password_change=False,
+        disable_goatcounter=False,
     )
 
     with pytest.raises(DeployError, match="--admin-password"):
@@ -1257,6 +1298,7 @@ def test_config_from_args_raises_on_missing_trusted_hosts() -> None:
         skip_scan=False,
         max_content_size=None,
         disable_password_change=False,
+        disable_goatcounter=False,
     )
 
     with pytest.raises(DeployError, match="--trusted-hosts"):
@@ -1288,6 +1330,7 @@ def test_config_from_args_defaults_image_ref_for_registry_mode() -> None:
         skip_scan=False,
         max_content_size=None,
         disable_password_change=False,
+        disable_goatcounter=False,
     )
 
     config = config_from_args(args)
@@ -1319,6 +1362,7 @@ def test_config_from_args_defaults_image_ref_for_tarball_mode() -> None:
         skip_scan=False,
         max_content_size=None,
         disable_password_change=False,
+        disable_goatcounter=False,
     )
 
     config = config_from_args(args)
@@ -1350,12 +1394,46 @@ def test_config_from_args_builds_registry_mode() -> None:
         skip_scan=False,
         max_content_size=None,
         disable_password_change=False,
+        disable_goatcounter=False,
     )
 
     config = config_from_args(args)
 
     assert config.deployment_mode == DEPLOY_MODE_REGISTRY
     assert config.image_ref == "ghcr.io/example/agblogger:1.2.3"
+
+
+def test_config_from_args_disables_goatcounter_when_requested() -> None:
+    args = argparse.Namespace(
+        secret_key="s" * 64,
+        admin_username="admin",
+        admin_password="strong-password!",
+        admin_display_name=None,
+        caddy_domain="blog.example.com",
+        caddy_email=None,
+        caddy_public=False,
+        caddy_external=False,
+        shared_caddy_dir=DEFAULT_SHARED_CADDY_DIR,
+        shared_caddy_email=None,
+        trusted_hosts="blog.example.com",
+        trusted_proxy_ips=None,
+        host_port=8000,
+        bind_public=False,
+        expose_docs=False,
+        deployment_mode=DEPLOY_MODE_TARBALL,
+        image_ref=None,
+        bundle_dir=DEFAULT_BUNDLE_DIR,
+        tarball_filename=DEFAULT_IMAGE_TARBALL,
+        platform=None,
+        skip_scan=False,
+        max_content_size=None,
+        disable_password_change=False,
+        disable_goatcounter=True,
+    )
+
+    config = config_from_args(args)
+
+    assert config.deploy_goatcounter is False
 
 
 # ── chmod warning on write_config_files ───────────────────────────────
@@ -2796,7 +2874,7 @@ class TestCollectConfigReusesExistingSecrets:
 
         # Simulate interactive answers: reuse=yes, mode=local, caddy=none, public=no,
         # port=8000, trusted hosts=example.com, proxy ips=(none), expose docs=no, disable pw=no
-        inputs = iter(["y", "local", "none", "n", "", "example.com", "", "n", "", "n"])
+        inputs = iter(["y", "local", "none", "n", "", "example.com", "", "n", "", "n", "y"])
         monkeypatch.setattr("builtins.input", lambda _prompt: next(inputs))
         monkeypatch.setattr("cli.deploy_production.getpass.getpass", lambda _prompt: "")
 
@@ -2817,7 +2895,9 @@ class TestCollectConfigReusesExistingSecrets:
         # password+confirm, mode=local,
         # caddy=none, public=no, port=8000, trusted hosts=example.com, proxy ips,
         # expose docs=no, disable password change=no
-        inputs = iter(["admin", "", "local", "n", "none", "n", "", "example.com", "", "n", "", "n"])
+        inputs = iter(
+            ["admin", "", "local", "n", "none", "n", "", "example.com", "", "n", "", "n", "y"]
+        )
         passwords = iter(["", "strongpass123", "strongpass123"])
         monkeypatch.setattr("builtins.input", lambda _prompt: next(inputs))
         monkeypatch.setattr(
@@ -3285,6 +3365,7 @@ class TestDnsInfoMessage:
                 "n",  # expose docs
                 "",  # max content size (unlimited)
                 "n",  # disable password change
+                "y",  # deploy GoatCounter
             ]
         )
         passwords = iter(["", "strongpass123", "strongpass123"])
@@ -3546,7 +3627,7 @@ class TestCollectConfigBundleDirReuse:
 
         # Simulate: reuse=yes, mode=local, caddy=none, public=no,
         # port=8000, trusted hosts, proxy ips, docs=no, disable pw=no
-        inputs = iter(["y", "local", "none", "n", "", "example.com", "", "n", "", "n"])
+        inputs = iter(["y", "local", "none", "n", "", "example.com", "", "n", "", "n", "y"])
         monkeypatch.setattr("builtins.input", lambda _prompt: next(inputs))
         monkeypatch.setattr("cli.deploy_production.getpass.getpass", lambda _prompt: "")
 
@@ -3588,7 +3669,7 @@ class TestCollectConfigBundleDirReuse:
 
         # Simulate: reuse=yes, mode=local, caddy=none, public=no,
         # port=8000, trusted hosts, proxy ips, docs=no, disable pw=no
-        inputs = iter(["y", "local", "none", "n", "", "example.com", "", "n", "", "n"])
+        inputs = iter(["y", "local", "none", "n", "", "example.com", "", "n", "", "n", "y"])
         monkeypatch.setattr("builtins.input", lambda _prompt: next(inputs))
         monkeypatch.setattr("cli.deploy_production.getpass.getpass", lambda _prompt: "")
 
@@ -3628,6 +3709,7 @@ class TestCollectConfigExternalCaddy:
                 "n",  # expose docs
                 "",  # max content size (unlimited)
                 "n",  # disable password change
+                "y",  # deploy GoatCounter
             ]
         )
         getpass_inputs = iter(
@@ -4345,6 +4427,16 @@ class TestBaseComposeAdminDisplayName:
         compose_path = Path(__file__).resolve().parent.parent.parent / "docker-compose.yml"
         content = compose_path.read_text(encoding="utf-8")
         assert "ADMIN_DISPLAY_NAME" in content
+
+    def test_base_compose_includes_goatcounter_site_host_env(self) -> None:
+        compose_path = Path(__file__).resolve().parent.parent.parent / "docker-compose.yml"
+        content = compose_path.read_text(encoding="utf-8")
+        assert "GOATCOUNTER_SITE_HOST=${GOATCOUNTER_SITE_HOST:-stats.internal}" in content
+
+    def test_base_compose_includes_analytics_enabled_default_env(self) -> None:
+        compose_path = Path(__file__).resolve().parent.parent.parent / "docker-compose.yml"
+        content = compose_path.read_text(encoding="utf-8")
+        assert "ANALYTICS_ENABLED_DEFAULT=${ANALYTICS_ENABLED_DEFAULT:-true}" in content
 
 
 # ── config_from_args: --caddy-external without --caddy-domain ────────
@@ -5551,6 +5643,34 @@ def test_build_image_direct_compose_includes_goatcounter_service() -> None:
     assert "goatcounter-token:/data/goatcounter-token:ro" in content
 
 
+def test_build_direct_compose_can_disable_goatcounter_service() -> None:
+    content = build_direct_compose_content(deploy_goatcounter=False)
+
+    assert "goatcounter:" not in content
+    assert "goatcounter-db:/data/goatcounter" not in content
+    assert "goatcounter-token:/data/goatcounter-token:ro" not in content
+
+
+def test_build_image_compose_can_disable_goatcounter_service() -> None:
+    content = build_image_compose_content(deploy_goatcounter=False)
+
+    assert "goatcounter:" not in content
+    assert "goatcounter-db:/data/goatcounter" not in content
+    assert "goatcounter-token:/data/goatcounter-token:ro" not in content
+
+
+def test_goatcounter_env_uses_generated_site_host() -> None:
+    content = build_image_compose_content()
+
+    assert "GOATCOUNTER_SITE_HOST=${GOATCOUNTER_SITE_HOST:-stats.internal}" in content
+
+
+def test_analytics_default_env_is_forwarded_to_compose() -> None:
+    content = build_image_compose_content()
+
+    assert "ANALYTICS_ENABLED_DEFAULT=${ANALYTICS_ENABLED_DEFAULT:-true}" in content
+
+
 def test_all_compose_builders_share_only_the_goatcounter_token_with_agblogger() -> None:
     """All compose builders should expose only the token volume to agblogger, not the DB volume."""
     builders_and_contents = [
@@ -5598,6 +5718,19 @@ def test_write_bundle_files_includes_goatcounter_entrypoint(tmp_path: Path) -> N
     entrypoint = bundle_dir / "goatcounter" / "entrypoint.sh"
     assert entrypoint.exists()
     assert entrypoint.stat().st_mode & 0o111 != 0
+
+
+def test_write_bundle_files_omits_goatcounter_entrypoint_when_disabled(tmp_path: Path) -> None:
+    config = _make_config(
+        deployment_mode=DEPLOY_MODE_TARBALL,
+        image_ref="ghcr.io/example/agblogger:v1.0",
+        deploy_goatcounter=False,
+    )
+    bundle_dir = tmp_path / "bundle"
+
+    write_bundle_files(config, bundle_dir)
+
+    assert not (bundle_dir / "goatcounter" / "entrypoint.sh").exists()
 
 
 def test_write_bundle_files_fails_gracefully_when_entrypoint_missing(

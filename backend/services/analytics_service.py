@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 from typing import TYPE_CHECKING, Any
 
 import httpx
@@ -39,7 +40,9 @@ logger = logging.getLogger(__name__)
 GOATCOUNTER_URL = "http://goatcounter:8080"
 # GoatCounter provisions the site under this host, so requests must present it
 # explicitly even when they connect to the service by its Docker DNS name.
-GOATCOUNTER_SITE_HOST = "stats.internal"
+GOATCOUNTER_SITE_HOST = (
+    os.getenv("GOATCOUNTER_SITE_HOST", "stats.internal").strip() or "stats.internal"
+)
 GOATCOUNTER_AUTH_FILE = "/data/goatcounter-token/token"
 _HIT_TIMEOUT = 2.0
 _STATS_TIMEOUT = 5.0
@@ -58,6 +61,12 @@ _token_warning_issued: bool = False
 
 # Strong references to fire-and-forget analytics tasks, preventing GC before completion.
 _background_tasks: set[asyncio.Task[None]] = set()
+
+
+def _analytics_enabled_default() -> bool:
+    """Return the deployment default for analytics when no row exists yet."""
+    raw = os.getenv("ANALYTICS_ENABLED_DEFAULT", "true").strip().lower()
+    return raw not in {"0", "false", "no", "off"}
 
 
 def _goatcounter_headers(token: str) -> dict[str, str]:
@@ -127,15 +136,20 @@ def _load_token() -> str | None:
 async def get_analytics_settings(session: AsyncSession) -> AnalyticsSettingsResponse:
     """Return current analytics settings, falling back to defaults if no row exists.
 
-    Returns an AnalyticsSettingsResponse with defaults (analytics_enabled=True,
-    show_views_on_posts=False) when no row has been persisted yet. The returned
-    response is not backed by a persisted row; callers that need a persistent row
-    should use update_analytics_settings instead.
+    Returns an AnalyticsSettingsResponse with defaults when no row has been
+    persisted yet. ``analytics_enabled`` follows the deployment-level
+    ``ANALYTICS_ENABLED_DEFAULT`` environment flag; ``show_views_on_posts``
+    remains disabled by default. The returned response is not backed by a
+    persisted row; callers that need a persistent row should use
+    update_analytics_settings instead.
     """
     result = await session.execute(select(AnalyticsSettings).limit(1))
     row = result.scalar_one_or_none()
     if row is None:
-        return AnalyticsSettingsResponse(analytics_enabled=True, show_views_on_posts=False)
+        return AnalyticsSettingsResponse(
+            analytics_enabled=_analytics_enabled_default(),
+            show_views_on_posts=False,
+        )
     return AnalyticsSettingsResponse(
         analytics_enabled=row.analytics_enabled,
         show_views_on_posts=row.show_views_on_posts,
@@ -162,7 +176,9 @@ async def update_analytics_settings(
 
     if row is None:
         row = AnalyticsSettings(
-            analytics_enabled=True if analytics_enabled is None else analytics_enabled,
+            analytics_enabled=(
+                _analytics_enabled_default() if analytics_enabled is None else analytics_enabled
+            ),
             show_views_on_posts=False if show_views_on_posts is None else show_views_on_posts,
         )
         session.add(row)

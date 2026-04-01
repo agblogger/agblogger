@@ -19,6 +19,7 @@ from contextlib import suppress
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Final, Literal, get_args
+from urllib.parse import urlsplit
 
 from backend.validation import is_valid_trusted_host
 
@@ -40,6 +41,7 @@ DEFAULT_IMAGE_REF = "agblogger:latest"
 DEFAULT_IMAGE_TARBALL = "agblogger-image.tar.gz"
 DEFAULT_REMOTE_PLATFORM = "linux/amd64"
 DEFAULT_BUNDLE_DIR = Path("dist/deploy")
+DEFAULT_GOATCOUNTER_SITE_HOST = "stats.internal"
 DEPLOY_MODE_LOCAL = "local"
 DEPLOY_MODE_REGISTRY = "registry"
 DEPLOY_MODE_TARBALL = "tarball"
@@ -91,6 +93,32 @@ def _is_ipv4_like(host: str) -> bool:
     """Return True when the string looks like a dotted-decimal IPv4 address."""
     parts = host.split(".")
     return len(parts) == 4 and all(p.isdigit() for p in parts)
+
+
+def _normalize_goatcounter_site_host(raw: str) -> str | None:
+    """Return a bare domain suitable for GoatCounter site provisioning."""
+    candidate = raw.strip().lower()
+    if not candidate:
+        return None
+
+    if "://" in candidate:
+        parsed = urlsplit(candidate)
+        if parsed.hostname is None:
+            return None
+        candidate = parsed.hostname.lower()
+    else:
+        candidate = candidate.split("/", 1)[0]
+        if candidate.count(":") == 1:
+            host, port = candidate.rsplit(":", 1)
+            if port.isdigit():
+                candidate = host
+
+    candidate = candidate.rstrip(".")
+    if not candidate or candidate.startswith("*."):
+        return None
+    if _is_ipv4_like(candidate) or _DOMAIN_RE.match(candidate) is None:
+        return None
+    return candidate
 
 
 GENERATED_CONFIG_FILES = [
@@ -147,6 +175,7 @@ class DeployConfig:
     scan_image: bool = True
     max_content_size: str | None = None
     disable_password_change: bool = False
+    deploy_goatcounter: bool = True
 
     @property
     def use_bundled_caddy(self) -> bool:
@@ -161,6 +190,19 @@ class DeployResult:
     env_path: Path
     commands: dict[str, str]
     bundle_path: Path | None = None
+
+
+def _goatcounter_site_host(config: DeployConfig) -> str:
+    """Return the public host GoatCounter should provision for this deployment."""
+    if config.caddy_config is not None:
+        return config.caddy_config.domain
+
+    for host in config.trusted_hosts:
+        normalized = _normalize_goatcounter_site_host(host)
+        if normalized is not None:
+            return normalized
+
+    return DEFAULT_GOATCOUNTER_SITE_HOST
 
 
 # ── Content builders ─────────────────────────────────────────────────
@@ -277,6 +319,8 @@ def build_env_content(config: DeployConfig) -> str:
             "AUTH_ENFORCE_LOGIN_ORIGIN=true",
             "AUTH_LOGIN_MAX_FAILURES=5",
             "AUTH_RATE_LIMIT_WINDOW_SECONDS=300",
+            f"ANALYTICS_ENABLED_DEFAULT={'true' if config.deploy_goatcounter else 'false'}",
+            f"GOATCOUNTER_SITE_HOST={_quote_env_value(_goatcounter_site_host(config))}",
             f"# BLUESKY_CLIENT_URL=https://{bluesky_domain}"
             "  # Uncomment to enable Bluesky cross-posting",
         ]
@@ -888,6 +932,8 @@ def _agblogger_env_section() -> str:
         "      - AUTH_ENFORCE_LOGIN_ORIGIN=${AUTH_ENFORCE_LOGIN_ORIGIN:-true}\n"
         "      - AUTH_LOGIN_MAX_FAILURES=${AUTH_LOGIN_MAX_FAILURES:-5}\n"
         "      - AUTH_RATE_LIMIT_WINDOW_SECONDS=${AUTH_RATE_LIMIT_WINDOW_SECONDS:-300}\n"
+        "      - ANALYTICS_ENABLED_DEFAULT=${ANALYTICS_ENABLED_DEFAULT:-true}\n"
+        "      - GOATCOUNTER_SITE_HOST=${GOATCOUNTER_SITE_HOST:-stats.internal}\n"
         "      - BLUESKY_CLIENT_URL=${BLUESKY_CLIENT_URL:-}\n"
     )
 
@@ -952,6 +998,8 @@ def _goatcounter_service_section(
         "    expose:\n"
         '      - "8080"\n'
         '    entrypoint: ["/bin/sh", "/entrypoint.sh"]\n'
+        "    environment:\n"
+        "      - GOATCOUNTER_SITE_HOST=${GOATCOUNTER_SITE_HOST:-stats.internal}\n"
         "    volumes:\n"
         "      - goatcounter-db:/data/goatcounter\n"
         "      - goatcounter-token:/data/goatcounter-token\n"
@@ -984,7 +1032,21 @@ def _compose_network_block() -> str:
     )
 
 
-def build_direct_compose_content() -> str:
+def _agblogger_goatcounter_volume_mount(*, deploy_goatcounter: bool) -> str:
+    """Return the AgBlogger token-volume mount when GoatCounter is enabled."""
+    if not deploy_goatcounter:
+        return ""
+    return "      - goatcounter-token:/data/goatcounter-token:ro\n"
+
+
+def _goatcounter_volume_definitions(*, deploy_goatcounter: bool) -> str:
+    """Return GoatCounter volume definitions when the sidecar is enabled."""
+    if not deploy_goatcounter:
+        return ""
+    return "  goatcounter-db:\n  goatcounter-token:\n"
+
+
+def build_direct_compose_content(*, deploy_goatcounter: bool = True) -> str:
     """Build a no-Caddy compose file for direct AgBlogger exposure."""
     return (
         "services:\n"
@@ -997,20 +1059,19 @@ def build_direct_compose_content() -> str:
         "    volumes:\n"
         "      - ./content:/data/content\n"
         "      - agblogger-db:/data/db\n"
-        "      - goatcounter-token:/data/goatcounter-token:ro\n"
+        + _agblogger_goatcounter_volume_mount(deploy_goatcounter=deploy_goatcounter)
         + _agblogger_env_section()
         + _agblogger_healthcheck_section()
-        + "\n"
-        + _goatcounter_service_section()
-        + "\n"
-        "volumes:\n"
-        "  agblogger-db:\n"
-        "  goatcounter-db:\n"
-        "  goatcounter-token:\n"
+        + ("\n" + _goatcounter_service_section() + "\n" if deploy_goatcounter else "")
+        + "volumes:\n"
+        + "  agblogger-db:\n"
+        + _goatcounter_volume_definitions(deploy_goatcounter=deploy_goatcounter)
     )
 
 
-def build_image_compose_content(*, caddy_public: bool = False) -> str:
+def build_image_compose_content(
+    *, caddy_public: bool = False, deploy_goatcounter: bool = True
+) -> str:
     """Build an image-based compose file with bundled Caddy reverse proxy for remote deployment."""
     return (
         "services:\n"
@@ -1022,26 +1083,27 @@ def build_image_compose_content(*, caddy_public: bool = False) -> str:
         "    volumes:\n"
         "      - ./content:/data/content\n"
         "      - agblogger-db:/data/db\n"
-        "      - goatcounter-token:/data/goatcounter-token:ro\n"
+        + _agblogger_goatcounter_volume_mount(deploy_goatcounter=deploy_goatcounter)
         + _agblogger_env_section()
         + _agblogger_healthcheck_section(include_network=True)
         + "\n"
         + _caddy_service_section(caddy_public=caddy_public)
-        + "\n"
-        + _goatcounter_service_section(include_network=True)
-        + "\n"
+        + (
+            "\n" + _goatcounter_service_section(include_network=True) + "\n"
+            if deploy_goatcounter
+            else ""
+        )
         + _compose_network_block()
         + "\n"
-        "volumes:\n"
-        "  agblogger-db:\n"
-        "  caddy-data:\n"
-        "  caddy-config:\n"
-        "  goatcounter-db:\n"
-        "  goatcounter-token:\n"
+        + "volumes:\n"
+        + "  agblogger-db:\n"
+        + "  caddy-data:\n"
+        + "  caddy-config:\n"
+        + _goatcounter_volume_definitions(deploy_goatcounter=deploy_goatcounter)
     )
 
 
-def build_image_direct_compose_content() -> str:
+def build_image_direct_compose_content(*, deploy_goatcounter: bool = True) -> str:
     """Build an image-only no-Caddy compose file for remote deployment."""
     return (
         "services:\n"
@@ -1053,16 +1115,13 @@ def build_image_direct_compose_content() -> str:
         "    volumes:\n"
         "      - ./content:/data/content\n"
         "      - agblogger-db:/data/db\n"
-        "      - goatcounter-token:/data/goatcounter-token:ro\n"
+        + _agblogger_goatcounter_volume_mount(deploy_goatcounter=deploy_goatcounter)
         + _agblogger_env_section()
         + _agblogger_healthcheck_section()
-        + "\n"
-        + _goatcounter_service_section()
-        + "\n"
-        "volumes:\n"
-        "  agblogger-db:\n"
-        "  goatcounter-db:\n"
-        "  goatcounter-token:\n"
+        + ("\n" + _goatcounter_service_section() + "\n" if deploy_goatcounter else "")
+        + "volumes:\n"
+        + "  agblogger-db:\n"
+        + _goatcounter_volume_definitions(deploy_goatcounter=deploy_goatcounter)
     )
 
 
@@ -1081,7 +1140,7 @@ def _external_caddy_network_block() -> str:
     )
 
 
-def build_external_caddy_compose_content() -> str:
+def build_external_caddy_compose_content(*, deploy_goatcounter: bool = True) -> str:
     """Build a local-build AgBlogger compose file for use with an external Caddy proxy."""
     return (
         "services:\n"
@@ -1094,21 +1153,25 @@ def build_external_caddy_compose_content() -> str:
         "    volumes:\n"
         "      - ./content:/data/content\n"
         "      - agblogger-db:/data/db\n"
-        "      - goatcounter-token:/data/goatcounter-token:ro\n"
+        + _agblogger_goatcounter_volume_mount(deploy_goatcounter=deploy_goatcounter)
         + _agblogger_env_section()
         + _agblogger_healthcheck_section()
         + "    networks:\n"
         f"      - {EXTERNAL_CADDY_NETWORK_NAME}\n"
-        "\n" + _goatcounter_service_section(network_name=EXTERNAL_CADDY_NETWORK_NAME) + "\n"
-        "volumes:\n"
-        "  agblogger-db:\n"
-        "  goatcounter-db:\n"
-        "  goatcounter-token:\n"
-        "\n" + _external_caddy_network_block()
+        + (
+            "\n" + _goatcounter_service_section(network_name=EXTERNAL_CADDY_NETWORK_NAME) + "\n"
+            if deploy_goatcounter
+            else ""
+        )
+        + "volumes:\n"
+        + "  agblogger-db:\n"
+        + _goatcounter_volume_definitions(deploy_goatcounter=deploy_goatcounter)
+        + "\n"
+        + _external_caddy_network_block()
     )
 
 
-def build_image_external_caddy_compose_content() -> str:
+def build_image_external_caddy_compose_content(*, deploy_goatcounter: bool = True) -> str:
     """Build an image-only AgBlogger compose file for use with an external Caddy proxy."""
     return (
         "services:\n"
@@ -1120,17 +1183,21 @@ def build_image_external_caddy_compose_content() -> str:
         "    volumes:\n"
         "      - ./content:/data/content\n"
         "      - agblogger-db:/data/db\n"
-        "      - goatcounter-token:/data/goatcounter-token:ro\n"
+        + _agblogger_goatcounter_volume_mount(deploy_goatcounter=deploy_goatcounter)
         + _agblogger_env_section()
         + _agblogger_healthcheck_section()
         + "    networks:\n"
         f"      - {EXTERNAL_CADDY_NETWORK_NAME}\n"
-        "\n" + _goatcounter_service_section(network_name=EXTERNAL_CADDY_NETWORK_NAME) + "\n"
-        "volumes:\n"
-        "  agblogger-db:\n"
-        "  goatcounter-db:\n"
-        "  goatcounter-token:\n"
-        "\n" + _external_caddy_network_block()
+        + (
+            "\n" + _goatcounter_service_section(network_name=EXTERNAL_CADDY_NETWORK_NAME) + "\n"
+            if deploy_goatcounter
+            else ""
+        )
+        + "volumes:\n"
+        + "  agblogger-db:\n"
+        + _goatcounter_volume_definitions(deploy_goatcounter=deploy_goatcounter)
+        + "\n"
+        + _external_caddy_network_block()
     )
 
 
@@ -1474,7 +1541,10 @@ def write_config_files(config: DeployConfig, project_dir: Path) -> None:
 
     if config.caddy_mode == CADDY_MODE_EXTERNAL:
         compose_path = project_dir / DEFAULT_EXTERNAL_CADDY_COMPOSE_FILE
-        compose_path.write_text(build_external_caddy_compose_content(), encoding="utf-8")
+        compose_path.write_text(
+            build_external_caddy_compose_content(deploy_goatcounter=config.deploy_goatcounter),
+            encoding="utf-8",
+        )
         stale_files.extend(
             [
                 DEFAULT_NO_CADDY_COMPOSE_FILE,
@@ -1496,7 +1566,10 @@ def write_config_files(config: DeployConfig, project_dir: Path) -> None:
             stale_files.append(DEFAULT_CADDY_PUBLIC_COMPOSE_FILE)
     else:
         no_caddy_path = project_dir / DEFAULT_NO_CADDY_COMPOSE_FILE
-        no_caddy_path.write_text(build_direct_compose_content(), encoding="utf-8")
+        no_caddy_path.write_text(
+            build_direct_compose_content(deploy_goatcounter=config.deploy_goatcounter),
+            encoding="utf-8",
+        )
         stale_files.append(DEFAULT_CADDY_PUBLIC_COMPOSE_FILE)
         stale_files.append(DEFAULT_EXTERNAL_CADDY_COMPOSE_FILE)
 
@@ -1646,7 +1719,10 @@ def write_bundle_files(config: DeployConfig, bundle_dir: Path) -> None:
     stale_files: list[str] = []
     if config.caddy_mode == CADDY_MODE_EXTERNAL:
         (bundle_dir / (DEFAULT_IMAGE_EXTERNAL_CADDY_COMPOSE_FILE + generated_suffix)).write_text(
-            build_image_external_caddy_compose_content(), encoding="utf-8"
+            build_image_external_caddy_compose_content(
+                deploy_goatcounter=config.deploy_goatcounter
+            ),
+            encoding="utf-8",
         )
         stale_files.extend(
             [
@@ -1669,7 +1745,11 @@ def write_bundle_files(config: DeployConfig, bundle_dir: Path) -> None:
         # Ports are baked into the compose file based on caddy_public to avoid
         # Docker Compose additive port merge conflicts with a separate overlay.
         (bundle_dir / (DEFAULT_IMAGE_COMPOSE_FILE + generated_suffix)).write_text(
-            build_image_compose_content(caddy_public=config.caddy_public), encoding="utf-8"
+            build_image_compose_content(
+                caddy_public=config.caddy_public,
+                deploy_goatcounter=config.deploy_goatcounter,
+            ),
+            encoding="utf-8",
         )
         stale_files.extend(
             [
@@ -1685,7 +1765,8 @@ def write_bundle_files(config: DeployConfig, bundle_dir: Path) -> None:
         )
     else:
         (bundle_dir / (DEFAULT_IMAGE_NO_CADDY_COMPOSE_FILE + generated_suffix)).write_text(
-            build_image_direct_compose_content(), encoding="utf-8"
+            build_image_direct_compose_content(deploy_goatcounter=config.deploy_goatcounter),
+            encoding="utf-8",
         )
         stale_files.extend(
             [
@@ -1712,25 +1793,28 @@ def write_bundle_files(config: DeployConfig, bundle_dir: Path) -> None:
         encoding="utf-8",
     )
 
-    # Copy GoatCounter entrypoint script into the bundle
     goatcounter_dir = bundle_dir / "goatcounter"
-    goatcounter_dir.mkdir(exist_ok=True)
-    entrypoint_src = Path(__file__).resolve().parent.parent / "goatcounter" / "entrypoint.sh"
-    if not entrypoint_src.is_file():
-        print(
-            f"ERROR: GoatCounter entrypoint script not found: {entrypoint_src}",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-    entrypoint_dst = goatcounter_dir / "entrypoint.sh"
-    shutil.copy2(entrypoint_src, entrypoint_dst)
-    try:
-        entrypoint_dst.chmod(entrypoint_dst.stat().st_mode | 0o755)
-    except OSError as exc:
-        print(
-            f"WARNING: Could not set executable permission on goatcounter/entrypoint.sh: {exc}",
-            file=sys.stderr,
-        )
+    if config.deploy_goatcounter:
+        goatcounter_dir.mkdir(exist_ok=True)
+        entrypoint_src = Path(__file__).resolve().parent.parent / "goatcounter" / "entrypoint.sh"
+        if not entrypoint_src.is_file():
+            print(
+                f"ERROR: GoatCounter entrypoint script not found: {entrypoint_src}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        entrypoint_dst = goatcounter_dir / "entrypoint.sh"
+        shutil.copy2(entrypoint_src, entrypoint_dst)
+        try:
+            entrypoint_dst.chmod(entrypoint_dst.stat().st_mode | 0o755)
+        except OSError as exc:
+            print(
+                f"WARNING: Could not set executable permission on goatcounter/entrypoint.sh: {exc}",
+                file=sys.stderr,
+            )
+    else:
+        with suppress(FileNotFoundError):
+            shutil.rmtree(goatcounter_dir)
 
     # Write idempotent setup script
     setup_path = bundle_dir / DEFAULT_SETUP_SCRIPT
@@ -2047,6 +2131,10 @@ def _mask_secrets(config: DeployConfig) -> DeployConfig:
         platform=config.platform,
         caddy_mode=config.caddy_mode,
         shared_caddy_config=config.shared_caddy_config,
+        scan_image=config.scan_image,
+        max_content_size=config.max_content_size,
+        disable_password_change=config.disable_password_change,
+        deploy_goatcounter=config.deploy_goatcounter,
     )
 
 
@@ -2066,13 +2154,19 @@ def dry_run(config: DeployConfig) -> None:
             print(build_caddy_site_snippet(caddy_config))
         if config.deployment_mode == DEPLOY_MODE_LOCAL:
             print(f"=== {DEFAULT_EXTERNAL_CADDY_COMPOSE_FILE} ===")
-            print(build_external_caddy_compose_content())
+            print(
+                build_external_caddy_compose_content(deploy_goatcounter=config.deploy_goatcounter)
+            )
         else:
             print(f"=== {DEFAULT_IMAGE_EXTERNAL_CADDY_COMPOSE_FILE} ===")
-            print(build_image_external_caddy_compose_content())
+            print(
+                build_image_external_caddy_compose_content(
+                    deploy_goatcounter=config.deploy_goatcounter
+                )
+            )
     elif config.deployment_mode == DEPLOY_MODE_LOCAL and caddy_config is None:
         print(f"=== {DEFAULT_NO_CADDY_COMPOSE_FILE} ===")
-        print(build_direct_compose_content())
+        print(build_direct_compose_content(deploy_goatcounter=config.deploy_goatcounter))
     elif config.deployment_mode == DEPLOY_MODE_LOCAL and caddy_config is not None:
         print("Using existing docker-compose.yml as the base compose file.\n")
         print(f"=== {DEFAULT_CADDYFILE} ===")
@@ -2084,10 +2178,15 @@ def dry_run(config: DeployConfig) -> None:
         print(f"=== {DEFAULT_CADDYFILE} ===")
         print(build_caddyfile_content(caddy_config))
         print(f"=== {DEFAULT_IMAGE_COMPOSE_FILE} ===")
-        print(build_image_compose_content(caddy_public=config.caddy_public))
+        print(
+            build_image_compose_content(
+                caddy_public=config.caddy_public,
+                deploy_goatcounter=config.deploy_goatcounter,
+            )
+        )
     else:
         print(f"=== {DEFAULT_IMAGE_NO_CADDY_COMPOSE_FILE} ===")
-        print(build_image_direct_compose_content())
+        print(build_image_direct_compose_content(deploy_goatcounter=config.deploy_goatcounter))
 
     use_caddy = config.caddy_config is not None
     commands = build_lifecycle_commands(
@@ -2140,6 +2239,9 @@ def print_config_summary(config: DeployConfig) -> None:
     if config.platform:
         print(f"  Platform:        {config.platform}")
     print(f"  Expose API docs: {'yes' if config.expose_docs else 'no'}")
+    print(f"  GoatCounter:     {'enabled' if config.deploy_goatcounter else 'disabled'}")
+    if config.deploy_goatcounter:
+        print(f"  GC site host:    {_goatcounter_site_host(config)}")
     print()
 
 
@@ -2441,6 +2543,10 @@ def collect_config(project_dir: Path | None = None) -> DeployConfig:
         "Disable admin password changes in the web UI? (for public demos)",
         default=False,
     )
+    deploy_goatcounter = _prompt_yes_no(
+        "Deploy the optional GoatCounter analytics sidecar?",
+        default=True,
+    )
 
     do_scan = False
     if shutil.which("trivy") is not None:
@@ -2471,6 +2577,7 @@ def collect_config(project_dir: Path | None = None) -> DeployConfig:
         caddy_mode=caddy_mode,
         shared_caddy_config=shared_caddy_config,
         scan_image=do_scan,
+        deploy_goatcounter=deploy_goatcounter,
     )
 
 
@@ -2554,6 +2661,7 @@ def config_from_args(args: argparse.Namespace) -> DeployConfig:
         caddy_mode=caddy_mode,
         shared_caddy_config=shared_caddy_config,
         scan_image=not args.skip_scan,
+        deploy_goatcounter=not getattr(args, "disable_goatcounter", False),
     )
 
 
@@ -2658,6 +2766,12 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         default=False,
         help="Disable admin password changes in the web UI (for public demos).",
+    )
+    config_group.add_argument(
+        "--disable-goatcounter",
+        action="store_true",
+        default=False,
+        help="Do not deploy the optional GoatCounter analytics sidecar.",
     )
     config_group.add_argument(
         "--deployment-mode",

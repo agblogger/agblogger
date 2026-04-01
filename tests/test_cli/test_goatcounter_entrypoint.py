@@ -54,3 +54,15 @@ def test_entrypoint_perm_flag_has_bitmask_comment() -> None:
     assert "-perm count,site_read" in entrypoint
     assert "-site-id 1" not in entrypoint
     assert "-user admin@example.com" in entrypoint
+
+
+def test_entrypoint_uses_configured_site_host_with_safe_normalization() -> None:
+    """The sidecar should accept a configured host and strip URL/port parts safely."""
+    entrypoint = Path("goatcounter/entrypoint.sh").read_text()
+
+    assert 'GOATCOUNTER_SITE_HOST_RAW="${GOATCOUNTER_SITE_HOST:-stats.internal}"' in entrypoint
+    assert 'GOATCOUNTER_SITE_HOST_RAW="${GOATCOUNTER_SITE_HOST_RAW#http://}"' in entrypoint
+    assert 'GOATCOUNTER_SITE_HOST_RAW="${GOATCOUNTER_SITE_HOST_RAW#https://}"' in entrypoint
+    assert 'GOATCOUNTER_SITE_HOST_RAW="${GOATCOUNTER_SITE_HOST_RAW%%/*}"' in entrypoint
+    assert 'GOATCOUNTER_SITE_HOST_RAW="${GOATCOUNTER_SITE_HOST_RAW%%:*}"' in entrypoint
+    assert 'GOATCOUNTER_VHOST="${GOATCOUNTER_SITE_HOST_RAW:-stats.internal}"' in entrypoint
