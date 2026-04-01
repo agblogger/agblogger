@@ -2,8 +2,21 @@ import DOMPurify from 'dompurify'
 import { useEffect, useMemo, useState } from 'react'
 
 const MATH_SPAN_RE = /<span class="math (inline|display)">([\s\S]*?)<\/span>/g
-
 const MATH_SPAN_CHECK_RE = /<span class="math (?:inline|display)">/
+const YOUTUBE_IFRAME_SRC_RE =
+  /^https:\/\/www\.(?:youtube\.com\/(?:embed|shorts)\/|youtube-nocookie\.com\/embed\/)[a-zA-Z0-9_-]{11}(?:\?[a-zA-Z0-9_=&%-]*)?$/
+const YOUTUBE_IFRAME_SANDBOX =
+  'allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox'
+const YOUTUBE_IFRAME_REFERRER_POLICY = 'origin'
+const YOUTUBE_IFRAME_LOADING = 'lazy'
+const IFRAME_TOKEN_PREFIX = `__AGBLOGGER_YOUTUBE_IFRAME_${Date.now().toString(36)}_`
+const ALLOWED_IFRAME_ATTRS = new Set([
+  'allowfullscreen',
+  'loading',
+  'referrerpolicy',
+  'sandbox',
+  'src',
+])
 
 const HTML_ENTITY_RE = /&(?:amp|lt|gt|quot|#39);/g
 const HTML_ENTITY_MAP: Record<string, string> = {
@@ -16,6 +29,63 @@ const HTML_ENTITY_MAP: Record<string, string> = {
 
 function decodeHtmlEntities(s: string): string {
   return s.replace(HTML_ENTITY_RE, (entity) => HTML_ENTITY_MAP[entity] ?? entity)
+}
+
+let iframeTokenCounter = 0
+
+function randomToken(): string {
+  iframeTokenCounter += 1
+  return `${IFRAME_TOKEN_PREFIX}${iframeTokenCounter}__`
+}
+
+function canonicalizeApprovedIframe(iframe: HTMLIFrameElement): string {
+  const src = iframe.getAttribute('src')
+  if (src === null) return ''
+  return (
+    `<iframe src="${src}"` +
+    ` sandbox="${YOUTUBE_IFRAME_SANDBOX}"` +
+    ' allowfullscreen="allowfullscreen"' +
+    ` referrerpolicy="${YOUTUBE_IFRAME_REFERRER_POLICY}"` +
+    ` loading="${YOUTUBE_IFRAME_LOADING}"></iframe>`
+  )
+}
+
+function isApprovedYouTubeIframe(iframe: HTMLIFrameElement): boolean {
+  const src = iframe.getAttribute('src')?.trim() ?? ''
+  if (!YOUTUBE_IFRAME_SRC_RE.test(src)) return false
+  if (iframe.getAttribute('sandbox') !== YOUTUBE_IFRAME_SANDBOX) return false
+  if (!iframe.hasAttribute('allowfullscreen')) return false
+  if (iframe.getAttribute('referrerpolicy') !== YOUTUBE_IFRAME_REFERRER_POLICY) return false
+  if (iframe.getAttribute('loading') !== YOUTUBE_IFRAME_LOADING) return false
+
+  const attrNames = iframe.getAttributeNames()
+  if (attrNames.length !== ALLOWED_IFRAME_ATTRS.size) return false
+  return attrNames.every((name) => ALLOWED_IFRAME_ATTRS.has(name.toLowerCase()))
+}
+
+function sanitizeRenderedContent(html: string): string {
+  if (!html.includes('<iframe') || typeof document === 'undefined') {
+    return DOMPurify.sanitize(html)
+  }
+
+  const template = document.createElement('template')
+  template.innerHTML = html
+
+  const preservedIframes = new Map<string, string>()
+  for (const iframe of Array.from(template.content.querySelectorAll('iframe'))) {
+    if (!isApprovedYouTubeIframe(iframe)) continue
+
+    const token = randomToken()
+    preservedIframes.set(token, canonicalizeApprovedIframe(iframe))
+    iframe.replaceWith(document.createTextNode(token))
+  }
+
+  const sanitized = DOMPurify.sanitize(template.innerHTML)
+  let restored = sanitized
+  for (const [token, iframeHtml] of preservedIframes) {
+    restored = restored.replace(token, iframeHtml)
+  }
+  return restored
 }
 
 type KatexRender = (tex: string, opts: { throwOnError: boolean; displayMode: boolean }) => string
@@ -62,7 +132,7 @@ export function useRenderedHtml(html: string | null | undefined): string {
 
   return useMemo(() => {
     if (html == null) return ''
-    if (!hasMath || render === null) return DOMPurify.sanitize(html)
+    if (!hasMath || render === null) return sanitizeRenderedContent(html)
     const rendered = html.replace(MATH_SPAN_RE, (_match, mode: string, tex: string) => {
       const displayMode = mode === 'display'
       const katexHtml = render(decodeHtmlEntities(tex.trim()), {
@@ -71,6 +141,6 @@ export function useRenderedHtml(html: string | null | undefined): string {
       })
       return `<span class="math ${mode}">${katexHtml}</span>`
     })
-    return DOMPurify.sanitize(rendered)
+    return sanitizeRenderedContent(rendered)
   }, [html, hasMath, render])
 }

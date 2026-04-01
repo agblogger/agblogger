@@ -139,7 +139,7 @@ class _HtmlSanitizer(HTMLParser):
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         tag_name = tag.lower()
         if tag_name == "iframe":
-            self._handle_iframe(attrs)
+            self._handle_iframe(attrs, self_closing=False)
             return
         if tag_name not in self._allowed_tags:
             self._open_tags.append(None)
@@ -163,7 +163,7 @@ class _HtmlSanitizer(HTMLParser):
     def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         tag_name = tag.lower()
         if tag_name == "iframe":
-            self._handle_iframe(attrs)
+            self._handle_iframe(attrs, self_closing=True)
             return
         if tag_name not in self._allowed_tags:
             return
@@ -217,7 +217,12 @@ class _HtmlSanitizer(HTMLParser):
             sanitized.append((name, value))
         return sanitized
 
-    def _handle_iframe(self, attrs: list[tuple[str, str | None]]) -> None:
+    def _handle_iframe(
+        self,
+        attrs: list[tuple[str, str | None]],
+        *,
+        self_closing: bool,
+    ) -> None:
         """Allow YouTube iframes with forced security attributes; strip all others.
 
         The src value is HTML-escaped before emission.
@@ -233,18 +238,25 @@ class _HtmlSanitizer(HTMLParser):
             self._parts.append(
                 "<p><em>[Iframe not allowed: only YouTube video embeds are supported]</em></p>"
             )
-            self._open_tags.append(None)
+            if not self_closing:
+                self._open_tags.append(None)
             return
 
         escaped_src = html.escape(src, quote=True)
-        self._parts.append(
+        iframe_html = (
             f'<iframe src="{escaped_src}"'
-            f' sandbox="allow-scripts allow-same-origin allow-popups"'
+            f' sandbox="allow-scripts allow-same-origin allow-popups'
+            f' allow-popups-to-escape-sandbox"'
             f' allowfullscreen="allowfullscreen"'
-            f' referrerpolicy="no-referrer"'
+            f' referrerpolicy="origin"'
             f' loading="lazy"'
             f">"
         )
+        if self_closing:
+            self._parts.append(f"{iframe_html}</iframe>")
+            return
+
+        self._parts.append(iframe_html)
         self._open_tags.append("iframe")
 
 

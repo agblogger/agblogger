@@ -288,7 +288,10 @@ class TestYouTubeIframe:
     def test_sandbox_attribute_forced(self) -> None:
         html = '<iframe src="https://www.youtube.com/embed/dQw4w9WgXcQ"></iframe>'
         result = _sanitize_html(html)
-        assert 'sandbox="allow-scripts allow-same-origin allow-popups"' in result
+        assert (
+            'sandbox="allow-scripts allow-same-origin allow-popups'
+            ' allow-popups-to-escape-sandbox"' in result
+        )
 
     def test_allowfullscreen_forced(self) -> None:
         html = '<iframe src="https://www.youtube.com/embed/dQw4w9WgXcQ"></iframe>'
@@ -298,7 +301,7 @@ class TestYouTubeIframe:
     def test_referrerpolicy_forced(self) -> None:
         html = '<iframe src="https://www.youtube.com/embed/dQw4w9WgXcQ"></iframe>'
         result = _sanitize_html(html)
-        assert 'referrerpolicy="no-referrer"' in result
+        assert 'referrerpolicy="origin"' in result
 
     def test_loading_lazy_forced(self) -> None:
         html = '<iframe src="https://www.youtube.com/embed/dQw4w9WgXcQ"></iframe>'
@@ -362,7 +365,10 @@ class TestYouTubeIframe:
         result = _sanitize_html(html)
         assert "allow-top-navigation" not in result
         assert "allow-forms" not in result
-        assert 'sandbox="allow-scripts allow-same-origin allow-popups"' in result
+        assert (
+            'sandbox="allow-scripts allow-same-origin allow-popups'
+            ' allow-popups-to-escape-sandbox"' in result
+        )
 
     def test_mixed_valid_and_invalid_iframes(self) -> None:
         """Valid YouTube iframe preserved, non-YouTube stripped with notification."""
@@ -392,12 +398,33 @@ class TestYouTubeIframe:
         result = _sanitize_html(html)
         assert "<iframe" in result
         assert 'src="https://www.youtube.com/embed/dQw4w9WgXcQ"' in result
+        assert "</iframe>" in result
+
+    def test_self_closing_youtube_iframe_preserves_following_content(self) -> None:
+        html = '<p>before</p><iframe src="https://www.youtube.com/embed/dQw4w9WgXcQ" /><p>after</p>'
+        result = _sanitize_html(html)
+        assert result == (
+            "<p>before</p>"
+            '<iframe src="https://www.youtube.com/embed/dQw4w9WgXcQ"'
+            ' sandbox="allow-scripts allow-same-origin allow-popups'
+            ' allow-popups-to-escape-sandbox"'
+            ' allowfullscreen="allowfullscreen"'
+            ' referrerpolicy="origin"'
+            ' loading="lazy"></iframe>'
+            "<p>after</p>"
+        )
 
     def test_self_closing_non_youtube_iframe_shows_notification(self) -> None:
         html = '<iframe src="https://evil.com/page" />'
         result = _sanitize_html(html)
         assert "<iframe" not in result
         assert "Iframe not allowed" in result
+
+    def test_self_closing_non_youtube_iframe_preserves_following_content(self) -> None:
+        html = '<iframe src="https://evil.com/page" /><p>after</p>'
+        result = _sanitize_html(html)
+        assert "Iframe not allowed" in result
+        assert result.endswith("<p>after</p>")
 
     def test_youtube_nocookie_shorts_stripped(self) -> None:
         """youtube-nocookie.com only supports /embed/, not /shorts/."""

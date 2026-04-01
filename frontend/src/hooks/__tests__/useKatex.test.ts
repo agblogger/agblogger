@@ -1,7 +1,9 @@
 import { describe, it, expect, vi } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
 
-const sanitizeSpy = vi.fn((html: string) => html)
+const sanitizeSpy = vi.fn((html: string) =>
+  html.replace(/<iframe\b[\s\S]*?<\/iframe>/g, ''),
+)
 vi.mock('dompurify', () => ({
   default: { sanitize: sanitizeSpy },
 }))
@@ -128,5 +130,36 @@ describe('useRenderedHtml', () => {
     expect(sanitizeSpy).toHaveBeenCalledWith(
       expect.stringContaining('<rendered-inline>'),
     )
+  })
+
+  it('preserves approved youtube iframes through frontend sanitization', () => {
+    const html =
+      '<p>before</p>' +
+      '<iframe src="https://www.youtube.com/embed/oSyEZAm8nb8"' +
+      ' sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"' +
+      ' allowfullscreen="allowfullscreen"' +
+      ' referrerpolicy="origin"' +
+      ' loading="lazy"></iframe>' +
+      '<p>after</p>'
+
+    const { result } = renderHook(() => useRenderedHtml(html))
+
+    expect(result.current).toContain('<iframe')
+    expect(result.current).toContain('src="https://www.youtube.com/embed/oSyEZAm8nb8"')
+    expect(result.current).toContain("</iframe>")
+    expect(result.current).toContain("<p>after</p>")
+  })
+
+  it('does not preserve youtube iframes with widened attributes', () => {
+    const html =
+      '<iframe src="https://www.youtube.com/embed/oSyEZAm8nb8"' +
+      ' sandbox="allow-scripts allow-same-origin allow-popups allow-forms"' +
+      ' allowfullscreen="allowfullscreen"' +
+      ' referrerpolicy="origin"' +
+      ' loading="lazy"></iframe>'
+
+    const { result } = renderHook(() => useRenderedHtml(html))
+
+    expect(result.current).not.toContain("<iframe")
   })
 })
