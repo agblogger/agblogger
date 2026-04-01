@@ -669,6 +669,7 @@ def test_deploy_writes_env_file_and_runs_docker_compose_without_caddy(
                 "docker-compose.nocaddy.yml",
                 "up",
                 "-d",
+                "--remove-orphans",
                 "--build",
             ],
             tmp_path,
@@ -724,6 +725,7 @@ def test_deploy_with_public_caddy_writes_override_and_runs_multi_file_compose(
                 "docker-compose.caddy-public.yml",
                 "up",
                 "-d",
+                "--remove-orphans",
                 "--build",
             ],
             tmp_path,
@@ -773,6 +775,7 @@ def test_deploy_with_local_caddy_runs_base_compose(
                 "docker-compose.yml",
                 "up",
                 "-d",
+                "--remove-orphans",
                 "--build",
             ],
             tmp_path,
@@ -825,6 +828,7 @@ def test_deploy_with_local_caddy_and_disabled_goatcounter_runs_generated_compose
                 DEFAULT_BUNDLED_CADDY_COMPOSE_FILE,
                 "up",
                 "-d",
+                "--remove-orphans",
                 "--build",
             ],
             tmp_path,
@@ -892,6 +896,7 @@ def test_deploy_runs_trivy_scan_before_compose_up(
                 "docker-compose.nocaddy.yml",
                 "up",
                 "-d",
+                "--remove-orphans",
             ],
             tmp_path,
             True,
@@ -919,6 +924,7 @@ def test_deploy_skips_scan_when_disabled(monkeypatch: pytest.MonkeyPatch, tmp_pa
                 "docker-compose.nocaddy.yml",
                 "up",
                 "-d",
+                "--remove-orphans",
                 "--build",
             ],
             tmp_path,
@@ -4797,6 +4803,14 @@ class TestBuildSetupScript:
         script = build_setup_script_content(config)
         assert "--force-recreate" in script
 
+    def test_force_recreate_also_removes_orphans(self) -> None:
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+        )
+        script = build_setup_script_content(config)
+        assert "up -d --force-recreate --remove-orphans" in script
+
     def test_compose_failure_shows_diagnostics_immediately(self) -> None:
         """Compose failure triggers diagnostics without waiting for health timeout."""
         config = _make_config(
@@ -4926,6 +4940,17 @@ class TestSetupScriptFilePlacement:
         script = build_setup_script_content(config)
         assert "Existing .env.production found" in script
         assert "cp .env.production.generated .env.production" in script
+
+    def test_env_production_upgrade_merges_missing_analytics_defaults(self) -> None:
+        """Upgrades should append missing deployment-managed analytics keys from the template."""
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+        )
+        script = build_setup_script_content(config)
+        assert "for key in ANALYTICS_ENABLED_DEFAULT GOATCOUNTER_SITE_HOST; do" in script
+        assert 'if ! grep -q "^${key}=" .env.production; then' in script
+        assert 'grep "^${key}=" .env.production.generated >> .env.production' in script
 
     def test_chmod_600_applied_in_both_branches(self) -> None:
         """chmod 600 must appear after mv (first install) AND after the upgrade message."""

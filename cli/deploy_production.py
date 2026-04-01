@@ -71,6 +71,10 @@ DEFAULT_SHARED_CADDY_COMPOSE_FILE = "docker-compose.yml"
 DEFAULT_SHARED_CADDYFILE = "Caddyfile"
 CADDY_NETWORK_SUBNET_PLACEHOLDER = "__CADDY_NETWORK_SUBNET__"
 EXTERNAL_CADDY_SUBNET_INSPECT_FORMAT = "{{with index .IPAM.Config 0}}{{.Subnet}}{{end}}"
+REMOTE_ENV_MERGE_KEYS: Final[tuple[str, ...]] = (
+    "ANALYTICS_ENABLED_DEFAULT",
+    "GOATCOUNTER_SITE_HOST",
+)
 
 
 def _read_version() -> str:
@@ -488,6 +492,15 @@ def build_setup_script_content(config: DeployConfig) -> str:
             ),
             '    echo "To use the newly generated config instead, run:"',
             '    echo "  cp .env.production.generated .env.production"',
+            "    if [ -f .env.production.generated ]; then",
+            f"        for key in {' '.join(REMOTE_ENV_MERGE_KEYS)}; do",
+            '            if ! grep -q "^${key}=" .env.production; then',
+            '                if grep -q "^${key}=" .env.production.generated; then',
+            '                    grep "^${key}=" .env.production.generated >> .env.production',
+            "                fi",
+            "            fi",
+            "        done",
+            "    fi",
             "    chmod 600 .env.production",
             "    chmod 600 .env.production.generated",
             "fi",
@@ -802,7 +815,7 @@ def build_setup_script_content(config: DeployConfig) -> str:
             "# Force-recreate ensures the newly loaded image is used, not a stale container.",
             "# Disable errexit so a compose dependency failure doesn't skip diagnostics.",
             "set +e",
-            f"{compose_cmd} up -d --force-recreate",
+            f"{compose_cmd} up -d --force-recreate --remove-orphans",
             "COMPOSE_EXIT=$?",
             "set -e",
             'if [ "$COMPOSE_EXIT" -ne 0 ]; then',
@@ -2009,7 +2022,7 @@ def _compose_base_args(config: DeployConfig) -> list[str]:
 
 def _compose_up_command(config: DeployConfig, *, build: bool = True) -> list[str]:
     """Build the docker compose up command for local deployments."""
-    command = [*_compose_base_args(config), "up", "-d"]
+    command = [*_compose_base_args(config), "up", "-d", "--remove-orphans"]
     if build:
         command.append("--build")
     return command

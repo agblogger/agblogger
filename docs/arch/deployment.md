@@ -31,7 +31,7 @@ Database schema migrations run programmatically during application startup, befo
 
 The repository includes deployment tooling for local and remote deployments. These workflows differ in how they deliver the image and configuration, but they converge on the same runtime architecture.
 
-Remote deployment bundles include a `setup.sh` deployment orchestrator script. The script handles file placement, image loading/pulling, external Caddy bootstrapping, old-stack teardown on mode switches, container startup, and health checking. GoatCounter remains outside the deployment success gate: the script only blocks on core application readiness, generated bundles can disable the sidecar entirely, and that disabled mode seeds the backend analytics default to off for fresh installs. Local deployments follow the same topology selection rules: when GoatCounter is disabled, the deployment helper switches bundled-Caddy installs to a generated compose file that omits the sidecar instead of relying on the checked-in base compose. The script is idempotent — safe to run on both fresh installs and upgrades.
+Remote deployment bundles include a `setup.sh` deployment orchestrator script. The script handles file placement, image loading/pulling, external Caddy bootstrapping, old-stack teardown on mode switches, container startup, orphan cleanup when services disappear from the generated compose files, and health checking. The script is idempotent — safe to run on both fresh installs and upgrades.
 
 The upgrade workflow is: regenerate the bundle locally, copy all files to the server, run `bash setup.sh`.
 
