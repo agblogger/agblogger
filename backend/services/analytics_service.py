@@ -25,6 +25,7 @@ from backend.schemas.analytics import (
     ReferrerEntry,
     TotalStatsResponse,
 )
+from backend.utils.goatcounter import normalize_goatcounter_site_host
 
 if TYPE_CHECKING:
     from fastapi import Request
@@ -41,7 +42,8 @@ GOATCOUNTER_URL = "http://goatcounter:8080"
 # GoatCounter provisions the site under this host, so requests must present it
 # explicitly even when they connect to the service by its Docker DNS name.
 GOATCOUNTER_SITE_HOST = (
-    os.getenv("GOATCOUNTER_SITE_HOST", "stats.internal").strip() or "stats.internal"
+    normalize_goatcounter_site_host(os.getenv("GOATCOUNTER_SITE_HOST", "stats.internal"))
+    or "stats.internal"
 )
 GOATCOUNTER_AUTH_FILE = "/data/goatcounter-token/token"
 _HIT_TIMEOUT = 2.0

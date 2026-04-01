@@ -19,8 +19,8 @@ from contextlib import suppress
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Final, Literal, get_args
-from urllib.parse import urlsplit
 
+from backend.utils.goatcounter import normalize_goatcounter_site_host
 from backend.validation import is_valid_trusted_host
 
 MIN_SECRET_KEY_LENGTH = 32
@@ -29,6 +29,7 @@ DEFAULT_HOST_PORT = 8000
 DEFAULT_ENV_FILE = ".env.production"
 DEFAULT_ENV_GENERATED_FILE = ".env.production.generated"
 DEFAULT_CADDYFILE = "Caddyfile.production"
+DEFAULT_BUNDLED_CADDY_COMPOSE_FILE = "docker-compose.caddy.yml"
 DEFAULT_NO_CADDY_COMPOSE_FILE = "docker-compose.nocaddy.yml"
 DEFAULT_CADDY_PUBLIC_COMPOSE_FILE = "docker-compose.caddy-public.yml"
 DEFAULT_IMAGE_COMPOSE_FILE = "docker-compose.image.yml"
@@ -92,38 +93,18 @@ _DOMAIN_RE = re.compile(
 def _is_ipv4_like(host: str) -> bool:
     """Return True when the string looks like a dotted-decimal IPv4 address."""
     parts = host.split(".")
-    return len(parts) == 4 and all(p.isdigit() for p in parts)
+    return len(parts) == 4 and all(part.isdigit() for part in parts)
 
 
 def _normalize_goatcounter_site_host(raw: str) -> str | None:
     """Return a bare domain suitable for GoatCounter site provisioning."""
-    candidate = raw.strip().lower()
-    if not candidate:
-        return None
-
-    if "://" in candidate:
-        parsed = urlsplit(candidate)
-        if parsed.hostname is None:
-            return None
-        candidate = parsed.hostname.lower()
-    else:
-        candidate = candidate.split("/", 1)[0]
-        if candidate.count(":") == 1:
-            host, port = candidate.rsplit(":", 1)
-            if port.isdigit():
-                candidate = host
-
-    candidate = candidate.rstrip(".")
-    if not candidate or candidate.startswith("*."):
-        return None
-    if _is_ipv4_like(candidate) or _DOMAIN_RE.match(candidate) is None:
-        return None
-    return candidate
+    return normalize_goatcounter_site_host(raw)
 
 
 GENERATED_CONFIG_FILES = [
     DEFAULT_ENV_FILE,
     DEFAULT_CADDYFILE,
+    DEFAULT_BUNDLED_CADDY_COMPOSE_FILE,
     DEFAULT_NO_CADDY_COMPOSE_FILE,
     DEFAULT_CADDY_PUBLIC_COMPOSE_FILE,
     DEFAULT_EXTERNAL_CADDY_COMPOSE_FILE,
@@ -435,6 +416,7 @@ def build_setup_script_content(config: DeployConfig) -> str:
         config.deployment_mode,
         use_caddy=config.use_bundled_caddy,
         caddy_public=config.caddy_public,
+        deploy_goatcounter=config.deploy_goatcounter,
         caddy_mode=config.caddy_mode,
     )
     compose_cmd = "docker compose --env-file .env.production"
@@ -1069,6 +1051,39 @@ def build_direct_compose_content(*, deploy_goatcounter: bool = True) -> str:
     )
 
 
+def build_bundled_caddy_compose_content(*, deploy_goatcounter: bool = True) -> str:
+    """Build a local-build compose file with bundled Caddy reverse proxy."""
+    return (
+        "services:\n"
+        "  agblogger:\n"
+        "    build: .\n"
+        f"    image: {LOCAL_IMAGE_TAG}\n"
+        "    user: root\n"
+        "    expose:\n"
+        '      - "8000"\n'
+        "    volumes:\n"
+        "      - ./content:/data/content\n"
+        "      - agblogger-db:/data/db\n"
+        + _agblogger_goatcounter_volume_mount(deploy_goatcounter=deploy_goatcounter)
+        + _agblogger_env_section()
+        + _agblogger_healthcheck_section(include_network=True)
+        + "\n"
+        + _caddy_service_section(caddy_public=False)
+        + (
+            "\n" + _goatcounter_service_section(include_network=True) + "\n"
+            if deploy_goatcounter
+            else ""
+        )
+        + _compose_network_block()
+        + "\n"
+        + "volumes:\n"
+        + "  agblogger-db:\n"
+        + "  caddy-data:\n"
+        + "  caddy-config:\n"
+        + _goatcounter_volume_definitions(deploy_goatcounter=deploy_goatcounter)
+    )
+
+
 def build_image_compose_content(
     *, caddy_public: bool = False, deploy_goatcounter: bool = True
 ) -> str:
@@ -1343,6 +1358,7 @@ def _compose_filenames(
     deployment_mode: str,
     use_caddy: bool,
     caddy_public: bool,
+    deploy_goatcounter: bool = True,
     caddy_mode: CaddyMode = CADDY_MODE_NONE,
 ) -> list[str]:
     """Return compose filenames for the requested deployment mode.
@@ -1358,8 +1374,12 @@ def _compose_filenames(
 
     if deployment_mode == DEPLOY_MODE_LOCAL:
         if use_caddy and caddy_public:
+            if not deploy_goatcounter:
+                return [DEFAULT_BUNDLED_CADDY_COMPOSE_FILE, DEFAULT_CADDY_PUBLIC_COMPOSE_FILE]
             return ["docker-compose.yml", DEFAULT_CADDY_PUBLIC_COMPOSE_FILE]
         if use_caddy:
+            if not deploy_goatcounter:
+                return [DEFAULT_BUNDLED_CADDY_COMPOSE_FILE]
             return ["docker-compose.yml"]
         return [DEFAULT_NO_CADDY_COMPOSE_FILE]
 
@@ -1375,10 +1395,17 @@ def _compose_base_command(
     use_caddy: bool,
     caddy_public: bool,
     env_filename: str,
+    deploy_goatcounter: bool = True,
     caddy_mode: CaddyMode = CADDY_MODE_NONE,
 ) -> str:
     """Build the shared docker compose command prefix for lifecycle commands."""
-    filenames = _compose_filenames(deployment_mode, use_caddy, caddy_public, caddy_mode=caddy_mode)
+    filenames = _compose_filenames(
+        deployment_mode,
+        use_caddy,
+        caddy_public,
+        deploy_goatcounter,
+        caddy_mode=caddy_mode,
+    )
     if not filenames:
         return f"docker compose --env-file {env_filename}"
 
@@ -1392,11 +1419,17 @@ def build_lifecycle_commands(
     caddy_public: bool,
     env_filename: str = DEFAULT_ENV_FILE,
     tarball_filename: str = DEFAULT_IMAGE_TARBALL,
+    deploy_goatcounter: bool = True,
     caddy_mode: CaddyMode = CADDY_MODE_NONE,
 ) -> dict[str, str]:
     """Build Docker lifecycle commands shown to the user."""
     base = _compose_base_command(
-        deployment_mode, use_caddy, caddy_public, env_filename, caddy_mode=caddy_mode
+        deployment_mode,
+        use_caddy,
+        caddy_public,
+        env_filename,
+        deploy_goatcounter,
+        caddy_mode=caddy_mode,
     )
     commands = {
         "start": f"{base} up -d",
@@ -1547,6 +1580,7 @@ def write_config_files(config: DeployConfig, project_dir: Path) -> None:
         )
         stale_files.extend(
             [
+                DEFAULT_BUNDLED_CADDY_COMPOSE_FILE,
                 DEFAULT_NO_CADDY_COMPOSE_FILE,
                 DEFAULT_CADDY_PUBLIC_COMPOSE_FILE,
                 DEFAULT_CADDYFILE,
@@ -1557,6 +1591,14 @@ def write_config_files(config: DeployConfig, project_dir: Path) -> None:
         caddyfile_path.write_text(build_caddyfile_content(config.caddy_config), encoding="utf-8")
         stale_files.append(DEFAULT_NO_CADDY_COMPOSE_FILE)
         stale_files.append(DEFAULT_EXTERNAL_CADDY_COMPOSE_FILE)
+        if config.deploy_goatcounter:
+            stale_files.append(DEFAULT_BUNDLED_CADDY_COMPOSE_FILE)
+        else:
+            bundled_compose_path = project_dir / DEFAULT_BUNDLED_CADDY_COMPOSE_FILE
+            bundled_compose_path.write_text(
+                build_bundled_caddy_compose_content(deploy_goatcounter=False),
+                encoding="utf-8",
+            )
         if config.caddy_public:
             override_path = project_dir / DEFAULT_CADDY_PUBLIC_COMPOSE_FILE
             override_path.write_text(
@@ -1570,6 +1612,7 @@ def write_config_files(config: DeployConfig, project_dir: Path) -> None:
             build_direct_compose_content(deploy_goatcounter=config.deploy_goatcounter),
             encoding="utf-8",
         )
+        stale_files.append(DEFAULT_BUNDLED_CADDY_COMPOSE_FILE)
         stale_files.append(DEFAULT_CADDY_PUBLIC_COMPOSE_FILE)
         stale_files.append(DEFAULT_EXTERNAL_CADDY_COMPOSE_FILE)
 
@@ -1585,6 +1628,7 @@ def _remote_bundle_commands(config: DeployConfig) -> dict[str, str]:
         use_caddy=config.caddy_config is not None,
         caddy_public=config.caddy_public,
         tarball_filename=config.tarball_filename,
+        deploy_goatcounter=config.deploy_goatcounter,
         caddy_mode=config.caddy_mode,
     )
 
@@ -1956,6 +2000,7 @@ def _compose_base_args(config: DeployConfig) -> list[str]:
         DEPLOY_MODE_LOCAL,
         use_caddy=config.use_bundled_caddy,
         caddy_public=config.caddy_public,
+        deploy_goatcounter=config.deploy_goatcounter,
         caddy_mode=config.caddy_mode,
     ):
         args.extend(["-f", filename])
@@ -2077,6 +2122,7 @@ def deploy(config: DeployConfig, project_dir: Path) -> DeployResult:
                 deployment_mode=config.deployment_mode,
                 use_caddy=config.use_bundled_caddy,
                 caddy_public=config.caddy_public,
+                deploy_goatcounter=config.deploy_goatcounter,
                 caddy_mode=config.caddy_mode,
             ),
             bundle_path=None,
@@ -2168,9 +2214,13 @@ def dry_run(config: DeployConfig) -> None:
         print(f"=== {DEFAULT_NO_CADDY_COMPOSE_FILE} ===")
         print(build_direct_compose_content(deploy_goatcounter=config.deploy_goatcounter))
     elif config.deployment_mode == DEPLOY_MODE_LOCAL and caddy_config is not None:
-        print("Using existing docker-compose.yml as the base compose file.\n")
         print(f"=== {DEFAULT_CADDYFILE} ===")
         print(build_caddyfile_content(caddy_config))
+        if config.deploy_goatcounter:
+            print("Using existing docker-compose.yml as the base compose file.\n")
+        else:
+            print(f"=== {DEFAULT_BUNDLED_CADDY_COMPOSE_FILE} ===")
+            print(build_bundled_caddy_compose_content(deploy_goatcounter=False))
         if config.caddy_public:
             print(f"=== {DEFAULT_CADDY_PUBLIC_COMPOSE_FILE} ===")
             print(build_caddy_public_compose_override_content())
@@ -2194,6 +2244,7 @@ def dry_run(config: DeployConfig) -> None:
         use_caddy=use_caddy,
         caddy_public=config.caddy_public,
         tarball_filename=config.tarball_filename,
+        deploy_goatcounter=config.deploy_goatcounter,
         caddy_mode=config.caddy_mode,
     )
     print("=== Lifecycle commands ===")

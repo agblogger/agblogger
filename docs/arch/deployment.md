@@ -31,7 +31,7 @@ Database schema migrations run programmatically during application startup, befo
 
 The repository includes deployment tooling for local and remote deployments. These workflows differ in how they deliver the image and configuration, but they converge on the same runtime architecture.
 
-Remote deployment bundles include a `setup.sh` deployment orchestrator script. The script handles file placement, image loading/pulling, external Caddy bootstrapping, old-stack teardown on mode switches, container startup, and health checking. GoatCounter remains outside the deployment success gate: the script only blocks on core application readiness, generated bundles can disable the sidecar entirely, and that disabled mode seeds the backend analytics default to off for fresh installs. The script is idempotent — safe to run on both fresh installs and upgrades.
+Remote deployment bundles include a `setup.sh` deployment orchestrator script. The script handles file placement, image loading/pulling, external Caddy bootstrapping, old-stack teardown on mode switches, container startup, and health checking. GoatCounter remains outside the deployment success gate: the script only blocks on core application readiness, generated bundles can disable the sidecar entirely, and that disabled mode seeds the backend analytics default to off for fresh installs. Local deployments follow the same topology selection rules: when GoatCounter is disabled, the deployment helper switches bundled-Caddy installs to a generated compose file that omits the sidecar instead of relying on the checked-in base compose. The script is idempotent — safe to run on both fresh installs and upgrades.
 
 The upgrade workflow is: regenerate the bundle locally, copy all files to the server, run `bash setup.sh`.
 
@@ -52,7 +52,7 @@ The project also supports a packaged local deployment profile for deployment-sty
 ## Code Entry Points
 
 - `Dockerfile` defines the production image.
-- `docker-compose.yml` defines the standard container topology (application, Caddy, GoatCounter).
+- `docker-compose.yml` defines the checked-in reference topology for the bundled-Caddy stack; `cli/deploy_production.py` can generate alternate local compose files such as `docker-compose.caddy.yml` when the requested deployment omits GoatCounter.
 - `goatcounter/entrypoint.sh` is the GoatCounter container's idempotent provisioning and startup script, parameterized by deployment-provided site host environment.
 - `cli/deploy_production.py` contains the deployment helper, configuration generation, and `setup.sh` script generation workflow.
 - `cli/release.py` contains release workflow tooling.

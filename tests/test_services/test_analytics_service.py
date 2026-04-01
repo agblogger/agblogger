@@ -481,6 +481,46 @@ def test_goatcounter_headers_use_environment_host(
         importlib.reload(reloaded)
 
 
+def test_goatcounter_headers_normalize_environment_host_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GoatCounter Host headers should use the bare provisioned hostname."""
+    import importlib
+
+    import backend.services.analytics_service as analytics_service
+
+    monkeypatch.setenv("GOATCOUNTER_SITE_HOST", "https://blog.example.com:8443/stats")
+    reloaded = importlib.reload(analytics_service)
+
+    try:
+        headers = reloaded._goatcounter_headers("test-token")
+        assert headers["Host"] == "blog.example.com"
+        assert headers["Authorization"] == "Bearer test-token"
+    finally:
+        monkeypatch.delenv("GOATCOUNTER_SITE_HOST", raising=False)
+        importlib.reload(reloaded)
+
+
+def test_goatcounter_headers_normalize_environment_host_port(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Host:port overrides should be normalized to the bare hostname."""
+    import importlib
+
+    import backend.services.analytics_service as analytics_service
+
+    monkeypatch.setenv("GOATCOUNTER_SITE_HOST", "blog.example.com:8443")
+    reloaded = importlib.reload(analytics_service)
+
+    try:
+        headers = reloaded._goatcounter_headers("test-token")
+        assert headers["Host"] == "blog.example.com"
+        assert headers["Authorization"] == "Bearer test-token"
+    finally:
+        monkeypatch.delenv("GOATCOUNTER_SITE_HOST", raising=False)
+        importlib.reload(reloaded)
+
+
 # ── Suggestion 3: _stats_request log includes params ──────────────────────────
 
 

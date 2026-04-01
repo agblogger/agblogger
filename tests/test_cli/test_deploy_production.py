@@ -23,6 +23,7 @@ from cli.deploy_production import (
     CADDY_STATIC_IP,
     COMPOSE_SUBNET,
     DEFAULT_BUNDLE_DIR,
+    DEFAULT_BUNDLED_CADDY_COMPOSE_FILE,
     DEFAULT_CADDY_PUBLIC_COMPOSE_FILE,
     DEFAULT_CADDYFILE,
     DEFAULT_ENV_FILE,
@@ -444,6 +445,19 @@ def test_build_lifecycle_commands_for_default_caddy() -> None:
     )
 
 
+def test_build_lifecycle_commands_for_default_caddy_without_goatcounter() -> None:
+    commands = build_lifecycle_commands(
+        deployment_mode=DEPLOY_MODE_LOCAL,
+        use_caddy=True,
+        caddy_public=False,
+        deploy_goatcounter=False,
+    )
+    assert (
+        commands["start"] == "docker compose --env-file .env.production "
+        f"-f {DEFAULT_BUNDLED_CADDY_COMPOSE_FILE} up -d"
+    )
+
+
 def test_build_lifecycle_commands_for_public_caddy_override() -> None:
     commands = build_lifecycle_commands(
         deployment_mode=DEPLOY_MODE_LOCAL,
@@ -577,6 +591,24 @@ def test_write_config_files_with_caddy_local(tmp_path: Path) -> None:
     assert (tmp_path / "Caddyfile.production").exists()
     assert not (tmp_path / "docker-compose.nocaddy.yml").exists()
     assert not (tmp_path / "docker-compose.caddy-public.yml").exists()
+
+
+def test_write_config_files_with_caddy_local_and_goatcounter_disabled(tmp_path: Path) -> None:
+    config = _make_config(
+        caddy_config=CaddyConfig(domain="blog.example.com", email=None),
+        host_bind_ip=LOCALHOST_BIND_IP,
+        deploy_goatcounter=False,
+    )
+    write_config_files(config, tmp_path)
+
+    assert (tmp_path / ".env.production").exists()
+    assert (tmp_path / "Caddyfile.production").exists()
+    compose_path = tmp_path / DEFAULT_BUNDLED_CADDY_COMPOSE_FILE
+    assert compose_path.exists()
+    compose_content = compose_path.read_text(encoding="utf-8")
+    assert "goatcounter:" not in compose_content
+    assert "goatcounter-db:/data/goatcounter" not in compose_content
+    assert "goatcounter-token:/data/goatcounter-token:ro" not in compose_content
 
 
 def test_write_config_files_with_caddy_public(tmp_path: Path) -> None:
@@ -739,6 +771,58 @@ def test_deploy_with_local_caddy_runs_base_compose(
                 ".env.production",
                 "-f",
                 "docker-compose.yml",
+                "up",
+                "-d",
+                "--build",
+            ],
+            tmp_path,
+            True,
+        )
+    ]
+
+
+def test_deploy_with_local_caddy_and_disabled_goatcounter_runs_generated_compose(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    (tmp_path / "docker-compose.yml").write_text("services: {}\n", encoding="utf-8")
+    commands = _stub_subprocess(monkeypatch)
+    _stub_no_trivy(monkeypatch)
+
+    config = DeployConfig(
+        secret_key="x" * 64,
+        admin_username="admin",
+        admin_password="very-strong-password",
+        trusted_hosts=["blog.example.com"],
+        trusted_proxy_ips=[],
+        host_port=8000,
+        host_bind_ip=LOCALHOST_BIND_IP,
+        caddy_config=CaddyConfig(domain="blog.example.com", email=None),
+        caddy_public=False,
+        expose_docs=False,
+        deployment_mode=DEPLOY_MODE_LOCAL,
+        image_ref=None,
+        bundle_dir=DEFAULT_BUNDLE_DIR,
+        tarball_filename=DEFAULT_IMAGE_TARBALL,
+        deploy_goatcounter=False,
+    )
+
+    result = deploy(config=config, project_dir=tmp_path)
+
+    assert (
+        result.commands["start"] == "docker compose --env-file .env.production "
+        f"-f {DEFAULT_BUNDLED_CADDY_COMPOSE_FILE} up -d"
+    )
+    compose_content = (tmp_path / DEFAULT_BUNDLED_CADDY_COMPOSE_FILE).read_text(encoding="utf-8")
+    assert "goatcounter:" not in compose_content
+    assert commands == [
+        (
+            [
+                "docker",
+                "compose",
+                "--env-file",
+                ".env.production",
+                "-f",
+                DEFAULT_BUNDLED_CADDY_COMPOSE_FILE,
                 "up",
                 "-d",
                 "--build",
@@ -2233,6 +2317,22 @@ class TestDryRunLocalCaddyNonPublic:
         assert "Using existing docker-compose.yml" in captured
         assert "=== Caddyfile.production ===" in captured
         assert f"=== {DEFAULT_CADDY_PUBLIC_COMPOSE_FILE} ===" in captured
+
+    def test_dry_run_local_caddy_disabled_goatcounter_prints_generated_compose(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        config = _make_config(
+            caddy_config=CaddyConfig(domain="blog.example.com", email=None),
+            caddy_public=False,
+            host_bind_ip=LOCALHOST_BIND_IP,
+            deploy_goatcounter=False,
+        )
+        dry_run(config)
+
+        captured = capsys.readouterr().out
+        assert "Using existing docker-compose.yml" not in captured
+        assert f"=== {DEFAULT_BUNDLED_CADDY_COMPOSE_FILE} ===" in captured
+        assert "goatcounter:" not in captured
 
 
 class TestDeployRemoteModeWithoutComposeYml:
