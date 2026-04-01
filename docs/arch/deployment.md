@@ -33,7 +33,7 @@ The repository includes deployment tooling for local and remote deployments. The
 
 Remote deployment bundles include a `setup.sh` deployment orchestrator script. The script handles file placement, image loading/pulling, external Caddy bootstrapping, old-stack teardown on mode switches, container startup, orphan cleanup when services disappear from the generated compose files, and health checking. The script is idempotent — safe to run on both fresh installs and upgrades.
 
-The upgrade workflow is: regenerate the bundle locally, copy all files to the server, run `bash setup.sh`.
+The upgrade workflow is: regenerate the bundle locally, copy all files to the server, run `bash setup.sh`. Existing `.env.production` files are preserved during upgrades, but deployment-managed analytics defaults (`ANALYTICS_ENABLED_DEFAULT` and `GOATCOUNTER_SITE_HOST`) are refreshed from the generated template so GoatCounter enablement and site-host changes take effect without replacing the rest of the environment file.
 
 ## Caddy Reverse Proxy Modes
 
