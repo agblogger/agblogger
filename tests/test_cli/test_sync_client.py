@@ -114,3 +114,60 @@ class TestSyncClientLogin:
             "/api/auth/login",
             json={"username": "admin", "password": "admin123"},
         )
+
+    def test_close_revokes_session_refresh_token_before_closing(self, tmp_path: Path) -> None:
+        content_dir = tmp_path / "content"
+        content_dir.mkdir()
+
+        response = MagicMock()
+        response.raise_for_status = MagicMock()
+
+        client = SyncClient.__new__(SyncClient)
+        client.content_dir = content_dir
+        client.server_url = "http://localhost:8000"
+        client._csrf_token = "cli-csrf"
+        client.client = MagicMock()
+        client.client.headers = {}
+        client.client.post.return_value = response
+
+        client.close()
+
+        client.client.post.assert_called_once_with(
+            "/api/auth/logout",
+            headers={"X-CSRF-Token": "cli-csrf"},
+            json={},
+        )
+        response.raise_for_status.assert_called_once_with()
+        assert client.__dict__["_csrf_token"] is None
+        client.client.close.assert_called_once_with()
+
+    def test_close_warns_and_still_closes_on_logout_failure(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        content_dir = tmp_path / "content"
+        content_dir.mkdir()
+
+        import httpx
+
+        request = httpx.Request("POST", "http://localhost:8000/api/auth/logout")
+        response = MagicMock()
+        response.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "logout failed",
+            request=request,
+            response=httpx.Response(status_code=500, request=request),
+        )
+
+        client = SyncClient.__new__(SyncClient)
+        client.content_dir = content_dir
+        client.server_url = "http://localhost:8000"
+        client._csrf_token = "cli-csrf"
+        client.client = MagicMock()
+        client.client.headers = {}
+        client.client.post.return_value = response
+
+        client.close()
+
+        captured = capsys.readouterr()
+        assert "Warning: failed to revoke CLI session on exit" in captured.err
+        assert client.__dict__["_csrf_token"] is None
+        client.client.close.assert_called_once_with()

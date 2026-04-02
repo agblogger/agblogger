@@ -234,13 +234,39 @@ class SyncClient:
 
     def close(self) -> None:
         """Close the HTTP client."""
-        self.client.close()
+        try:
+            self.logout()
+        finally:
+            self.client.close()
 
     def __enter__(self) -> SyncClient:
         return self
 
     def __exit__(self, *args: object) -> None:
         self.close()
+
+    def logout(self) -> None:
+        """Revoke the current session refresh token when the CLI exits."""
+        if getattr(self, "_csrf_token", None) is None:
+            return
+        if "Authorization" in self.client.headers:
+            return
+
+        try:
+            resp = self._call(
+                "POST",
+                "/api/auth/logout",
+                json={},
+                headers={"X-CSRF-Token": self._csrf_token},
+            )
+            resp.raise_for_status()
+        except (httpx.HTTPError, ValueError) as exc:
+            print(
+                f"Warning: failed to revoke CLI session on exit: {exc}",
+                file=sys.stderr,
+            )
+        finally:
+            self._csrf_token = None
 
     def _call(
         self,
