@@ -34,6 +34,16 @@ def _extract_initial_data(html: str) -> dict[str, object]:
     return json.loads(match.group(1))
 
 
+def _extract_root_fragment(html: str) -> str:
+    match = re.search(
+        r'<div id="root">(.*?)</div>\s*<script id="__initial_data__"',
+        html,
+        re.DOTALL,
+    )
+    assert match is not None
+    return match.group(1)
+
+
 @pytest.fixture
 def seo_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
     posts_dir = tmp_content_dir / "posts"
@@ -86,11 +96,19 @@ def seo_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
     labels_toml.write_text('[labels.python]\nnames = ["Python"]\n')
 
     (tmp_content_dir / "about.md").write_text("# About\n\nThis is the about page content.\n")
+    (tmp_content_dir / "unsafe.md").write_text(
+        "# Unsafe\n\n"
+        "Safe intro.\n\n"
+        "[click](javascript:alert('xss'))\n\n"
+        "<script>alert('owned')</script>\n\n"
+        "Safe outro.\n"
+    )
     index_toml = tmp_content_dir / "index.toml"
     index_toml.write_text(
         '[site]\ntitle = "Test Blog"\ndescription = "A test blog"\n'
         '[[pages]]\nid = "timeline"\ntitle = "Posts"\n'
         '[[pages]]\nid = "about"\ntitle = "About"\nfile = "about.md"\n'
+        '[[pages]]\nid = "unsafe"\ntitle = "Unsafe"\nfile = "unsafe.md"\n'
         '[[pages]]\nid = "labels"\ntitle = "Labels"\n'
     )
 
@@ -254,6 +272,15 @@ class TestPageSeo:
     async def test_rendered_body_has_data_content_marker(self, client: AsyncClient) -> None:
         resp = await client.get("/page/about")
         assert "data-content" in resp.text
+
+    async def test_rendered_body_strips_unsafe_markup(self, client: AsyncClient) -> None:
+        resp = await client.get("/page/unsafe")
+        assert resp.status_code == 200
+        root_html = _extract_root_fragment(resp.text).lower()
+        assert "<script>alert" not in root_html
+        assert 'href="javascript:' not in root_html
+        assert "safe intro." in root_html
+        assert "safe outro." in root_html
 
     async def test_unknown_page_returns_plain_html(self, client: AsyncClient) -> None:
         resp = await client.get("/page/nonexistent")

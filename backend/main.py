@@ -57,6 +57,7 @@ if TYPE_CHECKING:
     from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 logger = logging.getLogger(__name__)
+_ATOM_NAMESPACE = "http://www.w3.org/2005/Atom"
 
 _DEFAULT_INDEX_TOML = (
     '[site]\ntitle = "My Blog"\ntimezone = "UTC"\n\n'
@@ -105,6 +106,45 @@ def format_human_date(value: str | datetime) -> str:
 
     dt = parse_datetime(value)
     return f"{dt.strftime('%B')} {dt.day}, {dt.strftime('%Y')}"
+
+
+def _render_trusted_article_html(
+    *,
+    title: str,
+    body_html: str,
+    metadata_text: str | None = None,
+) -> str:
+    """Wrap sanitized markdown HTML in a small article shell for SEO pre-rendering."""
+    parts = ["<article>", "<h1>", html.escape(title), "</h1>"]
+    if metadata_text is not None:
+        parts.extend(
+            [
+                '<p style="color:#666;font-size:0.875rem;margin-bottom:2rem">',
+                html.escape(metadata_text),
+                "</p>",
+            ]
+        )
+    parts.extend(["<div data-content>", body_html, "</div>", "</article>"])
+    return "".join(parts)
+
+
+def _escape_xml_text(text: str) -> str:
+    return html.escape(text)
+
+
+def _append_xml_text(parts: list[str], tag: str, text: str) -> None:
+    parts.extend(["<", tag, ">", _escape_xml_text(text), "</", tag, ">"])
+
+
+def _append_xml_empty_element(parts: list[str], tag: str, attrs: dict[str, str]) -> None:
+    parts.extend(["<", tag])
+    for name, value in attrs.items():
+        parts.extend([" ", name, '="', _escape_xml_text(value), '"'])
+    parts.append("/>")
+
+
+def _serialize_xml(parts: list[str]) -> str:
+    return '<?xml version="1.0" encoding="UTF-8"?>\n' + "".join(parts)
 
 
 class _MultipartBodyTooLargeError(Exception):
@@ -926,13 +966,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if post.rendered_html:
             date_str = format_human_date(post.created_at)
             author_line = f" \u00b7 {post.author}" if post.author else ""
-            rendered_body = (
-                f"<article>"
-                f"<h1>{html.escape(post.title)}</h1>"
-                f'<p style="color:#666;font-size:0.875rem;margin-bottom:2rem">'
-                f"{html.escape(date_str)}{html.escape(author_line)}</p>"
-                f"<div data-content>{post.rendered_html}</div>"
-                f"</article>"
+            rendered_body = _render_trusted_article_html(
+                title=post.title,
+                body_html=post.rendered_html,
+                metadata_text=f"{date_str}{author_line}",
             )
 
         preload_data = {
@@ -1110,9 +1147,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         rendered_body = None
         if page.rendered_html:
-            rendered_body = (
-                f"<article><h1>{html.escape(page.title)}</h1>"
-                f"<div data-content>{page.rendered_html}</div></article>"
+            rendered_body = _render_trusted_article_html(
+                title=page.title,
+                body_html=page.rendered_html,
             )
 
         preload_data = {
@@ -1328,13 +1365,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         content_manager: ContentManager = request.app.state.content_manager
 
         urls: list[str] = []
-        urls.append(f"  <url><loc>{html.escape(base_url)}/</loc></url>")
+
+        def add_url(loc: str, *, lastmod: str | None = None) -> None:
+            url_parts = ["<url>"]
+            _append_xml_text(url_parts, "loc", loc)
+            if lastmod is not None:
+                _append_xml_text(url_parts, "lastmod", lastmod)
+            url_parts.append("</url>")
+            urls.append("".join(url_parts))
+
+        add_url(f"{base_url}/")
 
         for page in content_manager.site_config.pages:
             if page.file is not None:
-                urls.append(
-                    f"  <url><loc>{html.escape(base_url)}/page/{html.escape(page.id)}</loc></url>"
-                )
+                add_url(f"{base_url}/page/{page.id}")
 
         try:
             session_factory = request.app.state.session_factory
@@ -1352,10 +1396,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     if slug is None:
                         continue
                     lastmod = format_iso(p.modified_at)
-                    urls.append(
-                        f"  <url><loc>{html.escape(base_url)}/post/{html.escape(slug)}</loc>"
-                        f"<lastmod>{html.escape(lastmod)}</lastmod></url>"
-                    )
+                    add_url(f"{base_url}/post/{slug}", lastmod=lastmod)
 
                 label_stmt = (
                     select(LabelCache.id)
@@ -1368,9 +1409,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 label_ids = label_result.scalars().all()
 
                 for lid in label_ids:
-                    urls.append(
-                        f"  <url><loc>{html.escape(base_url)}/labels/{html.escape(lid)}</loc></url>"
-                    )
+                    add_url(f"{base_url}/labels/{lid}")
         except SQLAlchemyError:
             logger.exception("DB error generating sitemap")
             return Response(
@@ -1380,13 +1419,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 headers={"Retry-After": "60"},
             )
 
-        url_block = "\n".join(urls)
-        xml = (
-            '<?xml version="1.0" encoding="UTF-8"?>\n'
-            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
-            f"{url_block}\n"
-            "</urlset>"
-        )
+        sitemap_parts = [
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+            "".join(urls),
+            "</urlset>",
+        ]
+        xml = _serialize_xml(sitemap_parts)
         return Response(content=xml, media_type="application/xml")
 
     @app.get("/robots.txt", include_in_schema=False, response_model=None)
@@ -1416,10 +1454,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         base_url = _base_url(request)
         content_manager: ContentManager = request.app.state.content_manager
-        site_title = html.escape(content_manager.site_config.title)
-        site_desc = html.escape(content_manager.site_config.description)
+        site_title = content_manager.site_config.title
+        site_desc = content_manager.site_config.description
 
-        items: list[str] = []
+        items: list[tuple[str, str, str, str]] = []
         try:
             session_factory = request.app.state.session_factory
             async with session_factory() as session:
@@ -1436,26 +1474,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     slug = _public_post_slug(p.file_path)
                     if slug is None:
                         continue
-                    link = html.escape(f"{base_url}/post/{slug}")
-                    esc_title = html.escape(p.title)
-                    desc = html.escape(
-                        strip_html_tags(p.rendered_excerpt) if p.rendered_excerpt else ""
-                    )
+                    link = f"{base_url}/post/{slug}"
+                    desc = strip_html_tags(p.rendered_excerpt) if p.rendered_excerpt else ""
                     pub_dt = (
                         p.created_at.astimezone(UTC)
                         if p.created_at.tzinfo is not None
                         else p.created_at.replace(tzinfo=UTC)
                     )
                     pub_date = format_rfc2822(pub_dt, usegmt=True)
-                    items.append(
-                        f"    <item>\n"
-                        f"      <title>{esc_title}</title>\n"
-                        f"      <link>{link}</link>\n"
-                        f'      <guid isPermaLink="true">{link}</guid>\n'
-                        f"      <pubDate>{pub_date}</pubDate>\n"
-                        f"      <description>{desc}</description>\n"
-                        f"    </item>"
-                    )
+                    items.append((p.title, link, pub_date, desc))
         except SQLAlchemyError:
             logger.exception("DB error generating RSS feed")
             _empty_rss = (
@@ -1469,21 +1496,39 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 headers={"Retry-After": "60"},
             )
 
-        items_block = "\n".join(items)
-        feed_url = html.escape(f"{base_url}/feed.xml")
-        esc_base_url = html.escape(base_url)
-        rss = (
-            '<?xml version="1.0" encoding="UTF-8"?>\n'
-            '<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">\n'
-            "  <channel>\n"
-            f"    <title>{site_title}</title>\n"
-            f"    <link>{esc_base_url}/</link>\n"
-            f"    <description>{site_desc}</description>\n"
-            f'    <atom:link href="{feed_url}" rel="self" type="application/rss+xml"/>\n'
-            f"{items_block}\n"
-            "  </channel>\n"
-            "</rss>"
+        item_xml: list[str] = []
+        for title, link, pub_date, desc in items:
+            parts = ["<item>"]
+            _append_xml_text(parts, "title", title)
+            _append_xml_text(parts, "link", link)
+            parts.extend(
+                [
+                    '<guid isPermaLink="true">',
+                    _escape_xml_text(link),
+                    "</guid>",
+                ]
+            )
+            _append_xml_text(parts, "pubDate", pub_date)
+            _append_xml_text(parts, "description", desc)
+            parts.append("</item>")
+            item_xml.append("".join(parts))
+
+        rss_parts = ['<rss version="2.0" xmlns:atom="', _ATOM_NAMESPACE, '"><channel>']
+        _append_xml_text(rss_parts, "title", site_title)
+        _append_xml_text(rss_parts, "link", f"{base_url}/")
+        _append_xml_text(rss_parts, "description", site_desc)
+        _append_xml_empty_element(
+            rss_parts,
+            "atom:link",
+            {
+                "href": f"{base_url}/feed.xml",
+                "rel": "self",
+                "type": "application/rss+xml",
+            },
         )
+        rss_parts.append("".join(item_xml))
+        rss_parts.extend(["</channel>", "</rss>"])
+        rss = _serialize_xml(rss_parts)
         return Response(content=rss, media_type="application/rss+xml")
 
     # Serve frontend static files in production

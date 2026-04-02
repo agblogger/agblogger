@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING
 
 import pytest
@@ -26,6 +27,16 @@ def og_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
         "---\ntitle: Hello World\ncreated_at: 2026-02-02 22:21:29.975359+00\n"
         "author: admin\nlabels: []\n---\n"
         "This is the post body with some content for the excerpt.\n"
+    )
+    unsafe_post = posts_dir / "unsafe"
+    unsafe_post.mkdir()
+    (unsafe_post / "index.md").write_text(
+        "---\ntitle: Unsafe Body\ncreated_at: 2026-02-02 22:21:29.975359+00\n"
+        "author: admin\nlabels: []\n---\n"
+        "Safe intro.\n\n"
+        "[click](javascript:alert('xss'))\n\n"
+        "<script>alert('owned')</script>\n\n"
+        "Safe outro.\n"
     )
     draft_post = posts_dir / "my-draft"
     draft_post.mkdir()
@@ -75,6 +86,16 @@ async def client(og_settings: Settings) -> AsyncGenerator[AsyncClient]:
     """Create test HTTP client with lifespan triggered."""
     async with create_test_client(og_settings) as ac:
         yield ac
+
+
+def _extract_root_fragment(html: str) -> str:
+    match = re.search(
+        r'<div id="root">(.*?)</div>\s*<script id="__initial_data__"',
+        html,
+        re.DOTALL,
+    )
+    assert match is not None
+    return match.group(1)
 
 
 class TestPostOgTagsPublished:
@@ -190,6 +211,15 @@ class TestPostSeoMetaTags:
     async def test_rendered_body_has_data_content_marker(self, client: AsyncClient) -> None:
         resp = await client.get("/post/hello")
         assert "data-content" in resp.text
+
+    async def test_rendered_body_strips_unsafe_markup(self, client: AsyncClient) -> None:
+        resp = await client.get("/post/unsafe")
+        assert resp.status_code == 200
+        root_html = _extract_root_fragment(resp.text).lower()
+        assert "<script>alert" not in root_html
+        assert 'href="javascript:' not in root_html
+        assert "safe intro." in root_html
+        assert "safe outro." in root_html
 
     async def test_draft_has_no_rendered_body(self, client: AsyncClient) -> None:
         resp = await client.get("/post/my-draft")

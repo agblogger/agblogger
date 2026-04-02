@@ -117,8 +117,10 @@ class TestFeedTitleEscaping:
     async def test_double_quote_in_title_is_escaped(self, feed_client: AsyncClient) -> None:
         resp = await feed_client.get("/feed.xml")
         assert resp.status_code == 200
-        # html.escape with quote=True (default) escapes " as &quot;
-        assert "&quot;" in resp.text
+        # Quotes in XML character data are valid unescaped, but the title text must survive intact.
+        assert (
+            'Say "hello" &gt; world' in resp.text or "Say &quot;hello&quot; &gt; world" in resp.text
+        )
 
     async def test_feed_is_valid_xml_with_special_title_chars(
         self, feed_client: AsyncClient
