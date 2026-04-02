@@ -453,8 +453,8 @@ export default function EditorPage() {
 
           {!isNew && (createdAt !== null || modifiedAt !== null) && (
             <div className="flex items-center gap-4 text-xs text-muted">
-              {createdAt !== null && <span>Created {formatDate(createdAt, 'MMM d, yyyy, HH:mm')}</span>}
-              {modifiedAt !== null && <span>Modified {formatDate(modifiedAt, 'MMM d, yyyy, HH:mm')}</span>}
+              {createdAt !== null && <span>Created {formatDate(createdAt, 'MMM d, yyyy, HH:mm:ss')}</span>}
+              {modifiedAt !== null && <span>Modified {formatDate(modifiedAt, 'MMM d, yyyy, HH:mm:ss')}</span>}
             </div>
           )}
         </div>

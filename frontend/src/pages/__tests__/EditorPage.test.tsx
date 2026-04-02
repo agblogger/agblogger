@@ -9,6 +9,7 @@ import { fetchPost, fetchPostForEdit, createPost, updatePost, uploadAssets, fetc
 import { fetchSocialAccounts } from '@/api/crosspost'
 import type { UserResponse, PostEditResponse, PostDetail } from '@/api/client'
 import { DRAFT_SCHEMA_VERSION } from '@/hooks/useEditorAutoSave'
+import { formatDate } from '@/utils/date'
 
 // Mock localStorage since jsdom doesn't always provide full implementation
 const storage = new Map<string, string>()
@@ -28,6 +29,7 @@ Object.defineProperty(window, 'localStorage', {
   writable: true,
 })
 
+import api from '@/api/client'
 import { mockHttpError } from '@/test/MockHTTPError'
 
 vi.mock('@/api/posts', () => ({
@@ -158,6 +160,7 @@ const postDetail: PostDetail = {
 
 describe('EditorPage', () => {
   beforeEach(() => {
+    const mockApiPost = vi.mocked(api.post)
     mockUser = { id: 1, username: 'jane', email: 'jane@test.com', display_name: null }
     mockFetchPost.mockReset()
     mockFetchPostForEdit.mockReset()
@@ -165,6 +168,10 @@ describe('EditorPage', () => {
     mockFetchSocialAccounts.mockResolvedValue([])
     mockFetchViewCount.mockReset()
     mockFetchViewCount.mockResolvedValue({ views: null })
+    mockApiPost.mockReset()
+    mockApiPost.mockReturnValue({
+      json: () => Promise.resolve({ html: '<p>Preview</p>' }),
+    } as ReturnType<typeof mockApiPost>)
     localStorage.clear()
   })
 
@@ -830,6 +837,33 @@ describe('EditorPage', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/Modified.*Feb 22/)).toBeInTheDocument()
+    })
+  })
+
+  it('shows second-level modified time changes after saving within the same minute', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const mockUpdatePost = vi.mocked(updatePost)
+    const initialModifiedAt = '2026-02-01 13:00:01+00:00'
+    const updatedModifiedAt = '2026-02-01 13:00:45+00:00'
+    mockFetchPostForEdit.mockResolvedValue({
+      ...editResponse,
+      modified_at: initialModifiedAt,
+    })
+    mockUpdatePost.mockResolvedValue({
+      ...postDetail,
+      modified_at: updatedModifiedAt,
+    })
+    const user = userEvent.setup()
+    renderEditor('/editor/posts/existing/index.md')
+
+    await waitFor(() => {
+      expect(screen.getByText(`Modified ${formatDate(initialModifiedAt, 'MMM d, yyyy, HH:mm:ss')}`)).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: /save/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(`Modified ${formatDate(updatedModifiedAt, 'MMM d, yyyy, HH:mm:ss')}`)).toBeInTheDocument()
     })
   })
 
