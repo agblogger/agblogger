@@ -20,6 +20,8 @@ if TYPE_CHECKING:
     from httpx import AsyncClient
     from sqlalchemy.ext.asyncio import async_sessionmaker
 
+pytestmark = pytest.mark.slow
+
 
 def _get_session_factory(client: AsyncClient) -> async_sessionmaker[Any]:
     """Extract session_factory from a test client's ASGI app state."""

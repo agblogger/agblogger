@@ -19,6 +19,8 @@ if TYPE_CHECKING:
 
     from httpx import AsyncClient
 
+pytestmark = pytest.mark.slow
+
 
 class TestSafeStatus:
     def test_valid_status_returned(self) -> None:

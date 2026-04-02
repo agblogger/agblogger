@@ -22,6 +22,8 @@ if TYPE_CHECKING:
 
     from httpx import AsyncClient
 
+pytestmark = pytest.mark.slow
+
 
 def _extract_initial_data(html: str) -> dict[str, object]:
     match = re.search(

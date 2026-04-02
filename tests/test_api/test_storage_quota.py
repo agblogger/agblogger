@@ -23,6 +23,8 @@ if TYPE_CHECKING:
 
     from backend.services.storage_quota import ContentSizeTracker
 
+pytestmark = pytest.mark.slow
+
 
 @pytest.fixture
 def quota_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:

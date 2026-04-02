@@ -66,13 +66,14 @@ check-static: check-backend-static check-frontend-static check-vulture check-tri
     @{{ if v == "" { "true" } else { "echo" } }}
     @echo "✓ Static checks passed"
 
-# Run all test suites, excluding slow tests (pass coverage=true for coverage reports)
+# Run all test suites, excluding slow backend tests by default.
+# Pass coverage=true to merge the backend slow shard for full coverage reporting.
 test coverage="false": (test-backend coverage) (test-frontend coverage)
     @{{ if v == "" { "true" } else { "echo" } }}
     @echo "✓ Tests passed"
 
-# Run full quality gate (static checks first, then tests with coverage enforcement)
-check: check-static (test "true")
+# Run the fast quality gate (static checks first, then tests excluding slow backend tests)
+check: check-static test
     @{{ if v == "" { "true" } else { "echo" } }}
     @echo "✓ All checks passed"
 
@@ -106,8 +107,8 @@ check-snyk-deps:
     @echo "\n── Snyk: open source dependency scan ──"
     snyk test frontend
 
-# Run extra checks not covered by `check`
-check-extra: check-audit-full checkov check-gitleaks check-codeql check-semgrep test-backend-slow check-snyk-deps
+# Run extra checks not covered by `check`, including full backend coverage
+check-extra: check-audit-full checkov check-gitleaks check-codeql check-semgrep (test-backend "true") check-snyk-deps
     @echo "\n✓ Extra checks passed"
 
 # Run Snyk code analysis
@@ -218,30 +219,54 @@ check-backend-static:
     run_step $'\n── Backend: vulnerability audit ──' uv run pip-audit --progress-spinner off --requirement "$requirements_file"
     echo "✓ Backend static checks passed"
 
-# Backend tests, excluding slow tests (pass coverage=true for coverage report)
+# Backend tests, excluding slow tests. In coverage mode, merge slow tests so
+# the coverage gate still measures the full backend suite.
 test-backend coverage="false":
     #!/usr/bin/env bash
     set -euo pipefail
-    cmd=(uv run pytest tests/ -m "not slow" -n auto)
+    with_coverage=0
     if [ "{{ coverage }}" = "true" ] || [ "{{ coverage }}" = "coverage=true" ]; then
-        cmd+=(--cov=backend --cov=cli --cov-report=term-missing)
+        with_coverage=1
     elif [ "{{ coverage }}" != "false" ] && [ "{{ coverage }}" != "coverage=false" ]; then
         echo "Invalid coverage option '{{ coverage }}' (use coverage=true|false)" >&2
         exit 1
     fi
+
+    fast_cmd=(uv run pytest tests/ -m "not slow" -n auto)
+    slow_cmd=(uv run pytest tests/ -m slow -n auto)
+    if [ "$with_coverage" -eq 1 ]; then
+        rm -f .coverage .coverage.*
+        fast_cmd+=(--cov=backend --cov=cli --cov-report= --cov-fail-under=0)
+        slow_cmd+=(--cov=backend --cov=cli --cov-append --cov-report=term-missing)
+    fi
+
     if [ -n "{{ v }}" ]; then
-        printf '\n── Backend: tests ──\n'
-        "${cmd[@]}" -v
+        mode_args=(-v)
     else
         _out="$(mktemp)"
         trap 'rm -f "$_out"' EXIT
-        rc=0
-        "${cmd[@]}" -q --tb=short > "$_out" 2>&1 || rc=$?
-        if [ $rc -ne 0 ]; then
-            printf '\n── Backend: tests ──\n'
-            cat "$_out"
-            exit $rc
+        mode_args=(-q --tb=short)
+    fi
+
+    run_step() {
+        local label="$1"; shift
+        if [ -n "{{ v }}" ]; then
+            printf '%s\n' "$label"
+            "$@"
+        else
+            local rc=0
+            "$@" > "$_out" 2>&1 || rc=$?
+            if [ $rc -ne 0 ]; then
+                printf '%s\n' "$label"
+                cat "$_out"
+                exit $rc
+            fi
         fi
+    }
+
+    run_step $'\n── Backend: tests ──' "${fast_cmd[@]}" "${mode_args[@]}"
+    if [ "$with_coverage" -eq 1 ]; then
+        run_step $'\n── Backend: slow tests (coverage merge) ──' "${slow_cmd[@]}" "${mode_args[@]}"
     fi
     echo "✓ Backend tests passed"
 

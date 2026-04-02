@@ -26,6 +26,8 @@ if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
     from pathlib import Path
 
+pytestmark = pytest.mark.slow
+
 
 @pytest.fixture
 def app_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:

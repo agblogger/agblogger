@@ -17,8 +17,6 @@ if TYPE_CHECKING:
 
     from httpx import AsyncClient
 
-pytestmark = pytest.mark.slow
-
 
 class _CountingLock:
     def __init__(self) -> None:
