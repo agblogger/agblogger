@@ -683,10 +683,9 @@ def build_setup_script_content(config: DeployConfig) -> str:
         )
 
         # Detect subnet and replace placeholder in .env.production
-        inspect_fmt = EXTERNAL_CADDY_SUBNET_INSPECT_FORMAT.replace("{", "{{").replace("}", "}}")
         subnet_cmd = (
             f"CADDY_SUBNET=$(docker network inspect"
-            f' {EXTERNAL_CADDY_NETWORK_NAME} --format "{inspect_fmt}")'
+            f' {EXTERNAL_CADDY_NETWORK_NAME} --format "{EXTERNAL_CADDY_SUBNET_INSPECT_FORMAT}")'
         )
         sed_cmd = f'sed -i "s|{CADDY_NETWORK_SUBNET_PLACEHOLDER}|$CADDY_SUBNET|" .env.production'
         lines.extend(

@@ -4772,6 +4772,11 @@ class TestBuildSetupScript:
         script = build_setup_script_content(config)
         assert "index .IPAM.Config 0" in script
         assert "range .IPAM.Config" not in script
+        assert (
+            "docker network inspect caddy "
+            '--format "{{with index .IPAM.Config 0}}{{.Subnet}}{{end}}"'
+        ) in script
+        assert "{{{{with index .IPAM.Config 0}}" not in script
 
     def test_external_caddy_uses_custom_caddy_dir(self) -> None:
         config = _make_config(
