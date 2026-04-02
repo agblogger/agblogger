@@ -6,6 +6,7 @@ import {
   fetchBreakdown,
   fetchPathReferrers,
 } from '@/api/analytics'
+import { localDateToUtcEnd, localDateToUtcStart } from '@/utils/date'
 import type {
   AnalyticsSettings,
   TotalStatsResponse,
@@ -62,18 +63,18 @@ function formatLocalDate(date: Date): string {
 }
 
 /**
- * Compute start/end date strings for a given range.
+ * Compute UTC start/end instants for the selected local-date range.
  *
- * Dates are intentionally computed in the browser's local timezone so the
- * dashboard aligns with the user's calendar day, not UTC midnight.
+ * The browser chooses the local calendar dates, then converts them to explicit
+ * UTC timestamps so the backend does not have to infer client timezone.
  */
 function getDateRange(range: DateRange): { start: string; end: string } {
   const end = new Date()
   const start = new Date()
   start.setDate(start.getDate() - RANGE_DAYS[range])
   return {
-    start: formatLocalDate(start),
-    end: formatLocalDate(end),
+    start: localDateToUtcStart(formatLocalDate(start)),
+    end: localDateToUtcEnd(formatLocalDate(end)),
   }
 }
 

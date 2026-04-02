@@ -137,6 +137,26 @@ async def client(seo_settings: Settings) -> AsyncGenerator[AsyncClient]:
         yield ac
 
 
+class TestSpaShellRoutes:
+    async def test_admin_route_returns_spa_shell(self, client: AsyncClient) -> None:
+        resp = await client.get("/admin")
+        assert resp.status_code == 200
+        assert "text/html" in resp.headers["content-type"]
+        assert '<div id="root"></div>' in resp.text
+
+    async def test_login_route_returns_spa_shell(self, client: AsyncClient) -> None:
+        resp = await client.get("/login")
+        assert resp.status_code == 200
+        assert "text/html" in resp.headers["content-type"]
+        assert '<div id="root"></div>' in resp.text
+
+    async def test_editor_route_returns_spa_shell(self, client: AsyncClient) -> None:
+        resp = await client.get("/editor/posts/hello/index.md")
+        assert resp.status_code == 200
+        assert "text/html" in resp.headers["content-type"]
+        assert '<div id="root"></div>' in resp.text
+
+
 class TestHomepageSeo:
     async def test_returns_html(self, client: AsyncClient) -> None:
         resp = await client.get("/")

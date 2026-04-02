@@ -36,13 +36,19 @@ def app_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
         '\n[[pages]]\nid = "nofile"\ntitle = "No File Page"\n'
     )
     (tmp_content_dir / "about.md").write_text("# About\n\nAbout page.\n")
+    frontend_dir = tmp_path / "frontend"
+    frontend_dir.mkdir()
+    (frontend_dir / "index.html").write_text(
+        "<!doctype html><html><head><title>AgBlogger</title></head>"
+        '<body><div id="root"></div></body></html>'
+    )
     db_path = tmp_path / "test.db"
     return Settings(
         secret_key="test-secret-key-with-at-least-32-characters",
         debug=True,
         database_url=f"sqlite+aiosqlite:///{db_path}",
         content_dir=tmp_content_dir,
-        frontend_dir=tmp_path / "frontend",
+        frontend_dir=frontend_dir,
         admin_username="admin",
         admin_password="admin123",
     )
@@ -205,6 +211,65 @@ class TestPageHitRecording:
             assert resp.status_code == 404
             await asyncio.sleep(0)
         mock_record.assert_not_called()
+
+
+class TestFrontendSeoRouteHitRecording:
+    """Verify hit recording is triggered on server-rendered frontend routes."""
+
+    @pytest.mark.asyncio
+    async def test_unauthenticated_post_route_fires_hit(self, client: AsyncClient) -> None:
+        import asyncio
+
+        with patch(
+            "backend.services.analytics_service.record_hit",
+            new=AsyncMock(),
+        ) as mock_record:
+            resp = await client.get("/post/hello")
+            assert resp.status_code == 200
+            await asyncio.sleep(0)
+
+        mock_record.assert_called_once()
+        call_kwargs = mock_record.call_args.kwargs
+        assert call_kwargs["path"] == "/post/hello"
+        assert call_kwargs["user"] is None
+
+    @pytest.mark.asyncio
+    async def test_unauthenticated_page_route_fires_hit(self, client: AsyncClient) -> None:
+        import asyncio
+
+        with patch(
+            "backend.services.analytics_service.record_hit",
+            new=AsyncMock(),
+        ) as mock_record:
+            resp = await client.get("/page/about")
+            assert resp.status_code == 200
+            await asyncio.sleep(0)
+
+        mock_record.assert_called_once()
+        call_kwargs = mock_record.call_args.kwargs
+        assert call_kwargs["path"] == "/page/about"
+        assert call_kwargs["user"] is None
+
+    @pytest.mark.asyncio
+    async def test_authenticated_post_route_passes_user_to_record_hit(
+        self, client: AsyncClient
+    ) -> None:
+        import asyncio
+
+        token = await _get_admin_token(client)
+        with patch(
+            "backend.services.analytics_service.record_hit",
+            new=AsyncMock(),
+        ) as mock_record:
+            resp = await client.get(
+                "/post/hello",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            assert resp.status_code == 200
+            await asyncio.sleep(0)
+
+        mock_record.assert_called_once()
+        assert mock_record.call_args.kwargs["user"] is not None
 
 
 class TestPostHitSessionFactoryFailure:

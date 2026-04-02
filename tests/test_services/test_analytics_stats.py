@@ -12,6 +12,8 @@ import pytest
 from backend.models.base import DurableBase
 from backend.schemas.analytics import BreakdownEntry, PathHit, ReferrerEntry, TotalStatsResponse
 from backend.services.analytics_service import (
+    _build_goatcounter_date_params,
+    _normalize_goatcounter_end_date,
     _stats_request,
     fetch_breakdown,
     fetch_path_hits,
@@ -51,6 +53,36 @@ async def test_fetch_total_stats_returns_correct_data(session: AsyncSession) -> 
 
     assert result.total_views == 120
     assert result.total_unique == 85
+
+
+async def test_fetch_total_stats_falls_back_when_unique_missing(session: AsyncSession) -> None:
+    """Current GoatCounter builds omit total_unique; fall back to total."""
+    fake_response = {"total": 120}
+
+    with patch(
+        "backend.services.analytics_service._stats_request",
+        new_callable=AsyncMock,
+        return_value=fake_response,
+    ):
+        result = await fetch_total_stats(session)
+
+    assert result.total_views == 120
+    assert result.total_unique == 120
+
+
+async def test_fetch_total_stats_uses_inclusive_bare_end_date(session: AsyncSession) -> None:
+    """Bare end dates should be translated to GoatCounter's exclusive next-day bound."""
+    with patch(
+        "backend.services.analytics_service._stats_request",
+        new_callable=AsyncMock,
+        return_value={"total": 120},
+    ) as mock_stats:
+        await fetch_total_stats(session, start="2026-03-26", end="2026-04-02")
+
+    mock_stats.assert_awaited_once_with(
+        "/api/v0/stats/total",
+        {"start": "2026-03-26", "end": "2026-04-03"},
+    )
 
 
 async def test_fetch_total_stats_returns_none_when_unavailable_legacy(
@@ -113,6 +145,42 @@ async def test_fetch_path_hits_returns_correct_data(session: AsyncSession) -> No
     assert result.paths[1].path_id == 2
     assert result.paths[1].path == "/post/world"
     assert result.paths[1].views == 17
+
+
+async def test_fetch_path_hits_accepts_path_id_and_missing_unique(session: AsyncSession) -> None:
+    """Current GoatCounter builds use path_id and may omit count_unique."""
+    fake_response = {
+        "hits": [
+            {"path_id": 7, "path": "/post/hello", "count": 42},
+        ]
+    }
+
+    with patch(
+        "backend.services.analytics_service._stats_request",
+        new_callable=AsyncMock,
+        return_value=fake_response,
+    ):
+        result = await fetch_path_hits(session)
+
+    assert len(result.paths) == 1
+    assert result.paths[0].path_id == 7
+    assert result.paths[0].views == 42
+    assert result.paths[0].unique == 42
+
+
+async def test_fetch_path_hits_uses_inclusive_bare_end_date(session: AsyncSession) -> None:
+    """Bare end dates should include the selected calendar day for path hit queries."""
+    with patch(
+        "backend.services.analytics_service._stats_request",
+        new_callable=AsyncMock,
+        return_value={"hits": []},
+    ) as mock_stats:
+        await fetch_path_hits(session, start="2026-03-26", end="2026-04-02")
+
+    mock_stats.assert_awaited_once_with(
+        "/api/v0/stats/hits",
+        {"start": "2026-03-26", "end": "2026-04-03"},
+    )
 
 
 async def test_fetch_path_hits_skips_entries_with_missing_id(session: AsyncSession) -> None:
@@ -712,6 +780,31 @@ def test_total_stats_response_from_goatcounter_defaults_on_missing_keys() -> Non
     assert result.total_unique == 0
 
 
+def test_total_stats_response_from_goatcounter_falls_back_to_total() -> None:
+    """Missing total_unique falls back to total for newer GoatCounter payloads."""
+    result = TotalStatsResponse.from_goatcounter({"total": 120})
+    assert result.total_views == 120
+    assert result.total_unique == 120
+
+
+def test_normalize_goatcounter_end_date_moves_bare_date_to_next_day() -> None:
+    """GoatCounter treats bare end dates as exclusive; move them forward one day."""
+    assert _normalize_goatcounter_end_date("2026-04-02") == "2026-04-03"
+
+
+def test_normalize_goatcounter_end_date_preserves_datetime() -> None:
+    """Explicit datetimes should be forwarded unchanged."""
+    assert _normalize_goatcounter_end_date("2026-04-02T23:59:59Z") == "2026-04-02T23:59:59Z"
+
+
+def test_build_goatcounter_date_params_normalizes_end_only() -> None:
+    """Date params should keep start unchanged and normalize a bare end date."""
+    assert _build_goatcounter_date_params("2026-03-26", "2026-04-02") == {
+        "start": "2026-03-26",
+        "end": "2026-04-03",
+    }
+
+
 def test_total_stats_response_from_goatcounter_logs_debug_on_missing_keys(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
@@ -732,6 +825,16 @@ def test_path_hit_from_goatcounter_maps_fields() -> None:
     assert result.path == "/post/test"
     assert result.views == 42
     assert result.unique == 30
+
+
+def test_path_hit_from_goatcounter_accepts_path_id_and_missing_unique() -> None:
+    """Missing count_unique falls back to count; path_id aliases id."""
+    entry = {"path_id": 3, "path": "/post/test", "count": 42}
+    result = PathHit.from_goatcounter(entry)
+    assert result.path_id == 3
+    assert result.path == "/post/test"
+    assert result.views == 42
+    assert result.unique == 42
 
 
 def test_path_hit_from_goatcounter_defaults_on_missing_keys() -> None:

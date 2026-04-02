@@ -892,6 +892,38 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 return None
         return base_html
 
+    async def _fire_frontend_route_hit(request: Request, path: str) -> None:
+        """Record a hit for a server-rendered public route using auth-aware skip logic."""
+        from backend.api.deps import get_current_admin, security
+        from backend.services.analytics_service import fire_background_hit
+
+        session_factory = request.app.state.session_factory
+        try:
+            async with session_factory() as session:
+                credentials = await security(request)
+                user = await get_current_admin(request, credentials=credentials, session=session)
+        except SQLAlchemyError:
+            logger.warning(
+                "Skipping frontend analytics hit for %r because auth lookup failed",
+                path,
+                exc_info=True,
+            )
+            return
+
+        fire_background_hit(
+            request=request,
+            session_factory=session_factory,
+            path=path,
+            user=user,
+        )
+
+    async def _serve_spa_shell(request: Request) -> HTMLResponse:
+        """Serve the frontend SPA shell for client-only routes."""
+        base_html = await _get_base_html(request)
+        if base_html is None:
+            return HTMLResponse(_NOT_FOUND_HTML, status_code=404)
+        return HTMLResponse(base_html)
+
     # Post route — serves SEO-enriched SPA HTML for post views, and redirects
     # asset requests to the content API.  Must be registered before the
     # StaticFiles catch-all.
@@ -951,6 +983,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         if post is None or post.is_draft:
             return HTMLResponse(base_html)
+
+        await _fire_frontend_route_hit(request, f"/post/{slug}")
 
         description = ""
         if post.rendered_excerpt:
@@ -1023,7 +1057,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         from_date: str | None = Query(None, alias="from"),
         to_date: str | None = Query(None, alias="to"),
     ) -> HTMLResponse:
-        from backend.api.deps import get_current_admin, mark_auth_sensitive_read
+        from backend.api.deps import get_current_admin, mark_auth_sensitive_read, security
         from backend.services.post_service import MAX_SAFE_PAGE, list_posts
         from backend.services.seo_service import (
             SeoContext,
@@ -1051,7 +1085,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         try:
             session_factory = request.app.state.session_factory
             async with session_factory() as session:
-                user = await get_current_admin(request, session=session)
+                credentials = await security(request)
+                user = await get_current_admin(request, credentials=credentials, session=session)
                 is_authenticated = user is not None
                 try:
                     post_list = await list_posts(
@@ -1142,6 +1177,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if page is None:
             return HTMLResponse(base_html)
 
+        await _fire_frontend_route_hit(request, f"/page/{page_id}")
+
         description = strip_html_tags(page.rendered_html)[:200] if page.rendered_html else site_desc
         canonical = f"{base_url}/page/{page_id}"
 
@@ -1192,13 +1229,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/labels/new", include_in_schema=False, response_model=None)
     async def labels_new_route(request: Request) -> HTMLResponse:
-        base_html = await _get_base_html(request)
-        return HTMLResponse(base_html or _NOT_FOUND_HTML)
+        return await _serve_spa_shell(request)
 
     @app.get("/labels/{label_id}/settings", include_in_schema=False, response_model=None)
     async def label_settings_route(label_id: str, request: Request) -> HTMLResponse:
-        base_html = await _get_base_html(request)
-        return HTMLResponse(base_html or _NOT_FOUND_HTML)
+        return await _serve_spa_shell(request)
 
     @app.get("/labels/{label_id}", include_in_schema=False, response_model=None)
     async def label_detail_route(label_id: str, request: Request) -> HTMLResponse:
@@ -1354,6 +1389,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
 
         return HTMLResponse(render_seo_html(base_html, ctx))
+
+    @app.get("/login", include_in_schema=False, response_model=None)
+    async def login_route(request: Request) -> HTMLResponse:
+        return await _serve_spa_shell(request)
+
+    @app.get("/admin", include_in_schema=False, response_model=None)
+    async def admin_route(request: Request) -> HTMLResponse:
+        return await _serve_spa_shell(request)
+
+    @app.get("/editor", include_in_schema=False, response_model=None)
+    async def editor_index_route(request: Request) -> HTMLResponse:
+        return await _serve_spa_shell(request)
+
+    @app.get("/editor/{path:path}", include_in_schema=False, response_model=None)
+    async def editor_route(path: str, request: Request) -> HTMLResponse:
+        if ".." in path.split("/"):
+            logger.warning("Path traversal attempt in editor route: %s", path)
+            return HTMLResponse(_NOT_FOUND_HTML, status_code=404)
+        return await _serve_spa_shell(request)
 
     @app.get("/sitemap.xml", include_in_schema=False, response_model=None)
     async def sitemap_route(request: Request) -> Response:

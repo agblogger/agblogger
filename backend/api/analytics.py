@@ -32,6 +32,7 @@ from backend.services.analytics_service import (
     get_analytics_settings,
     update_analytics_settings,
 )
+from backend.utils.datetime import parse_datetime
 from backend.utils.slug import file_path_to_slug, is_directory_post_path, resolve_slug_candidates
 
 logger = logging.getLogger(__name__)
@@ -42,6 +43,27 @@ public_router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 # Restrict public file_path to safe characters and bounded length to prevent
 # path traversal, injection, and abuse of the GoatCounter filter API.
 _SAFE_PATH_PATTERN = re.compile(r"^[a-zA-Z0-9/_.-]{1,200}$")
+_ANALYTICS_DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_ANALYTICS_DATETIME_PATTERN = re.compile(
+    r"^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}"
+    r"(?::\d{2}(?:\.\d{1,6})?)?"
+    r"(?:Z|[+-]\d{2}:\d{2}|[+-]\d{2})?$"
+)
+
+
+def _validate_analytics_range_param(value: str | None, name: str) -> str | None:
+    """Accept a date or datetime string and reject unparseable range parameters."""
+    if value is None:
+        return None
+    if not (
+        _ANALYTICS_DATE_PATTERN.fullmatch(value) or _ANALYTICS_DATETIME_PATTERN.fullmatch(value)
+    ):
+        raise HTTPException(status_code=422, detail=f"Invalid {name} parameter")
+    try:
+        parse_datetime(value)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=f"Invalid {name} parameter") from exc
+    return value
 
 
 async def _resolve_public_post_slug(session: AsyncSession, file_path: str) -> str | None:
@@ -111,10 +133,12 @@ async def update_settings(
 async def get_total_stats(
     session: Annotated[AsyncSession, Depends(get_session)],
     _user: Annotated[AdminUser, Depends(require_admin)],
-    start: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
-    end: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    start: str | None = Query(default=None),
+    end: str | None = Query(default=None),
 ) -> TotalStatsResponse:
     """Get total aggregated stats from GoatCounter."""
+    start = _validate_analytics_range_param(start, "start")
+    end = _validate_analytics_range_param(end, "end")
     result = await fetch_total_stats(session, start, end)
     if result is None:
         raise HTTPException(status_code=503, detail="Analytics service unavailable")
@@ -125,10 +149,12 @@ async def get_total_stats(
 async def get_path_hits(
     session: Annotated[AsyncSession, Depends(get_session)],
     _user: Annotated[AdminUser, Depends(require_admin)],
-    start: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
-    end: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    start: str | None = Query(default=None),
+    end: str | None = Query(default=None),
 ) -> PathHitsResponse:
     """Get per-path hit counts from GoatCounter."""
+    start = _validate_analytics_range_param(start, "start")
+    end = _validate_analytics_range_param(end, "end")
     result = await fetch_path_hits(session, start, end)
     if result is None:
         raise HTTPException(status_code=503, detail="Analytics service unavailable")
@@ -153,10 +179,12 @@ async def get_breakdown(
     category: BreakdownCategory,
     session: Annotated[AsyncSession, Depends(get_session)],
     _user: Annotated[AdminUser, Depends(require_admin)],
-    start: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
-    end: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    start: str | None = Query(default=None),
+    end: str | None = Query(default=None),
 ) -> BreakdownResponse:
     """Get category breakdown stats (browsers, systems, locations, etc.) from GoatCounter."""
+    start = _validate_analytics_range_param(start, "start")
+    end = _validate_analytics_range_param(end, "end")
     result = await fetch_breakdown(session, category, start, end)
     if result is None:
         raise HTTPException(status_code=503, detail="Analytics service unavailable")

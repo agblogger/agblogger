@@ -1,6 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { SWRTestWrapper } from '@/test/swrWrapper'
+import { localDateToUtcEnd, localDateToUtcStart } from '@/utils/date'
 
 const mockFetchAnalyticsSettings = vi.fn()
 const mockFetchTotalStats = vi.fn()
@@ -241,7 +242,7 @@ describe('useAnalyticsDashboard', () => {
     expect(mockFetchBreakdown).toHaveBeenCalledWith('systems', expect.any(String), expect.any(String))
   })
 
-  it('formats dashboard ranges using the local calendar date instead of UTC slices', async () => {
+  it('formats dashboard ranges as UTC timestamps for the selected local calendar dates', async () => {
     const originalTz = nodeProcess.env['TZ']
     nodeProcess.env['TZ'] = 'Europe/Warsaw'
     vi.useFakeTimers()
@@ -265,10 +266,24 @@ describe('useAnalyticsDashboard', () => {
         await vi.runAllTimersAsync()
       })
 
-      expect(mockFetchTotalStats).toHaveBeenCalledWith('2026-03-19', '2026-03-26')
-      expect(mockFetchPathHits).toHaveBeenCalledWith('2026-03-19', '2026-03-26')
-      expect(mockFetchBreakdown).toHaveBeenCalledWith('browsers', '2026-03-19', '2026-03-26')
-      expect(mockFetchBreakdown).toHaveBeenCalledWith('systems', '2026-03-19', '2026-03-26')
+      expect(mockFetchTotalStats).toHaveBeenCalledWith(
+        localDateToUtcStart('2026-03-19'),
+        localDateToUtcEnd('2026-03-26'),
+      )
+      expect(mockFetchPathHits).toHaveBeenCalledWith(
+        localDateToUtcStart('2026-03-19'),
+        localDateToUtcEnd('2026-03-26'),
+      )
+      expect(mockFetchBreakdown).toHaveBeenCalledWith(
+        'browsers',
+        localDateToUtcStart('2026-03-19'),
+        localDateToUtcEnd('2026-03-26'),
+      )
+      expect(mockFetchBreakdown).toHaveBeenCalledWith(
+        'systems',
+        localDateToUtcStart('2026-03-19'),
+        localDateToUtcEnd('2026-03-26'),
+      )
     } finally {
       nodeProcess.env['TZ'] = originalTz
       vi.useRealTimers()

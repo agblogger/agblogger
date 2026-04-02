@@ -54,7 +54,7 @@ class TotalStatsResponse(BaseModel):
             )
         return cls(
             total_views=data.get("total", 0),
-            total_unique=data.get("total_unique", 0),
+            total_unique=data.get("total_unique", data.get("total", 0)),
         )
 
 
@@ -77,10 +77,10 @@ class PathHit(BaseModel):
                 list(entry.keys()),
             )
         return cls(
-            path_id=entry.get("id", 0),
+            path_id=entry.get("id", entry.get("path_id", 0)),
             path=entry.get("path", ""),
             views=entry.get("count", 0),
-            unique=entry.get("count_unique", 0),
+            unique=entry.get("count_unique", entry.get("count", 0)),
         )
 
 

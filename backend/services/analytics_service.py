@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import os
+from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
 import httpx
@@ -25,6 +26,7 @@ from backend.schemas.analytics import (
     ReferrerEntry,
     TotalStatsResponse,
 )
+from backend.utils.datetime import parse_datetime
 from backend.utils.goatcounter import normalize_goatcounter_site_host
 
 if TYPE_CHECKING:
@@ -94,6 +96,34 @@ def _goatcounter_headers(token: str) -> dict[str, str]:
         "Authorization": f"Bearer {token}",
         "Host": GOATCOUNTER_SITE_HOST,
     }
+
+
+def _normalize_goatcounter_end_date(end: str) -> str:
+    """Convert a bare YYYY-MM-DD end date to GoatCounter's exclusive upper bound."""
+    if "T" in end or " " in end.strip():
+        return end
+    try:
+        return (parse_datetime(end) + timedelta(days=1)).date().isoformat()
+    except ValueError:
+        logger.warning(
+            "Invalid analytics end date %r; passing through unchanged",
+            end,
+            exc_info=True,
+        )
+        return end
+
+
+def _build_goatcounter_date_params(
+    start: str | None,
+    end: str | None,
+) -> dict[str, Any]:
+    """Build GoatCounter date params, treating bare end dates as inclusive."""
+    params: dict[str, Any] = {}
+    if start is not None:
+        params["start"] = start
+    if end is not None:
+        params["end"] = _normalize_goatcounter_end_date(end)
+    return params
 
 
 def _get_http_client() -> httpx.AsyncClient:
@@ -381,12 +411,7 @@ async def fetch_total_stats(
     if not settings.analytics_enabled:
         return None
 
-    params: dict[str, Any] = {}
-    if start is not None:
-        params["start"] = start
-    if end is not None:
-        params["end"] = end
-
+    params = _build_goatcounter_date_params(start, end)
     data = await _stats_request("/api/v0/stats/total", params or None)
     if data is None:
         return None
@@ -403,18 +428,13 @@ async def fetch_path_hits(
     if not settings.analytics_enabled:
         return None
 
-    params: dict[str, Any] = {}
-    if start is not None:
-        params["start"] = start
-    if end is not None:
-        params["end"] = end
-
+    params = _build_goatcounter_date_params(start, end)
     data = await _stats_request("/api/v0/stats/hits", params or None)
     if data is None:
         return None
     paths: list[PathHit] = []
     for entry in data.get("hits", []):
-        path_id = entry.get("id")
+        path_id = entry.get("id", entry.get("path_id"))
         if not path_id or path_id < 1:
             continue
         path = entry.get("path", "")
@@ -454,12 +474,7 @@ async def fetch_breakdown(
     if not settings.analytics_enabled:
         return None
 
-    params: dict[str, Any] = {}
-    if start is not None:
-        params["start"] = start
-    if end is not None:
-        params["end"] = end
-
+    params = _build_goatcounter_date_params(start, end)
     data = await _stats_request(f"/api/v0/stats/{category}", params or None)
     if data is None:
         return None

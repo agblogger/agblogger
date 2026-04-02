@@ -515,7 +515,7 @@ class TestStatsServiceUnavailable:
 
 
 class TestDateParameterValidation:
-    """Tests for date parameter regex validation."""
+    """Tests for analytics range parameter validation."""
 
     @pytest.mark.asyncio
     async def test_total_stats_rejects_invalid_start_date(self, client: AsyncClient) -> None:
@@ -549,15 +549,14 @@ class TestDateParameterValidation:
         assert resp.status_code in {200, 503}
 
     @pytest.mark.asyncio
-    async def test_total_stats_accepts_out_of_range_date_format(self, client: AsyncClient) -> None:
-        """Regex only checks format, not calendar validity."""
+    async def test_total_stats_accepts_valid_datetime_format(self, client: AsyncClient) -> None:
         token = await _get_admin_token(client)
         resp = await client.get(
             "/api/admin/analytics/stats/total",
-            params={"start": "2024-13-45"},
+            params={"start": "2024-01-01T00:00:00.000Z", "end": "2024-01-31T23:59:59.999Z"},
             headers={"Authorization": f"Bearer {token}"},
         )
-        # Pattern matches — not 422
+        # 200 or 503 (GoatCounter not running), but not 422
         assert resp.status_code in {200, 503}
 
     @pytest.mark.asyncio
@@ -571,6 +570,16 @@ class TestDateParameterValidation:
         assert resp.status_code == 422
 
     @pytest.mark.asyncio
+    async def test_path_hits_accepts_valid_datetime(self, client: AsyncClient) -> None:
+        token = await _get_admin_token(client)
+        resp = await client.get(
+            "/api/admin/analytics/stats/hits",
+            params={"start": "2024-01-01T00:00:00.000Z"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code in {200, 503}
+
+    @pytest.mark.asyncio
     async def test_breakdown_rejects_invalid_date(self, client: AsyncClient) -> None:
         token = await _get_admin_token(client)
         resp = await client.get(
@@ -579,6 +588,16 @@ class TestDateParameterValidation:
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_breakdown_accepts_valid_datetime(self, client: AsyncClient) -> None:
+        token = await _get_admin_token(client)
+        resp = await client.get(
+            "/api/admin/analytics/stats/browsers",
+            params={"end": "2024-01-31T23:59:59.999Z"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code in {200, 503}
 
 
 class TestSchemaValidation:
