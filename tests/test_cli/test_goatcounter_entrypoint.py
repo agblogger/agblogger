@@ -11,9 +11,8 @@ def test_entrypoint_checks_existing_site_before_creating_one() -> None:
     entrypoint = Path("goatcounter/entrypoint.sh").read_text()
 
     assert "site_exists()" in entrypoint
-    assert "command -v sqlite3" in entrypoint
-    assert "SELECT 1 FROM sites WHERE cname='$GOATCOUNTER_VHOST' LIMIT 1;" in entrypoint
-    assert "SELECT 1 FROM site WHERE cname='$GOATCOUNTER_VHOST' LIMIT 1;" in entrypoint
+    assert "goatcounter db show site \\" in entrypoint
+    assert '-find "$GOATCOUNTER_VHOST"' in entrypoint
     assert entrypoint.index("site_exists; then") < entrypoint.index("goatcounter db create site")
 
 
@@ -27,6 +26,15 @@ def test_entrypoint_uses_exec_for_final_command() -> None:
     """The final goatcounter serve must use exec to avoid zombie parent process."""
     entrypoint = Path("goatcounter/entrypoint.sh").read_text()
     assert "exec goatcounter serve" in entrypoint
+
+
+def test_entrypoint_clears_custom_host_env_before_serving() -> None:
+    """The final GoatCounter serve process must not inherit AgBlogger-only env vars."""
+    entrypoint = Path("goatcounter/entrypoint.sh").read_text()
+    assert "unset GOATCOUNTER_SITE_HOST" in entrypoint
+    unset_index = entrypoint.index("unset GOATCOUNTER_SITE_HOST")
+    serve_index = entrypoint.index("exec goatcounter serve")
+    assert unset_index < serve_index
 
 
 def test_entrypoint_site_creation_does_not_silently_ignore_errors() -> None:
@@ -52,8 +60,20 @@ def test_entrypoint_perm_flag_has_bitmask_comment() -> None:
     """The API token must request the explicit GoatCounter permissions it needs."""
     entrypoint = Path("goatcounter/entrypoint.sh").read_text()
     assert "-perm count,site_read" in entrypoint
+    assert '-user "$USER_ID"' in entrypoint
     assert "-site-id 1" not in entrypoint
-    assert "-user admin@example.com" in entrypoint
+
+
+def test_entrypoint_looks_up_user_id_before_creating_token() -> None:
+    """Token creation should use the resolved user id and an explicit token name."""
+    entrypoint = Path("goatcounter/entrypoint.sh").read_text()
+
+    assert "goatcounter db show user \\" in entrypoint
+    assert '-find "admin@example.com"' in entrypoint
+    assert '"user_id"' in entrypoint
+    assert 'GOATCOUNTER_TOKEN_NAME="agblogger"' in entrypoint
+    assert '-name "$GOATCOUNTER_TOKEN_NAME"' in entrypoint
+    assert "-user admin@example.com" not in entrypoint
 
 
 def test_entrypoint_uses_configured_site_host_with_safe_normalization() -> None:

@@ -9,26 +9,55 @@ GOATCOUNTER_SITE_HOST_RAW="${GOATCOUNTER_SITE_HOST_RAW#https://}"
 GOATCOUNTER_SITE_HOST_RAW="${GOATCOUNTER_SITE_HOST_RAW%%/*}"
 GOATCOUNTER_SITE_HOST_RAW="${GOATCOUNTER_SITE_HOST_RAW%%:*}"
 GOATCOUNTER_VHOST="${GOATCOUNTER_SITE_HOST_RAW:-stats.internal}"
+GOATCOUNTER_TOKEN_NAME="agblogger"
 
 mkdir -p /data/goatcounter
 mkdir -p /data/goatcounter-token
 
 site_exists() {
-    if ! command -v sqlite3 >/dev/null 2>&1 || [ ! -s "$GOATCOUNTER_DB" ]; then
+    if [ ! -s "$GOATCOUNTER_DB" ]; then
         return 1
     fi
 
-    sqlite3 "$GOATCOUNTER_DB" \
-        "SELECT 1 FROM sites WHERE cname='$GOATCOUNTER_VHOST' LIMIT 1;" >/dev/null 2>&1 ||
-        sqlite3 "$GOATCOUNTER_DB" \
-            "SELECT 1 FROM site WHERE cname='$GOATCOUNTER_VHOST' LIMIT 1;" >/dev/null 2>&1
+    goatcounter db show site \
+        -db "sqlite+$GOATCOUNTER_DB" \
+        -find "$GOATCOUNTER_VHOST" >/dev/null 2>&1
+}
+
+resolve_user_id() {
+    goatcounter db show user \
+        -db "sqlite+$GOATCOUNTER_DB" \
+        -find "admin@example.com" \
+        -format json 2>/dev/null |
+        sed -n 's/.*"user_id":[[:space:]]*\([0-9][0-9]*\).*/\1/p' |
+        head -n 1
+}
+
+resolve_api_token() {
+    USER_ID="$1"
+
+    goatcounter db query \
+        -db "sqlite+$GOATCOUNTER_DB" \
+        -format csv \
+        "select token from api_tokens where user_id = $USER_ID and name = '$GOATCOUNTER_TOKEN_NAME' order by api_token_id desc limit 1" \
+        2>/dev/null |
+        sed -n '2{s/\r$//;p;}'
 }
 
 create_api_token() {
-    TOKEN=$(goatcounter db create apitoken \
+    USER_ID=$(resolve_user_id)
+    if [ -z "$USER_ID" ]; then
+        echo "ERROR: Failed to resolve GoatCounter admin user id" >&2
+        exit 1
+    fi
+
+    goatcounter db create apitoken \
         -db "sqlite+$GOATCOUNTER_DB" \
-        -user admin@example.com \
-        -perm count,site_read)
+        -user "$USER_ID" \
+        -name "$GOATCOUNTER_TOKEN_NAME" \
+        -perm count,site_read >/dev/null
+
+    TOKEN=$(resolve_api_token "$USER_ID")
 
     if [ -z "$TOKEN" ]; then
         echo "ERROR: Failed to create GoatCounter API token" >&2
@@ -69,6 +98,7 @@ if [ ! -f "$TOKEN_FILE" ] || [ ! -s "$GOATCOUNTER_DB" ]; then
 fi
 
 echo "Starting GoatCounter server..."
+unset GOATCOUNTER_SITE_HOST
 exec goatcounter serve \
     -db "sqlite+$GOATCOUNTER_DB" \
     -listen ":8080" \

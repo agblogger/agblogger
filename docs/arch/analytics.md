@@ -14,9 +14,11 @@ The feature is built around a sidecar model:
 - the backend service records hits, proxies stats, and manages persisted settings
 - the frontend surfaces stats in an admin dashboard tab and optional public view counts on posts
 
-The backend communicates with GoatCounter through its internal HTTP API using an API token scoped to hit recording and stats reads. Requests connect over the internal Docker service name, but they present the GoatCounter site host expected by the sidecar so the analytics site resolves consistently. The deployment helper and backend normalize that configured host to the same bare hostname before provisioning sites or sending `Host` headers. The GoatCounter database stays private to the sidecar. The token and database live on separate named volumes so the sidecar can recover when either is independently replaced.
-
 Two admin-controlled toggles -- analytics-enabled and show-views-on-posts -- are stored as a singleton row in a durable Alembic-managed table. The stored values remain durable across redeploys, but the backend clamps the effective analytics-enabled state off whenever the deployment omits the GoatCounter sidecar.
+
+## Sidecar deployment and provisioning
+
+The backend communicates with GoatCounter through its internal HTTP API using an API token scoped to hit recording and stats reads. Requests connect over the internal Docker service name, but they present the GoatCounter site host expected by the sidecar so the analytics site resolves consistently. The deployment helper and backend normalize that configured host to the same bare hostname before provisioning sites or sending `Host` headers. The sidecar provisions idempotently through GoatCounter's own CLI lookups, so it can recreate the shared token when the token volume is replaced while the GoatCounter database volume still contains the existing site and user. The GoatCounter database stays private to the sidecar. The token and database live on separate named volumes so the sidecar can recover when either is independently replaced.
 
 ## Data Flow
 
