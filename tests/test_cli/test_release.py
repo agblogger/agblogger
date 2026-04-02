@@ -222,6 +222,18 @@ def test_justfile_exposes_release_recipe() -> None:
     assert 'release level: stamp-build\n    uv run agblogger-release "{{ level }}"' in content
 
 
+def test_build_cli_recipe_uses_non_conflicting_pyinstaller_workspace() -> None:
+    justfile = Path(__file__).resolve().parents[2] / "justfile"
+    content = justfile.read_text(encoding="utf-8")
+
+    assert "--workpath .pyinstaller/cli/work" in content
+    assert "--specpath .pyinstaller/cli/spec" in content
+    assert '--add-data "{{ justfile_directory() }}/VERSION:."' in content
+    assert '--add-data "{{ justfile_directory() }}/BUILD:."' in content
+    assert "--workpath build/cli" not in content
+    assert "--specpath build/cli" not in content
+
+
 # ── T1: Release error path tests ────────────────────────────────────
 
 

@@ -20,6 +20,7 @@ clean:
         .coverage \
         .hypothesis \
         .mypy_cache \
+        .pyinstaller \
         .playwright-mcp \
         .pytest_cache \
         .ruff_cache \
@@ -454,8 +455,8 @@ build-cli: stamp-build
         --name agblogger \
         --strip \
         --distpath dist/cli \
-        --workpath build/cli \
-        --specpath build/cli \
+        --workpath .pyinstaller/cli/work \
+        --specpath .pyinstaller/cli/spec \
         --clean \
         --noconfirm \
         --exclude-module tkinter \
@@ -464,8 +465,8 @@ build-cli: stamp-build
         --exclude-module pydoc \
         --exclude-module multiprocessing \
         --exclude-module sqlite3 \
-        --add-data "VERSION:." \
-        --add-data "BUILD:." \
+        --add-data "{{ justfile_directory() }}/VERSION:." \
+        --add-data "{{ justfile_directory() }}/BUILD:." \
         cli/sync_client.py
 
 # Install the CLI client to prefix/bin (default: ~/.local/bin)

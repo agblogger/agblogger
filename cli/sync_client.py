@@ -580,6 +580,10 @@ def main() -> None:
     args = parser.parse_args()
     content_dir = Path(args.dir).resolve()
 
+    if args.command is None:
+        parser.print_help()
+        return
+
     if args.command == "init":
         if not args.server:
             print("Error: --server required for init")
@@ -642,8 +646,6 @@ def main() -> None:
                     print("Sync cancelled.")
                     sys.exit(0)
                 client.sync(plan)
-            else:
-                parser.print_help()
     except httpx.HTTPStatusError as exc:
         print(f"Error: Server returned HTTP {exc.response.status_code}")
         sys.exit(1)

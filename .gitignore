@@ -20,6 +20,7 @@ __pycache__/
 dist/
 build/
 .venv/
+.pyinstaller/
 .mypy_cache/
 .pytest_cache/
 .hypothesis/

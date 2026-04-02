@@ -462,6 +462,34 @@ class TestMainHttpErrorHandling:
         assert "500" in captured.out
 
 
+# ── Bare invocation help path ───────────────────────────────────────
+
+
+class TestMainHelpBehavior:
+    def test_no_args_prints_help_without_loading_config_or_authenticating(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        monkeypatch.setattr("sys.argv", ["agblogger"])
+
+        with (
+            patch("cli.sync_client.load_config", side_effect=AssertionError("load_config called")),
+            patch(
+                "cli.sync_client.login_interactive",
+                side_effect=AssertionError("login_interactive called"),
+            ),
+            patch("cli.sync_client.SyncClient", side_effect=AssertionError("SyncClient called")),
+        ):
+            from cli.sync_client import main
+
+            main()
+
+        captured = capsys.readouterr()
+        assert "usage: agblogger" in captured.out
+        assert "{init,status,sync}" in captured.out
+
+
 # ── PAT env var is ignored entirely ──────────────────────────────────
 
 
