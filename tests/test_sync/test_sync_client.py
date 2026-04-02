@@ -420,6 +420,49 @@ class TestSyncClientSync:
         ]
         assert len(commit_calls) == 1
 
+    def test_sync_downloads_server_copy_for_local_delete_remote_modify_conflict(
+        self, tmp_path: Path, monkeypatch: Any
+    ) -> None:
+        content_dir = tmp_path / "content"
+        content_dir.mkdir()
+
+        commit_resp = _DummyResponse(
+            json_data={
+                "status": "ok",
+                "commit_hash": "abc123",
+                "conflicts": [],
+                "to_download": [],
+                "warnings": [],
+            }
+        )
+        download_resp = _DummyResponse(content=b"# Server copy\n")
+        client, _http_client = _build_sync_client(
+            content_dir,
+            responses={
+                "/api/sync/commit": commit_resp,
+                "/api/sync/download/posts/conflict/index.md": download_resp,
+            },
+        )
+        client.status = lambda: {
+            "to_upload": [],
+            "to_download": [],
+            "to_delete_remote": [],
+            "to_delete_local": [],
+            "conflicts": [
+                {
+                    "file_path": "posts/conflict/index.md",
+                    "action": "merge",
+                    "change_type": "delete_modify_conflict",
+                }
+            ],
+        }
+
+        monkeypatch.setattr(sync_client, "save_manifest", lambda *_: None)
+
+        client.sync()
+
+        assert (content_dir / "posts" / "conflict" / "index.md").read_text() == "# Server copy\n"
+
 
 class TestSyncClientErrorHandling:
     def test_download_http_error_does_not_crash_sync(
@@ -877,6 +920,53 @@ class TestSyncBackupIntegration:
         # Both conflicts should be reported
         assert "posts/a/index.md" in captured.out
         assert "posts/b/index.md" in captured.out
+
+    def test_sync_conflict_output_translates_internal_markers(
+        self, tmp_path: Path, monkeypatch: Any, capsys: Any
+    ) -> None:
+        content_dir = tmp_path / "content"
+        content_dir.mkdir()
+
+        commit_resp = _DummyResponse(
+            json_data={
+                "status": "ok",
+                "commit_hash": "c789",
+                "conflicts": [
+                    {
+                        "file_path": "labels.toml",
+                        "body_conflicted": False,
+                        "field_conflicts": ["_no_base"],
+                    }
+                ],
+                "to_download": [],
+                "warnings": [],
+            }
+        )
+        client, _http = _build_sync_client(
+            content_dir,
+            responses={"/api/sync/commit": commit_resp},
+        )
+        client.status = lambda: {
+            "to_upload": [],
+            "to_download": [],
+            "to_delete_remote": [],
+            "to_delete_local": [],
+            "conflicts": [
+                {
+                    "file_path": "labels.toml",
+                    "action": "merge",
+                    "change_type": "conflict",
+                }
+            ],
+        }
+
+        monkeypatch.setattr(sync_client, "save_manifest", lambda *_: None)
+
+        client.sync()
+
+        captured = capsys.readouterr()
+        assert "_no_base" not in captured.out
+        assert "no common base" in captured.out
 
 
 class TestRemovedMethods:

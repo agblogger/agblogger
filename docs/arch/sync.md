@@ -22,6 +22,8 @@ One sync run follows this sequence:
 
 The manifest represents the last agreed shared file state. The last shared commit gives the server a common merge base for conflict handling. When both client and server changed the same markdown post, the server attempts a structured merge. When a clean merge is not possible, the server keeps the server-side result, reports the conflict, and tells the client which files must be downloaded again.
 
+The client only scans the managed sync surface when building its local manifest, so unmanaged local files do not enter the protocol. Delete-vs-modify divergence also converges in one run: if the local side deleted a file that the server changed, the server copy is preserved and the CLI restores that server version locally during the same sync.
+
 This is a reconcile-and-commit protocol, not a blind mirror and not continuous replication.
 
 ## Conflict Handling

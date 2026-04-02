@@ -12,6 +12,7 @@ import pytest
 from cli.sync_client import (
     CONFIG_FILE,
     confirm_sync,
+    format_conflict_details,
     format_plan_summary,
     has_pending_changes,
     load_config,
@@ -109,7 +110,7 @@ class TestFormatPlanSummary:
 
     def test_conflict(self) -> None:
         result = format_plan_summary(_plan(conflicts=[{"file_path": "posts/c/index.md"}]))
-        assert "  ! posts/c/index.md (conflict)" in result
+        assert "  ! posts/c/index.md (reconcile on sync)" in result
 
     def test_empty_plan(self) -> None:
         assert format_plan_summary(_plan()) == ""
@@ -126,6 +127,28 @@ class TestFormatPlanSummary:
         )
         lines = result.strip().split("\n")
         assert len(lines) == 5
+
+
+class TestFormatConflictDetails:
+    def test_translates_internal_no_base_marker(self) -> None:
+        result = format_conflict_details(
+            {
+                "file_path": "labels.toml",
+                "body_conflicted": False,
+                "field_conflicts": ["_no_base"],
+            }
+        )
+        assert result == "no common base"
+
+    def test_translates_internal_parse_error_marker(self) -> None:
+        result = format_conflict_details(
+            {
+                "file_path": "labels.toml",
+                "body_conflicted": False,
+                "field_conflicts": ["_parse_error"],
+            }
+        )
+        assert result == "parse error"
 
 
 # ── Confirmation ─────────────────────────────────────────────────────
@@ -249,6 +272,60 @@ class TestSyncConfirmationIntegration:
         mock_client.sync.assert_not_called()
         captured = capsys.readouterr()
         assert "cancelled" in captured.out.lower()
+
+    def test_sync_prints_status_warnings(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        mock_client = self._setup(
+            tmp_path,
+            monkeypatch,
+            _plan(
+                to_upload=["a.md"],
+                warnings=["Git history unavailable; sync may not detect all changes correctly."],
+            ),
+        )
+        with (
+            patch("cli.sync_client.SyncClient", return_value=mock_client),
+            patch("cli.sync_client.login_interactive", return_value="token"),
+            patch("cli.sync_client.confirm_sync", return_value=True),
+        ):
+            from cli.sync_client import main
+
+            main()
+        captured = capsys.readouterr()
+        assert "Git history unavailable" in captured.out
+
+
+class TestStatusWarnings:
+    def test_status_command_prints_warnings(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        save_config(tmp_path, {"server": "https://example.com"})
+        monkeypatch.setattr("sys.argv", ["agblogger", "-d", str(tmp_path), "status"])
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.status.return_value = _plan(
+            warnings=["Git history unavailable; sync may not detect all changes correctly."]
+        )
+
+        with (
+            patch("cli.sync_client.SyncClient", return_value=mock_client),
+            patch("cli.sync_client.login_interactive", return_value="token"),
+        ):
+            from cli.sync_client import main
+
+            main()
+
+        captured = capsys.readouterr()
+        assert "Git history unavailable" in captured.out
 
 
 # ── Login error handling ─────────────────────────────────────────────

@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+from backend.sync_paths import is_sync_managed_path
 from cli.version import get_cli_version
 
 try:
@@ -56,6 +57,8 @@ def scan_local_files(content_dir: Path) -> dict[str, FileEntry]:
                 continue
             full = Path(root) / filename
             rel = str(full.relative_to(content_dir))
+            if not is_sync_managed_path(rel):
+                continue
             stat = full.stat()
             entries[rel] = FileEntry(
                 file_path=rel,
@@ -162,8 +165,34 @@ def format_plan_summary(plan: dict[str, Any]) -> str:
     for f in plan.get("to_delete_remote", []):
         lines.append(f"  - {f} (delete remote)")
     for c in plan.get("conflicts", []):
-        lines.append(f"  ! {c['file_path']} (conflict)")
+        lines.append(f"  ! {c['file_path']} (reconcile on sync)")
     return "\n".join(lines)
+
+
+def format_conflict_details(conflict: dict[str, Any]) -> str:
+    """Format sync conflict details for CLI output."""
+    details: list[str] = []
+    if conflict.get("body_conflicted"):
+        details.append("body")
+
+    field_conflicts = conflict.get("field_conflicts", [])
+    user_fields: list[str] = []
+    for field in field_conflicts:
+        if field == "_no_base":
+            details.append("no common base")
+        elif field == "_parse_error":
+            details.append("parse error")
+        else:
+            user_fields.append(str(field))
+    if user_fields:
+        details.append(f"fields: {', '.join(user_fields)}")
+    return ", ".join(details) or "unknown"
+
+
+def print_plan_warnings(plan: dict[str, Any]) -> None:
+    """Print any warnings returned with a sync plan."""
+    for warning in plan.get("warnings", []):
+        print(f"  Warning: {warning}")
 
 
 def confirm_sync(plan: dict[str, Any]) -> bool:
@@ -464,10 +493,12 @@ class SyncClient:
             return None
         return backup_dir
 
-    def sync(self, plan: dict[str, Any] | None = None) -> None:
+    def sync(self, plan: dict[str, Any] | None = None, *, emit_plan_warnings: bool = True) -> None:
         """Bidirectional sync with the server."""
         if plan is None:
             plan = self.status()
+        if emit_plan_warnings:
+            print_plan_warnings(plan)
         to_upload: list[str] = plan.get("to_upload", [])
         to_download_plan: list[str] = plan.get("to_download", [])
         to_delete_remote: list[str] = plan.get("to_delete_remote", [])
@@ -477,8 +508,19 @@ class SyncClient:
 
         # Collect all files to upload: plan's to_upload + conflict files
         file_paths_to_upload: list[str] = list(to_upload)
+        conflict_downloads: list[str] = []
         for conflict in conflicts:
             fp = conflict["file_path"]
+            local_path = _is_safe_local_path(self.content_dir, fp)
+            if (
+                conflict.get("change_type") == "delete_modify_conflict"
+                and local_path is not None
+                and not local_path.exists()
+            ):
+                if fp not in conflict_downloads:
+                    conflict_downloads.append(fp)
+                print(f"  Keep server version: {fp}")
+                continue
             if fp not in file_paths_to_upload:
                 file_paths_to_upload.append(fp)
 
@@ -526,6 +568,9 @@ class SyncClient:
 
         # Download files: from plan's to_download + from commit response's to_download
         all_downloads: list[str] = list(to_download_plan)
+        for fp in conflict_downloads:
+            if fp not in all_downloads:
+                all_downloads.append(fp)
         for fp in commit_data.get("to_download", []):
             if fp not in all_downloads:
                 all_downloads.append(fp)
@@ -551,13 +596,7 @@ class SyncClient:
         # Report conflicts
         for c in response_conflicts:
             fp = c["file_path"]
-            details: list[str] = []
-            if c.get("body_conflicted"):
-                details.append("body")
-            field_conflicts = c.get("field_conflicts", [])
-            if field_conflicts:
-                details.append(f"fields: {', '.join(field_conflicts)}")
-            print(f"  CONFLICT: {fp} ({', '.join(details) or 'unknown'})")
+            print(f"  CONFLICT: {fp} ({format_conflict_details(c)})")
         if backup_dir is not None:
             print(f"  Backups of your local versions saved to .backups/{backup_dir.name}/")
 
@@ -652,6 +691,7 @@ def main() -> None:
             )
             if args.command == "status":
                 plan = client.status()
+                print_plan_warnings(plan)
                 print("Sync Status:")
                 print(f"  To upload:        {len(plan.get('to_upload', []))}")
                 print(f"  To download:      {len(plan.get('to_download', []))}")
@@ -663,15 +703,20 @@ def main() -> None:
                     print(f"    + {f} (upload)")
                 for f in plan.get("to_download", []):
                     print(f"    < {f} (download)")
+                for f in plan.get("to_delete_local", []):
+                    print(f"    - {f} (delete local)")
+                for f in plan.get("to_delete_remote", []):
+                    print(f"    - {f} (delete remote)")
                 for c in plan.get("conflicts", []):
-                    print(f"    ! {c['file_path']} (conflict)")
+                    print(f"    ! {c['file_path']} (reconcile on sync)")
 
             elif args.command == "sync":
                 plan = client.status()
+                print_plan_warnings(plan)
                 if has_pending_changes(plan) and not args.yes and not confirm_sync(plan):
                     print("Sync cancelled.")
                     sys.exit(0)
-                client.sync(plan)
+                client.sync(plan, emit_plan_warnings=False)
     except httpx.HTTPStatusError as exc:
         print(f"Error: Server returned HTTP {exc.response.status_code}")
         sys.exit(1)

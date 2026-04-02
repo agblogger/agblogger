@@ -32,13 +32,13 @@ from backend.services.sync_service import (
     FileEntry,
     compute_sync_plan,
     get_server_manifest,
-    is_sync_managed_path,
     merge_labels_toml,
     merge_post_file,
     normalize_post_frontmatter,
     scan_content_files,
     update_server_manifest,
 )
+from backend.sync_paths import is_sync_managed_path
 from backend.utils.slug import is_directory_post_path
 
 if TYPE_CHECKING:

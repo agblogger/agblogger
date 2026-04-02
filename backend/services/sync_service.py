@@ -20,13 +20,12 @@ from sqlalchemy import delete, select
 
 from backend.filesystem.frontmatter import RECOGNIZED_FIELDS, extract_title, strip_leading_heading
 from backend.models.sync import SyncManifest
+from backend.sync_paths import is_sync_managed_path as is_sync_managed_path
 from backend.utils.datetime import format_datetime, format_iso, now_utc, parse_datetime
 from backend.utils.slug import is_directory_post_path
 
 logger = logging.getLogger(__name__)
 
-_SYNC_ALLOWED_PREFIXES = ("posts/", "assets/")
-_SYNC_ALLOWED_TOP_LEVEL_FILES = frozenset({"index.toml", "labels.toml"})
 _TOML_PARSE_ERRORS = (tomllib.TOMLDecodeError, ValueError)
 
 if TYPE_CHECKING:
@@ -78,36 +77,6 @@ class SyncPlan:
     to_delete_local: list[str] = field(default_factory=list)
     conflicts: list[SyncChange] = field(default_factory=list)
     no_change: list[str] = field(default_factory=list)
-
-
-def is_sync_managed_path(file_path: str) -> bool:
-    """Return True when the path belongs to the managed sync surface.
-
-    Sync is intentionally limited to canonical content files, not every file
-    stored under ``content/``. Hidden files such as OAuth key material are
-    excluded even though they may live under the same root.
-    """
-    normalized = file_path.strip().lstrip("/")
-    if not normalized:
-        return False
-
-    parts = [part for part in normalized.split("/") if part]
-    if not parts:
-        return False
-    if any(part in {".", ".."} or part.startswith(".") for part in parts):
-        return False
-
-    if normalized in _SYNC_ALLOWED_TOP_LEVEL_FILES:
-        return True
-    if len(parts) == 1 and normalized.endswith(".md"):
-        return True
-    if normalized.startswith("assets/"):
-        return True
-    if normalized.startswith("posts/"):
-        if normalized.endswith(".md"):
-            return is_directory_post_path(normalized)
-        return True
-    return False
 
 
 def hash_file(file_path: Path) -> str:
