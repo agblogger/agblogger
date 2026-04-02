@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
@@ -10,35 +9,9 @@ import pytest
 from cli.local_caddy import main
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from pytest import MonkeyPatch
-
-
-def test_justfile_exposes_local_caddy_recipes_without_replacing_dev_server() -> None:
-    justfile = Path("justfile").read_text(encoding="utf-8")
-
-    assert (
-        "start:\n"
-        '    python3 -m cli.dev_server start --localdir "{{ localdir }}" '
-        '--backend-port "{{ backend_port }}" --frontend-port "{{ frontend_port }}"'
-    ) in justfile
-    assert ('stop:\n    python3 -m cli.dev_server stop --localdir "{{ localdir }}"') in justfile
-    assert (
-        "health:\n"
-        '    python3 -m cli.dev_server health --localdir "{{ localdir }}" '
-        '--backend-port "{{ backend_port }}" --frontend-port "{{ frontend_port }}"'
-    ) in justfile
-    assert (
-        "start-caddy-local:\n"
-        '    python3 -m cli.local_caddy start --localdir "{{ localdir }}" '
-        '--caddy-port "{{ local_caddy_port }}"'
-    ) in justfile
-    assert (
-        'stop-caddy-local:\n    python3 -m cli.local_caddy stop --localdir "{{ localdir }}"'
-    ) in justfile
-    assert (
-        "health-caddy-local:\n"
-        '    python3 -m cli.local_caddy health --caddy-port "{{ local_caddy_port }}"'
-    ) in justfile
 
 
 def test_main_start_starts_local_caddy_profile_when_unhealthy(

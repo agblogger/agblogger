@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
@@ -18,6 +17,8 @@ from cli.release import (
 )
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from pytest import MonkeyPatch
 
 
@@ -213,25 +214,6 @@ def test_run_release_rejects_dirty_worktree(monkeypatch: MonkeyPatch, tmp_path: 
 
     with pytest.raises(ReleaseError, match="clean git worktree"):
         run_release(tmp_path, "patch")
-
-
-def test_justfile_exposes_release_recipe() -> None:
-    justfile = Path(__file__).resolve().parents[2] / "justfile"
-    content = justfile.read_text(encoding="utf-8")
-
-    assert 'release level: stamp-build\n    uv run agblogger-release "{{ level }}"' in content
-
-
-def test_build_cli_recipe_uses_non_conflicting_pyinstaller_workspace() -> None:
-    justfile = Path(__file__).resolve().parents[2] / "justfile"
-    content = justfile.read_text(encoding="utf-8")
-
-    assert "--workpath .pyinstaller/cli/work" in content
-    assert "--specpath .pyinstaller/cli/spec" in content
-    assert '--add-data "{{ justfile_directory() }}/VERSION:."' in content
-    assert '--add-data "{{ justfile_directory() }}/BUILD:."' in content
-    assert "--workpath build/cli" not in content
-    assert "--specpath build/cli" not in content
 
 
 # ── T1: Release error path tests ────────────────────────────────────

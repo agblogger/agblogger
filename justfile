@@ -72,6 +72,16 @@ test coverage="false": (test-backend coverage) (test-frontend coverage)
     @{{ if v == "" { "true" } else { "echo" } }}
     @echo "✓ Tests passed"
 
+# Run the full backend suite, including slow tests, with backend coverage gating.
+test-backend-all: (test-backend "true")
+    @{{ if v == "" { "true" } else { "echo" } }}
+    @echo "✓ All backend tests passed"
+
+# Run the full backend and frontend suites with coverage gating.
+test-all: test-backend-all (test-frontend "true")
+    @{{ if v == "" { "true" } else { "echo" } }}
+    @echo "✓ Full test suite passed"
+
 # Run the fast quality gate (static checks first, then tests excluding slow backend tests)
 check: check-static test
     @{{ if v == "" { "true" } else { "echo" } }}
@@ -108,7 +118,7 @@ check-snyk-deps:
     snyk test frontend
 
 # Run extra checks not covered by `check`, including full backend coverage
-check-extra: check-audit-full checkov check-gitleaks check-codeql check-semgrep (test-backend "true") check-snyk-deps
+check-extra: check-audit-full checkov check-gitleaks check-codeql check-semgrep test-backend-all check-snyk-deps
     @echo "\n✓ Extra checks passed"
 
 # Run Snyk code analysis

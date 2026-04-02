@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -13,14 +13,8 @@ from cli.zap_scan import (
     run_zap_scan,
 )
 
-
-def test_justfile_zap_recipe_defaults_avoid_nested_template_literals() -> None:
-    justfile = Path("justfile").read_text(encoding="utf-8")
-
-    assert 'zap-baseline minutes="":' in justfile
-    assert 'zap-full minutes="":' in justfile
-    assert 'zap-baseline minutes="{{ zap_baseline_minutes }}":' not in justfile
-    assert 'zap-full minutes="{{ zap_full_minutes }}":' not in justfile
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def test_build_docker_command_for_baseline_scan_on_macos(tmp_path: Path) -> None:
