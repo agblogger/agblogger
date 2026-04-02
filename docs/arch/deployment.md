@@ -33,6 +33,8 @@ The repository includes deployment tooling for local and remote deployments. The
 
 Remote deployment bundles include a `setup.sh` deployment orchestrator script. The script handles file placement, image loading/pulling, external Caddy bootstrapping, old-stack teardown on mode switches, container startup, orphan cleanup when services disappear from the generated compose files, and health checking. The script is idempotent — safe to run on both fresh installs and upgrades.
 
+When GoatCounter is enabled, `setup.sh` also waits for the sidecar health check and includes GoatCounter status/logs in rollout diagnostics so analytics failures are caught during deployment instead of surfacing later in the admin UI.
+
 The upgrade workflow is: regenerate the bundle locally, copy all files to the server, run `bash setup.sh`. Existing `.env.production` files are preserved during upgrades, but deployment-managed analytics defaults (`ANALYTICS_ENABLED_DEFAULT` and `GOATCOUNTER_SITE_HOST`) are refreshed from the generated template so GoatCounter enablement and site-host changes take effect without replacing the rest of the environment file.
 
 ## Caddy Reverse Proxy Modes
@@ -53,7 +55,7 @@ The project also supports a packaged local deployment profile for deployment-sty
 
 - `Dockerfile` defines the production image.
 - `docker-compose.yml` defines the checked-in reference topology for the bundled-Caddy stack; `cli/deploy_production.py` can generate alternate local compose files such as `docker-compose.caddy.yml` when the requested deployment omits GoatCounter.
-- `goatcounter/entrypoint.sh` is the GoatCounter container's idempotent provisioning and startup script.
+- `goatcounter/entrypoint.sh` is the GoatCounter container's idempotent provisioning and startup script, including token-permission repair for reused token volumes.
 - `cli/deploy_production.py` contains the deployment helper, configuration generation, and `setup.sh` script generation workflow.
 - `cli/release.py` contains release workflow tooling.
 - `tests/test_cli/test_deploy_production.py` covers the deployment helper behavior.

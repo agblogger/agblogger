@@ -1,10 +1,16 @@
 from pathlib import Path
 
 
-def test_entrypoint_reprovisions_when_db_volume_is_replaced_but_token_volume_remains() -> None:
+def test_entrypoint_always_ensures_the_current_site_token() -> None:
     entrypoint = Path("goatcounter/entrypoint.sh").read_text()
+    existing_site_message = (
+        'echo "Provisioning GoatCounter: existing site detected, ensuring API token..."'
+    )
 
-    assert 'if [ ! -f "$TOKEN_FILE" ] || [ ! -s "$GOATCOUNTER_DB" ]; then' in entrypoint
+    assert "if site_exists; then" in entrypoint
+    assert existing_site_message in entrypoint
+    assert 'echo "Provisioning GoatCounter: ensuring API token..."' in entrypoint
+    assert "ensure_api_token" in entrypoint
 
 
 def test_entrypoint_checks_existing_site_before_creating_one() -> None:
@@ -59,21 +65,35 @@ def test_entrypoint_site_creation_exits_on_unexpected_failure() -> None:
 def test_entrypoint_perm_flag_has_bitmask_comment() -> None:
     """The API token must request the explicit GoatCounter permissions it needs."""
     entrypoint = Path("goatcounter/entrypoint.sh").read_text()
-    assert "-perm count,site_read" in entrypoint
+    assert 'GOATCOUNTER_CREATE_PERMISSIONS="count,site_read"' in entrypoint
+    assert "GOATCOUNTER_REQUIRED_PERMISSIONS=74" in entrypoint
+    assert "update api_tokens set permissions = $GOATCOUNTER_REQUIRED_PERMISSIONS" in entrypoint
+    assert "where token = '$TOKEN'" in entrypoint
     assert '-user "$USER_ID"' in entrypoint
     assert "-site-id 1" not in entrypoint
 
 
-def test_entrypoint_looks_up_user_id_before_creating_token() -> None:
-    """Token creation should use the resolved user id and an explicit token name."""
+def test_entrypoint_makes_existing_token_readable_to_agblogger() -> None:
+    """Existing token volumes must be fixed on restart so AgBlogger can read the token."""
     entrypoint = Path("goatcounter/entrypoint.sh").read_text()
 
-    assert "goatcounter db show user \\" in entrypoint
-    assert '-find "admin@example.com"' in entrypoint
-    assert '"user_id"' in entrypoint
+    assert 'if [ -f "$TOKEN_FILE" ]; then' in entrypoint
+    assert 'chmod 644 "$TOKEN_FILE"' in entrypoint
+
+
+def test_entrypoint_looks_up_site_specific_user_id_before_creating_token() -> None:
+    """Token creation should resolve the admin user for the current GoatCounter site."""
+    entrypoint = Path("goatcounter/entrypoint.sh").read_text()
+
+    assert "resolve_site_id()" in entrypoint
+    assert "select site_id from sites" in entrypoint
+    assert "where cname = '$GOATCOUNTER_VHOST'" in entrypoint
+    assert "select user_id from users" in entrypoint
+    assert "email = 'admin@example.com' and site_id = $SITE_ID" in entrypoint
     assert 'GOATCOUNTER_TOKEN_NAME="agblogger"' in entrypoint
     assert '-name "$GOATCOUNTER_TOKEN_NAME"' in entrypoint
-    assert "-user admin@example.com" not in entrypoint
+    assert "site_id = $SITE_ID and user_id = $USER_ID" in entrypoint
+    assert "update_api_token_permissions" in entrypoint
 
 
 def test_entrypoint_uses_configured_site_host_with_safe_normalization() -> None:

@@ -75,7 +75,7 @@ services:
       - ./goatcounter/entrypoint.sh:/entrypoint.sh:ro
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080"] # nosemgrep: wget-unencrypted-url
+      test: ["CMD-SHELL", "wget -qO/dev/null --header=\"Host: ${GOATCOUNTER_SITE_HOST:-stats.internal}\" http://127.0.0.1:8080/user/new"] # nosemgrep: wget-unencrypted-url
       interval: 30s
       timeout: 5s
       start_period: 15s

@@ -6,12 +6,15 @@ import argparse
 import re
 from pathlib import Path
 from types import SimpleNamespace
-from typing import cast
+from typing import TYPE_CHECKING, cast
 from unittest.mock import patch
 
 import pytest
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 from cli.deploy_production import (
     AGBLOGGER_STATIC_IP,
@@ -5796,6 +5799,39 @@ def test_analytics_default_env_is_forwarded_to_compose() -> None:
     content = build_image_compose_content()
 
     assert "ANALYTICS_ENABLED_DEFAULT=${ANALYTICS_ENABLED_DEFAULT:-true}" in content
+
+
+@pytest.mark.parametrize(
+    "builder",
+    [
+        build_direct_compose_content,
+        build_image_compose_content,
+        build_image_direct_compose_content,
+        build_external_caddy_compose_content,
+        build_image_external_caddy_compose_content,
+    ],
+)
+def test_goatcounter_healthcheck_sends_configured_host_header(
+    builder: Callable[[], str],
+) -> None:
+    content = builder()
+    expected = (
+        'test: ["CMD-SHELL", "wget -qO/dev/null '
+        '--header=\\"Host: ${GOATCOUNTER_SITE_HOST:-stats.internal}\\" '
+        'http://127.0.0.1:8080/user/new"]'
+    )
+
+    assert expected in content
+    assert 'test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080"]' not in content
+
+
+def test_setup_script_waits_for_goatcounter_when_enabled() -> None:
+    script = build_setup_script_content(_make_config())
+
+    assert "ps -q goatcounter" in script
+    assert "goatcounter container not found yet" in script
+    assert "goatcounter: $GOATCOUNTER_HEALTH" in script
+    assert "Error: GoatCounter container failed" in script
 
 
 def test_all_compose_builders_share_only_the_goatcounter_token_with_agblogger() -> None:

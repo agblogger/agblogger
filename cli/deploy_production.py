@@ -767,6 +767,41 @@ def build_setup_script_content(config: DeployConfig) -> str:
     bundled_caddy_enabled = (
         config.caddy_config is not None and config.caddy_mode == CADDY_MODE_BUNDLED
     )
+    goatcounter_enabled = config.deploy_goatcounter
+    if goatcounter_enabled:
+        lines.extend(
+            [
+                f"    GOATCOUNTER_ID=$({compose_cmd} ps -q goatcounter 2>/dev/null)",
+                '    if [ -n "$GOATCOUNTER_ID" ]; then',
+                (
+                    "        GOATCOUNTER_STATE=$(docker inspect"
+                    ' --format "{{.State.Status}}"'
+                    ' "$GOATCOUNTER_ID" 2>/dev/null || echo "unknown")'
+                ),
+                (
+                    "        GOATCOUNTER_HEALTH=$(docker inspect"
+                    ' --format "{{.State.Health.Status}}"'
+                    ' "$GOATCOUNTER_ID" 2>/dev/null || echo "unknown")'
+                ),
+                (
+                    "        GOATCOUNTER_EXIT=$(docker inspect"
+                    ' --format "{{.State.ExitCode}}"'
+                    ' "$GOATCOUNTER_ID" 2>/dev/null || echo "unknown")'
+                ),
+                '        echo "--- GoatCounter container ---" >&2',
+                '        echo "  State:     $GOATCOUNTER_STATE" >&2',
+                '        echo "  Health:    $GOATCOUNTER_HEALTH" >&2',
+                '        echo "  Exit code: $GOATCOUNTER_EXIT" >&2',
+                '        echo "" >&2',
+                '        echo "--- GoatCounter logs (last 30 lines) ---" >&2',
+                (
+                    f"        {compose_cmd} logs --no-log-prefix --tail 30"
+                    " goatcounter >&2 2>/dev/null || true"
+                ),
+                '        echo "" >&2',
+                "    fi",
+            ]
+        )
     if bundled_caddy_enabled:
         lines.extend(
             [
@@ -852,6 +887,42 @@ def build_setup_script_content(config: DeployConfig) -> str:
             '    if [ "$HEALTH" = "healthy" ]; then',
         ]
     )
+    if goatcounter_enabled:
+        lines.extend(
+            [
+                f"        GOATCOUNTER_ID=$({compose_cmd} ps -q goatcounter 2>/dev/null)",
+                '        if [ -z "$GOATCOUNTER_ID" ]; then',
+                '            echo "  [${ELAPSED}s] goatcounter container not found yet"',
+                "            continue",
+                "        fi",
+                (
+                    "        GOATCOUNTER_STATE=$(docker inspect"
+                    ' --format "{{.State.Status}}"'
+                    ' "$GOATCOUNTER_ID" 2>/dev/null || echo "unknown")'
+                ),
+                (
+                    '        if [ "$GOATCOUNTER_STATE" = "exited" ]'
+                    ' || [ "$GOATCOUNTER_STATE" = "dead" ]; then'
+                ),
+                '            echo "" >&2',
+                (
+                    '            echo "Error: GoatCounter container failed'
+                    ' (state: $GOATCOUNTER_STATE)." >&2'
+                ),
+                "            show_diagnostics",
+                "            exit 1",
+                "        fi",
+                (
+                    "        GOATCOUNTER_HEALTH=$(docker inspect"
+                    ' --format "{{.State.Health.Status}}"'
+                    ' "$GOATCOUNTER_ID" 2>/dev/null || echo "unknown")'
+                ),
+                '        echo "  [${ELAPSED}s] goatcounter: $GOATCOUNTER_HEALTH"',
+                '        if [ "$GOATCOUNTER_HEALTH" != "healthy" ]; then',
+                "            continue",
+                "        fi",
+            ]
+        )
     if bundled_caddy_enabled:
         lines.extend(
             [
@@ -1001,7 +1072,9 @@ def _goatcounter_service_section(
         "    restart: unless-stopped\n"
         "    healthcheck:\n"
         # nosemgrep: wget-unencrypted-url (localhost health check)
-        '      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080"]\n'
+        '      test: ["CMD-SHELL", "wget -qO/dev/null '
+        '--header=\\"Host: ${GOATCOUNTER_SITE_HOST:-stats.internal}\\" '
+        'http://127.0.0.1:8080/user/new"]\n'
         "      interval: 30s\n"
         "      timeout: 5s\n"
         "      start_period: 15s\n"
