@@ -83,6 +83,8 @@ async def test_record_hit_sends_to_goatcounter(
     payload = call_kwargs.kwargs["json"]
     assert payload["hits"][0]["path"] == "/post/hello-world"
     assert payload["hits"][0]["ip"] == "1.2.3.4"
+    assert payload["hits"][0]["user_agent"] == "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"
+    assert "ua" not in payload["hits"][0]
     assert call_kwargs.kwargs["headers"]["Host"] == "stats.internal"
 
 

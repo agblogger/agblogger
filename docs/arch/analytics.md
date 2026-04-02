@@ -22,7 +22,7 @@ The backend communicates with GoatCounter through its internal HTTP API using an
 
 ## Data Flow
 
-When a reader fetches a post or page through the API, the backend fires an asynchronous hit to GoatCounter. Hits are fire-and-forget — network failures are logged but never affect the reader's response. Admin users are excluded (non-admin authenticated users are still tracked), and detected bots are filtered out. Background analytics work is bounded so public traffic spikes cannot create an unbounded number of in-flight tasks.
+When a reader fetches a post or page through the API, the backend fires an asynchronous hit to GoatCounter. Hits are fire-and-forget — network failures are logged but never affect the reader's response. The backend sends the canonical path together with the client IP and user agent so GoatCounter can apply its normal session-based deduplication without any browser-side JavaScript. Admin users are excluded (non-admin authenticated users are still tracked), and detected bots are filtered out. Background analytics work is bounded so public traffic spikes cannot create an unbounded number of in-flight tasks.
 
 Admin dashboard statistics — total views, per-path hits, referrers, browser and OS breakdowns — are proxied from GoatCounter's stats API through admin-only backend endpoints. Stats are only served while analytics is enabled. The frontend reads settings first and short-circuits stats fetches when analytics is disabled, returning zeroed-out data so the normal off state shows empty dashboards rather than loading spinners or GoatCounter outage errors.
 

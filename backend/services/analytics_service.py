@@ -272,7 +272,7 @@ async def record_hit(
                     {
                         "path": path,
                         "ip": client_ip,
-                        "ua": user_agent,
+                        "user_agent": user_agent,
                     }
                 ]
             },
