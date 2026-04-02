@@ -106,10 +106,9 @@ class ReferrerEntry(BaseModel):
                 missing,
                 list(entry.keys()),
             )
-        return cls(
-            referrer=entry.get("name", ""),
-            count=entry.get("count", 0),
-        )
+        name = entry.get("name", "")
+        referrer = name if isinstance(name, str) and name != "" else "Direct"
+        return cls(referrer=referrer, count=entry.get("count", 0))
 
 
 class PathReferrersResponse(BaseModel):
@@ -127,7 +126,12 @@ class BreakdownEntry(BaseModel):
     percent: float = Field(ge=0, le=100)
 
     @classmethod
-    def from_goatcounter(cls, entry: dict[str, Any]) -> BreakdownEntry:
+    def from_goatcounter(
+        cls,
+        entry: dict[str, Any],
+        *,
+        total_count: int | None = None,
+    ) -> BreakdownEntry:
         """Construct from a raw GoatCounter breakdown entry, logging DEBUG on missing keys."""
         missing = [k for k in ("name", "count", "percent") if k not in entry]
         if missing:
@@ -136,10 +140,14 @@ class BreakdownEntry(BaseModel):
                 missing,
                 list(entry.keys()),
             )
+        count = entry.get("count", 0)
+        percent = entry.get("percent")
+        if percent is None:
+            percent = (count / total_count * 100.0) if total_count and total_count > 0 else 0.0
         return cls(
             name=entry.get("name", ""),
-            count=entry.get("count", 0),
-            percent=entry.get("percent", 0.0),
+            count=count,
+            percent=percent,
         )
 
 

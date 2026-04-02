@@ -453,10 +453,10 @@ async def fetch_path_referrers(
     if not settings.analytics_enabled:
         return None
 
-    data = await _stats_request(f"/api/v0/stats/hits/{path_id}/referrers")
+    data = await _stats_request(f"/api/v0/stats/hits/{path_id}")
     if data is None:
         return None
-    referrers = [ReferrerEntry.from_goatcounter(entry) for entry in data.get("referrers", [])]
+    referrers = [ReferrerEntry.from_goatcounter(entry) for entry in data.get("refs", [])]
     return PathReferrersResponse(path_id=path_id, referrers=referrers)
 
 
@@ -478,7 +478,13 @@ async def fetch_breakdown(
     data = await _stats_request(f"/api/v0/stats/{category}", params or None)
     if data is None:
         return None
-    entries = [BreakdownEntry.from_goatcounter(entry) for entry in data.get("stats", [])]
+    stats = data.get("stats", [])
+    total_count = sum(
+        entry.get("count", 0)
+        for entry in stats
+        if isinstance(entry, dict) and isinstance(entry.get("count", 0), int)
+    )
+    entries = [BreakdownEntry.from_goatcounter(entry, total_count=total_count) for entry in stats]
     return BreakdownResponse(category=category, entries=entries)
 
 

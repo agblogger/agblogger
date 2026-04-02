@@ -279,9 +279,9 @@ async def test_fetch_path_hits_returns_none_when_analytics_disabled(
 async def test_fetch_path_referrers_returns_correct_data(session: AsyncSession) -> None:
     """fetch_path_referrers maps GoatCounter referrer data to PathReferrersResponse."""
     fake_response = {
-        "referrers": [
+        "refs": [
             {"name": "https://example.com", "count": 8},
-            {"name": "Direct", "count": 5},
+            {"name": "", "count": 5, "ref_scheme": "o"},
         ]
     }
 
@@ -324,7 +324,7 @@ async def test_fetch_path_referrers_returns_none_when_analytics_disabled(
     with patch(
         "backend.services.analytics_service._stats_request",
         new_callable=AsyncMock,
-        return_value={"referrers": []},
+        return_value={"refs": []},
     ) as mock_req:
         result = await fetch_path_referrers(session, path_id=7)
 
@@ -357,6 +357,28 @@ async def test_fetch_breakdown_returns_correct_data(session: AsyncSession) -> No
     assert result.entries[0].count == 60
     assert result.entries[0].percent == 60.0
     assert result.entries[1].name == "Firefox"
+
+
+async def test_fetch_breakdown_computes_percent_when_missing(session: AsyncSession) -> None:
+    """Current GoatCounter breakdown payloads omit percent; derive it from counts."""
+    fake_response = {
+        "stats": [
+            {"name": "Chrome", "count": 3},
+            {"name": "Safari", "count": 2},
+            {"name": "Firefox", "count": 1},
+        ]
+    }
+
+    with patch(
+        "backend.services.analytics_service._stats_request",
+        new_callable=AsyncMock,
+        return_value=fake_response,
+    ):
+        result = await fetch_breakdown(session, "browsers")
+
+    assert result.entries[0].percent == 50.0
+    assert result.entries[1].percent == pytest.approx(33.3333333333)
+    assert result.entries[2].percent == pytest.approx(16.6666666667)
 
 
 async def test_fetch_breakdown_returns_none_when_unavailable_legacy(
@@ -865,10 +887,18 @@ def test_referrer_entry_from_goatcounter_maps_fields() -> None:
     assert result.count == 8
 
 
+def test_referrer_entry_from_goatcounter_maps_blank_name_to_direct() -> None:
+    """Blank GoatCounter referrer names represent direct visits."""
+    entry = {"name": "", "count": 5, "ref_scheme": "o"}
+    result = ReferrerEntry.from_goatcounter(entry)
+    assert result.referrer == "Direct"
+    assert result.count == 5
+
+
 def test_referrer_entry_from_goatcounter_defaults_on_missing_keys() -> None:
-    """ReferrerEntry.from_goatcounter defaults to empty string and 0 when keys absent."""
+    """ReferrerEntry.from_goatcounter defaults to direct and 0 when keys absent."""
     result = ReferrerEntry.from_goatcounter({})
-    assert result.referrer == ""
+    assert result.referrer == "Direct"
     assert result.count == 0
 
 
@@ -889,6 +919,15 @@ def test_breakdown_entry_from_goatcounter_maps_fields() -> None:
     assert result.name == "Chrome"
     assert result.count == 60
     assert result.percent == 60.0
+
+
+def test_breakdown_entry_from_goatcounter_computes_percent_when_missing() -> None:
+    """Missing percent falls back to a share derived from total_count."""
+    entry = {"name": "Chrome", "count": 3}
+    result = BreakdownEntry.from_goatcounter(entry, total_count=6)
+    assert result.name == "Chrome"
+    assert result.count == 3
+    assert result.percent == 50.0
 
 
 def test_breakdown_entry_from_goatcounter_defaults_on_missing_keys() -> None:
