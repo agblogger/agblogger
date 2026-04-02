@@ -4995,10 +4995,25 @@ class TestSetupScriptFilePlacement:
             image_ref="ghcr.io/example/agblogger:v1.0",
         )
         script = build_setup_script_content(config)
-        assert "for key in ANALYTICS_ENABLED_DEFAULT GOATCOUNTER_SITE_HOST; do" in script
+        managed_keys_loop = (
+            "for key in ANALYTICS_ENABLED_DEFAULT GOATCOUNTER_SITE_HOST TRUSTED_PROXY_IPS; do"
+        )
+        assert managed_keys_loop in script
         assert 'if grep -q "^${key}=" .env.production.generated; then' in script
         assert 'sed -i "/^${key}=/d" .env.production' in script
         assert 'grep "^${key}=" .env.production.generated >> .env.production' in script
+
+    def test_env_production_upgrade_replaces_trusted_proxy_ips(self) -> None:
+        """Upgrades should refresh deployment-managed trusted proxy subnets from the template."""
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+        )
+        script = build_setup_script_content(config)
+        managed_keys_loop = (
+            "for key in ANALYTICS_ENABLED_DEFAULT GOATCOUNTER_SITE_HOST TRUSTED_PROXY_IPS; do"
+        )
+        assert managed_keys_loop in script
 
     def test_chmod_600_applied_in_both_branches(self) -> None:
         """chmod 600 must appear after mv (first install) AND after the upgrade message."""

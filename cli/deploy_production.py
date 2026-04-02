@@ -77,6 +77,7 @@ EXTERNAL_CADDY_SUBNET_INSPECT_FORMAT = "{{with index .IPAM.Config 0}}{{.Subnet}}
 REMOTE_ENV_MERGE_KEYS: Final[tuple[str, ...]] = (
     "ANALYTICS_ENABLED_DEFAULT",
     "GOATCOUNTER_SITE_HOST",
+    "TRUSTED_PROXY_IPS",
 )
 
 
@@ -1939,9 +1940,12 @@ def _build_remote_readme_content(config: DeployConfig, commands: dict[str, str])
         [
             "3. Run `bash setup.sh` again.",
             "",
-            "   `.env.production` is preserved automatically on upgrades — `setup.sh` never"
-            " overwrites it. `.env.production.generated` is available as a reference for"
-            " any new configuration variables introduced in the new version."
+            "   `.env.production` is preserved automatically on upgrades — `setup.sh` does"
+            " not replace the file wholesale. Deployment-managed keys such as trusted proxy"
+            " subnets and analytics defaults are refreshed from `.env.production.generated`"
+            " so Caddy mode switches and shared-network changes keep working without manual"
+            " env edits. `.env.production.generated` remains available as a reference for"
+            " any other new configuration variables introduced in the new version."
             " Caddy mode switches are handled automatically — `setup.sh` tears down the"
             " old stack before starting the new one.",
             "",
