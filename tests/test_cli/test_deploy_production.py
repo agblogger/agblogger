@@ -62,6 +62,7 @@ from cli.deploy_production import (
     _goatcounter_site_host,
     _is_valid_caddy_domain,
     _read_version,
+    _shared_caddy_runtime_dir,
     _unquote_env_value,
     _validate_config,
     backup_existing_configs,
@@ -187,11 +188,13 @@ def _stub_with_trivy(monkeypatch: pytest.MonkeyPatch) -> None:
 def _stub_docker_inspect_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     """Stub _is_container_running to return False."""
     monkeypatch.setattr("cli.deploy_production._is_container_running", lambda _name: False)
+    monkeypatch.setattr("cli.deploy_production._container_exists", lambda _name: False)
 
 
 def _stub_docker_inspect_running(monkeypatch: pytest.MonkeyPatch) -> None:
     """Stub _is_container_running to return True."""
     monkeypatch.setattr("cli.deploy_production._is_container_running", lambda _name: True)
+    monkeypatch.setattr("cli.deploy_production._container_exists", lambda _name: True)
 
 
 # ── parse_csv_list ───────────────────────────────────────────────────
@@ -3602,7 +3605,7 @@ def test_config_from_args_external_caddy() -> None:
         caddy_email="ops@example.com",
         caddy_public=False,
         caddy_external=True,
-        shared_caddy_dir="/opt/caddy",
+        shared_caddy_dir=DEFAULT_SHARED_CADDY_DIR,
         shared_caddy_email=None,
         trusted_hosts="blog.example.com",
         trusted_proxy_ips=None,
@@ -3623,7 +3626,7 @@ def test_config_from_args_external_caddy() -> None:
     assert config.caddy_config is not None
     assert config.caddy_config.domain == "blog.example.com"
     assert config.shared_caddy_config is not None
-    assert config.shared_caddy_config.caddy_dir == Path("/opt/caddy")
+    assert config.shared_caddy_config.caddy_dir == Path(DEFAULT_SHARED_CADDY_DIR).expanduser()
     assert config.shared_caddy_config.acme_email == "ops@example.com"
 
 
@@ -3682,13 +3685,14 @@ def test_print_config_summary_external_caddy(capsys: pytest.CaptureFixture[str])
         caddy_config=CaddyConfig(domain="blog.example.com", email="ops@example.com"),
         host_bind_ip=LOCALHOST_BIND_IP,
         shared_caddy_config=SharedCaddyConfig(
-            caddy_dir=Path("/opt/caddy"), acme_email="ops@example.com"
+            caddy_dir=Path(DEFAULT_SHARED_CADDY_DIR).expanduser(),
+            acme_email="ops@example.com",
         ),
     )
     print_config_summary(config)
     captured = capsys.readouterr().out
     assert "external" in captured.lower()
-    assert "/opt/caddy" in captured
+    assert str(Path(DEFAULT_SHARED_CADDY_DIR).expanduser()) in captured
     assert "blog.example.com" in captured
 
 
@@ -3802,7 +3806,7 @@ class TestCollectConfigExternalCaddy:
 
         # Simulate: no reuse, mode=local, caddy=external,
         # domain=blog.example.com, email=ops@example.com, public=no,
-        # shared dir=/opt/caddy, acme email=(use default from caddy email),
+        # shared dir=default, acme email=(use default from caddy email),
         # trusted hosts=blog.example.com, extra proxy ips=(none), docs=no
         inputs = iter(
             [
@@ -3812,7 +3816,7 @@ class TestCollectConfigExternalCaddy:
                 "external",  # caddy mode
                 "blog.example.com",  # caddy domain
                 "ops@example.com",  # caddy email
-                "/opt/caddy",  # shared caddy dir
+                DEFAULT_SHARED_CADDY_DIR,  # shared caddy dir
                 "",  # acme email (use default)
                 "blog.example.com",  # trusted hosts
                 "",  # extra proxy ips
@@ -3841,7 +3845,7 @@ class TestCollectConfigExternalCaddy:
         assert config.caddy_config is not None
         assert config.caddy_config.domain == "blog.example.com"
         assert config.shared_caddy_config is not None
-        assert config.shared_caddy_config.caddy_dir == Path("/opt/caddy")
+        assert config.shared_caddy_config.caddy_dir == Path(DEFAULT_SHARED_CADDY_DIR).expanduser()
         assert config.shared_caddy_config.acme_email == "ops@example.com"
 
 
@@ -3982,7 +3986,31 @@ def test_caddy_modes_set_matches_literal() -> None:
 
 
 def test_default_shared_caddy_dir_constant() -> None:
-    assert DEFAULT_SHARED_CADDY_DIR == "/opt/caddy"
+    assert DEFAULT_SHARED_CADDY_DIR == "~/.local/share/caddy"
+
+
+def test_shared_caddy_runtime_dir_keeps_home_scoped_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir = Path("/home/deploy")
+    monkeypatch.setattr("cli.deploy_production._docker_is_snap_install", lambda: True)
+    runtime_dir = _shared_caddy_runtime_dir(
+        Path(DEFAULT_SHARED_CADDY_DIR),
+        home_dir=home_dir,
+    )
+    assert runtime_dir == home_dir / ".local/share/caddy"
+
+
+def test_shared_caddy_runtime_dir_falls_back_from_opt_on_snap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir = Path("/home/deploy")
+    monkeypatch.setattr("cli.deploy_production._docker_is_snap_install", lambda: True)
+    runtime_dir = _shared_caddy_runtime_dir(
+        Path("/opt/caddy"),
+        home_dir=home_dir,
+    )
+    assert runtime_dir == home_dir / ".local/share/caddy"
 
 
 def test_external_caddy_network_name_constant() -> None:
@@ -4242,9 +4270,11 @@ def test_ensure_shared_caddy_starts_container(
     _stub_docker_inspect_missing(monkeypatch)
     caddy_dir = tmp_path / "caddy"
     ensure_shared_caddy(caddy_dir=caddy_dir, acme_email=None)
-    compose_up_calls = [(cmd, cwd) for cmd, cwd, _ in commands if "compose" in cmd and "up" in cmd]
-    assert len(compose_up_calls) == 1
-    assert compose_up_calls[0][1] == caddy_dir
+    run_calls = [(cmd, cwd) for cmd, cwd, _ in commands if cmd[:3] == ["docker", "run", "-d"]]
+    assert len(run_calls) == 1
+    assert run_calls[0][1] == caddy_dir
+    assert "--name" in run_calls[0][0]
+    assert SHARED_CADDY_CONTAINER_NAME in run_calls[0][0]
 
 
 def test_ensure_shared_caddy_skips_if_already_running(
@@ -4258,8 +4288,10 @@ def test_ensure_shared_caddy_skips_if_already_running(
     (caddy_dir / "Caddyfile").write_text("existing", encoding="utf-8")
     (caddy_dir / "docker-compose.yml").write_text("existing", encoding="utf-8")
     ensure_shared_caddy(caddy_dir=caddy_dir, acme_email=None)
-    compose_up_calls = [cmd for cmd, _, _ in commands if "up" in cmd]
-    assert len(compose_up_calls) == 0
+    start_calls = [cmd for cmd, _, _ in commands if cmd[:2] == ["docker", "start"]]
+    run_calls = [cmd for cmd, _, _ in commands if cmd[:3] == ["docker", "run", "-d"]]
+    assert len(start_calls) == 0
+    assert len(run_calls) == 0
 
 
 # ── write_caddy_site_snippet / reload_shared_caddy ───────────────────
@@ -4524,9 +4556,12 @@ def test_deploy_external_caddy_full_flow(monkeypatch: pytest.MonkeyPatch, tmp_pa
     # Lifecycle commands reference external caddy compose
     assert DEFAULT_EXTERNAL_CADDY_COMPOSE_FILE in result.commands["start"]
 
-    # Docker commands: shared caddy compose up + agblogger compose up
-    compose_up_calls = [(cmd, cwd) for cmd, cwd, _ in commands if "up" in cmd]
-    assert len(compose_up_calls) == 2  # shared caddy + agblogger
+    # Docker commands: shared caddy bootstrap + agblogger compose up
+    run_calls = [(cmd, cwd) for cmd, cwd, _ in commands if cmd[:3] == ["docker", "run", "-d"]]
+    compose_up_calls = [(cmd, cwd) for cmd, cwd, _ in commands if "compose" in cmd and "up" in cmd]
+    assert len(run_calls) == 1
+    assert run_calls[0][1] == caddy_dir
+    assert len(compose_up_calls) == 1  # agblogger only
 
 
 # ── Base docker-compose.yml ADMIN_DISPLAY_NAME ───────────────────────
@@ -4701,7 +4736,8 @@ class TestBuildSetupScript:
         script = build_setup_script_content(config)
         # Directory creation
         assert "mkdir -p" in script
-        assert "/opt/caddy/sites" in script
+        assert "CADDY_DIR='/opt/caddy'" in script
+        assert 'mkdir -p "$CADDY_DIR/sites"' in script
         # Shared Caddyfile heredoc
         assert "import /etc/caddy/sites/*.caddy" in script
         # Shared compose heredoc
@@ -4709,8 +4745,10 @@ class TestBuildSetupScript:
         # Network creation
         assert "docker network create" in script
         assert EXTERNAL_CADDY_NETWORK_NAME in script
-        # Start shared Caddy
-        assert "docker compose up -d" in script
+        # Start shared Caddy without depending on compose file discovery
+        assert "docker run -d" in script
+        assert f"--name {SHARED_CADDY_CONTAINER_NAME}" in script
+        assert "docker compose up -d" not in script
         # Subnet detection
         assert "docker network inspect" in script
         assert CADDY_NETWORK_SUBNET_PLACEHOLDER in script

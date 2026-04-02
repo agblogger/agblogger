@@ -64,9 +64,12 @@ CADDY_MODE_BUNDLED: Final[CaddyMode] = "bundled"
 CADDY_MODE_EXTERNAL: Final[CaddyMode] = "external"
 CADDY_MODE_NONE: Final[CaddyMode] = "none"
 CADDY_MODES: Final[set[CaddyMode]] = set(get_args(CaddyMode))
-DEFAULT_SHARED_CADDY_DIR = "/opt/caddy"
+DEFAULT_SHARED_CADDY_DIR = "~/.local/share/caddy"
+SNAP_SHARED_CADDY_DIR_RELATIVE = ".local/share/caddy"
 EXTERNAL_CADDY_NETWORK_NAME = "caddy"
 SHARED_CADDY_CONTAINER_NAME = "caddy"
+SHARED_CADDY_DATA_VOLUME = "caddy-data"
+SHARED_CADDY_CONFIG_VOLUME = "caddy-config"
 DEFAULT_SHARED_CADDY_COMPOSE_FILE = "docker-compose.yml"
 DEFAULT_SHARED_CADDYFILE = "Caddyfile"
 CADDY_NETWORK_SUBNET_PLACEHOLDER = "__CADDY_NETWORK_SUBNET__"
@@ -388,15 +391,15 @@ def build_shared_caddy_compose_content() -> str:
         "    volumes:\n"
         "      - ./Caddyfile:/etc/caddy/Caddyfile:ro\n"
         "      - ./sites:/etc/caddy/sites:ro\n"
-        "      - caddy-data:/data\n"
-        "      - caddy-config:/config\n"
+        f"      - {SHARED_CADDY_DATA_VOLUME}:/data\n"
+        f"      - {SHARED_CADDY_CONFIG_VOLUME}:/config\n"
         "    restart: unless-stopped\n"
         "    networks:\n"
         f"      - {EXTERNAL_CADDY_NETWORK_NAME}\n"
         "\n"
         "volumes:\n"
-        "  caddy-data:\n"
-        "  caddy-config:\n"
+        f"  {SHARED_CADDY_DATA_VOLUME}:\n"
+        f"  {SHARED_CADDY_CONFIG_VOLUME}:\n"
         "\n"
         "networks:\n"
         f"  {EXTERNAL_CADDY_NETWORK_NAME}:\n"
@@ -599,7 +602,22 @@ def build_setup_script_content(config: DeployConfig) -> str:
             [
                 "# ── Bootstrap shared Caddy ───────────────────────────────────────────",
                 'echo "Setting up shared Caddy reverse proxy..."',
-                f'mkdir -p "{caddy_dir}/sites"',
+                f"CADDY_DIR={_bash_quote(caddy_dir)}",
+                "if readlink -f \"$(command -v docker)\" 2>/dev/null | grep -q '^/snap/'; then",
+                '    case "$CADDY_DIR" in',
+                '        "$HOME"/*|./*|../*|~/*) ;;',
+                "        /*)",
+                (f'            SNAP_CADDY_DIR="$HOME/{SNAP_SHARED_CADDY_DIR_RELATIVE}"'),
+                (
+                    '            echo "Shared Caddy directory $CADDY_DIR'
+                    " is not usable with snap-packaged Docker;"
+                    ' using $SNAP_CADDY_DIR instead."'
+                ),
+                '            CADDY_DIR="$SNAP_CADDY_DIR"',
+                "            ;;",
+                "    esac",
+                "fi",
+                'mkdir -p "$CADDY_DIR/sites"',
                 "",
             ]
         )
@@ -607,8 +625,8 @@ def build_setup_script_content(config: DeployConfig) -> str:
         # Write shared Caddyfile if not exists
         lines.extend(
             [
-                f'if [ ! -f "{caddy_dir}/{DEFAULT_SHARED_CADDYFILE}" ]; then',
-                f"    cat > \"{caddy_dir}/{DEFAULT_SHARED_CADDYFILE}\" <<'CADDYFILE_EOF'",
+                f'if [ ! -f "$CADDY_DIR/{DEFAULT_SHARED_CADDYFILE}" ]; then',
+                f"    cat > \"$CADDY_DIR/{DEFAULT_SHARED_CADDYFILE}\" <<'CADDYFILE_EOF'",
                 caddyfile_content.rstrip("\n"),
                 "CADDYFILE_EOF",
                 "fi",
@@ -619,8 +637,8 @@ def build_setup_script_content(config: DeployConfig) -> str:
         # Write shared docker-compose.yml if not exists
         lines.extend(
             [
-                f'if [ ! -f "{caddy_dir}/{DEFAULT_SHARED_CADDY_COMPOSE_FILE}" ]; then',
-                f"    cat > \"{caddy_dir}/{DEFAULT_SHARED_CADDY_COMPOSE_FILE}\" <<'COMPOSE_EOF'",
+                f'if [ ! -f "$CADDY_DIR/{DEFAULT_SHARED_CADDY_COMPOSE_FILE}" ]; then',
+                f"    cat > \"$CADDY_DIR/{DEFAULT_SHARED_CADDY_COMPOSE_FILE}\" <<'COMPOSE_EOF'",
                 caddy_compose_content.rstrip("\n"),
                 "COMPOSE_EOF",
                 "fi",
@@ -641,12 +659,24 @@ def build_setup_script_content(config: DeployConfig) -> str:
 
         # Start shared Caddy if not running
         container = SHARED_CADDY_CONTAINER_NAME
-        ps_check = f'if ! docker ps --format "{{{{.Names}}}}" | grep -q "^{container}$"; then'
         lines.extend(
             [
-                ps_check,
-                '    echo "Starting shared Caddy..."',
-                f'    (cd "{caddy_dir}" && docker compose up -d)',
+                f'if ! docker ps --format "{{{{.Names}}}}" | grep -q "^{container}$"; then',
+                f'    if docker ps -a --format "{{{{.Names}}}}" | grep -q "^{container}$"; then',
+                '        echo "Starting existing shared Caddy container..."',
+                f"        docker start {container}",
+                "    else",
+                '        echo "Starting shared Caddy..."',
+                f"        docker volume create {SHARED_CADDY_DATA_VOLUME} >/dev/null",
+                f"        docker volume create {SHARED_CADDY_CONFIG_VOLUME} >/dev/null",
+                f"        docker run -d --name {container} --restart unless-stopped"
+                " -p 80:80 -p 443:443"
+                f' -v "$CADDY_DIR/{DEFAULT_SHARED_CADDYFILE}:/etc/caddy/Caddyfile:ro"'
+                f' -v "$CADDY_DIR/sites:/etc/caddy/sites:ro"'
+                f" -v {SHARED_CADDY_DATA_VOLUME}:/data"
+                f" -v {SHARED_CADDY_CONFIG_VOLUME}:/config"
+                f" --network {EXTERNAL_CADDY_NETWORK_NAME} caddy:2",
+                "    fi",
                 "fi",
                 "",
             ]
@@ -685,7 +715,7 @@ def build_setup_script_content(config: DeployConfig) -> str:
         lines.extend(
             [
                 f"# Write site snippet for {domain}",
-                f"cat > \"{caddy_dir}/sites/{domain}.caddy\" <<'SITE_EOF'",
+                f"cat > \"$CADDY_DIR/sites/{domain}.caddy\" <<'SITE_EOF'",
                 site_snippet.rstrip("\n"),
                 "SITE_EOF",
                 "",
@@ -1318,32 +1348,136 @@ def _is_container_running(container_name: str) -> bool:
     return result.returncode == 0 and "true" in result.stdout.strip().lower()
 
 
+def _container_exists(container_name: str) -> bool:
+    """Check if a Docker container exists, regardless of whether it is running."""
+    try:
+        result = subprocess.run(
+            ["docker", "inspect", "--format", "{{.Id}}", container_name],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except subprocess.TimeoutExpired:
+        return False
+    return result.returncode == 0 and bool(result.stdout.strip())
+
+
+def _docker_network_exists(project_dir: Path, network_name: str) -> bool:
+    """Return whether a Docker network already exists."""
+    try:
+        result = subprocess.run(
+            ["docker", "network", "inspect", network_name],
+            cwd=project_dir,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except subprocess.TimeoutExpired:
+        return False
+    return result.returncode == 0
+
+
+def _docker_is_snap_install(docker_path: str | None = None) -> bool:
+    """Return whether Docker appears to be provided by snap."""
+    candidate = docker_path or shutil.which("docker")
+    if not candidate:
+        return False
+    try:
+        resolved = Path(candidate).resolve(strict=False)
+    except OSError:
+        resolved = Path(candidate)
+    return str(resolved).startswith("/snap/")
+
+
+def _shared_caddy_runtime_dir(caddy_dir: Path, *, home_dir: Path | None = None) -> Path:
+    """Resolve the shared Caddy directory used at runtime.
+
+    Snap-packaged Docker cannot reliably read compose files or bind-mount
+    content from arbitrary system paths such as ``/opt``. When Docker comes
+    from snap and the configured directory is outside the user's home, move the
+    runtime directory into the home directory automatically.
+    """
+    expanded_dir = caddy_dir.expanduser()
+    if not _docker_is_snap_install():
+        return expanded_dir
+
+    home_root = (home_dir or Path.home()).expanduser()
+    try:
+        if expanded_dir.resolve(strict=False).is_relative_to(home_root.resolve(strict=False)):
+            return expanded_dir
+    except OSError:
+        pass
+    return home_root / SNAP_SHARED_CADDY_DIR_RELATIVE
+
+
 def ensure_shared_caddy(caddy_dir: Path, acme_email: str | None) -> None:
     """Bootstrap or verify a shared Caddy reverse proxy at the given directory."""
+    effective_caddy_dir = _shared_caddy_runtime_dir(caddy_dir)
+    if effective_caddy_dir != caddy_dir.expanduser():
+        print(
+            "Shared Caddy directory "
+            f"{caddy_dir} is not usable with snap-packaged Docker; "
+            f"using {effective_caddy_dir} instead."
+        )
+
     if _is_container_running(SHARED_CADDY_CONTAINER_NAME):
         print(f"Shared Caddy container '{SHARED_CADDY_CONTAINER_NAME}' is already running.")
         return
 
-    print(f"Bootstrapping shared Caddy at {caddy_dir}...")
+    print(f"Bootstrapping shared Caddy at {effective_caddy_dir}...")
     try:
-        caddy_dir.mkdir(parents=True, exist_ok=True)
-        (caddy_dir / "sites").mkdir(exist_ok=True)
+        effective_caddy_dir.mkdir(parents=True, exist_ok=True)
+        (effective_caddy_dir / "sites").mkdir(exist_ok=True)
     except OSError as exc:
         raise DeployError(
-            f"Cannot create shared Caddy directory {caddy_dir}: {exc}. "
+            f"Cannot create shared Caddy directory {effective_caddy_dir}: {exc}. "
             "Check permissions or choose a different path with --shared-caddy-dir."
         ) from exc
 
-    caddyfile_path = caddy_dir / DEFAULT_SHARED_CADDYFILE
+    caddyfile_path = effective_caddy_dir / DEFAULT_SHARED_CADDYFILE
     if not caddyfile_path.exists():
         caddyfile_path.write_text(build_shared_caddyfile_content(acme_email), encoding="utf-8")
 
-    compose_path = caddy_dir / DEFAULT_SHARED_CADDY_COMPOSE_FILE
+    compose_path = effective_caddy_dir / DEFAULT_SHARED_CADDY_COMPOSE_FILE
     if not compose_path.exists():
         compose_path.write_text(build_shared_caddy_compose_content(), encoding="utf-8")
 
-    print("Starting shared Caddy container...")
-    _run_command(["docker", "compose", "up", "-d"], caddy_dir)
+    if not _docker_network_exists(effective_caddy_dir, EXTERNAL_CADDY_NETWORK_NAME):
+        _run_docker(effective_caddy_dir, ["network", "create", EXTERNAL_CADDY_NETWORK_NAME])
+
+    if _container_exists(SHARED_CADDY_CONTAINER_NAME):
+        print("Starting existing shared Caddy container...")
+        _run_docker(effective_caddy_dir, ["start", SHARED_CADDY_CONTAINER_NAME])
+    else:
+        print("Starting shared Caddy container...")
+        _run_docker(effective_caddy_dir, ["volume", "create", SHARED_CADDY_DATA_VOLUME])
+        _run_docker(effective_caddy_dir, ["volume", "create", SHARED_CADDY_CONFIG_VOLUME])
+        _run_docker(
+            effective_caddy_dir,
+            [
+                "run",
+                "-d",
+                "--name",
+                SHARED_CADDY_CONTAINER_NAME,
+                "--restart",
+                "unless-stopped",
+                "-p",
+                "80:80",
+                "-p",
+                "443:443",
+                "-v",
+                f"{effective_caddy_dir / DEFAULT_SHARED_CADDYFILE}:/etc/caddy/Caddyfile:ro",
+                "-v",
+                f"{effective_caddy_dir / 'sites'}:/etc/caddy/sites:ro",
+                "-v",
+                f"{SHARED_CADDY_DATA_VOLUME}:/data",
+                "-v",
+                f"{SHARED_CADDY_CONFIG_VOLUME}:/config",
+                "--network",
+                EXTERNAL_CADDY_NETWORK_NAME,
+                "caddy:2",
+            ],
+        )
     print("Shared Caddy container started.")
 
 
@@ -2175,9 +2309,21 @@ def deploy(config: DeployConfig, project_dir: Path) -> DeployResult:
             print(msg)
 
         if config.caddy_mode == CADDY_MODE_EXTERNAL and config.shared_caddy_config is not None:
+            shared_caddy_dir = _shared_caddy_runtime_dir(config.shared_caddy_config.caddy_dir)
+            if shared_caddy_dir != config.shared_caddy_config.caddy_dir.expanduser():
+                config = replace(
+                    config,
+                    shared_caddy_config=replace(
+                        config.shared_caddy_config,
+                        caddy_dir=shared_caddy_dir,
+                    ),
+                )
+            shared_caddy_config = config.shared_caddy_config
+            if shared_caddy_config is None:
+                raise DeployError("External Caddy mode requires shared Caddy configuration")
             ensure_shared_caddy(
-                caddy_dir=config.shared_caddy_config.caddy_dir,
-                acme_email=config.shared_caddy_config.acme_email,
+                caddy_dir=shared_caddy_config.caddy_dir,
+                acme_email=shared_caddy_config.acme_email,
             )
             config = _resolve_external_caddy_proxy_config(config, project_dir)
 
@@ -2632,7 +2778,7 @@ def collect_config(project_dir: Path | None = None) -> DeployConfig:
         acme_input = input(acme_prompt).strip()
         acme_email = acme_input or default_acme
         shared_caddy_config = SharedCaddyConfig(
-            caddy_dir=Path(shared_caddy_dir), acme_email=acme_email
+            caddy_dir=Path(shared_caddy_dir).expanduser(), acme_email=acme_email
         )
     else:
         host_bind_ip = (
@@ -2750,7 +2896,7 @@ def config_from_args(args: argparse.Namespace) -> DeployConfig:
             caddy_mode = CADDY_MODE_EXTERNAL
             shared_email = args.shared_caddy_email or args.caddy_email
             shared_caddy_config = SharedCaddyConfig(
-                caddy_dir=Path(args.shared_caddy_dir),
+                caddy_dir=Path(args.shared_caddy_dir).expanduser(),
                 acme_email=shared_email,
             )
             host_bind_ip = LOCALHOST_BIND_IP

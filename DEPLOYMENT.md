@@ -130,7 +130,7 @@ The setup script is idempotent — safe to run on both fresh installs and upgrad
 2. **File placement**: moves `.generated` config files (compose, Caddyfile) into their final names, backing up existing versions to `.bak`. For `.env.production`, the generated file is only placed on first install — existing env files are preserved on upgrades.
 3. **Stack teardown on mode change**: if the Caddy mode changed since the last deployment, tears down the old stack before starting the new one.
 4. **Image loading**: runs `docker load -i <tarball>` (tarball mode) or `docker compose pull` (registry mode).
-5. **Shared Caddy bootstrap** (external Caddy mode only): creates the shared Caddy directory, writes the root Caddyfile and compose file, starts the Caddy container, detects the Docker network subnet, writes the site snippet, and reloads Caddy.
+5. **Shared Caddy bootstrap** (external Caddy mode only): creates the shared Caddy directory, writes the root Caddyfile and compose file, starts the Caddy container directly with Docker, detects the Docker network subnet, writes the site snippet, and reloads Caddy.
 6. **Starts AgBlogger**: runs `docker compose up -d`.
 7. **Health check**: polls for up to 60 seconds until all services report healthy.
 
@@ -182,26 +182,26 @@ A dedicated Caddy container runs alongside AgBlogger in the same Docker Compose 
 
 ### External
 
-AgBlogger joins a shared Caddy instance that lives in a separate Docker Compose stack. Each service on the server drops a site snippet into the shared Caddy's `sites/` directory.
+AgBlogger joins a shared Caddy instance that lives in a separate shared runtime. Each service on the server drops a site snippet into the shared Caddy's `sites/` directory.
 
 **Best for:** Multi-service servers with multiple subdomains served by a single Caddy instance.
 
 **What the wizard asks:**
 - Public domain
 - Email for TLS certificate notices
-- Shared Caddy directory (default: `/opt/caddy`)
+- Shared Caddy directory (default: `~/.local/share/caddy`)
 - ACME email for the shared Caddy instance (defaults to the certificate email)
 
 **How it works:**
-- A shared Caddy container runs from a separate compose stack (bootstrapped automatically if not already running).
+- A shared Caddy container is bootstrapped automatically if not already running. The deployment helper writes a reference `docker-compose.yml` into the shared Caddy directory, but starts the container directly with Docker so the default home-scoped path works on hosts that use snap-packaged Docker.
 - The shared Caddyfile uses `import /etc/caddy/sites/*.caddy` to load per-service site snippets.
 - AgBlogger's compose file joins the external `caddy` Docker network instead of running its own Caddy container.
 - The Caddy network subnet is auto-detected at deploy time and written into `TRUSTED_PROXY_IPS`.
 - Configuration changes are applied via `docker exec caddy caddy reload` (no container restart needed).
 
-**Shared Caddy directory structure** (e.g., at `/opt/caddy`):
+**Shared Caddy directory structure** (e.g., at `~/.local/share/caddy`):
 ```
-/opt/caddy/
+~/.local/share/caddy/
   Caddyfile              # Global config with import directive
   docker-compose.yml     # Shared Caddy container definition
   sites/
@@ -246,7 +246,7 @@ The interactive wizard asks the following questions in order:
 | 10 | Public domain | — | Only for bundled/external Caddy |
 | 11 | TLS email | — | Optional, for Let's Encrypt notices |
 | 12 | Expose Caddy publicly? | Yes | Only for bundled Caddy |
-| 13 | Shared Caddy directory | `/opt/caddy` | Only for external Caddy |
+| 13 | Shared Caddy directory | `~/.local/share/caddy` | Only for external Caddy |
 | 14 | ACME email for shared Caddy | Same as TLS email | Only for external Caddy |
 | 15 | Expose directly on Internet? | No | Only for no-Caddy mode |
 | 16 | Host port | 8000 | Only for no-Caddy mode |
@@ -329,7 +329,7 @@ Configuration:
   --caddy-email TEXT          Email for TLS certificate notifications
   --caddy-public              Expose Caddy ports 80/443 publicly
   --caddy-external            Use a shared external Caddy instance
-  --shared-caddy-dir PATH    Shared Caddy directory (default: /opt/caddy)
+  --shared-caddy-dir PATH    Shared Caddy directory (default: ~/.local/share/caddy)
   --shared-caddy-email TEXT   ACME email for shared Caddy
   --trusted-hosts TEXT        Comma-separated allowed Host header values
   --trusted-proxy-ips TEXT    Comma-separated trusted proxy IPs
