@@ -59,6 +59,7 @@ zap_caddy_port := env("ZAP_CADDY_PORT", "8080")
 local_caddy_port := env("LOCAL_CADDY_PORT", "8080")
 
 # Verbose output for check/test commands (v=1 on CLI, or VERBOSE=1 in env)
+
 v := env("VERBOSE", "")
 
 # Run all static analysis checks (no tests)
@@ -67,6 +68,7 @@ check-static: check-backend-static check-frontend-static check-vulture check-tri
     @echo "✓ Static checks passed"
 
 # Run all test suites, excluding slow backend tests by default.
+
 # Pass coverage=true to merge the backend slow shard for full coverage reporting.
 test coverage="false": (test-backend coverage) (test-frontend coverage)
     @{{ if v == "" { "true" } else { "echo" } }}
@@ -118,7 +120,7 @@ check-snyk-deps:
     snyk test frontend
 
 # Run extra checks not covered by `check`, including full backend coverage
-check-extra: check-audit-full checkov check-gitleaks check-codeql check-semgrep test-backend-all check-snyk-deps
+check-extra: test-backend-slow check-audit-full checkov check-gitleaks check-codeql check-semgrep check-snyk-deps
     @echo "\n✓ Extra checks passed"
 
 # Run Snyk code analysis
@@ -230,6 +232,7 @@ check-backend-static:
     echo "✓ Backend static checks passed"
 
 # Backend tests, excluding slow tests. In coverage mode, merge slow tests so
+
 # the coverage gate still measures the full backend suite.
 test-backend coverage="false":
     #!/usr/bin/env bash
