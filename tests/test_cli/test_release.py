@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
@@ -17,9 +18,10 @@ from cli.release import (
 )
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from pytest import MonkeyPatch
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _write_release_fixture(root: Path) -> None:
@@ -141,7 +143,7 @@ def test_run_release_updates_versions_and_invokes_git_and_github(
     assert result.old_version == "0.1.0"
     assert result.new_version == "0.1.1"
     assert result.tag == "v0.1.1"
-    assert result.tarball_path == tmp_path / "dist" / "releases" / "agblogger-0.1.1.tar.gz"
+    assert result.tarball_path == tmp_path / "dist" / "releases" / "agblogger-server-0.1.1.tar.gz"
     assert (tmp_path / "VERSION").read_text(encoding="utf-8") == "0.1.1\n"
     assert (tmp_path / "pyproject.toml").read_text(encoding="utf-8").count("0.1.1") == 1
     assert commands == [
@@ -168,9 +170,9 @@ def test_run_release_updates_versions_and_invokes_git_and_github(
                 "git",
                 "archive",
                 "--format=tar.gz",
-                "--prefix=agblogger-0.1.1/",
+                "--prefix=agblogger-server-0.1.1/",
                 "-o",
-                str(tmp_path / "dist" / "releases" / "agblogger-0.1.1.tar.gz"),
+                str(tmp_path / "dist" / "releases" / "agblogger-server-0.1.1.tar.gz"),
                 "v0.1.1",
             ],
             tmp_path,
@@ -183,7 +185,7 @@ def test_run_release_updates_versions_and_invokes_git_and_github(
                 "release",
                 "create",
                 "v0.1.1",
-                str(tmp_path / "dist" / "releases" / "agblogger-0.1.1.tar.gz"),
+                str(tmp_path / "dist" / "releases" / "agblogger-server-0.1.1.tar.gz"),
                 "--title",
                 "v0.1.1",
                 "--generate-notes",
@@ -278,6 +280,19 @@ def test_bump_version_rejects_unsupported_level() -> None:
 def test_read_repo_version_raises_when_missing(tmp_path: Path) -> None:
     with pytest.raises(ReleaseError, match="Missing VERSION file"):
         read_repo_version(tmp_path)
+
+
+def test_release_cli_workflow_uses_sync_specific_asset_names() -> None:
+    workflow = (PROJECT_ROOT / ".github" / "workflows" / "release-cli.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'BINARY_NAME="agblogger-sync-${VERSION}"' in workflow
+    assert (
+        'ARCHIVE_NAME="agblogger-sync-${VERSION}-${{ matrix.os }}-${{ matrix.arch }}"' in workflow
+    )
+    assert 'BINARY_NAME="agblogger-${VERSION}"' not in workflow
+    assert 'ARCHIVE_NAME="agblogger-${VERSION}-${{ matrix.os }}-${{ matrix.arch }}"' not in workflow
 
 
 # ── I3: main() error recovery ───────────────────────────────────────

@@ -249,14 +249,14 @@ def run_release(project_dir: Path, level: str, *, remote: str = "origin") -> Rel
     _run_git(project_dir, ["commit", "-m", f"release: {tag}"])
     _run_git(project_dir, ["tag", "-a", tag, "-m", f"Release {tag}"])
 
-    tarball_path = project_dir / "dist" / "releases" / f"agblogger-{new_version}.tar.gz"
+    tarball_path = project_dir / "dist" / "releases" / f"agblogger-server-{new_version}.tar.gz"
     tarball_path.parent.mkdir(parents=True, exist_ok=True)
     _run_git(
         project_dir,
         [
             "archive",
             "--format=tar.gz",
-            f"--prefix=agblogger-{new_version}/",
+            f"--prefix=agblogger-server-{new_version}/",
             "-o",
             str(tarball_path),
             tag,

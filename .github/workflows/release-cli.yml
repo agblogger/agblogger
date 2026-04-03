@@ -50,8 +50,8 @@ jobs:
         run: |
           VERSION="${{ github.event.release.tag_name }}"
           VERSION="${VERSION#v}"
-          BINARY_NAME="agblogger-${VERSION}"
-          ARCHIVE_NAME="agblogger-${VERSION}-${{ matrix.os }}-${{ matrix.arch }}"
+          BINARY_NAME="agblogger-sync-${VERSION}"
+          ARCHIVE_NAME="agblogger-sync-${VERSION}-${{ matrix.os }}-${{ matrix.arch }}"
 
           mv dist/cli/agblogger "dist/cli/${BINARY_NAME}"
 
@@ -67,5 +67,5 @@ jobs:
         run: |
           VERSION="${{ github.event.release.tag_name }}"
           VERSION="${VERSION#v}"
-          ARCHIVE_NAME="agblogger-${VERSION}-${{ matrix.os }}-${{ matrix.arch }}.${{ matrix.archive }}"
+          ARCHIVE_NAME="agblogger-sync-${VERSION}-${{ matrix.os }}-${{ matrix.arch }}.${{ matrix.archive }}"
           gh release upload "${{ github.event.release.tag_name }}" "dist/cli/${ARCHIVE_NAME}" --clobber

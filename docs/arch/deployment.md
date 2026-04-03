@@ -35,6 +35,8 @@ Remote deployment bundles include a `setup.sh` deployment orchestrator script. T
 
 When GoatCounter is enabled, `setup.sh` also waits for the sidecar health check and includes GoatCounter status/logs in rollout diagnostics so analytics failures are caught during deployment instead of surfacing later in the admin UI.
 
+GitHub releases publish two artifact families with distinct names: `agblogger-server-<version>.tar.gz` for the versioned source bundle created by `just release`, and `agblogger-sync-<version>-<os>-<arch>.<ext>` for platform-specific sync CLI archives attached by the release workflow.
+
 The upgrade workflow is: regenerate the bundle locally, copy all files to the server, run `bash setup.sh`. Existing `.env.production` files are preserved during upgrades, but deployment-managed values are refreshed from the generated template without replacing the rest of the environment file. This includes analytics defaults (`ANALYTICS_ENABLED_DEFAULT`, `GOATCOUNTER_SITE_HOST`) and the derived trusted proxy subnet (`TRUSTED_PROXY_IPS`) so shared-Caddy network changes and Caddy mode switches keep HTTPS-aware auth working across upgrades.
 
 ## Caddy Reverse Proxy Modes
