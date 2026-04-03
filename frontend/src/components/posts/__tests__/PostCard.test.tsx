@@ -63,12 +63,12 @@ describe('PostCard', () => {
 
   it('shows draft badge', () => {
     renderCard(makePost({ is_draft: true }))
-    expect(screen.getByText('Draft')).toBeInTheDocument()
+    expect(screen.getByText('DRAFT')).toBeInTheDocument()
   })
 
   it('hides draft badge', () => {
     renderCard(makePost({ is_draft: false }))
-    expect(screen.queryByText('Draft')).not.toBeInTheDocument()
+    expect(screen.queryByText('DRAFT')).not.toBeInTheDocument()
   })
 
   it('renders label chips', () => {

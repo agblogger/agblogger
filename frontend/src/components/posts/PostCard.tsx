@@ -25,9 +25,16 @@ function PostCardInner({ post, index = 0 }: PostCardProps) {
       <Link to={postHref} className="absolute inset-0" aria-label={post.title} />
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
-          <h2 className="font-display text-xl text-ink group-hover:text-accent transition-colors leading-snug">
-            {post.title}
-          </h2>
+          <div className="flex items-baseline gap-2 flex-wrap">
+            <h2 className="font-display text-xl text-ink group-hover:text-accent transition-colors leading-snug">
+              {post.title}
+            </h2>
+            {post.is_draft && (
+              <span className="text-[10px] font-mono font-semibold uppercase tracking-widest px-1.5 py-0.5 bg-muted/10 text-muted border border-muted/30 rounded shrink-0">
+                DRAFT
+              </span>
+            )}
+          </div>
 
           {post.subtitle != null && (
             <p data-testid="card-subtitle" className="text-base text-ink/60 mt-1 leading-snug">
@@ -65,12 +72,6 @@ function PostCardInner({ post, index = 0 }: PostCardProps) {
                   ))}
                 </div>
               </>
-            )}
-
-            {post.is_draft && (
-              <span className="text-xs px-2 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 rounded-full font-medium">
-                Draft
-              </span>
             )}
           </div>
         </div>
