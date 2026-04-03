@@ -15,8 +15,6 @@ if TYPE_CHECKING:
 
     from httpx import AsyncClient
 
-pytestmark = pytest.mark.slow
-
 
 @pytest.fixture
 def app_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
@@ -298,6 +296,7 @@ class TestLoginOriginValidation:
         assert resp.status_code == 403
 
     @pytest.mark.asyncio
+    @pytest.mark.slow
     async def test_login_succeeds_behind_tls_terminating_proxy(
         self, tmp_content_dir: Path, tmp_path: Path
     ) -> None:

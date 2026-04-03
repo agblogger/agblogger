@@ -17,8 +17,6 @@ if TYPE_CHECKING:
 
     from httpx import AsyncClient
 
-pytestmark = pytest.mark.slow
-
 
 POST_PATH = "posts/2026-02-02-hello-world/index.md"
 

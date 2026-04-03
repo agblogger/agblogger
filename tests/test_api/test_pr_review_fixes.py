@@ -43,9 +43,6 @@ if TYPE_CHECKING:
 
     from httpx import AsyncClient
 
-pytestmark = pytest.mark.slow
-
-
 # ── Issue 3 (unit): _looks_like_post_asset_path heuristic ──
 
 

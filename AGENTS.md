@@ -51,7 +51,7 @@ Use unsandboxed `uv run` for ALL Python tooling.
 - **IMPORTANT**: For every bug found, add a regression test that fails because of the bug, then fix the bug and ensure the test passes.
 - Use property-based testing (Hypothesis, fast-check) for deterministic logic. Abstract high-invariant logic into independent pure functions to enable property-based testing.
 - Avoid brittle tests. Test user workflows, not implementation details.
-- Backend tests which take more than 1s to run should be marked @pytest.mark.slow. If a fixture setup takes more than 2s, the entire group of tests using that fixture should be marked @pytest.mark.slow.
+- Backend tests which take more than 1s to run should be marked @pytest.mark.slow. If a fixture setup takes more than 3s, the entire group of tests using that fixture should be marked @pytest.mark.slow.
 - Coverage target 80%, branches 70%.
 
 ## Commit Guidelines

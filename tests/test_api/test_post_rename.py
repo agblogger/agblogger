@@ -16,8 +16,6 @@ if TYPE_CHECKING:
 
     from httpx import AsyncClient
 
-pytestmark = pytest.mark.slow
-
 
 @pytest.fixture
 def app_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
@@ -68,6 +66,7 @@ async def _create_post(client: AsyncClient, token: str, title: str) -> dict[str,
 
 
 class TestPostRename:
+    @pytest.mark.slow
     @pytest.mark.asyncio
     async def test_update_preserves_existing_date_prefixed_path(self, tmp_path: Path) -> None:
         """Updating a date-prefixed post without a title slug change must keep its path stable."""

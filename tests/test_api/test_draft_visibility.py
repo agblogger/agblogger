@@ -22,8 +22,6 @@ if TYPE_CHECKING:
 
     from httpx import AsyncClient
 
-pytestmark = pytest.mark.slow
-
 
 @pytest.fixture
 def draft_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:

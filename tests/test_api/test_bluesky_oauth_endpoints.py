@@ -5,15 +5,11 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
-import pytest
-
 from backend.services.crosspost_service import DuplicateAccountError
 from tests.conftest import create_test_client
 
 if TYPE_CHECKING:
     from backend.config import Settings
-
-pytestmark = pytest.mark.slow
 
 
 class TestClientMetadata:

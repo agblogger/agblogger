@@ -23,7 +23,7 @@ Backend testing emphasizes correctness at the boundaries that matter most for th
 
 Because the filesystem is authoritative, backend tests focus heavily on preserving content correctly even when caches, external tools, or integrations fail.
 
-The backend suite is split into normal and `slow` shards. Tests that take more than 1s, or test groups that inherit more than 2s of fixture setup, are marked `@pytest.mark.slow`.
+The backend suite is split into normal and `slow` shards. Tests that take more than 1s, or test groups that inherit more than 3s of fixture setup, are marked `@pytest.mark.slow`.
 
 ## Frontend
 
