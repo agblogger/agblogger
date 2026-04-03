@@ -3,6 +3,8 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 
+import { shouldProxyPostRequestToBackend } from './vitePostProxy'
+
 const backendProxyPort = process.env['AGBLOGGER_BACKEND_PORT'] ?? '8000'
 const allowedHosts = ['host.docker.internal']
 
@@ -25,16 +27,12 @@ export default defineConfig({
         target: `http://localhost:${backendProxyPort}`,
         changeOrigin: true,
         bypass(req) {
-          // Only proxy asset requests (paths with a file extension after slug/)
-          const path = req.url ?? '';
-          const parts = path.replace(/^\/post\//, '').split('/');
-          if (parts.length >= 2) {
-            const leaf = parts.at(-1) ?? '';
-            if (leaf.includes('.') && !leaf.endsWith('.md')) {
-              return; // proxy to backend
-            }
+          const requestPath = req.url ?? ''
+          if (shouldProxyPostRequestToBackend(requestPath)) {
+            return
           }
-          return path; // serve SPA for post view routes
+
+          return requestPath
         },
       },
     },

@@ -1,0 +1,36 @@
+const POST_ROUTE_PREFIX = '/post/'
+
+export function looksLikePostAssetPath(filePath: string): boolean {
+  if (!filePath.includes('/')) {
+    return false
+  }
+
+  const leaf = filePath.replace(/\/+$/, '').split('/').at(-1) ?? ''
+  if (leaf === '' || leaf === 'index.md') {
+    return false
+  }
+
+  const leafExtension = leaf.includes('.') ? `.${leaf.split('.').at(-1) ?? ''}` : ''
+  return leafExtension !== '' && leafExtension !== '.md'
+}
+
+export function shouldProxyPostRequest(
+  requestUrl: string,
+  hasExistingAsset: (filePath: string) => boolean,
+): boolean {
+  const pathname = new URL(requestUrl, 'http://localhost').pathname
+  if (!pathname.startsWith(POST_ROUTE_PREFIX)) {
+    return false
+  }
+
+  const filePath = pathname.slice(POST_ROUTE_PREFIX.length)
+  if (filePath === '' || filePath.split('/').includes('..')) {
+    return false
+  }
+
+  if (hasExistingAsset(filePath)) {
+    return true
+  }
+
+  return looksLikePostAssetPath(filePath)
+}
