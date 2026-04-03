@@ -21,6 +21,22 @@ export default defineConfig({
         target: `http://localhost:${backendProxyPort}`,
         changeOrigin: true,
       },
+      '/post/': {
+        target: `http://localhost:${backendProxyPort}`,
+        changeOrigin: true,
+        bypass(req) {
+          // Only proxy asset requests (paths with a file extension after slug/)
+          const path = req.url ?? '';
+          const parts = path.replace(/^\/post\//, '').split('/');
+          if (parts.length >= 2) {
+            const leaf = parts.at(-1) ?? '';
+            if (leaf.includes('.') && !leaf.endsWith('.md')) {
+              return; // proxy to backend
+            }
+          }
+          return path; // serve SPA for post view routes
+        },
+      },
     },
   },
   build: {
