@@ -10,6 +10,13 @@ describe('shouldProxyPostRequest', () => {
     expect(hasExistingAsset).toHaveBeenCalledWith('my-post/LICENSE')
   })
 
+  it('decodes encoded extensionless asset names before checking the filesystem', () => {
+    const hasExistingAsset = vi.fn((filePath: string) => filePath === 'my-post/LICENSE copy')
+
+    expect(shouldProxyPostRequest('/post/my-post/LICENSE%20copy', hasExistingAsset)).toBe(true)
+    expect(hasExistingAsset).toHaveBeenCalledWith('my-post/LICENSE copy')
+  })
+
   it('keeps nested post slugs in the SPA when no asset exists', () => {
     const hasExistingAsset = vi.fn(() => false)
 

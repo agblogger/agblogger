@@ -1,5 +1,13 @@
 const POST_ROUTE_PREFIX = '/post/'
 
+function decodePostFilePath(filePath: string): string | null {
+  try {
+    return decodeURIComponent(filePath)
+  } catch {
+    return null
+  }
+}
+
 export function looksLikePostAssetPath(filePath: string): boolean {
   if (!filePath.includes('/')) {
     return false
@@ -23,7 +31,12 @@ export function shouldProxyPostRequest(
     return false
   }
 
-  const filePath = pathname.slice(POST_ROUTE_PREFIX.length)
+  const encodedFilePath = pathname.slice(POST_ROUTE_PREFIX.length)
+  const filePath = decodePostFilePath(encodedFilePath)
+  if (filePath === null) {
+    return false
+  }
+
   if (filePath === '' || filePath.split('/').includes('..')) {
     return false
   }
