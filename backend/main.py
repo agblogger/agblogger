@@ -91,6 +91,26 @@ def _looks_like_post_asset_path(file_path: str) -> bool:
     return suffix != "" and suffix != ".md"
 
 
+def _is_existing_post_asset_path(content_dir: Path, file_path: str) -> bool:
+    asset_path = content_dir / "posts" / file_path
+    return asset_path.exists() and asset_path.is_file() and asset_path.suffix != ".md"
+
+
+def _has_canonical_post_for_slug(content_dir: Path, file_path: str) -> bool:
+    canonical_post_path = content_dir / "posts" / file_path / "index.md"
+    return canonical_post_path.exists() and canonical_post_path.is_file()
+
+
+def _should_redirect_post_path_to_content(content_dir: Path, file_path: str) -> bool:
+    if _is_existing_post_asset_path(content_dir, file_path):
+        return True
+
+    if not _looks_like_post_asset_path(file_path):
+        return False
+
+    return not _has_canonical_post_for_slug(content_dir, file_path)
+
+
 def _public_post_slug(file_path: str) -> str | None:
     """Return the canonical public slug for a cached post path, or None if invalid."""
     try:
@@ -933,10 +953,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             logger.warning("Path traversal attempt in post asset URL: %s", file_path)
             return HTMLResponse(_NOT_FOUND_HTML, status_code=404)
 
-        content_path = request.app.state.settings.content_dir / "posts" / file_path
-        if (
-            content_path.exists() and content_path.is_file() and content_path.suffix != ".md"
-        ) or _looks_like_post_asset_path(file_path):
+        if _should_redirect_post_path_to_content(request.app.state.settings.content_dir, file_path):
             return RedirectResponse(
                 url=f"/api/content/posts/{file_path}",
                 status_code=301,

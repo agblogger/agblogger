@@ -25,6 +25,7 @@ export function looksLikePostAssetPath(filePath: string): boolean {
 export function shouldProxyPostRequest(
   requestUrl: string,
   hasExistingAsset: (filePath: string) => boolean,
+  hasCanonicalPost: (filePath: string) => boolean = () => false,
 ): boolean {
   const pathname = new URL(requestUrl, 'http://localhost').pathname
   if (!pathname.startsWith(POST_ROUTE_PREFIX)) {
@@ -43,6 +44,10 @@ export function shouldProxyPostRequest(
 
   if (hasExistingAsset(filePath)) {
     return true
+  }
+
+  if (hasCanonicalPost(filePath)) {
+    return false
   }
 
   return looksLikePostAssetPath(filePath)

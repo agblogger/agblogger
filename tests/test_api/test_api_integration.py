@@ -66,6 +66,41 @@ async def client(app_settings: Settings) -> AsyncGenerator[AsyncClient]:
         yield ac
 
 
+@pytest.fixture
+def dotted_slug_app_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
+    """Create settings with a nested post whose final slug segment contains a dot."""
+    posts_dir = tmp_content_dir / "posts"
+    dotted_post = posts_dir / "releases" / "v1.0"
+    dotted_post.mkdir(parents=True)
+    (dotted_post / "index.md").write_text(
+        "---\ntitle: Release v1.0\ncreated_at: 2026-02-05 10:00:00+00\n"
+        "author: admin\nlabels: []\n---\n# Release v1.0\n\nRelease notes.\n"
+    )
+    (tmp_content_dir / "labels.toml").write_text("[labels]\n")
+    frontend_dir = tmp_path / "frontend"
+    frontend_dir.mkdir()
+    (frontend_dir / "index.html").write_text(
+        "<!DOCTYPE html><html><body><div id='root'></div></body></html>"
+    )
+    db_path = tmp_path / "dotted-slug.db"
+    return Settings(
+        secret_key="test-secret-key-with-at-least-32-characters",
+        debug=True,
+        database_url=f"sqlite+aiosqlite:///{db_path}",
+        content_dir=tmp_content_dir,
+        frontend_dir=frontend_dir,
+        admin_username="admin",
+        admin_password="admin123",
+    )
+
+
+@pytest.fixture
+async def dotted_slug_client(dotted_slug_app_settings: Settings) -> AsyncGenerator[AsyncClient]:
+    """Create test HTTP client for dotted nested post slug routing."""
+    async with create_test_client(dotted_slug_app_settings) as ac:
+        yield ac
+
+
 class TestHealth:
     @pytest.mark.asyncio
     async def test_health_check(self, client: AsyncClient) -> None:
@@ -2552,3 +2587,14 @@ class TestPostAssetRedirect:
         resp = await client.get("/post/dir-post/img/photo.png", follow_redirects=False)
         assert resp.status_code == 301
         assert resp.headers["location"] == "/api/content/posts/dir-post/img/photo.png"
+
+
+class TestDottedNestedPostRoute:
+    """Nested post slugs ending in a dotted segment still render the post route."""
+
+    async def test_dotted_nested_slug_does_not_redirect_to_content_api(
+        self, dotted_slug_client: AsyncClient
+    ) -> None:
+        resp = await dotted_slug_client.get("/post/releases/v1.0", follow_redirects=False)
+        assert resp.status_code == 200
+        assert "/api/content/posts/releases/v1.0" not in resp.text

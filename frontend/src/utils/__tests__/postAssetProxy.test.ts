@@ -23,6 +23,16 @@ describe('shouldProxyPostRequest', () => {
     expect(shouldProxyPostRequest('/post/2026/recap', hasExistingAsset)).toBe(false)
   })
 
+  it('keeps dotted nested post slugs in the SPA when no asset exists', () => {
+    const hasExistingAsset = vi.fn(() => false)
+    const hasCanonicalPost = vi.fn((filePath: string) => filePath === 'releases/v1.0')
+
+    expect(shouldProxyPostRequest('/post/releases/v1.0', hasExistingAsset, hasCanonicalPost)).toBe(
+      false,
+    )
+    expect(hasCanonicalPost).toHaveBeenCalledWith('releases/v1.0')
+  })
+
   it('still proxies dotted asset paths without a filesystem hit', () => {
     const hasExistingAsset = vi.fn(() => false)
 
