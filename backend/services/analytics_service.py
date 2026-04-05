@@ -547,15 +547,15 @@ async def fetch_dashboard(
     start: str | None = None,
     end: str | None = None,
 ) -> DashboardResponse | None:
-    """Fetch all dashboard data from GoatCounter sequentially.
+    """Fetch all dashboard data from GoatCounter concurrently.
 
-    Makes 9 sequential GoatCounter requests to stay within GoatCounter's rate
-    limit. The /api/v0/stats/hits response is fetched once and used for both
-    path hits and views-over-time, eliminating a duplicate call. Individual
-    endpoint failures fall back to empty/zero data so a partial GoatCounter
-    outage does not block the entire dashboard.
+    Fires 9 GoatCounter requests in parallel via asyncio.gather. The
+    /api/v0/stats/hits response is reused for both path hits and
+    views-over-time, eliminating a duplicate call. Individual endpoint
+    failures fall back to empty/zero data so a partial GoatCounter outage
+    does not block the entire dashboard.
 
-    Returns None when analytics is disabled or GoatCounter is unavailable.
+    Returns None when analytics is disabled.
     """
     settings = await get_analytics_settings(session)
     if not settings.analytics_enabled:
@@ -563,15 +563,27 @@ async def fetch_dashboard(
 
     params = _build_goatcounter_date_params(start, end) or None
 
-    total_data = await _stats_request("/api/v0/stats/total", params)
-    hits_data = await _stats_request("/api/v0/stats/hits", params)
-    browsers_data = await _stats_request("/api/v0/stats/browsers", params)
-    systems_data = await _stats_request("/api/v0/stats/systems", params)
-    languages_data = await _stats_request("/api/v0/stats/languages", params)
-    locations_data = await _stats_request("/api/v0/stats/locations", params)
-    sizes_data = await _stats_request("/api/v0/stats/sizes", params)
-    campaigns_data = await _stats_request("/api/v0/stats/campaigns", params)
-    referrers_data = await _stats_request("/api/v0/stats/toprefs", params)
+    (
+        total_data,
+        hits_data,
+        browsers_data,
+        systems_data,
+        languages_data,
+        locations_data,
+        sizes_data,
+        campaigns_data,
+        referrers_data,
+    ) = await asyncio.gather(
+        _stats_request("/api/v0/stats/total", params),
+        _stats_request("/api/v0/stats/hits", params),
+        _stats_request("/api/v0/stats/browsers", params),
+        _stats_request("/api/v0/stats/systems", params),
+        _stats_request("/api/v0/stats/languages", params),
+        _stats_request("/api/v0/stats/locations", params),
+        _stats_request("/api/v0/stats/sizes", params),
+        _stats_request("/api/v0/stats/campaigns", params),
+        _stats_request("/api/v0/stats/toprefs", params),
+    )
 
     stats = (
         TotalStatsResponse.from_goatcounter(total_data)

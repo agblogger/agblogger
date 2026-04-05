@@ -855,10 +855,10 @@ async def test_fetch_dashboard_returns_none_when_analytics_disabled(
     mock_req.assert_not_called()
 
 
-async def test_fetch_dashboard_makes_sequential_goatcounter_requests(
+async def test_fetch_dashboard_calls_all_goatcounter_endpoints(
     session: AsyncSession,
 ) -> None:
-    """fetch_dashboard calls each GoatCounter endpoint exactly once, sequentially."""
+    """fetch_dashboard calls each GoatCounter endpoint exactly once."""
     hits_response = {
         "hits": [
             {
@@ -872,10 +872,10 @@ async def test_fetch_dashboard_makes_sequential_goatcounter_requests(
     breakdown_response = {"stats": [{"name": "Chrome", "count": 80}]}
     toprefs_response = {"stats": [{"name": "hn.algolia.com", "count": 15}]}
 
-    call_order: list[str] = []
+    called_endpoints: list[str] = []
 
     async def fake_stats_request(endpoint: str, params: object = None) -> object:
-        call_order.append(endpoint)
+        called_endpoints.append(endpoint)
         if endpoint == "/api/v0/stats/total":
             return {"total": 200}
         if endpoint == "/api/v0/stats/hits":
@@ -902,19 +902,20 @@ async def test_fetch_dashboard_makes_sequential_goatcounter_requests(
     assert len(result.referrers.referrers) == 1
     assert result.referrers.referrers[0].referrer == "hn.algolia.com"
 
-    # Verify sequential ordering (not concurrent)
-    expected_order = [
-        "/api/v0/stats/total",
-        "/api/v0/stats/hits",
-        "/api/v0/stats/browsers",
-        "/api/v0/stats/systems",
-        "/api/v0/stats/languages",
-        "/api/v0/stats/locations",
-        "/api/v0/stats/sizes",
-        "/api/v0/stats/campaigns",
-        "/api/v0/stats/toprefs",
-    ]
-    assert call_order == expected_order
+    # All 9 endpoints called exactly once (concurrent — order is not asserted)
+    assert sorted(called_endpoints) == sorted(
+        [
+            "/api/v0/stats/total",
+            "/api/v0/stats/hits",
+            "/api/v0/stats/browsers",
+            "/api/v0/stats/systems",
+            "/api/v0/stats/languages",
+            "/api/v0/stats/locations",
+            "/api/v0/stats/sizes",
+            "/api/v0/stats/campaigns",
+            "/api/v0/stats/toprefs",
+        ]
+    )
 
 
 async def test_fetch_dashboard_hits_fetched_once_for_paths_and_views(

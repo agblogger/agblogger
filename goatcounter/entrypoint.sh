@@ -146,4 +146,5 @@ unset GOATCOUNTER_SITE_HOST
 exec goatcounter serve \
     -db "sqlite+$GOATCOUNTER_DB" \
     -listen ":8080" \
-    -tls none
+    -tls none \
+    -ratelimit api:9999999/1,api-count:9999999/1
