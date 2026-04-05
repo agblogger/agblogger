@@ -25,6 +25,7 @@ from backend.schemas.analytics import (
     PathHitsResponse,
     PathReferrersResponse,
     ReferrerEntry,
+    SiteReferrersResponse,
     TotalStatsResponse,
     ViewsOverTimeResponse,
 )
@@ -460,6 +461,50 @@ async def fetch_path_referrers(
         return None
     referrers = [ReferrerEntry.from_goatcounter(entry) for entry in data.get("refs", [])]
     return PathReferrersResponse(path_id=path_id, referrers=referrers)
+
+
+async def fetch_site_referrers(
+    session: AsyncSession,
+    start: str | None = None,
+    end: str | None = None,
+) -> SiteReferrersResponse | None:
+    """Aggregate referrers across all paths into a single ranked list."""
+    settings = await get_analytics_settings(session)
+    if not settings.analytics_enabled:
+        return None
+
+    params = _build_goatcounter_date_params(start, end)
+    path_data = await _stats_request("/api/v0/stats/hits", params or None)
+    if path_data is None:
+        return None
+
+    path_ids = [
+        entry.get("path_id", entry.get("id"))
+        for entry in path_data.get("hits", [])
+        if entry.get("path_id", entry.get("id"))
+    ]
+    if not path_ids:
+        return SiteReferrersResponse(referrers=[])
+
+    ref_results = await asyncio.gather(
+        *[_stats_request(f"/api/v0/stats/hits/{pid}") for pid in path_ids],
+        return_exceptions=True,
+    )
+
+    totals: dict[str, int] = {}
+    for ref_data in ref_results:
+        if not isinstance(ref_data, dict):
+            continue
+        for ref_entry in ref_data.get("refs", []):
+            entry = ReferrerEntry.from_goatcounter(ref_entry)
+            totals[entry.referrer] = totals.get(entry.referrer, 0) + entry.count
+
+    referrers = sorted(
+        [ReferrerEntry(referrer=name, count=count) for name, count in totals.items()],
+        key=lambda r: r.count,
+        reverse=True,
+    )
+    return SiteReferrersResponse(referrers=referrers)
 
 
 async def fetch_breakdown(

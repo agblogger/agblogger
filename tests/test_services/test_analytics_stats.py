@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -18,6 +18,7 @@ from backend.services.analytics_service import (
     fetch_breakdown,
     fetch_path_hits,
     fetch_path_referrers,
+    fetch_site_referrers,
     fetch_total_stats,
     fetch_view_count,
     fetch_views_over_time,
@@ -1061,3 +1062,65 @@ async def test_fetch_views_over_time_handles_missing_stats_field(
 
     assert result is not None
     assert result.days == []
+
+
+# ── fetch_site_referrers ──────────────────────────────────────────────────────
+
+
+async def test_fetch_site_referrers_aggregates_across_paths(session: AsyncSession) -> None:
+    """fetch_site_referrers merges referrers from all paths."""
+    path_hits = {
+        "hits": [
+            {"path_id": 1, "path": "/post/a", "count": 10},
+            {"path_id": 2, "path": "/post/b", "count": 5},
+        ]
+    }
+    refs_path_1 = {"refs": [{"name": "Google", "count": 5}, {"name": "Twitter", "count": 3}]}
+    refs_path_2 = {"refs": [{"name": "Google", "count": 2}, {"name": "Reddit", "count": 1}]}
+
+    async def mock_stats_request(
+        endpoint: str, params: dict[str, Any] | None = None
+    ) -> dict[str, Any] | None:
+        if endpoint == "/api/v0/stats/hits":
+            return path_hits
+        if endpoint == "/api/v0/stats/hits/1":
+            return refs_path_1
+        if endpoint == "/api/v0/stats/hits/2":
+            return refs_path_2
+        return None
+
+    with patch(
+        "backend.services.analytics_service._stats_request",
+        side_effect=mock_stats_request,
+    ):
+        result = await fetch_site_referrers(session, start="2026-04-01", end="2026-04-07")
+
+    assert result is not None
+    refs = {r.referrer: r.count for r in result.referrers}
+    assert refs["Google"] == 7
+    assert refs["Twitter"] == 3
+    assert refs["Reddit"] == 1
+    assert result.referrers[0].referrer == "Google"
+
+
+async def test_fetch_site_referrers_returns_none_when_unavailable(session: AsyncSession) -> None:
+    """fetch_site_referrers returns None when GoatCounter is unavailable."""
+    with patch(
+        "backend.services.analytics_service._stats_request",
+        new_callable=AsyncMock,
+        return_value=None,
+    ):
+        result = await fetch_site_referrers(session)
+    assert result is None
+
+
+async def test_fetch_site_referrers_handles_empty_paths(session: AsyncSession) -> None:
+    """fetch_site_referrers returns empty list when no paths exist."""
+    with patch(
+        "backend.services.analytics_service._stats_request",
+        new_callable=AsyncMock,
+        return_value={"hits": []},
+    ):
+        result = await fetch_site_referrers(session)
+    assert result is not None
+    assert result.referrers == []

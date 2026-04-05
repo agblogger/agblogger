@@ -118,6 +118,12 @@ class PathReferrersResponse(BaseModel):
     referrers: list[ReferrerEntry] = Field(default_factory=list)
 
 
+class SiteReferrersResponse(BaseModel):
+    """Aggregated referrer counts across all paths."""
+
+    referrers: list[ReferrerEntry] = Field(default_factory=list)
+
+
 class BreakdownEntry(BaseModel):
     """A single breakdown entry (browser, OS, country, etc.)."""
 
