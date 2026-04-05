@@ -48,16 +48,18 @@ html {
   --color-tag-text: #b0aaa2;
 }
 
-.dark .prose p {
-  color: #c8c4be;
-}
-
 .dark .prose mark {
   background: rgba(217, 164, 6, 0.35);
   color: #e0ddd8;
 }
 
 /* Prose styling for rendered content */
+.prose {
+  font-size: 1.05rem;
+  line-height: 1.75;
+  color: var(--color-ink);
+}
+
 .prose h1, .prose h2, .prose h3, .prose h4, .prose h5, .prose h6 {
   font-family: var(--font-display);
   font-weight: 500;
@@ -70,10 +72,7 @@ html {
 .prose h3 { font-size: 1.35rem; margin-top: 2rem; margin-bottom: 0.5rem; scroll-margin-top: 8rem; }
 
 .prose p {
-  font-size: 1.05rem;
-  line-height: 1.75;
   margin-bottom: 1.25rem;
-  color: #2d2d2d;
 }
 
 .prose a {
@@ -107,7 +106,6 @@ html {
 
 .prose li {
   margin-bottom: 0.35rem;
-  line-height: 1.7;
 }
 
 .prose blockquote {
@@ -134,7 +132,6 @@ html {
 .prose dd {
   margin-left: 1.5rem;
   margin-bottom: 0.5rem;
-  line-height: 1.7;
 }
 
 .prose li:has(> input[type="checkbox"]) {
@@ -185,12 +182,8 @@ html {
 .prose pre .va { color: #cdd6f4; }                    /* variable — text */
 .prose pre .re { color: #f2cdcd; }                    /* region marker — flamingo */
 
-.prose code {
-  font-family: var(--font-mono);
-  font-size: 0.9em;
-}
-
 .prose :not(pre) > code {
+  font-family: var(--font-mono);
   background: var(--color-tag-bg);
   padding: 0.15em 0.4em;
   border-radius: 4px;
@@ -209,7 +202,6 @@ html {
   text-align: center;
   font-family: var(--font-mono);
   font-size: 0.8rem;
-  color: var(--color-fg);
   margin-top: 0.5rem;
 }
 
