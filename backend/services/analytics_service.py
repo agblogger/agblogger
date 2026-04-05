@@ -716,6 +716,9 @@ async def download_export(
             timeout=_STATS_TIMEOUT,
         )
         response.raise_for_status()
+        if response.status_code == 202:
+            logger.warning("GoatCounter export %d not yet ready (202)", export_id)
+            return None
         content = response.content
         if not content:
             logger.warning("GoatCounter returned empty body for export %d download", export_id)

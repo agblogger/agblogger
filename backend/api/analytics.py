@@ -142,8 +142,8 @@ async def get_dashboard(
 ) -> DashboardResponse:
     """Get all dashboard analytics data in a single request.
 
-    Fetches 9 GoatCounter endpoints sequentially, combining the hits response
-    for both path hits and views-over-time to stay within rate limits.
+    Fetches GoatCounter endpoints in parallel via asyncio.gather, combining
+    the hits response for both path hits and views-over-time.
     """
     start = _validate_analytics_range_param(start, "start")
     end = _validate_analytics_range_param(end, "end")

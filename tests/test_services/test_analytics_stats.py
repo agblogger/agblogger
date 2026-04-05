@@ -363,6 +363,27 @@ async def test_download_export_returns_bytes(session: AsyncSession) -> None:
     assert result == b"csv-data-here"
 
 
+async def test_download_export_returns_none_on_202(session: AsyncSession) -> None:
+    """download_export returns None when GoatCounter responds 202 (export not yet ready)."""
+    from backend.services.analytics_service import download_export
+
+    fake_response = MagicMock()
+    fake_response.status_code = 202
+    fake_response.content = b'{"error": "still processing"}'
+    fake_response.raise_for_status = MagicMock()
+
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(return_value=fake_response)
+
+    with (
+        patch("backend.services.analytics_service._load_token", return_value="test-token"),
+        patch("backend.services.analytics_service._get_http_client", return_value=mock_client),
+    ):
+        result = await download_export(session, 42)
+
+    assert result is None
+
+
 async def test_stats_request_returns_none_on_invalid_json() -> None:
     """_stats_request returns None when the response body is not valid JSON."""
     import json

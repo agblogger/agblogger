@@ -118,8 +118,8 @@ function dashboardToData(
 /**
  * Composite SWR hook that fetches analytics settings first, then fetches all
  * dashboard stats via a single backend request when analytics is enabled.
- * The backend fetches GoatCounter endpoints sequentially to stay within rate
- * limits. Returns zeroed-out data when analytics is disabled rather than
+ * The backend fetches GoatCounter endpoints in parallel. Returns zeroed-out
+ * data when analytics is disabled rather than
  * triggering fetches.
  */
 export function useAnalyticsDashboard(range: DateRange) {
