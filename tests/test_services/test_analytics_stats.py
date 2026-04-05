@@ -20,6 +20,7 @@ from backend.services.analytics_service import (
     fetch_path_referrers,
     fetch_total_stats,
     fetch_view_count,
+    fetch_views_over_time,
 )
 
 if TYPE_CHECKING:
@@ -973,3 +974,90 @@ def test_breakdown_entry_from_goatcounter_logs_debug_on_missing_keys(
         BreakdownEntry.from_goatcounter({"unexpected": 1})
 
     assert any(r.levelno == logging.DEBUG for r in caplog.records)
+
+
+# ── fetch_views_over_time ─────────────────────────────────────────────────────
+
+
+async def test_fetch_views_over_time_aggregates_daily_counts(session: AsyncSession) -> None:
+    """fetch_views_over_time sums per-path daily counts into daily totals."""
+    fake_response = {
+        "hits": [
+            {
+                "path_id": 1,
+                "path": "/post/hello",
+                "count": 10,
+                "stats": [
+                    {"day": "2026-04-01", "days": [5, 3, 2, 0, 0, 0, 0]},
+                ],
+            },
+            {
+                "path_id": 2,
+                "path": "/post/world",
+                "count": 6,
+                "stats": [
+                    {"day": "2026-04-01", "days": [2, 1, 3, 0, 0, 0, 0]},
+                ],
+            },
+        ]
+    }
+    with patch(
+        "backend.services.analytics_service._stats_request",
+        new_callable=AsyncMock,
+        return_value=fake_response,
+    ):
+        result = await fetch_views_over_time(session, start="2026-04-01", end="2026-04-07")
+
+    assert result is not None
+    assert len(result.days) == 7
+    assert result.days[0].date == "2026-04-01"
+    assert result.days[0].views == 7  # 5 + 2
+    assert result.days[1].views == 4  # 3 + 1
+    assert result.days[2].views == 5  # 2 + 3
+
+
+async def test_fetch_views_over_time_returns_none_when_unavailable(
+    session: AsyncSession,
+) -> None:
+    """fetch_views_over_time returns None when GoatCounter is unavailable."""
+    with patch(
+        "backend.services.analytics_service._stats_request",
+        new_callable=AsyncMock,
+        return_value=None,
+    ):
+        result = await fetch_views_over_time(session)
+
+    assert result is None
+
+
+async def test_fetch_views_over_time_handles_empty_hits(session: AsyncSession) -> None:
+    """fetch_views_over_time returns empty days when no hits exist."""
+    with patch(
+        "backend.services.analytics_service._stats_request",
+        new_callable=AsyncMock,
+        return_value={"hits": []},
+    ):
+        result = await fetch_views_over_time(session)
+
+    assert result is not None
+    assert result.days == []
+
+
+async def test_fetch_views_over_time_handles_missing_stats_field(
+    session: AsyncSession,
+) -> None:
+    """Paths without a stats field are skipped gracefully."""
+    fake_response = {
+        "hits": [
+            {"path_id": 1, "path": "/post/hello", "count": 10},
+        ]
+    }
+    with patch(
+        "backend.services.analytics_service._stats_request",
+        new_callable=AsyncMock,
+        return_value=fake_response,
+    ):
+        result = await fetch_views_over_time(session)
+
+    assert result is not None
+    assert result.days == []

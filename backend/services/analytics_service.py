@@ -20,11 +20,13 @@ from backend.schemas.analytics import (
     BreakdownCategory,
     BreakdownEntry,
     BreakdownResponse,
+    DailyViewCount,
     PathHit,
     PathHitsResponse,
     PathReferrersResponse,
     ReferrerEntry,
     TotalStatsResponse,
+    ViewsOverTimeResponse,
 )
 from backend.utils.datetime import parse_datetime
 from backend.utils.goatcounter import normalize_goatcounter_site_host
@@ -518,6 +520,46 @@ async def fetch_view_count(
                 logger.warning("Unexpected count value in GoatCounter response for path %r", path)
                 return None
     return 0
+
+
+def _offset_date(base_date: str, offset: int) -> str:
+    """Add offset days to a YYYY-MM-DD date string."""
+    from datetime import date, timedelta
+
+    d = date.fromisoformat(base_date)
+    return (d + timedelta(days=offset)).isoformat()
+
+
+async def fetch_views_over_time(
+    session: AsyncSession,
+    start: str | None = None,
+    end: str | None = None,
+) -> ViewsOverTimeResponse | None:
+    """Aggregate per-path daily counts into daily totals across all paths."""
+    settings = await get_analytics_settings(session)
+    if not settings.analytics_enabled:
+        return None
+
+    params = _build_goatcounter_date_params(start, end)
+    params["daily"] = "true"
+    data = await _stats_request("/api/v0/stats/hits", params or None)
+    if data is None:
+        return None
+
+    day_totals: dict[str, int] = {}
+    for entry in data.get("hits", []):
+        for stat_block in entry.get("stats", []):
+            start_day = stat_block.get("day", "")
+            if not start_day:
+                continue
+            for offset, count in enumerate(stat_block.get("days", [])):
+                if not isinstance(count, int):
+                    continue
+                day_date = _offset_date(start_day, offset)
+                day_totals[day_date] = day_totals.get(day_date, 0) + count
+
+    days = [DailyViewCount(date=d, views=v) for d, v in sorted(day_totals.items())]
+    return ViewsOverTimeResponse(days=days)
 
 
 async def close_analytics_client() -> None:

@@ -163,3 +163,16 @@ class BreakdownResponse(BaseModel):
 
     category: BreakdownCategory
     entries: list[BreakdownEntry] = Field(default_factory=list)
+
+
+class DailyViewCount(BaseModel):
+    """View count for a single day."""
+
+    date: str = Field(min_length=10, max_length=10)
+    views: int = Field(ge=0)
+
+
+class ViewsOverTimeResponse(BaseModel):
+    """Daily view counts aggregated across all paths."""
+
+    days: list[DailyViewCount] = Field(default_factory=list)
