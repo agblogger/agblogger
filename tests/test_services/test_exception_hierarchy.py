@@ -69,11 +69,10 @@ class TestGitServiceInitRepoTimeoutExpired:
         content_dir.mkdir()
         gs = GitService(content_dir)
 
-        # Simulate TimeoutExpired from subprocess.run
         with (
-            patch(
-                "backend.services.git_service.asyncio.to_thread",
-                new_callable=AsyncMock,
+            patch.object(
+                gs,
+                "_run",
                 side_effect=subprocess.TimeoutExpired(cmd=["git", "init"], timeout=30),
             ),
             pytest.raises(subprocess.TimeoutExpired),
@@ -92,9 +91,9 @@ class TestGitServiceInitRepoTimeoutExpired:
         gs = GitService(content_dir)
 
         with (
-            patch(
-                "backend.services.git_service.asyncio.to_thread",
-                new_callable=AsyncMock,
+            patch.object(
+                gs,
+                "_run",
                 side_effect=subprocess.TimeoutExpired(cmd=["git", "init"], timeout=30),
             ),
             caplog.at_level(logging.ERROR, logger="backend.services.git_service"),

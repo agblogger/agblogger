@@ -12,6 +12,7 @@ import pytest
 from backend.services.git_service import GIT_TIMEOUT_SECONDS, GitService
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable
     from pathlib import Path
 
 
@@ -227,33 +228,65 @@ class TestHeadCommitEmptyRepo:
 
 
 class TestGitTimeout:
-    """subprocess.run is called with timeout kwarg."""
+    """Async git subprocesses are launched with timeout enforcement."""
 
-    async def test_run_passes_timeout(self, tmp_path: Path) -> None:
+    async def test_run_uses_asyncio_subprocess_with_timeout(self, tmp_path: Path) -> None:
         gs = GitService(tmp_path)
         (tmp_path / "file.txt").write_text("hello")
         await gs.init_repo()
 
-        with patch("subprocess.run", wraps=__import__("subprocess").run) as mock_run:
-            await gs.head_commit()
-        # Verify timeout was passed
-        call_kwargs = mock_run.call_args.kwargs
-        assert "timeout" in call_kwargs
-        assert call_kwargs["timeout"] == GIT_TIMEOUT_SECONDS
+        proc = AsyncMock()
+        proc.communicate.return_value = (b"deadbeef\n", b"")
+        proc.returncode = 0
+        captured_timeout: dict[str, float] = {}
 
-    async def test_merge_file_passes_timeout(self, tmp_path: Path) -> None:
+        async def fake_wait_for(awaitable: Awaitable[object], *, timeout: float) -> object:
+            captured_timeout["value"] = timeout
+            return await awaitable
+
+        with (
+            patch(
+                "backend.services.git_service.asyncio.create_subprocess_exec",
+                new_callable=AsyncMock,
+                return_value=proc,
+            ) as mock_exec,
+            patch("backend.services.git_service.asyncio.wait_for", side_effect=fake_wait_for),
+        ):
+            result = await gs._run("rev-parse", "HEAD")
+
+        assert result.stdout == "deadbeef\n"
+        assert captured_timeout["value"] == GIT_TIMEOUT_SECONDS
+        mock_exec.assert_awaited_once()
+
+    async def test_merge_file_uses_asyncio_subprocess_with_timeout(self, tmp_path: Path) -> None:
         gs = GitService(tmp_path)
         (tmp_path / "file.txt").write_text("hello")
         await gs.init_repo()
 
-        with patch("subprocess.run", wraps=__import__("subprocess").run) as mock_run:
-            await gs.merge_file_content("base", "ours", "theirs")
-        # The merge_file subprocess.run call should include timeout
-        merge_calls = [c for c in mock_run.call_args_list if "merge-file" in str(c)]
-        assert merge_calls, "Expected at least one subprocess.run call for git merge-file"
-        for call in merge_calls:
-            assert "timeout" in call.kwargs
-            assert call.kwargs["timeout"] == GIT_TIMEOUT_SECONDS
+        proc = AsyncMock()
+        proc.communicate.return_value = (b"merged body", b"")
+        proc.returncode = 0
+        captured_timeout: dict[str, float] = {}
+
+        async def fake_wait_for(awaitable: Awaitable[object], *, timeout: float) -> object:
+            captured_timeout["value"] = timeout
+            return await awaitable
+
+        with (
+            patch(
+                "backend.services.git_service.asyncio.create_subprocess_exec",
+                new_callable=AsyncMock,
+                return_value=proc,
+            ) as mock_exec,
+            patch("backend.services.git_service.asyncio.wait_for", side_effect=fake_wait_for),
+        ):
+            merged, conflicted = await gs.merge_file_content("base", "ours", "theirs")
+
+        assert merged == "merged body"
+        assert conflicted is False
+        assert captured_timeout["value"] == GIT_TIMEOUT_SECONDS
+        mock_exec.assert_awaited_once()
+        assert mock_exec.await_args.args[:3] == ("git", "merge-file", "-p")
 
     def test_timeout_constant_is_positive(self) -> None:
         assert GIT_TIMEOUT_SECONDS > 0

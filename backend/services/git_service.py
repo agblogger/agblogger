@@ -29,15 +29,54 @@ class GitService:
         capture_output: bool = True,
     ) -> subprocess.CompletedProcess[str]:
         """Run a git command in the content directory."""
-        return await asyncio.to_thread(
-            subprocess.run,
+        return await self._run_process(
             ["git", *args],
-            cwd=self.content_dir,
             check=check,
             capture_output=capture_output,
-            text=True,
-            timeout=GIT_TIMEOUT_SECONDS,
+            cwd=self.content_dir,
         )
+
+    async def _run_process(
+        self,
+        command: list[str],
+        *,
+        cwd: Path | None,
+        check: bool = True,
+        capture_output: bool = True,
+    ) -> subprocess.CompletedProcess[str]:
+        """Run a subprocess under asyncio so the event loop owns child reaping."""
+        stdout_target = asyncio.subprocess.PIPE if capture_output else asyncio.subprocess.DEVNULL
+        process = await asyncio.create_subprocess_exec(
+            *command,
+            cwd=cwd,
+            stdout=stdout_target,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            stdout_bytes, stderr_bytes = await asyncio.wait_for(
+                process.communicate(),
+                timeout=GIT_TIMEOUT_SECONDS,
+            )
+        except TimeoutError as exc:
+            if process.returncode is None:
+                process.kill()
+                await process.wait()
+            raise subprocess.TimeoutExpired(cmd=command, timeout=GIT_TIMEOUT_SECONDS) from exc
+
+        if process.returncode is None:
+            msg = f"Process {' '.join(command)} finished without a return code"
+            raise RuntimeError(msg)
+        stdout = stdout_bytes.decode("utf-8", errors="replace")
+        stderr = stderr_bytes.decode("utf-8", errors="replace")
+        result = subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+        if check and result.returncode != 0:
+            raise subprocess.CalledProcessError(
+                result.returncode,
+                command,
+                output=result.stdout,
+                stderr=result.stderr,
+            )
+        return result
 
     async def init_repo(self) -> None:
         """Initialize a git repo if one doesn't exist, then commit any existing files."""
@@ -138,10 +177,6 @@ class GitService:
 
         Returns (merged_text, has_conflicts).
         """
-        return await asyncio.to_thread(self._merge_file_content_sync, base, ours, theirs)
-
-    def _merge_file_content_sync(self, base: str, ours: str, theirs: str) -> tuple[str, bool]:
-        """Synchronous three-way merge implementation for use with asyncio.to_thread."""
         with tempfile.TemporaryDirectory() as td:
             tmp = Path(td)
             base_f = tmp / "base"
@@ -151,13 +186,11 @@ class GitService:
             ours_f.write_text(ours, encoding="utf-8")
             theirs_f.write_text(theirs, encoding="utf-8")
 
-            result = subprocess.run(
+            result = await self._run_process(
                 ["git", "merge-file", "-p", str(ours_f), str(base_f), str(theirs_f)],
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
                 check=False,
-                timeout=GIT_TIMEOUT_SECONDS,
+                capture_output=True,
+                cwd=None,
             )
             # exit 0 = clean merge, positive exit = number of conflicts (capped at 127),
             # negative exit = signal, exit >= 128 = git error

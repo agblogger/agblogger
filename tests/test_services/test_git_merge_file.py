@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import subprocess
 from typing import TYPE_CHECKING
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -103,13 +103,15 @@ class TestMergeFileContent:
         git = GitService(tmp_path)
         await git.init_repo()
 
-        fake_result = subprocess.CompletedProcess(
-            args=["git", "merge-file"],
-            returncode=128,
-            stdout="",
-            stderr="fatal: some error",
-        )
-        with patch("subprocess.run", return_value=fake_result):
+        proc = AsyncMock()
+        proc.communicate.return_value = (b"", b"fatal: some error")
+        proc.returncode = 128
+
+        with patch(
+            "backend.services.git_service.asyncio.create_subprocess_exec",
+            new_callable=AsyncMock,
+            return_value=proc,
+        ):
             with pytest.raises(subprocess.CalledProcessError) as exc_info:
                 await git.merge_file_content("base\n", "ours\n", "theirs\n")
             assert exc_info.value.returncode == 128
