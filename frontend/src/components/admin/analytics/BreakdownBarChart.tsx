@@ -81,7 +81,7 @@ export default function BreakdownBarChart({
 
   const topEntries = entries.slice(0, 8)
 
-  function handleBarClick(data: { name?: string; id?: number; index?: number } | null, index: number) {
+  function handleBarClick(_data: unknown, index: number) {
     if (drillDownCategory === undefined) return
     const entry = topEntries[index]
     if (entry === undefined) return
@@ -107,7 +107,7 @@ export default function BreakdownBarChart({
               layout="vertical"
               margin={{ left: 0, right: 8, top: 0, bottom: 0 }}
               onClick={(chartData) => {
-                if (chartData?.activeTooltipIndex !== undefined) {
+                if (chartData.activeTooltipIndex != null && typeof chartData.activeTooltipIndex === 'number') {
                   handleBarClick(null, chartData.activeTooltipIndex)
                 }
               }}

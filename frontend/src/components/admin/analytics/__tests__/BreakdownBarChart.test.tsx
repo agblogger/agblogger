@@ -28,12 +28,13 @@ function renderChart(
   title = 'Browsers',
   drillDownCategory?: 'browsers' | 'systems',
 ) {
+  const extraProps = drillDownCategory !== undefined ? { drillDownCategory } : {}
   return render(
     <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0, shouldRetryOnError: false }}>
       <BreakdownBarChart
         title={title}
         entries={entries}
-        drillDownCategory={drillDownCategory}
+        {...extraProps}
       />
     </SWRConfig>,
   )

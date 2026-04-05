@@ -5,10 +5,6 @@ import { fetchCreateExport, fetchExportStatus, fetchExportDownload } from '@/api
 const MAX_POLLS = 30
 const POLL_INTERVAL_MS = 2000
 
-function sleep(ms: number): Promise<void> {
-  return new Promise<void>((resolve) => { setTimeout(resolve, ms) })
-}
-
 interface ExportButtonProps {
   disabled: boolean
 }
