@@ -473,39 +473,25 @@ async def fetch_site_referrers(
     start: str | None = None,
     end: str | None = None,
 ) -> SiteReferrersResponse | None:
-    """Aggregate referrers across all paths into a single ranked list."""
+    """Aggregate site-wide referrers via GoatCounter's toprefs endpoint.
+
+    Returns None when analytics is disabled or GoatCounter is unavailable.
+    """
     settings = await get_analytics_settings(session)
     if not settings.analytics_enabled:
         return None
 
     params = _build_goatcounter_date_params(start, end)
-    path_data = await _stats_request("/api/v0/stats/hits", params or None)
-    if path_data is None:
+    data = await _stats_request("/api/v0/stats/toprefs", params or None)
+    if data is None:
         return None
 
-    path_ids = [
-        entry.get("path_id", entry.get("id"))
-        for entry in path_data.get("hits", [])
-        if entry.get("path_id", entry.get("id"))
-    ]
-    if not path_ids:
-        return SiteReferrersResponse(referrers=[])
-
-    ref_results = await asyncio.gather(
-        *[_stats_request(f"/api/v0/stats/hits/{pid}") for pid in path_ids],
-        return_exceptions=True,
-    )
-
-    totals: dict[str, int] = {}
-    for ref_data in ref_results:
-        if not isinstance(ref_data, dict):
-            continue
-        for ref_entry in ref_data.get("refs", []):
-            entry = ReferrerEntry.from_goatcounter(ref_entry)
-            totals[entry.referrer] = totals.get(entry.referrer, 0) + entry.count
-
     referrers = sorted(
-        [ReferrerEntry(referrer=name, count=count) for name, count in totals.items()],
+        [
+            ReferrerEntry.from_goatcounter(entry)
+            for entry in data.get("stats", [])
+            if isinstance(entry, dict)
+        ],
         key=lambda r: r.count,
         reverse=True,
     )
@@ -547,7 +533,7 @@ async def fetch_breakdown(
 async def fetch_breakdown_detail(
     session: AsyncSession,
     category: BreakdownDetailCategory,
-    entry_id: int,
+    entry_id: str,
 ) -> BreakdownDetailResponse | None:
     """Proxy GoatCounter version drill-down for a breakdown entry."""
     settings = await get_analytics_settings(session)
@@ -600,12 +586,16 @@ async def fetch_view_count(
     return 0
 
 
-def _offset_date(base_date: str, offset: int) -> str:
-    """Add offset days to a YYYY-MM-DD date string."""
+def _offset_date(base_date: str, offset: int) -> str | None:
+    """Add offset days to a YYYY-MM-DD date string. Returns None on invalid input."""
     from datetime import date, timedelta
 
-    d = date.fromisoformat(base_date)
-    return (d + timedelta(days=offset)).isoformat()
+    try:
+        d = date.fromisoformat(base_date)
+        return (d + timedelta(days=offset)).isoformat()
+    except ValueError, OverflowError:
+        logger.warning("Invalid day value %r from GoatCounter stats block", base_date)
+        return None
 
 
 async def fetch_views_over_time(
@@ -619,7 +609,6 @@ async def fetch_views_over_time(
         return None
 
     params = _build_goatcounter_date_params(start, end)
-    params["daily"] = "true"
     data = await _stats_request("/api/v0/stats/hits", params or None)
     if data is None:
         return None
@@ -627,14 +616,12 @@ async def fetch_views_over_time(
     day_totals: dict[str, int] = {}
     for entry in data.get("hits", []):
         for stat_block in entry.get("stats", []):
-            start_day = stat_block.get("day", "")
-            if not start_day:
+            day = stat_block.get("day", "")
+            if not day:
                 continue
-            for offset, count in enumerate(stat_block.get("days", [])):
-                if not isinstance(count, int):
-                    continue
-                day_date = _offset_date(start_day, offset)
-                day_totals[day_date] = day_totals.get(day_date, 0) + count
+            daily_count = stat_block.get("daily", 0)
+            if isinstance(daily_count, int):
+                day_totals[day] = day_totals.get(day, 0) + daily_count
 
     days = [DailyViewCount(date=d, views=v) for d, v in sorted(day_totals.items())]
     return ViewsOverTimeResponse(days=days)
@@ -662,7 +649,14 @@ async def create_export(
         )
         response.raise_for_status()
         data = response.json()
-        return ExportCreateResponse(id=data.get("id", 0))
+        export_id = data.get("id")
+        if not isinstance(export_id, int) or export_id <= 0:
+            logger.error(
+                "GoatCounter export creation response missing valid 'id' field: %r",
+                data,
+            )
+            return None
+        return ExportCreateResponse(id=export_id)
     except _STATS_ERRORS:
         logger.warning("Failed to create GoatCounter export", exc_info=True)
         return None

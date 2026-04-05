@@ -3,17 +3,24 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
 
 from backend.models.base import DurableBase
-from backend.schemas.analytics import BreakdownEntry, PathHit, ReferrerEntry, TotalStatsResponse
+from backend.schemas.analytics import (
+    BreakdownDetailEntry,
+    BreakdownEntry,
+    PathHit,
+    ReferrerEntry,
+    TotalStatsResponse,
+)
 from backend.services.analytics_service import (
     _build_goatcounter_date_params,
     _normalize_goatcounter_end_date,
+    _offset_date,
     _stats_request,
     fetch_breakdown,
     fetch_breakdown_detail,
@@ -1081,7 +1088,7 @@ def test_breakdown_entry_from_goatcounter_logs_debug_on_missing_keys(
 
 
 async def test_fetch_views_over_time_aggregates_daily_counts(session: AsyncSession) -> None:
-    """fetch_views_over_time sums per-path daily counts into daily totals."""
+    """fetch_views_over_time sums per-path daily counts into daily totals using daily field."""
     fake_response = {
         "hits": [
             {
@@ -1089,7 +1096,9 @@ async def test_fetch_views_over_time_aggregates_daily_counts(session: AsyncSessi
                 "path": "/post/hello",
                 "count": 10,
                 "stats": [
-                    {"day": "2026-04-01", "days": [5, 3, 2, 0, 0, 0, 0]},
+                    {"day": "2026-04-01", "daily": 5, "hourly": [0] * 24},
+                    {"day": "2026-04-02", "daily": 3, "hourly": [0] * 24},
+                    {"day": "2026-04-03", "daily": 2, "hourly": [0] * 24},
                 ],
             },
             {
@@ -1097,7 +1106,9 @@ async def test_fetch_views_over_time_aggregates_daily_counts(session: AsyncSessi
                 "path": "/post/world",
                 "count": 6,
                 "stats": [
-                    {"day": "2026-04-01", "days": [2, 1, 3, 0, 0, 0, 0]},
+                    {"day": "2026-04-01", "daily": 2, "hourly": [0] * 24},
+                    {"day": "2026-04-02", "daily": 1, "hourly": [0] * 24},
+                    {"day": "2026-04-03", "daily": 3, "hourly": [0] * 24},
                 ],
             },
         ]
@@ -1110,7 +1121,7 @@ async def test_fetch_views_over_time_aggregates_daily_counts(session: AsyncSessi
         result = await fetch_views_over_time(session, start="2026-04-01", end="2026-04-07")
 
     assert result is not None
-    assert len(result.days) == 7
+    assert len(result.days) == 3
     assert result.days[0].date == "2026-04-01"
     assert result.days[0].views == 7  # 5 + 2
     assert result.days[1].views == 4  # 3 + 1
@@ -1168,30 +1179,18 @@ async def test_fetch_views_over_time_handles_missing_stats_field(
 
 
 async def test_fetch_site_referrers_aggregates_across_paths(session: AsyncSession) -> None:
-    """fetch_site_referrers merges referrers from all paths."""
-    path_hits = {
-        "hits": [
-            {"path_id": 1, "path": "/post/a", "count": 10},
-            {"path_id": 2, "path": "/post/b", "count": 5},
+    """fetch_site_referrers returns referrers from GoatCounter's toprefs endpoint."""
+    fake_response = {
+        "stats": [
+            {"name": "Google", "count": 7},
+            {"name": "Twitter", "count": 3},
+            {"name": "Reddit", "count": 1},
         ]
     }
-    refs_path_1 = {"refs": [{"name": "Google", "count": 5}, {"name": "Twitter", "count": 3}]}
-    refs_path_2 = {"refs": [{"name": "Google", "count": 2}, {"name": "Reddit", "count": 1}]}
-
-    async def mock_stats_request(
-        endpoint: str, params: dict[str, Any] | None = None
-    ) -> dict[str, Any] | None:
-        if endpoint == "/api/v0/stats/hits":
-            return path_hits
-        if endpoint == "/api/v0/stats/hits/1":
-            return refs_path_1
-        if endpoint == "/api/v0/stats/hits/2":
-            return refs_path_2
-        return None
-
     with patch(
         "backend.services.analytics_service._stats_request",
-        side_effect=mock_stats_request,
+        new_callable=AsyncMock,
+        return_value=fake_response,
     ):
         result = await fetch_site_referrers(session, start="2026-04-01", end="2026-04-07")
 
@@ -1214,16 +1213,35 @@ async def test_fetch_site_referrers_returns_none_when_unavailable(session: Async
     assert result is None
 
 
-async def test_fetch_site_referrers_handles_empty_paths(session: AsyncSession) -> None:
-    """fetch_site_referrers returns empty list when no paths exist."""
+async def test_fetch_site_referrers_handles_empty_stats(session: AsyncSession) -> None:
+    """fetch_site_referrers returns empty list when no referrers exist."""
     with patch(
         "backend.services.analytics_service._stats_request",
         new_callable=AsyncMock,
-        return_value={"hits": []},
+        return_value={"stats": []},
     ):
         result = await fetch_site_referrers(session)
     assert result is not None
     assert result.referrers == []
+
+
+async def test_fetch_site_referrers_returns_none_when_analytics_disabled(
+    session: AsyncSession,
+) -> None:
+    """fetch_site_referrers returns None when analytics is disabled."""
+    from backend.services.analytics_service import update_analytics_settings
+
+    await update_analytics_settings(session, analytics_enabled=False)
+
+    with patch(
+        "backend.services.analytics_service._stats_request",
+        new_callable=AsyncMock,
+        return_value={"stats": []},
+    ) as mock_req:
+        result = await fetch_site_referrers(session)
+
+    assert result is None
+    mock_req.assert_not_called()
 
 
 # ── fetch_breakdown_detail ─────────────────────────────────────────────────────
@@ -1242,11 +1260,11 @@ async def test_fetch_breakdown_detail_returns_versions(session: AsyncSession) ->
         new_callable=AsyncMock,
         return_value=fake_response,
     ):
-        result = await fetch_breakdown_detail(session, "browsers", 3)
+        result = await fetch_breakdown_detail(session, "browsers", "3")
 
     assert result is not None
     assert result.category == "browsers"
-    assert result.entry_id == 3
+    assert result.entry_id == "3"
     assert len(result.entries) == 2
     assert result.entries[0].name == "Chrome 120"
     assert result.entries[0].count == 50
@@ -1261,6 +1279,155 @@ async def test_fetch_breakdown_detail_returns_none_when_unavailable(
         new_callable=AsyncMock,
         return_value=None,
     ):
-        result = await fetch_breakdown_detail(session, "browsers", 3)
+        result = await fetch_breakdown_detail(session, "browsers", "3")
 
     assert result is None
+
+
+async def test_fetch_breakdown_detail_returns_none_when_analytics_disabled(
+    session: AsyncSession,
+) -> None:
+    """fetch_breakdown_detail returns None when analytics is disabled."""
+    from backend.services.analytics_service import update_analytics_settings
+
+    await update_analytics_settings(session, analytics_enabled=False)
+
+    with patch(
+        "backend.services.analytics_service._stats_request",
+        new_callable=AsyncMock,
+        return_value={"stats": []},
+    ) as mock_req:
+        result = await fetch_breakdown_detail(session, "browsers", "3")
+
+    assert result is None
+    mock_req.assert_not_called()
+
+
+# ── get_export_status and download_export disabled-gating ─────────────────────
+
+
+async def test_get_export_status_returns_none_when_analytics_disabled(
+    session: AsyncSession,
+) -> None:
+    """get_export_status returns None when analytics is disabled."""
+    from backend.services.analytics_service import get_export_status, update_analytics_settings
+
+    await update_analytics_settings(session, analytics_enabled=False)
+    result = await get_export_status(session, 42)
+    assert result is None
+
+
+async def test_download_export_returns_none_when_analytics_disabled(
+    session: AsyncSession,
+) -> None:
+    """download_export returns None when analytics is disabled."""
+    from backend.services.analytics_service import download_export, update_analytics_settings
+
+    await update_analytics_settings(session, analytics_enabled=False)
+    result = await download_export(session, 42)
+    assert result is None
+
+
+# ── Issue 12 (service): Validate export ID in create_export ───────────────────
+
+
+async def test_create_export_returns_none_when_id_missing(session: AsyncSession) -> None:
+    """create_export returns None when GoatCounter response missing valid id."""
+    from backend.services.analytics_service import create_export
+
+    fake_post_response = MagicMock()
+    fake_post_response.status_code = 202
+    fake_post_response.json.return_value = {}  # No "id" key
+    fake_post_response.raise_for_status = MagicMock()
+
+    mock_client = AsyncMock()
+    mock_client.post = AsyncMock(return_value=fake_post_response)
+
+    with (
+        patch("backend.services.analytics_service._load_token", return_value="test-token"),
+        patch("backend.services.analytics_service._get_http_client", return_value=mock_client),
+    ):
+        result = await create_export(session)
+
+    assert result is None
+
+
+async def test_create_export_returns_none_when_id_is_zero(session: AsyncSession) -> None:
+    """create_export returns None when GoatCounter returns id=0."""
+    from backend.services.analytics_service import create_export
+
+    fake_post_response = MagicMock()
+    fake_post_response.status_code = 202
+    fake_post_response.json.return_value = {"id": 0}
+    fake_post_response.raise_for_status = MagicMock()
+
+    mock_client = AsyncMock()
+    mock_client.post = AsyncMock(return_value=fake_post_response)
+
+    with (
+        patch("backend.services.analytics_service._load_token", return_value="test-token"),
+        patch("backend.services.analytics_service._get_http_client", return_value=mock_client),
+    ):
+        result = await create_export(session)
+
+    assert result is None
+
+
+# ── Issue 3: _offset_date defensive handling ──────────────────────────────────
+
+
+def test_offset_date_adds_days_correctly() -> None:
+    """_offset_date correctly adds days to a YYYY-MM-DD date string."""
+    assert _offset_date("2026-04-01", 0) == "2026-04-01"
+    assert _offset_date("2026-04-01", 1) == "2026-04-02"
+    assert _offset_date("2026-04-01", 30) == "2026-05-01"
+
+
+def test_offset_date_returns_none_on_invalid_input() -> None:
+    """_offset_date returns None when given an invalid date string."""
+    assert _offset_date("not-a-date", 1) is None
+    assert _offset_date("N/A", 0) is None
+
+
+def test_offset_date_handles_month_boundary() -> None:
+    """_offset_date correctly handles month boundaries."""
+    assert _offset_date("2026-01-31", 1) == "2026-02-01"
+
+
+# ── BreakdownDetailEntry schema classmethod tests ─────────────────────────────
+
+
+def test_breakdown_detail_entry_from_goatcounter_maps_fields() -> None:
+    """BreakdownDetailEntry.from_goatcounter maps name, count, percent correctly."""
+    entry = {"name": "Chrome 120", "count": 50, "percent": 62.5}
+    result = BreakdownDetailEntry.from_goatcounter(entry)
+    assert result.name == "Chrome 120"
+    assert result.count == 50
+    assert result.percent == 62.5
+
+
+def test_breakdown_detail_entry_from_goatcounter_defaults_on_missing_keys() -> None:
+    """BreakdownDetailEntry.from_goatcounter defaults to Unknown/0 when keys absent."""
+    result = BreakdownDetailEntry.from_goatcounter({})
+    assert result.name == "Unknown"
+    assert result.count == 0
+    assert result.percent == 0.0
+
+
+def test_breakdown_detail_entry_from_goatcounter_maps_blank_name_to_unknown() -> None:
+    """BreakdownDetailEntry.from_goatcounter maps blank name to 'Unknown'."""
+    assert BreakdownDetailEntry.from_goatcounter({"name": "", "count": 5}).name == "Unknown"
+    assert BreakdownDetailEntry.from_goatcounter({"name": "  ", "count": 3}).name == "Unknown"
+
+
+def test_breakdown_detail_entry_from_goatcounter_coerces_non_int_count_to_zero() -> None:
+    """BreakdownDetailEntry.from_goatcounter coerces non-integer count to 0."""
+    assert BreakdownDetailEntry.from_goatcounter({"name": "Chrome 120", "count": "N/A"}).count == 0
+    assert BreakdownDetailEntry.from_goatcounter({"name": "Chrome 120", "count": None}).count == 0
+
+
+def test_breakdown_detail_entry_from_goatcounter_computes_percent_when_missing() -> None:
+    """BreakdownDetailEntry.from_goatcounter computes percent from total_count when absent."""
+    entry = {"name": "Chrome 120", "count": 3}
+    result = BreakdownDetailEntry.from_goatcounter(entry, total_count=6)
+    assert result.percent == 50.0

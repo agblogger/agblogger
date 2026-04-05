@@ -130,6 +130,7 @@ class BreakdownEntry(BaseModel):
     name: str
     count: int = Field(ge=0)
     percent: float = Field(ge=0, le=100)
+    gc_id: str | None = None  # GoatCounter entry ID for drill-down
 
     @classmethod
     def from_goatcounter(
@@ -154,10 +155,13 @@ class BreakdownEntry(BaseModel):
         percent = entry.get("percent")
         if percent is None:
             percent = (count / total_count * 100.0) if total_count and total_count > 0 else 0.0
+        gc_id_raw = entry.get("id")
+        gc_id = gc_id_raw if isinstance(gc_id_raw, str) and gc_id_raw else None
         return cls(
             name=name,
             count=count,
             percent=percent,
+            gc_id=gc_id,
         )
 
 
@@ -204,7 +208,7 @@ class BreakdownDetailResponse(BaseModel):
     """Version detail for a breakdown entry (e.g. all Chrome versions)."""
 
     category: BreakdownDetailCategory
-    entry_id: int = Field(ge=1)
+    entry_id: str = Field(min_length=1, max_length=200)
     entries: list[BreakdownDetailEntry] = Field(default_factory=list)
 
 
@@ -224,7 +228,7 @@ class ViewsOverTimeResponse(BaseModel):
 class ExportCreateResponse(BaseModel):
     """Response after creating a CSV export job."""
 
-    id: int = Field(ge=0)
+    id: int = Field(ge=1)
 
 
 class ExportStatusResponse(BaseModel):

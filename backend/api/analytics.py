@@ -222,7 +222,7 @@ async def get_site_referrers(
 @admin_router.get("/stats/{category}/{entry_id}", response_model=BreakdownDetailResponse)
 async def get_breakdown_detail(
     category: BreakdownDetailCategory,
-    entry_id: Annotated[int, Path(ge=1)],
+    entry_id: Annotated[str, Path(min_length=1, max_length=200)],
     session: Annotated[AsyncSession, Depends(get_session)],
     _user: Annotated[AdminUser, Depends(require_admin)],
 ) -> BreakdownDetailResponse:

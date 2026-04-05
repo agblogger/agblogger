@@ -204,13 +204,17 @@ class TestNewAnalyticsEndpoints:
         assert resp.status_code == 422
 
     @pytest.mark.asyncio
-    async def test_breakdown_detail_invalid_id(self, client: AsyncClient) -> None:
+    async def test_breakdown_detail_503_when_unavailable(self, client: AsyncClient) -> None:
         token = await _get_admin_token(client)
-        resp = await client.get(
-            "/api/admin/analytics/stats/browsers/0",
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        assert resp.status_code == 422
+        with patch(
+            "backend.api.analytics.fetch_breakdown_detail",
+            new=AsyncMock(return_value=None),
+        ):
+            resp = await client.get(
+                "/api/admin/analytics/stats/browsers/chrome",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert resp.status_code == 503
 
 
 class TestAnalyticsSettings:
@@ -589,6 +593,50 @@ class TestStatsServiceUnavailable:
         assert resp.json()["detail"] == "Analytics service unavailable"
         mock_req.assert_not_called()
 
+    @pytest.mark.asyncio
+    async def test_views_over_time_returns_503_when_service_none(self, client: AsyncClient) -> None:
+        token = await _get_admin_token(client)
+        with patch(
+            "backend.api.analytics.fetch_views_over_time",
+            new=AsyncMock(return_value=None),
+        ):
+            resp = await client.get(
+                "/api/admin/analytics/stats/views-over-time",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert resp.status_code == 503
+        assert resp.json()["detail"] == "Analytics service unavailable"
+
+    @pytest.mark.asyncio
+    async def test_site_referrers_returns_503_when_service_none(self, client: AsyncClient) -> None:
+        token = await _get_admin_token(client)
+        with patch(
+            "backend.api.analytics.fetch_site_referrers",
+            new=AsyncMock(return_value=None),
+        ):
+            resp = await client.get(
+                "/api/admin/analytics/stats/referrers",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert resp.status_code == 503
+        assert resp.json()["detail"] == "Analytics service unavailable"
+
+    @pytest.mark.asyncio
+    async def test_breakdown_detail_returns_503_when_service_none(
+        self, client: AsyncClient
+    ) -> None:
+        token = await _get_admin_token(client)
+        with patch(
+            "backend.api.analytics.fetch_breakdown_detail",
+            new=AsyncMock(return_value=None),
+        ):
+            resp = await client.get(
+                "/api/admin/analytics/stats/browsers/chrome",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert resp.status_code == 503
+        assert resp.json()["detail"] == "Analytics service unavailable"
+
 
 class TestDateParameterValidation:
     """Tests for analytics range parameter validation."""
@@ -671,6 +719,46 @@ class TestDateParameterValidation:
         resp = await client.get(
             "/api/admin/analytics/stats/browsers",
             params={"end": "2024-01-31T23:59:59.999Z"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code in {200, 503}
+
+    @pytest.mark.asyncio
+    async def test_views_over_time_rejects_invalid_date(self, client: AsyncClient) -> None:
+        token = await _get_admin_token(client)
+        resp = await client.get(
+            "/api/admin/analytics/stats/views-over-time",
+            params={"start": "invalid"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_referrers_rejects_invalid_date(self, client: AsyncClient) -> None:
+        token = await _get_admin_token(client)
+        resp = await client.get(
+            "/api/admin/analytics/stats/referrers",
+            params={"start": "01-01-2024"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_views_over_time_accepts_valid_date(self, client: AsyncClient) -> None:
+        token = await _get_admin_token(client)
+        resp = await client.get(
+            "/api/admin/analytics/stats/views-over-time",
+            params={"start": "2024-01-01"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code in {200, 503}
+
+    @pytest.mark.asyncio
+    async def test_referrers_accepts_valid_date(self, client: AsyncClient) -> None:
+        token = await _get_admin_token(client)
+        resp = await client.get(
+            "/api/admin/analytics/stats/referrers",
+            params={"end": "2024-01-31"},
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code in {200, 503}
