@@ -155,6 +155,8 @@ export function useAnalyticsDashboard(range: DateRange) {
     isLoading:
       settingsResult.isLoading ||
       (analyticsEnabled === true && dashboardResult.isLoading),
+    // Sequential by design: the dashboard fetch is conditional on analytics being enabled,
+    // so settings must be resolved first to avoid an unnecessary dashboard request.
     mutate: async () => {
       const settings = await settingsResult.mutate()
       if (settings === undefined) return undefined

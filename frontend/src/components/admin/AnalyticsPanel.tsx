@@ -1,6 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { BarChart2, Loader2 } from 'lucide-react'
-import { useMemo } from 'react'
 
 import { updateAnalyticsSettings } from '@/api/analytics'
 import { HTTPError } from '@/api/client'

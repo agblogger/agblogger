@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { CSSProperties } from 'react'
 import {
   BarChart,
   Bar,
@@ -10,6 +11,8 @@ import {
 import { useBreakdownDetail } from '@/hooks/useAnalyticsDashboard'
 import type { BreakdownEntry } from '@/api/client'
 import type { BreakdownDetailCategory } from '@/api/client'
+
+const POINTER_CURSOR: CSSProperties = { cursor: 'pointer' }
 
 interface BreakdownBarChartProps {
   title: string
@@ -122,7 +125,7 @@ export default function BreakdownBarChart({
                 dataKey="percent"
                 fill="var(--color-accent, #6366f1)"
                 fillOpacity={0.75}
-                style={drillDownCategory !== undefined ? { cursor: 'pointer' } : undefined}
+                style={drillDownCategory !== undefined ? POINTER_CURSOR : undefined}
               />
             </BarChart>
           </ResponsiveContainer>

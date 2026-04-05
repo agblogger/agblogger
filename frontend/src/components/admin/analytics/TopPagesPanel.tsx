@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { usePathReferrers } from '@/hooks/useAnalyticsDashboard'
 import type { PathHit } from '@/api/client'
@@ -72,7 +72,7 @@ export default function TopPagesPanel({ paths }: TopPagesPanelProps) {
     }
   }
 
-  const sorted = [...paths].sort((a, b) => b.views - a.views)
+  const sorted = useMemo(() => [...paths].sort((a, b) => b.views - a.views), [paths])
 
   return (
     <div className="bg-surface border border-border rounded-lg p-5">
