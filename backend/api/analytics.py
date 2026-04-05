@@ -17,32 +17,21 @@ from backend.models.user import AdminUser
 from backend.schemas.analytics import (
     AnalyticsSettingsResponse,
     AnalyticsSettingsUpdate,
-    BreakdownCategory,
     BreakdownDetailCategory,
     BreakdownDetailResponse,
-    BreakdownResponse,
     DashboardResponse,
     ExportCreateResponse,
     ExportStatusResponse,
-    PathHitsResponse,
     PathReferrersResponse,
-    SiteReferrersResponse,
-    TotalStatsResponse,
     ViewCountResponse,
-    ViewsOverTimeResponse,
 )
 from backend.services.analytics_service import (
     create_export,
     download_export,
-    fetch_breakdown,
     fetch_breakdown_detail,
     fetch_dashboard,
-    fetch_path_hits,
     fetch_path_referrers,
-    fetch_site_referrers,
-    fetch_total_stats,
     fetch_view_count,
-    fetch_views_over_time,
     get_analytics_settings,
     get_export_status,
     update_analytics_settings,
@@ -164,38 +153,6 @@ async def get_dashboard(
     return result
 
 
-@admin_router.get("/stats/total", response_model=TotalStatsResponse)
-async def get_total_stats(
-    session: Annotated[AsyncSession, Depends(get_session)],
-    _user: Annotated[AdminUser, Depends(require_admin)],
-    start: str | None = Query(default=None),
-    end: str | None = Query(default=None),
-) -> TotalStatsResponse:
-    """Get total aggregated stats from GoatCounter."""
-    start = _validate_analytics_range_param(start, "start")
-    end = _validate_analytics_range_param(end, "end")
-    result = await fetch_total_stats(session, start, end)
-    if result is None:
-        raise HTTPException(status_code=503, detail="Analytics service unavailable")
-    return result
-
-
-@admin_router.get("/stats/hits", response_model=PathHitsResponse)
-async def get_path_hits(
-    session: Annotated[AsyncSession, Depends(get_session)],
-    _user: Annotated[AdminUser, Depends(require_admin)],
-    start: str | None = Query(default=None),
-    end: str | None = Query(default=None),
-) -> PathHitsResponse:
-    """Get per-path hit counts from GoatCounter."""
-    start = _validate_analytics_range_param(start, "start")
-    end = _validate_analytics_range_param(end, "end")
-    result = await fetch_path_hits(session, start, end)
-    if result is None:
-        raise HTTPException(status_code=503, detail="Analytics service unavailable")
-    return result
-
-
 @admin_router.get("/stats/hits/{path_id}", response_model=PathReferrersResponse)
 async def get_path_referrers(
     path_id: Annotated[int, Path(ge=1)],
@@ -204,38 +161,6 @@ async def get_path_referrers(
 ) -> PathReferrersResponse:
     """Get referrer breakdown for a specific path ID."""
     result = await fetch_path_referrers(session, path_id)
-    if result is None:
-        raise HTTPException(status_code=503, detail="Analytics service unavailable")
-    return result
-
-
-@admin_router.get("/stats/views-over-time", response_model=ViewsOverTimeResponse)
-async def get_views_over_time(
-    session: Annotated[AsyncSession, Depends(get_session)],
-    _user: Annotated[AdminUser, Depends(require_admin)],
-    start: str | None = Query(default=None),
-    end: str | None = Query(default=None),
-) -> ViewsOverTimeResponse:
-    """Get daily view counts aggregated across all paths."""
-    start = _validate_analytics_range_param(start, "start")
-    end = _validate_analytics_range_param(end, "end")
-    result = await fetch_views_over_time(session, start, end)
-    if result is None:
-        raise HTTPException(status_code=503, detail="Analytics service unavailable")
-    return result
-
-
-@admin_router.get("/stats/referrers", response_model=SiteReferrersResponse)
-async def get_site_referrers(
-    session: Annotated[AsyncSession, Depends(get_session)],
-    _user: Annotated[AdminUser, Depends(require_admin)],
-    start: str | None = Query(default=None),
-    end: str | None = Query(default=None),
-) -> SiteReferrersResponse:
-    """Get aggregated referrer counts across all paths."""
-    start = _validate_analytics_range_param(start, "start")
-    end = _validate_analytics_range_param(end, "end")
-    result = await fetch_site_referrers(session, start, end)
     if result is None:
         raise HTTPException(status_code=503, detail="Analytics service unavailable")
     return result
@@ -250,23 +175,6 @@ async def get_breakdown_detail(
 ) -> BreakdownDetailResponse:
     """Get version detail for a breakdown entry (browsers/systems only)."""
     result = await fetch_breakdown_detail(session, category, entry_id)
-    if result is None:
-        raise HTTPException(status_code=503, detail="Analytics service unavailable")
-    return result
-
-
-@admin_router.get("/stats/{category}", response_model=BreakdownResponse)
-async def get_breakdown(
-    category: BreakdownCategory,
-    session: Annotated[AsyncSession, Depends(get_session)],
-    _user: Annotated[AdminUser, Depends(require_admin)],
-    start: str | None = Query(default=None),
-    end: str | None = Query(default=None),
-) -> BreakdownResponse:
-    """Get category breakdown stats (browsers, systems, locations, etc.) from GoatCounter."""
-    start = _validate_analytics_range_param(start, "start")
-    end = _validate_analytics_range_param(end, "end")
-    result = await fetch_breakdown(session, category, start, end)
     if result is None:
         raise HTTPException(status_code=503, detail="Analytics service unavailable")
     return result

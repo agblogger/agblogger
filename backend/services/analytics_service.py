@@ -410,26 +410,6 @@ def fire_background_hit(
     task.add_done_callback(_background_tasks.discard)
 
 
-async def fetch_total_stats(
-    session: AsyncSession,
-    start: str | None = None,
-    end: str | None = None,
-) -> TotalStatsResponse | None:
-    """Proxy GoatCounter total stats.
-
-    Returns None when analytics is disabled or GoatCounter is unavailable.
-    """
-    settings = await get_analytics_settings(session)
-    if not settings.analytics_enabled:
-        return None
-
-    params = _build_goatcounter_date_params(start, end)
-    data = await _stats_request("/api/v0/stats/total", params or None)
-    if data is None:
-        return None
-    return TotalStatsResponse.from_goatcounter(data)
-
-
 def _parse_hits_data(data: dict[str, Any]) -> tuple[PathHitsResponse, ViewsOverTimeResponse]:
     """Parse a GoatCounter /api/v0/stats/hits response into path hits and views-over-time.
 
@@ -487,27 +467,6 @@ def _parse_referrers_data(data: dict[str, Any]) -> SiteReferrersResponse:
     return SiteReferrersResponse(referrers=referrers)
 
 
-async def fetch_path_hits(
-    session: AsyncSession,
-    start: str | None = None,
-    end: str | None = None,
-) -> PathHitsResponse | None:
-    """Proxy GoatCounter per-path hit counts.
-
-    Returns None when analytics is disabled or GoatCounter is unavailable.
-    """
-    settings = await get_analytics_settings(session)
-    if not settings.analytics_enabled:
-        return None
-
-    params = _build_goatcounter_date_params(start, end)
-    data = await _stats_request("/api/v0/stats/hits", params or None)
-    if data is None:
-        return None
-    paths, _ = _parse_hits_data(data)
-    return paths
-
-
 async def fetch_path_referrers(
     session: AsyncSession,
     path_id: int,
@@ -522,47 +481,6 @@ async def fetch_path_referrers(
         return None
     referrers = [ReferrerEntry.from_goatcounter(entry) for entry in data.get("refs", [])]
     return PathReferrersResponse(path_id=path_id, referrers=referrers)
-
-
-async def fetch_site_referrers(
-    session: AsyncSession,
-    start: str | None = None,
-    end: str | None = None,
-) -> SiteReferrersResponse | None:
-    """Aggregate site-wide referrers via GoatCounter's toprefs endpoint.
-
-    Returns None when analytics is disabled or GoatCounter is unavailable.
-    """
-    settings = await get_analytics_settings(session)
-    if not settings.analytics_enabled:
-        return None
-
-    params = _build_goatcounter_date_params(start, end)
-    data = await _stats_request("/api/v0/stats/toprefs", params or None)
-    if data is None:
-        return None
-    return _parse_referrers_data(data)
-
-
-async def fetch_breakdown(
-    session: AsyncSession,
-    category: BreakdownCategory,
-    start: str | None = None,
-    end: str | None = None,
-) -> BreakdownResponse | None:
-    """Proxy GoatCounter category breakdown (browsers, systems, locations, etc.).
-
-    Returns None when analytics is disabled or GoatCounter is unavailable.
-    """
-    settings = await get_analytics_settings(session)
-    if not settings.analytics_enabled:
-        return None
-
-    params = _build_goatcounter_date_params(start, end)
-    data = await _stats_request(f"/api/v0/stats/{category}", params or None)
-    if data is None:
-        return None
-    return _parse_breakdown_data(data, category)
 
 
 async def fetch_breakdown_detail(
@@ -622,27 +540,6 @@ async def fetch_view_count(
                 logger.warning("Unexpected count value in GoatCounter response for path %r", path)
                 return None
     return 0
-
-
-async def fetch_views_over_time(
-    session: AsyncSession,
-    start: str | None = None,
-    end: str | None = None,
-) -> ViewsOverTimeResponse | None:
-    """Aggregate per-path daily counts into daily totals across all paths.
-
-    Returns None when analytics is disabled or GoatCounter is unavailable.
-    """
-    settings = await get_analytics_settings(session)
-    if not settings.analytics_enabled:
-        return None
-
-    params = _build_goatcounter_date_params(start, end)
-    data = await _stats_request("/api/v0/stats/hits", params or None)
-    if data is None:
-        return None
-    _, views_over_time = _parse_hits_data(data)
-    return views_over_time
 
 
 async def fetch_dashboard(
