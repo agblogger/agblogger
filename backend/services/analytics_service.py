@@ -484,7 +484,11 @@ async def fetch_breakdown(
         for entry in stats
         if isinstance(entry, dict) and isinstance(entry.get("count", 0), int)
     )
-    entries = [BreakdownEntry.from_goatcounter(entry, total_count=total_count) for entry in stats]
+    entries = [
+        BreakdownEntry.from_goatcounter(entry, total_count=total_count)
+        for entry in stats
+        if isinstance(entry, dict)
+    ]
     return BreakdownResponse(category=category, entries=entries)
 
 

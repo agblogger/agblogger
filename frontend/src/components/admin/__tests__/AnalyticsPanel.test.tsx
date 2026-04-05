@@ -314,7 +314,7 @@ describe('AnalyticsPanel', () => {
     })
   })
 
-  it('renders top pages table with path, views, unique columns', async () => {
+  it('renders top pages table with path and views columns', async () => {
     renderPanel()
     await waitFor(() => {
       expect(screen.getByText('Top pages')).toBeInTheDocument()

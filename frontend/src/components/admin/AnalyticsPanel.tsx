@@ -84,6 +84,9 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
     () => [...(data?.paths.paths ?? [])].sort((a, b) => b.views - a.views),
     [data],
   )
+  // GoatCounter's per-path "count" is unique visitors per path, so summing
+  // across paths gives "total page views" — distinct from the site-wide
+  // "Visitors" metric (GoatCounter's "total") which deduplicates across paths.
   const pageViews = useMemo(
     () => sortedPaths.reduce((sum, p) => sum + p.views, 0),
     [sortedPaths],

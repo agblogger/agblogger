@@ -47,7 +47,7 @@ class TotalStatsResponse(BaseModel):
 
     @classmethod
     def from_goatcounter(cls, data: dict[str, Any]) -> TotalStatsResponse:
-        """Construct from a raw GoatCounter JSON dict, logging DEBUG on missing keys."""
+        """Construct from a raw GoatCounter JSON dict, logging DEBUG on missing key."""
         if "total" not in data:
             logger.debug(
                 "GoatCounter total stats response missing 'total' key (got: %s)",
@@ -85,7 +85,7 @@ class PathHit(BaseModel):
 
 
 class PathHitsResponse(BaseModel):
-    """Hit counts for multiple paths."""
+    """Visitor counts for multiple paths."""
 
     paths: list[PathHit] = Field(default_factory=list)
 
@@ -143,7 +143,8 @@ class BreakdownEntry(BaseModel):
         name = entry.get("name", "")
         if not isinstance(name, str) or not name.strip():
             name = "Unknown"
-        count = entry.get("count", 0)
+        raw_count = entry.get("count", 0)
+        count = raw_count if isinstance(raw_count, int) else 0
         percent = entry.get("percent")
         if percent is None:
             percent = (count / total_count * 100.0) if total_count and total_count > 0 else 0.0

@@ -54,20 +54,6 @@ async def test_fetch_total_stats_returns_correct_data(session: AsyncSession) -> 
     assert result.visitors == 120
 
 
-async def test_fetch_total_stats_maps_total_to_unique_visitors(session: AsyncSession) -> None:
-    """GoatCounter's 'total' field represents unique visitors."""
-    fake_response = {"total": 120}
-
-    with patch(
-        "backend.services.analytics_service._stats_request",
-        new_callable=AsyncMock,
-        return_value=fake_response,
-    ):
-        result = await fetch_total_stats(session)
-
-    assert result.visitors == 120
-
-
 async def test_fetch_total_stats_uses_inclusive_bare_end_date(session: AsyncSession) -> None:
     """Bare end dates should be translated to GoatCounter's exclusive next-day bound."""
     with patch(
@@ -421,7 +407,7 @@ async def test_fetch_view_count_returns_count_when_enabled(session: AsyncSession
 
     fake_response = {
         "hits": [
-            {"path": "/post/hello", "count": 99, "count_unique": 70},
+            {"path": "/post/hello", "count": 99},
         ]
     }
 
@@ -784,7 +770,7 @@ async def test_fetch_path_hits_logs_debug_on_missing_keys(
 
 
 def test_total_stats_response_from_goatcounter_maps_fields() -> None:
-    """TotalStatsResponse.from_goatcounter maps GoatCounter's total to unique_visitors."""
+    """TotalStatsResponse.from_goatcounter maps GoatCounter's 'total' field to 'visitors'."""
     data = {"total": 120}
     result = TotalStatsResponse.from_goatcounter(data)
     assert result.visitors == 120
@@ -848,6 +834,13 @@ def test_path_hit_from_goatcounter_accepts_legacy_id_field() -> None:
     assert result.path_id == 3
     assert result.path == "/post/test"
     assert result.views == 42
+
+
+def test_path_hit_from_goatcounter_prefers_path_id_over_id() -> None:
+    """When both path_id and id are present, path_id takes precedence."""
+    entry = {"path_id": 5, "id": 3, "path": "/post/test", "count": 10}
+    result = PathHit.from_goatcounter(entry)
+    assert result.path_id == 5
 
 
 def test_path_hit_from_goatcounter_defaults_on_missing_keys() -> None:
@@ -933,6 +926,43 @@ def test_breakdown_entry_from_goatcounter_maps_blank_name_to_unknown() -> None:
     assert BreakdownEntry.from_goatcounter({"name": "", "count": 5}).name == "Unknown"
     assert BreakdownEntry.from_goatcounter({"name": "  ", "count": 3}).name == "Unknown"
     assert BreakdownEntry.from_goatcounter({"name": None, "count": 1}).name == "Unknown"
+
+
+def test_breakdown_entry_from_goatcounter_coerces_non_int_count_to_zero() -> None:
+    """Non-integer count values are treated as 0 to prevent TypeError in percent math."""
+    assert BreakdownEntry.from_goatcounter({"name": "Chrome", "count": "N/A"}).count == 0
+    assert BreakdownEntry.from_goatcounter({"name": "Chrome", "count": None}).count == 0
+    assert BreakdownEntry.from_goatcounter({"name": "Chrome", "count": 3.5}).count == 0
+
+
+def test_breakdown_entry_from_goatcounter_maps_non_string_name_to_unknown() -> None:
+    """Non-string name types (int, bool) are labelled 'Unknown'."""
+    assert BreakdownEntry.from_goatcounter({"name": 0, "count": 1}).name == "Unknown"
+    assert BreakdownEntry.from_goatcounter({"name": False, "count": 1}).name == "Unknown"
+
+
+async def test_fetch_breakdown_skips_non_dict_entries(session: AsyncSession) -> None:
+    """Non-dict entries in the stats list are silently skipped."""
+    fake_response = {
+        "stats": [
+            {"name": "Chrome", "count": 60},
+            None,
+            "invalid",
+            42,
+            {"name": "Firefox", "count": 40},
+        ]
+    }
+
+    with patch(
+        "backend.services.analytics_service._stats_request",
+        new_callable=AsyncMock,
+        return_value=fake_response,
+    ):
+        result = await fetch_breakdown(session, "browsers")
+
+    assert len(result.entries) == 2
+    assert result.entries[0].name == "Chrome"
+    assert result.entries[1].name == "Firefox"
 
 
 def test_breakdown_entry_from_goatcounter_logs_debug_on_missing_keys(

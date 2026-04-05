@@ -319,7 +319,7 @@ class TestPublicViewCount:
         _, slug = await _create_published_post(client, headers, title="Analytics visible post")
         # Mock GoatCounter response
         mock_data: dict[str, list[dict[str, object]]] = {
-            "hits": [{"path": f"/post/{slug}", "count": 42, "count_unique": 30}]
+            "hits": [{"path": f"/post/{slug}", "count": 42}]
         }
         with patch(
             "backend.services.analytics_service._stats_request",
@@ -383,9 +383,7 @@ class TestPublicViewCount:
 
         with patch(
             "backend.services.analytics_service._stats_request",
-            new=AsyncMock(
-                return_value={"hits": [{"path": f"/post/{slug}", "count": 42, "count_unique": 30}]}
-            ),
+            new=AsyncMock(return_value={"hits": [{"path": f"/post/{slug}", "count": 42}]}),
         ) as mock_req:
             resp = await client.get(f"/api/analytics/views/{slug}")
 
@@ -417,9 +415,7 @@ class TestPublicViewCount:
 
         with patch(
             "backend.services.analytics_service._stats_request",
-            new=AsyncMock(
-                return_value={"hits": [{"path": f"/post/{slug}", "count": 42, "count_unique": 30}]}
-            ),
+            new=AsyncMock(return_value={"hits": [{"path": f"/post/{slug}", "count": 42}]}),
         ) as mock_req:
             resp = await client.get(f"/api/analytics/views/{slug}")
 
@@ -780,7 +776,7 @@ class TestPublicViewCountPathSanitization:
         await self._enable_views(client)
         _, slug = await self._create_post(client, title="Analytics safe path")
         mock_data: dict[str, list[dict[str, object]]] = {
-            "hits": [{"path": f"/post/{slug}", "count": 5, "count_unique": 3}]
+            "hits": [{"path": f"/post/{slug}", "count": 5}]
         }
         with patch(
             "backend.services.analytics_service._stats_request",
