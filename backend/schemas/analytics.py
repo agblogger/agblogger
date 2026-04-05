@@ -130,7 +130,8 @@ class BreakdownEntry(BaseModel):
     name: str
     count: int = Field(ge=0)
     percent: float = Field(ge=0, le=100)
-    gc_id: str | None = None  # GoatCounter entry ID for drill-down
+    # GoatCounter entry ID; populated for drill-down-capable categories (browsers, systems) only
+    gc_id: str | None = None
 
     @classmethod
     def from_goatcounter(
@@ -215,7 +216,7 @@ class BreakdownDetailResponse(BaseModel):
 class DailyViewCount(BaseModel):
     """View count for a single day."""
 
-    date: str = Field(min_length=10, max_length=10)
+    date: str = Field(min_length=10, max_length=10, description="ISO 8601 date (YYYY-MM-DD)")
     views: int = Field(ge=0)
 
 
@@ -234,5 +235,24 @@ class ExportCreateResponse(BaseModel):
 class ExportStatusResponse(BaseModel):
     """Status of a CSV export job."""
 
-    id: int = Field(ge=0)
+    id: int = Field(ge=1)
     finished: bool
+
+
+class DashboardResponse(BaseModel):
+    """All analytics dashboard data in a single response.
+
+    Fetched sequentially on the backend to stay within GoatCounter's rate limit.
+    The hits endpoint is called once and used for both path hits and views-over-time.
+    """
+
+    stats: TotalStatsResponse
+    paths: PathHitsResponse
+    views_over_time: ViewsOverTimeResponse
+    browsers: BreakdownResponse
+    operating_systems: BreakdownResponse
+    languages: BreakdownResponse
+    locations: BreakdownResponse
+    sizes: BreakdownResponse
+    campaigns: BreakdownResponse
+    referrers: SiteReferrersResponse

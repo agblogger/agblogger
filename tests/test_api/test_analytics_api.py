@@ -1192,3 +1192,87 @@ class TestResolvePublicPostSlug:
         # posts/flat.md is NOT a canonical directory-backed path
         result = await _resolve_public_post_slug(post_session, "posts/flat.md")
         assert result is None
+
+
+class TestDashboardEndpoint:
+    """Tests for the consolidated GET /dashboard endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_dashboard_unauthenticated(self, client: AsyncClient) -> None:
+        """Dashboard endpoint requires authentication."""
+        resp = await client.get("/api/admin/analytics/dashboard")
+        assert resp.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_dashboard_503_when_analytics_disabled(self, client: AsyncClient) -> None:
+        """Dashboard returns 503 when analytics are disabled."""
+        token = await _get_admin_token(client)
+        with patch(
+            "backend.api.analytics.fetch_dashboard",
+            new=AsyncMock(return_value=None),
+        ):
+            resp = await client.get(
+                "/api/admin/analytics/dashboard",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert resp.status_code == 503
+
+    @pytest.mark.asyncio
+    async def test_dashboard_happy_path(self, client: AsyncClient) -> None:
+        """Dashboard endpoint returns all fields when GoatCounter succeeds."""
+        from backend.schemas.analytics import (
+            BreakdownResponse,
+            DashboardResponse,
+            PathHitsResponse,
+            SiteReferrersResponse,
+            TotalStatsResponse,
+            ViewsOverTimeResponse,
+        )
+
+        token = await _get_admin_token(client)
+        fake_dashboard = DashboardResponse(
+            stats=TotalStatsResponse(visitors=200),
+            paths=PathHitsResponse(paths=[]),
+            views_over_time=ViewsOverTimeResponse(days=[]),
+            browsers=BreakdownResponse(category="browsers", entries=[]),
+            operating_systems=BreakdownResponse(category="systems", entries=[]),
+            languages=BreakdownResponse(category="languages", entries=[]),
+            locations=BreakdownResponse(category="locations", entries=[]),
+            sizes=BreakdownResponse(category="sizes", entries=[]),
+            campaigns=BreakdownResponse(category="campaigns", entries=[]),
+            referrers=SiteReferrersResponse(referrers=[]),
+        )
+
+        with patch(
+            "backend.api.analytics.fetch_dashboard",
+            new=AsyncMock(return_value=fake_dashboard),
+        ):
+            resp = await client.get(
+                "/api/admin/analytics/dashboard",
+                params={"start": "2026-04-01T00:00:00Z", "end": "2026-04-30T23:59:59Z"},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["stats"]["visitors"] == 200
+        assert "paths" in data
+        assert "views_over_time" in data
+        assert "browsers" in data
+        assert "operating_systems" in data
+        assert "languages" in data
+        assert "locations" in data
+        assert "sizes" in data
+        assert "campaigns" in data
+        assert "referrers" in data
+
+    @pytest.mark.asyncio
+    async def test_dashboard_rejects_invalid_date_param(self, client: AsyncClient) -> None:
+        """Dashboard endpoint rejects unparseable date parameters."""
+        token = await _get_admin_token(client)
+        resp = await client.get(
+            "/api/admin/analytics/dashboard",
+            params={"start": "not-a-date"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 422

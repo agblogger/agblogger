@@ -21,6 +21,7 @@ from backend.schemas.analytics import (
     BreakdownDetailCategory,
     BreakdownDetailResponse,
     BreakdownResponse,
+    DashboardResponse,
     ExportCreateResponse,
     ExportStatusResponse,
     PathHitsResponse,
@@ -35,6 +36,7 @@ from backend.services.analytics_service import (
     download_export,
     fetch_breakdown,
     fetch_breakdown_detail,
+    fetch_dashboard,
     fetch_path_hits,
     fetch_path_referrers,
     fetch_site_referrers,
@@ -140,6 +142,26 @@ async def update_settings(
         analytics_enabled=body.analytics_enabled,
         show_views_on_posts=body.show_views_on_posts,
     )
+
+
+@admin_router.get("/dashboard", response_model=DashboardResponse)
+async def get_dashboard(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _user: Annotated[AdminUser, Depends(require_admin)],
+    start: str | None = Query(default=None),
+    end: str | None = Query(default=None),
+) -> DashboardResponse:
+    """Get all dashboard analytics data in a single request.
+
+    Fetches 9 GoatCounter endpoints sequentially, combining the hits response
+    for both path hits and views-over-time to stay within rate limits.
+    """
+    start = _validate_analytics_range_param(start, "start")
+    end = _validate_analytics_range_param(end, "end")
+    result = await fetch_dashboard(session, start, end)
+    if result is None:
+        raise HTTPException(status_code=503, detail="Analytics service unavailable")
+    return result
 
 
 @admin_router.get("/stats/total", response_model=TotalStatsResponse)
@@ -264,7 +286,7 @@ async def create_csv_export(
 
 @admin_router.get("/export/{export_id}", response_model=ExportStatusResponse)
 async def get_csv_export_status(
-    export_id: Annotated[int, Path(ge=0)],
+    export_id: Annotated[int, Path(ge=1)],
     session: Annotated[AsyncSession, Depends(get_session)],
     _user: Annotated[AdminUser, Depends(require_admin)],
 ) -> ExportStatusResponse:
@@ -277,7 +299,7 @@ async def get_csv_export_status(
 
 @admin_router.get("/export/{export_id}/download")
 async def download_csv_export(
-    export_id: Annotated[int, Path(ge=0)],
+    export_id: Annotated[int, Path(ge=1)],
     session: Annotated[AsyncSession, Depends(get_session)],
     _user: Annotated[AdminUser, Depends(require_admin)],
 ) -> Response:

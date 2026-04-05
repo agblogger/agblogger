@@ -1,25 +1,22 @@
 import useSWR from 'swr'
 import {
   fetchAnalyticsSettings,
-  fetchTotalStats,
-  fetchPathHits,
-  fetchBreakdown,
+  fetchDashboard,
   fetchPathReferrers,
-  fetchViewsOverTime,
-  fetchSiteReferrers,
   fetchBreakdownDetail,
 } from '@/api/analytics'
 import { localDateToUtcEnd, localDateToUtcStart } from '@/utils/date'
 import type {
   AnalyticsSettings,
-  TotalStatsResponse,
-  PathHitsResponse,
-  BreakdownResponse,
+  DashboardResponse,
   PathReferrersResponse,
-  ViewsOverTimeResponse,
-  SiteReferrersResponse,
   BreakdownDetailCategory,
   BreakdownDetailResponse,
+  BreakdownResponse,
+  PathHitsResponse,
+  SiteReferrersResponse,
+  TotalStatsResponse,
+  ViewsOverTimeResponse,
 } from '@/api/client'
 
 export interface AnalyticsDashboardData {
@@ -33,6 +30,7 @@ export interface AnalyticsDashboardData {
   sizes: BreakdownResponse
   campaigns: BreakdownResponse
   viewsOverTime: ViewsOverTimeResponse
+  referrers: SiteReferrersResponse
 }
 
 export type DateRangePreset = '7d' | '30d' | '90d'
@@ -46,39 +44,18 @@ export type DateRange = DateRangePreset | CustomDateRange
 
 const RANGE_DAYS: Record<DateRangePreset, number> = { '7d': 7, '30d': 30, '90d': 90 }
 
-interface AnalyticsDashboardStatsData {
-  stats: TotalStatsResponse
-  paths: PathHitsResponse
-  browsers: BreakdownResponse
-  operatingSystems: BreakdownResponse
-  languages: BreakdownResponse
-  locations: BreakdownResponse
-  sizes: BreakdownResponse
-  campaigns: BreakdownResponse
-  viewsOverTime: ViewsOverTimeResponse
-}
-
-function getDisabledDashboardStats(): AnalyticsDashboardStatsData {
+function getDisabledDashboardStats() {
   return {
-    stats: {
-      visitors: 0,
-    },
-    paths: {
-      paths: [],
-    },
-    browsers: {
-      category: 'browsers',
-      entries: [],
-    },
-    operatingSystems: {
-      category: 'systems',
-      entries: [],
-    },
-    languages: { category: 'languages', entries: [] },
-    locations: { category: 'locations', entries: [] },
-    sizes: { category: 'sizes', entries: [] },
-    campaigns: { category: 'campaigns', entries: [] },
+    stats: { visitors: 0 },
+    paths: { paths: [] },
+    browsers: { category: 'browsers' as const, entries: [] },
+    operatingSystems: { category: 'systems' as const, entries: [] },
+    languages: { category: 'languages' as const, entries: [] },
+    locations: { category: 'locations' as const, entries: [] },
+    sizes: { category: 'sizes' as const, entries: [] },
+    campaigns: { category: 'campaigns' as const, entries: [] },
     viewsOverTime: { days: [] },
+    referrers: { referrers: [] },
   }
 }
 
@@ -119,12 +96,31 @@ export function isDateRangeValid(range: DateRange): boolean {
   return start === '' || end === '' || start <= end
 }
 
+function dashboardToData(
+  settings: AnalyticsSettings,
+  dashboard: DashboardResponse,
+): AnalyticsDashboardData {
+  return {
+    settings,
+    stats: dashboard.stats,
+    paths: dashboard.paths,
+    viewsOverTime: dashboard.views_over_time,
+    browsers: dashboard.browsers,
+    operatingSystems: dashboard.operating_systems,
+    languages: dashboard.languages,
+    locations: dashboard.locations,
+    sizes: dashboard.sizes,
+    campaigns: dashboard.campaigns,
+    referrers: dashboard.referrers,
+  }
+}
+
 /**
- * Composite SWR hook that fetches analytics settings first, then conditionally
- * fetches stats (total, paths, browsers, OS, languages, locations, sizes,
- * campaigns, views-over-time) in parallel when analytics is enabled.
- * Returns zeroed-out data when analytics is disabled rather than triggering fetches.
- * Individual fetch failures fall back to empty/zero data instead of rejecting the whole batch.
+ * Composite SWR hook that fetches analytics settings first, then fetches all
+ * dashboard stats via a single backend request when analytics is enabled.
+ * The backend fetches GoatCounter endpoints sequentially to stay within rate
+ * limits. Returns zeroed-out data when analytics is disabled rather than
+ * triggering fetches.
  */
 export function useAnalyticsDashboard(range: DateRange) {
   const { start, end } = getDateRange(range)
@@ -136,99 +132,38 @@ export function useAnalyticsDashboard(range: DateRange) {
   )
   const analyticsEnabled = settingsResult.data?.analytics_enabled ?? null
 
-  const dashboardResult = useSWR<AnalyticsDashboardStatsData, Error>(
+  const dashboardResult = useSWR<DashboardResponse, Error>(
     analyticsEnabled === true && rangeValid ? ['analytics-dashboard', start, end] : null,
-    async () => {
-      function fulfilled<T>(r: PromiseSettledResult<T>): T | undefined {
-        return r.status === 'fulfilled' ? r.value : undefined
-      }
-
-      const [
-        statsResult,
-        pathsResult,
-        browsersResult,
-        osResult,
-        languagesResult,
-        locationsResult,
-        sizesResult,
-        campaignsResult,
-        viewsOverTimeResult,
-      ] = await Promise.allSettled([
-        fetchTotalStats(start, end),
-        fetchPathHits(start, end),
-        fetchBreakdown('browsers', start, end),
-        fetchBreakdown('systems', start, end),
-        fetchBreakdown('languages', start, end),
-        fetchBreakdown('locations', start, end),
-        fetchBreakdown('sizes', start, end),
-        fetchBreakdown('campaigns', start, end),
-        fetchViewsOverTime(start, end),
-      ])
-
-      const stats = fulfilled(statsResult) ?? { visitors: 0 }
-      const paths = fulfilled(pathsResult) ?? { paths: [] }
-      const browsersData = fulfilled(browsersResult) ?? { category: 'browsers' as const, entries: [] }
-      const osData = fulfilled(osResult) ?? { category: 'systems' as const, entries: [] }
-      const languagesData = fulfilled(languagesResult) ?? { category: 'languages' as const, entries: [] }
-      const locationsData = fulfilled(locationsResult) ?? { category: 'locations' as const, entries: [] }
-      const sizesData = fulfilled(sizesResult) ?? { category: 'sizes' as const, entries: [] }
-      const campaignsData = fulfilled(campaignsResult) ?? { category: 'campaigns' as const, entries: [] }
-      const viewsOverTimeData = fulfilled(viewsOverTimeResult) ?? { days: [] }
-
-      return {
-        stats,
-        paths,
-        browsers: browsersData,
-        operatingSystems: osData,
-        languages: languagesData,
-        locations: locationsData,
-        sizes: sizesData,
-        campaigns: campaignsData,
-        viewsOverTime: viewsOverTimeData,
-      }
-    },
+    () => fetchDashboard(start, end),
   )
-  const statsData =
-    settingsResult.data?.analytics_enabled === false
-      ? getDisabledDashboardStats()
-      : dashboardResult.data
+
+  const disabled = settingsResult.data?.analytics_enabled === false
 
   const data: AnalyticsDashboardData | undefined =
-    settingsResult.data !== undefined && statsData !== undefined
-      ? {
-          settings: settingsResult.data,
-          ...statsData,
-        }
+    settingsResult.data !== undefined
+      ? disabled
+        ? { settings: settingsResult.data, ...getDisabledDashboardStats() }
+        : dashboardResult.data !== undefined
+          ? dashboardToData(settingsResult.data, dashboardResult.data)
+          : undefined
       : undefined
 
   return {
     data,
     settings: settingsResult.data,
-    error:
-      settingsResult.error ??
-      (settingsResult.data?.analytics_enabled === false ? undefined : dashboardResult.error),
+    error: settingsResult.error ?? (disabled ? undefined : dashboardResult.error),
     isLoading:
       settingsResult.isLoading ||
-      (settingsResult.data?.analytics_enabled === true && dashboardResult.isLoading),
+      (analyticsEnabled === true && dashboardResult.isLoading),
     mutate: async () => {
       const settings = await settingsResult.mutate()
-      if (settings === undefined) {
-        return undefined
-      }
+      if (settings === undefined) return undefined
       if (!settings.analytics_enabled) {
-        return {
-          settings,
-          ...getDisabledDashboardStats(),
-        }
+        return { settings, ...getDisabledDashboardStats() }
       }
-      const stats = await dashboardResult.mutate()
-      if (stats === undefined) {
-        return undefined
-      }
-      return {
-        settings,
-        ...stats,
-      }
+      const dashboard = await dashboardResult.mutate()
+      if (dashboard === undefined) return undefined
+      return dashboardToData(settings, dashboard)
     },
   }
 }
@@ -237,15 +172,6 @@ export function usePathReferrers(pathId: number | null) {
   return useSWR<PathReferrersResponse, Error>(
     pathId !== null ? ['pathReferrers', pathId] : null,
     ([, id]: [string, number]) => fetchPathReferrers(id),
-  )
-}
-
-export function useSiteReferrers(range: DateRange, enabled: boolean) {
-  const { start, end } = getDateRange(range)
-  const rangeValid = isDateRangeValid(range)
-  return useSWR<SiteReferrersResponse, Error>(
-    enabled && rangeValid ? ['site-referrers', start, end] : null,
-    () => fetchSiteReferrers(start, end),
   )
 }
 

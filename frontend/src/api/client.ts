@@ -361,3 +361,16 @@ export interface ExportStatusResponse {
   id: number
   finished: boolean
 }
+
+export interface DashboardResponse {
+  stats: TotalStatsResponse
+  paths: PathHitsResponse
+  views_over_time: ViewsOverTimeResponse
+  browsers: BreakdownResponse
+  operating_systems: BreakdownResponse
+  languages: BreakdownResponse
+  locations: BreakdownResponse
+  sizes: BreakdownResponse
+  campaigns: BreakdownResponse
+  referrers: SiteReferrersResponse
+}

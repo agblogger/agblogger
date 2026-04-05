@@ -8,9 +8,9 @@ import type {
   BreakdownCategory,
   ViewCountResponse,
   ViewsOverTimeResponse,
-  SiteReferrersResponse,
   BreakdownDetailCategory,
   BreakdownDetailResponse,
+  DashboardResponse,
   ExportCreateResponse,
   ExportStatusResponse,
 } from './client'
@@ -65,13 +65,10 @@ export async function fetchViewsOverTime(
     .json<ViewsOverTimeResponse>()
 }
 
-export async function fetchSiteReferrers(
-  start: string,
-  end: string,
-): Promise<SiteReferrersResponse> {
+export async function fetchDashboard(start: string, end: string): Promise<DashboardResponse> {
   return api
-    .get('admin/analytics/stats/referrers', { searchParams: { start, end } })
-    .json<SiteReferrersResponse>()
+    .get('admin/analytics/dashboard', { searchParams: { start, end } })
+    .json<DashboardResponse>()
 }
 
 export async function fetchBreakdownDetail(

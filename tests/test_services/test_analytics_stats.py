@@ -20,10 +20,10 @@ from backend.schemas.analytics import (
 from backend.services.analytics_service import (
     _build_goatcounter_date_params,
     _normalize_goatcounter_end_date,
-    _offset_date,
     _stats_request,
     fetch_breakdown,
     fetch_breakdown_detail,
+    fetch_dashboard,
     fetch_path_hits,
     fetch_path_referrers,
     fetch_site_referrers,
@@ -1155,6 +1155,25 @@ async def test_fetch_views_over_time_handles_empty_hits(session: AsyncSession) -
     assert result.days == []
 
 
+async def test_fetch_views_over_time_returns_none_when_analytics_disabled(
+    session: AsyncSession,
+) -> None:
+    """fetch_views_over_time is gated off when analytics are disabled."""
+    from backend.services.analytics_service import update_analytics_settings
+
+    await update_analytics_settings(session, analytics_enabled=False)
+
+    with patch(
+        "backend.services.analytics_service._stats_request",
+        new_callable=AsyncMock,
+        return_value={"hits": []},
+    ) as mock_req:
+        result = await fetch_views_over_time(session)
+
+    assert result is None
+    mock_req.assert_not_called()
+
+
 async def test_fetch_views_over_time_handles_missing_stats_field(
     session: AsyncSession,
 ) -> None:
@@ -1373,27 +1392,6 @@ async def test_create_export_returns_none_when_id_is_zero(session: AsyncSession)
     assert result is None
 
 
-# ── Issue 3: _offset_date defensive handling ──────────────────────────────────
-
-
-def test_offset_date_adds_days_correctly() -> None:
-    """_offset_date correctly adds days to a YYYY-MM-DD date string."""
-    assert _offset_date("2026-04-01", 0) == "2026-04-01"
-    assert _offset_date("2026-04-01", 1) == "2026-04-02"
-    assert _offset_date("2026-04-01", 30) == "2026-05-01"
-
-
-def test_offset_date_returns_none_on_invalid_input() -> None:
-    """_offset_date returns None when given an invalid date string."""
-    assert _offset_date("not-a-date", 1) is None
-    assert _offset_date("N/A", 0) is None
-
-
-def test_offset_date_handles_month_boundary() -> None:
-    """_offset_date correctly handles month boundaries."""
-    assert _offset_date("2026-01-31", 1) == "2026-02-01"
-
-
 # ── BreakdownDetailEntry schema classmethod tests ─────────────────────────────
 
 
@@ -1431,3 +1429,153 @@ def test_breakdown_detail_entry_from_goatcounter_computes_percent_when_missing()
     entry = {"name": "Chrome 120", "count": 3}
     result = BreakdownDetailEntry.from_goatcounter(entry, total_count=6)
     assert result.percent == 50.0
+
+
+# ── fetch_dashboard ────────────────────────────────────────────────────────────
+
+
+async def test_fetch_dashboard_returns_none_when_analytics_disabled(
+    session: AsyncSession,
+) -> None:
+    """fetch_dashboard is gated off when analytics are disabled."""
+    from backend.services.analytics_service import update_analytics_settings
+
+    await update_analytics_settings(session, analytics_enabled=False)
+
+    with patch(
+        "backend.services.analytics_service._stats_request",
+        new_callable=AsyncMock,
+        return_value={"total": 120},
+    ) as mock_req:
+        result = await fetch_dashboard(session)
+
+    assert result is None
+    mock_req.assert_not_called()
+
+
+async def test_fetch_dashboard_makes_sequential_goatcounter_requests(
+    session: AsyncSession,
+) -> None:
+    """fetch_dashboard calls each GoatCounter endpoint exactly once, sequentially."""
+    hits_response = {
+        "hits": [
+            {
+                "path_id": 1,
+                "path": "/post/hello",
+                "count": 100,
+                "stats": [{"day": "2026-04-01", "daily": 50}, {"day": "2026-04-02", "daily": 50}],
+            }
+        ]
+    }
+    breakdown_response = {"stats": [{"name": "Chrome", "count": 80}]}
+    toprefs_response = {"stats": [{"name": "hn.algolia.com", "count": 15}]}
+
+    call_order: list[str] = []
+
+    async def fake_stats_request(endpoint: str, params: object = None) -> object:
+        call_order.append(endpoint)
+        if endpoint == "/api/v0/stats/total":
+            return {"total": 200}
+        if endpoint == "/api/v0/stats/hits":
+            return hits_response
+        if endpoint == "/api/v0/stats/toprefs":
+            return toprefs_response
+        return breakdown_response
+
+    with patch(
+        "backend.services.analytics_service._stats_request",
+        side_effect=fake_stats_request,
+    ):
+        result = await fetch_dashboard(session, start="2026-04-01", end="2026-04-02")
+
+    assert result is not None
+    assert result.stats.visitors == 200
+    assert len(result.paths.paths) == 1
+    assert result.paths.paths[0].path == "/post/hello"
+    assert len(result.views_over_time.days) == 2
+    assert result.views_over_time.days[0].date == "2026-04-01"
+    assert result.views_over_time.days[0].views == 50
+    assert result.views_over_time.days[1].date == "2026-04-02"
+    assert result.views_over_time.days[1].views == 50
+    assert len(result.referrers.referrers) == 1
+    assert result.referrers.referrers[0].referrer == "hn.algolia.com"
+
+    # Verify sequential ordering (not concurrent)
+    expected_order = [
+        "/api/v0/stats/total",
+        "/api/v0/stats/hits",
+        "/api/v0/stats/browsers",
+        "/api/v0/stats/systems",
+        "/api/v0/stats/languages",
+        "/api/v0/stats/locations",
+        "/api/v0/stats/sizes",
+        "/api/v0/stats/campaigns",
+        "/api/v0/stats/toprefs",
+    ]
+    assert call_order == expected_order
+
+
+async def test_fetch_dashboard_hits_fetched_once_for_paths_and_views(
+    session: AsyncSession,
+) -> None:
+    """The /api/v0/stats/hits endpoint is called exactly once for path hits and views-over-time."""
+    hits_response = {
+        "hits": [
+            {
+                "path_id": 1,
+                "path": "/post/hello",
+                "count": 42,
+                "stats": [{"day": "2026-04-01", "daily": 42}],
+            }
+        ]
+    }
+    hits_call_count = 0
+
+    async def fake_stats_request(endpoint: str, params: object = None) -> object:
+        nonlocal hits_call_count
+        if endpoint == "/api/v0/stats/hits":
+            hits_call_count += 1
+            return hits_response
+        if endpoint == "/api/v0/stats/total":
+            return {"total": 42}
+        if endpoint == "/api/v0/stats/toprefs":
+            return {"stats": []}
+        return {"stats": []}
+
+    with patch(
+        "backend.services.analytics_service._stats_request",
+        side_effect=fake_stats_request,
+    ):
+        result = await fetch_dashboard(session)
+
+    assert hits_call_count == 1, "hits endpoint must be fetched only once"
+    assert result is not None
+    # Both path hits and views-over-time derived from same response
+    assert result.paths.paths[0].path == "/post/hello"
+    assert result.views_over_time.days[0].date == "2026-04-01"
+    assert result.views_over_time.days[0].views == 42
+
+
+async def test_fetch_dashboard_partial_goatcounter_failure_uses_empty_defaults(
+    session: AsyncSession,
+) -> None:
+    """Individual GoatCounter endpoint failures fall back to empty data, not None."""
+
+    async def fake_stats_request(endpoint: str, params: object = None) -> object | None:
+        if endpoint == "/api/v0/stats/total":
+            return {"total": 99}
+        # All other endpoints return None (simulating GoatCounter rate-limit or error)
+        return None
+
+    with patch(
+        "backend.services.analytics_service._stats_request",
+        side_effect=fake_stats_request,
+    ):
+        result = await fetch_dashboard(session)
+
+    assert result is not None
+    assert result.stats.visitors == 99
+    assert result.paths.paths == []
+    assert result.views_over_time.days == []
+    assert result.browsers.entries == []
+    assert result.referrers.referrers == []

@@ -5,12 +5,8 @@ import { SWRConfig } from 'swr'
 
 const mockFetchAnalyticsSettings = vi.fn()
 const mockUpdateAnalyticsSettings = vi.fn()
-const mockFetchTotalStats = vi.fn()
-const mockFetchPathHits = vi.fn()
+const mockFetchDashboard = vi.fn()
 const mockFetchPathReferrers = vi.fn()
-const mockFetchBreakdown = vi.fn()
-const mockFetchViewsOverTime = vi.fn()
-const mockFetchSiteReferrers = vi.fn()
 const mockFetchBreakdownDetail = vi.fn()
 
 vi.mock('@/api/analytics', () => ({
@@ -18,12 +14,9 @@ vi.mock('@/api/analytics', () => ({
     mockFetchAnalyticsSettings(...args) as unknown,
   updateAnalyticsSettings: (...args: unknown[]) =>
     mockUpdateAnalyticsSettings(...args) as unknown,
-  fetchTotalStats: (...args: unknown[]) => mockFetchTotalStats(...args) as unknown,
-  fetchPathHits: (...args: unknown[]) => mockFetchPathHits(...args) as unknown,
+  fetchDashboard: (...args: unknown[]) => mockFetchDashboard(...args) as unknown,
   fetchPathReferrers: (...args: unknown[]) => mockFetchPathReferrers(...args) as unknown,
-  fetchBreakdown: (...args: unknown[]) => mockFetchBreakdown(...args) as unknown,
-  fetchViewsOverTime: (...args: unknown[]) => mockFetchViewsOverTime(...args) as unknown,
-  fetchSiteReferrers: (...args: unknown[]) => mockFetchSiteReferrers(...args) as unknown,
+  fetchSiteReferrers: () => Promise.resolve({ referrers: [] }),
   fetchBreakdownDetail: (...args: unknown[]) => mockFetchBreakdownDetail(...args) as unknown,
 }))
 
@@ -47,50 +40,41 @@ import { MockHTTPError } from '@/test/MockHTTPError'
 
 const DEFAULT_SETTINGS = { analytics_enabled: true, show_views_on_posts: false }
 
-const DEFAULT_STATS = { visitors: 567 }
-
-const DEFAULT_PATHS = {
-  paths: [
-    { path_id: 1, path: '/posts/hello', views: 800 },
-    { path_id: 2, path: '/posts/world', views: 434 },
-  ],
-}
-
-const DEFAULT_BROWSERS = {
-  category: 'browsers',
-  entries: [
-    { name: 'Chrome', count: 500, percent: 72.3 },
-    { name: 'Firefox', count: 192, percent: 27.7 },
-  ],
-}
-
-const DEFAULT_SYSTEMS = {
-  category: 'systems',
-  entries: [
-    { name: 'macOS', count: 400, percent: 57.8 },
-    { name: 'Windows', count: 292, percent: 42.2 },
-  ],
+const DEFAULT_DASHBOARD = {
+  stats: { visitors: 567 },
+  paths: {
+    paths: [
+      { path_id: 1, path: '/posts/hello', views: 800 },
+      { path_id: 2, path: '/posts/world', views: 434 },
+    ],
+  },
+  views_over_time: { days: [] },
+  browsers: {
+    category: 'browsers',
+    entries: [
+      { name: 'Chrome', count: 500, percent: 72.3 },
+      { name: 'Firefox', count: 192, percent: 27.7 },
+    ],
+  },
+  operating_systems: {
+    category: 'systems',
+    entries: [
+      { name: 'macOS', count: 400, percent: 57.8 },
+      { name: 'Windows', count: 292, percent: 42.2 },
+    ],
+  },
+  languages: { category: 'languages', entries: [{ name: 'English', count: 80, percent: 68.0 }] },
+  locations: { category: 'locations', entries: [{ name: 'US', count: 100, percent: 45.0 }] },
+  sizes: { category: 'sizes', entries: [{ name: '1920x1080', count: 60, percent: 38.0 }] },
+  campaigns: { category: 'campaigns', entries: [] },
+  referrers: { referrers: [] },
 }
 
 function setupDefaults() {
   mockFetchAnalyticsSettings.mockResolvedValue(DEFAULT_SETTINGS)
-  mockFetchTotalStats.mockResolvedValue(DEFAULT_STATS)
-  mockFetchPathHits.mockResolvedValue(DEFAULT_PATHS)
-  mockFetchBreakdown.mockImplementation((category: string) => {
-    const responses: Record<string, unknown> = {
-      browsers: DEFAULT_BROWSERS,
-      systems: DEFAULT_SYSTEMS,
-      languages: { category: 'languages', entries: [{ name: 'English', count: 80, percent: 68.0 }] },
-      locations: { category: 'locations', entries: [{ name: 'US', count: 100, percent: 45.0 }] },
-      sizes: { category: 'sizes', entries: [{ name: '1920x1080', count: 60, percent: 38.0 }] },
-      campaigns: { category: 'campaigns', entries: [] },
-    }
-    return Promise.resolve(responses[category] ?? { category, entries: [] })
-  })
+  mockFetchDashboard.mockResolvedValue(DEFAULT_DASHBOARD)
   mockFetchPathReferrers.mockResolvedValue({ path_id: 0, referrers: [] })
-  mockFetchViewsOverTime.mockResolvedValue({ days: [] })
-  mockFetchSiteReferrers.mockResolvedValue({ referrers: [] })
-  mockFetchBreakdownDetail.mockResolvedValue(null)
+  mockFetchBreakdownDetail.mockResolvedValue({ category: 'browsers', entry_id: 'chrome', entries: [] })
 }
 
 function renderPanel(props: { busy?: boolean; onBusyChange?: (busy: boolean) => void } = {}) {
@@ -113,22 +97,20 @@ describe('AnalyticsPanel', () => {
   })
 
   it('shows loading spinner initially then renders dashboard data', async () => {
-    // Use a deferred promise so we can observe the loading state — block all parallel fetches
-    let resolveAll!: () => void
-    const gate = new Promise<void>((resolve) => {
-      resolveAll = resolve
+    // Use a deferred promise so we can observe the loading state
+    let resolveSettings!: () => void
+    const settingsGate = new Promise<void>((resolve) => {
+      resolveSettings = resolve
     })
-    mockFetchAnalyticsSettings.mockReturnValue(gate.then(() => DEFAULT_SETTINGS))
-    mockFetchTotalStats.mockReturnValue(gate.then(() => DEFAULT_STATS))
-    mockFetchPathHits.mockReturnValue(gate.then(() => DEFAULT_PATHS))
-    mockFetchBreakdown.mockReturnValue(gate.then(() => DEFAULT_BROWSERS))
+    mockFetchAnalyticsSettings.mockReturnValue(settingsGate.then(() => DEFAULT_SETTINGS))
+    mockFetchDashboard.mockResolvedValue(DEFAULT_DASHBOARD)
 
     renderPanel()
     // While loading, spinner is present
     expect(screen.getByRole('status')).toBeInTheDocument()
 
-    // Resolve all fetches
-    resolveAll()
+    // Resolve settings fetch
+    resolveSettings()
 
     // After data loads, shows summary cards
     await waitFor(() => {
@@ -180,19 +162,17 @@ describe('AnalyticsPanel', () => {
       expect(screen.getByText('Page Views')).toBeInTheDocument()
     })
 
-    // Reset call counts after initial load
-    const initialCallCount = mockFetchTotalStats.mock.calls.length
+    const initialCallCount = mockFetchDashboard.mock.calls.length
 
     await user.click(screen.getByRole('button', { name: '30d' }))
 
     await waitFor(() => {
-      expect(mockFetchTotalStats.mock.calls.length).toBeGreaterThan(initialCallCount)
+      expect(mockFetchDashboard.mock.calls.length).toBeGreaterThan(initialCallCount)
     })
-    // Should have been called with 30d range dates
-    const calls = mockFetchTotalStats.mock.calls
+    // fetchDashboard should be called with (start, end) strings
+    const calls = mockFetchDashboard.mock.calls
     const lastCall = calls[calls.length - 1] as [string, string]
     expect(lastCall).toHaveLength(2)
-    // start date should be roughly 30 days back — just check it's a string date
     expect(typeof lastCall[0]).toBe('string')
   })
 
@@ -278,17 +258,19 @@ describe('AnalyticsPanel', () => {
     })
   })
 
-  it('preserves persisted settings when stats are unavailable', async () => {
-    // With Promise.allSettled (Issue 11), individual stats failures fall back to empty/zero
-    // data — the panel remains usable and settings are preserved.
+  it('preserves persisted settings when dashboard returns zero data', async () => {
+    // Backend returns empty defaults when GoatCounter partially fails —
+    // the panel remains usable and settings are preserved.
     mockFetchAnalyticsSettings.mockResolvedValue({
       analytics_enabled: true,
       show_views_on_posts: true,
     })
-    mockFetchTotalStats.mockRejectedValue(new Error('GoatCounter down'))
-    mockFetchPathHits.mockRejectedValue(new Error('GoatCounter down'))
-    mockFetchBreakdown.mockRejectedValue(new Error('GoatCounter down'))
-    mockFetchViewsOverTime.mockRejectedValue(new Error('GoatCounter down'))
+    mockFetchDashboard.mockResolvedValue({
+      ...DEFAULT_DASHBOARD,
+      stats: { visitors: 0 },
+      paths: { paths: [] },
+      views_over_time: { days: [] },
+    })
     mockUpdateAnalyticsSettings.mockResolvedValue({
       analytics_enabled: false,
       show_views_on_posts: true,
@@ -325,9 +307,6 @@ describe('AnalyticsPanel', () => {
   it('shows "Analytics unavailable" when all fetches fail', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     mockFetchAnalyticsSettings.mockRejectedValue(new Error('GoatCounter down'))
-    mockFetchTotalStats.mockRejectedValue(new Error('GoatCounter down'))
-    mockFetchPathHits.mockRejectedValue(new Error('GoatCounter down'))
-    mockFetchBreakdown.mockRejectedValue(new Error('GoatCounter down'))
     renderPanel()
 
     await waitFor(() => {
@@ -349,9 +328,6 @@ describe('AnalyticsPanel', () => {
   it('shows session expired message on 401 during loadDashboard', async () => {
     const authError = new MockHTTPError(401)
     mockFetchAnalyticsSettings.mockRejectedValue(authError)
-    mockFetchTotalStats.mockRejectedValue(authError)
-    mockFetchPathHits.mockRejectedValue(authError)
-    mockFetchBreakdown.mockRejectedValue(authError)
     renderPanel()
 
     await waitFor(() => {
@@ -382,7 +358,7 @@ describe('AnalyticsPanel', () => {
   })
 
   it('shows empty message when no path data', async () => {
-    mockFetchPathHits.mockResolvedValue({ paths: [] })
+    mockFetchDashboard.mockResolvedValue({ ...DEFAULT_DASHBOARD, paths: { paths: [] } })
     renderPanel()
     await waitFor(() => {
       expect(screen.getByText('No page data for selected range.')).toBeInTheDocument()
@@ -390,7 +366,7 @@ describe('AnalyticsPanel', () => {
   })
 
   it('shows "—" for top page when no path data', async () => {
-    mockFetchPathHits.mockResolvedValue({ paths: [] })
+    mockFetchDashboard.mockResolvedValue({ ...DEFAULT_DASHBOARD, paths: { paths: [] } })
     renderPanel()
     await waitFor(() => {
       expect(screen.getByText('Top Page')).toBeInTheDocument()
@@ -399,12 +375,15 @@ describe('AnalyticsPanel', () => {
   })
 
   it('renders top pages table sorted by views descending', async () => {
-    mockFetchPathHits.mockResolvedValue({
-      paths: [
-        { path_id: 3, path: '/posts/low', views: 50 },
-        { path_id: 1, path: '/posts/high', views: 900 },
-        { path_id: 2, path: '/posts/mid', views: 300 },
-      ],
+    mockFetchDashboard.mockResolvedValue({
+      ...DEFAULT_DASHBOARD,
+      paths: {
+        paths: [
+          { path_id: 3, path: '/posts/low', views: 50 },
+          { path_id: 1, path: '/posts/high', views: 900 },
+          { path_id: 2, path: '/posts/mid', views: 300 },
+        ],
+      },
     })
     renderPanel()
     await waitFor(() => {
@@ -420,11 +399,14 @@ describe('AnalyticsPanel', () => {
   })
 
   it('renders views over time chart section', async () => {
-    mockFetchViewsOverTime.mockResolvedValue({
-      days: [
-        { date: '2024-01-01', views: 100 },
-        { date: '2024-01-02', views: 200 },
-      ],
+    mockFetchDashboard.mockResolvedValue({
+      ...DEFAULT_DASHBOARD,
+      views_over_time: {
+        days: [
+          { date: '2024-01-01', views: 100 },
+          { date: '2024-01-02', views: 200 },
+        ],
+      },
     })
     renderPanel()
     await waitFor(() => {
@@ -432,9 +414,10 @@ describe('AnalyticsPanel', () => {
     })
   })
 
-  it('renders top referrers panel', async () => {
-    mockFetchSiteReferrers.mockResolvedValue({
-      referrers: [{ referrer: 'https://example.com', count: 42 }],
+  it('renders top referrers panel with referrers from dashboard', async () => {
+    mockFetchDashboard.mockResolvedValue({
+      ...DEFAULT_DASHBOARD,
+      referrers: { referrers: [{ referrer: 'https://example.com', count: 42 }] },
     })
     renderPanel()
     await waitFor(() => {
@@ -499,13 +482,13 @@ describe('AnalyticsPanel', () => {
       expect(screen.getByText('Page Views')).toBeInTheDocument()
     })
 
-    const initialCallCount = mockFetchTotalStats.mock.calls.length
+    const initialCallCount = mockFetchDashboard.mock.calls.length
 
     const startInput = screen.getByLabelText('Start date')
     await user.type(startInput, '2024-01-01')
 
     await waitFor(() => {
-      expect(mockFetchTotalStats.mock.calls.length).toBeGreaterThan(initialCallCount)
+      expect(mockFetchDashboard.mock.calls.length).toBeGreaterThan(initialCallCount)
     })
   })
 })
