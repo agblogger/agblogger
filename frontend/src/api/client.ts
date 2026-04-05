@@ -324,3 +324,39 @@ export interface BreakdownResponse {
 export interface ViewCountResponse {
   views: number | null
 }
+
+export interface DailyViewCount {
+  date: string
+  views: number
+}
+
+export interface ViewsOverTimeResponse {
+  days: DailyViewCount[]
+}
+
+export interface SiteReferrersResponse {
+  referrers: ReferrerEntry[]
+}
+
+export interface BreakdownDetailEntry {
+  name: string
+  count: number
+  percent: number
+}
+
+export type BreakdownDetailCategory = 'browsers' | 'systems'
+
+export interface BreakdownDetailResponse {
+  category: BreakdownDetailCategory
+  entry_id: number
+  entries: BreakdownDetailEntry[]
+}
+
+export interface ExportCreateResponse {
+  id: number
+}
+
+export interface ExportStatusResponse {
+  id: number
+  finished: boolean
+}

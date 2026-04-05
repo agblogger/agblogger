@@ -7,6 +7,12 @@ import type {
   BreakdownResponse,
   BreakdownCategory,
   ViewCountResponse,
+  ViewsOverTimeResponse,
+  SiteReferrersResponse,
+  BreakdownDetailCategory,
+  BreakdownDetailResponse,
+  ExportCreateResponse,
+  ExportStatusResponse,
 } from './client'
 
 export async function fetchAnalyticsSettings(): Promise<AnalyticsSettings> {
@@ -48,4 +54,43 @@ export async function fetchBreakdown(
 /** Fetch public view count. Accepts a bare slug or canonical file path (e.g., "posts/hello/index.md"). */
 export async function fetchViewCount(pathOrSlug: string): Promise<ViewCountResponse> {
   return api.get(`analytics/views/${pathOrSlug}`).json<ViewCountResponse>()
+}
+
+export async function fetchViewsOverTime(
+  start: string,
+  end: string,
+): Promise<ViewsOverTimeResponse> {
+  return api
+    .get('admin/analytics/stats/views-over-time', { searchParams: { start, end } })
+    .json<ViewsOverTimeResponse>()
+}
+
+export async function fetchSiteReferrers(
+  start: string,
+  end: string,
+): Promise<SiteReferrersResponse> {
+  return api
+    .get('admin/analytics/stats/referrers', { searchParams: { start, end } })
+    .json<SiteReferrersResponse>()
+}
+
+export async function fetchBreakdownDetail(
+  category: BreakdownDetailCategory,
+  entryId: number,
+): Promise<BreakdownDetailResponse> {
+  return api
+    .get(`admin/analytics/stats/${category}/${entryId}`)
+    .json<BreakdownDetailResponse>()
+}
+
+export async function fetchCreateExport(): Promise<ExportCreateResponse> {
+  return api.post('admin/analytics/export').json<ExportCreateResponse>()
+}
+
+export async function fetchExportStatus(exportId: number): Promise<ExportStatusResponse> {
+  return api.get(`admin/analytics/export/${exportId}`).json<ExportStatusResponse>()
+}
+
+export async function fetchExportDownload(exportId: number): Promise<Blob> {
+  return api.get(`admin/analytics/export/${exportId}/download`).blob()
 }
