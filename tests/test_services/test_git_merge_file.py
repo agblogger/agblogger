@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 import subprocess
-from typing import TYPE_CHECKING
+import tempfile
+import threading
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from backend.services.git_service import GitService
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 class TestMergeFileContent:
@@ -84,6 +83,60 @@ class TestMergeFileContent:
         kwargs = mock_td.call_args.kwargs
         # dir must not be set to content_dir (should use system temp)
         assert kwargs.get("dir") is None or kwargs["dir"] != tmp_path
+
+    async def test_temp_file_writes_and_cleanup_run_off_event_loop_thread(
+        self, tmp_path: Path
+    ) -> None:
+        git = GitService(tmp_path)
+        await git.init_repo()
+
+        main_thread = threading.get_ident()
+        write_threads: list[int] = []
+        cleanup_threads: list[int] = []
+        original_write_text = Path.write_text
+        original_cleanup = tempfile.TemporaryDirectory.cleanup
+
+        def record_write_text(
+            self: Path,
+            data: str,
+            encoding: str | None = None,
+            errors: str | None = None,
+            newline: str | None = None,
+        ) -> int:
+            write_threads.append(threading.get_ident())
+            return original_write_text(
+                self,
+                data,
+                encoding=encoding,
+                errors=errors,
+                newline=newline,
+            )
+
+        def record_cleanup(self: tempfile.TemporaryDirectory[str]) -> None:
+            cleanup_threads.append(threading.get_ident())
+            original_cleanup(self)
+
+        with (
+            patch("pathlib.Path.write_text", autospec=True, side_effect=record_write_text),
+            patch(
+                "backend.services.git_service.tempfile.TemporaryDirectory.cleanup",
+                autospec=True,
+                side_effect=record_cleanup,
+            ),
+        ):
+            merged, conflicted = await git.merge_file_content(
+                "line1\nline2\nline3\n",
+                "line1 changed\nline2\nline3\n",
+                "line1\nline2\nline3 changed\n",
+            )
+
+        assert not conflicted
+        assert "line1 changed" in merged
+        assert "line3 changed" in merged
+        assert len(write_threads) == 3
+        assert all(thread_id != main_thread for thread_id in write_threads)
+        assert cleanup_threads
+        assert all(thread_id != main_thread for thread_id in cleanup_threads)
 
     async def test_merge_preserves_non_ascii_content(self, tmp_path: Path) -> None:
         """Merge must correctly handle non-ASCII characters (CJK, emoji, accented)."""

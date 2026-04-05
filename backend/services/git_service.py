@@ -60,23 +60,11 @@ class GitService:
             )
         except TimeoutError as exc:
             if process.returncode is None:
-                with contextlib.suppress(ProcessLookupError):
-                    process.kill()
-                try:
-                    await asyncio.wait_for(process.wait(), timeout=_POST_KILL_WAIT_SECONDS)
-                except TimeoutError:
-                    logger.error(
-                        "Process %s did not exit after SIGKILL within %ss; handle leaked",
-                        " ".join(command),
-                        _POST_KILL_WAIT_SECONDS,
-                    )
+                await self._kill_and_wait_for_process_exit(process, command)
             raise subprocess.TimeoutExpired(cmd=command, timeout=GIT_TIMEOUT_SECONDS) from exc
         except BaseException:
             if process.returncode is None:
-                with contextlib.suppress(ProcessLookupError):
-                    process.kill()
-                # asyncio's child watcher reaps the process via SIGCHLD;
-                # no explicit wait() needed here.
+                await self._kill_and_wait_for_process_exit(process, command)
             raise
 
         if process.returncode is None:
@@ -95,6 +83,21 @@ class GitService:
                 stderr=result.stderr,
             )
         return result
+
+    async def _kill_and_wait_for_process_exit(
+        self, process: asyncio.subprocess.Process, command: list[str]
+    ) -> None:
+        """Terminate a subprocess and wait briefly for the OS handle to close."""
+        with contextlib.suppress(ProcessLookupError):
+            process.kill()
+        try:
+            await asyncio.wait_for(process.wait(), timeout=_POST_KILL_WAIT_SECONDS)
+        except TimeoutError:
+            logger.error(
+                "Process %s did not exit after SIGKILL within %ss; handle leaked",
+                " ".join(command),
+                _POST_KILL_WAIT_SECONDS,
+            )
 
     async def init_repo(self) -> None:
         """Initialize a git repo if one doesn't exist, then commit any existing files."""
@@ -195,14 +198,21 @@ class GitService:
 
         Returns (merged_text, has_conflicts).
         """
-        with tempfile.TemporaryDirectory() as td:
-            tmp = Path(td)
+        temp_dir = tempfile.TemporaryDirectory()
+        try:
+            tmp = Path(temp_dir.name)
             base_f = tmp / "base"
             ours_f = tmp / "ours"
             theirs_f = tmp / "theirs"
-            base_f.write_text(base, encoding="utf-8")
-            ours_f.write_text(ours, encoding="utf-8")
-            theirs_f.write_text(theirs, encoding="utf-8")
+            await asyncio.to_thread(
+                self._write_merge_inputs,
+                base_f,
+                base,
+                ours_f,
+                ours,
+                theirs_f,
+                theirs,
+            )
 
             result = await self._run_process(
                 ["git", "merge-file", "-p", str(ours_f), str(base_f), str(theirs_f)],
@@ -217,3 +227,19 @@ class GitService:
                     result.returncode, "git merge-file", result.stdout, result.stderr
                 )
             return result.stdout, result.returncode > 0
+        finally:
+            await asyncio.to_thread(temp_dir.cleanup)
+
+    @staticmethod
+    def _write_merge_inputs(
+        base_f: Path,
+        base: str,
+        ours_f: Path,
+        ours: str,
+        theirs_f: Path,
+        theirs: str,
+    ) -> None:
+        """Write merge inputs off the event loop to avoid blocking request handling."""
+        base_f.write_text(base, encoding="utf-8")
+        ours_f.write_text(ours, encoding="utf-8")
+        theirs_f.write_text(theirs, encoding="utf-8")

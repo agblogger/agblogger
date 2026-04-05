@@ -258,6 +258,55 @@ class TestGitTimeout:
         assert captured_timeout["value"] == GIT_TIMEOUT_SECONDS
         mock_exec.assert_awaited_once()
 
+    async def test_cancelled_run_waits_for_process_exit_before_raising(
+        self, tmp_path: Path
+    ) -> None:
+        gs = GitService(tmp_path)
+
+        class ControlledProcess:
+            def __init__(self) -> None:
+                self.returncode: int | None = None
+                self.communicate_started = asyncio.Event()
+                self.wait_started = asyncio.Event()
+                self.allow_exit = asyncio.Event()
+                self.kill_called = False
+
+            async def communicate(self) -> tuple[bytes, bytes]:
+                self.communicate_started.set()
+                await asyncio.Future()
+                raise AssertionError("unreachable")
+
+            async def wait(self) -> int:
+                self.wait_started.set()
+                await self.allow_exit.wait()
+                self.returncode = -9
+                return self.returncode
+
+            def kill(self) -> None:
+                self.kill_called = True
+
+        proc = ControlledProcess()
+
+        with patch(
+            "backend.services.git_service.asyncio.create_subprocess_exec",
+            new_callable=AsyncMock,
+            return_value=proc,
+        ):
+            task = asyncio.create_task(
+                gs._run_process(["git", "status"], cwd=tmp_path, check=False)
+            )
+            await asyncio.wait_for(proc.communicate_started.wait(), timeout=1)
+            task.cancel()
+
+            await asyncio.wait_for(proc.wait_started.wait(), timeout=1)
+            assert proc.kill_called is True
+            assert task.done() is False
+
+            proc.allow_exit.set()
+
+            with pytest.raises(asyncio.CancelledError):
+                await task
+
     async def test_merge_file_uses_asyncio_subprocess_with_timeout(self, tmp_path: Path) -> None:
         gs = GitService(tmp_path)
         (tmp_path / "file.txt").write_text("hello")
