@@ -76,7 +76,7 @@ export async function fetchSiteReferrers(
 
 export async function fetchBreakdownDetail(
   category: BreakdownDetailCategory,
-  entryId: number,
+  entryId: string,
 ): Promise<BreakdownDetailResponse> {
   return api
     .get(`admin/analytics/stats/${category}/${entryId}`)

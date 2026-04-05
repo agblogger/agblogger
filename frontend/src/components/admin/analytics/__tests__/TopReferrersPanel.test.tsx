@@ -38,4 +38,10 @@ describe('TopReferrersPanel', () => {
     expect(screen.getByText('Referrer')).toBeInTheDocument()
     expect(screen.getByText('Count')).toBeInTheDocument()
   })
+
+  it('shows error state when error prop is provided', () => {
+    render(<TopReferrersPanel referrers={[]} isLoading={false} error={new Error('Network error')} />)
+    expect(screen.getByText('Failed to load referrers. Please try again.')).toBeInTheDocument()
+    expect(screen.queryByText('No referrer data for selected range.')).not.toBeInTheDocument()
+  })
 })

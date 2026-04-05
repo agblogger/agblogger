@@ -19,7 +19,7 @@ interface BreakdownBarChartProps {
 
 interface DrillDownDetail {
   name: string
-  entryId: number
+  entryId: string
 }
 
 function VersionDetail({
@@ -28,7 +28,7 @@ function VersionDetail({
   onClose,
 }: {
   category: BreakdownDetailCategory
-  entryId: number
+  entryId: string
   onClose: () => void
 }) {
   const { data, error, isLoading } = useBreakdownDetail(category, entryId)
@@ -86,10 +86,8 @@ export default function BreakdownBarChart({
     const entry = topEntries[index]
     if (entry === undefined) return
 
-    // Find entryId — BreakdownEntry has `count` as a proxy for id when the server
-    // embeds one; we use array index as a fallback. The hook accepts entryId as a number.
-    // Per the API shape, we pass the index (0-based) as the entryId for drill-down.
-    const entryId = index
+    const entryId = entry.gc_id
+    if (entryId === undefined || entryId === null || entryId === '') return
     const isSame = drillDown !== null && drillDown.entryId === entryId
     setDrillDown(isSame ? null : { name: entry.name, entryId })
   }

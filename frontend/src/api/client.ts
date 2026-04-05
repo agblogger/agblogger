@@ -312,6 +312,7 @@ export interface BreakdownEntry {
   name: string
   count: number
   percent: number
+  gc_id?: string | null
 }
 
 export type BreakdownCategory = 'browsers' | 'systems' | 'languages' | 'locations' | 'sizes' | 'campaigns'
@@ -348,7 +349,7 @@ export type BreakdownDetailCategory = 'browsers' | 'systems'
 
 export interface BreakdownDetailResponse {
   category: BreakdownDetailCategory
-  entry_id: number
+  entry_id: string
   entries: BreakdownDetailEntry[]
 }
 

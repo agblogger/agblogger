@@ -23,7 +23,7 @@ vi.mock('@/api/analytics', () => ({
   fetchBreakdownDetail: (...args: unknown[]) => mockFetchBreakdownDetail(...args) as unknown,
 }))
 
-import { useAnalyticsDashboard, usePathReferrers, useSiteReferrers, useBreakdownDetail } from '../useAnalyticsDashboard'
+import { useAnalyticsDashboard, usePathReferrers, useSiteReferrers, useBreakdownDetail, isDateRangeValid } from '../useAnalyticsDashboard'
 import type {
   AnalyticsSettings,
   TotalStatsResponse,
@@ -109,8 +109,8 @@ const siteReferrers: SiteReferrersResponse = {
 
 const breakdownDetail: BreakdownDetailResponse = {
   category: 'browsers',
-  entry_id: 1,
-  entries: [{ name: 'Chrome', count: 500, percent: 100 }],
+  entry_id: 'chrome-1',
+  entries: [{ name: 'Chrome 120', count: 500, percent: 100 }],
 }
 
 const emptyStats = {
@@ -168,23 +168,36 @@ describe('useAnalyticsDashboard', () => {
     })
   })
 
-  it('returns error when a fetch call rejects', async () => {
+  it('falls back to empty data for failed individual fetches (Promise.allSettled)', async () => {
     mockFetchAnalyticsSettings.mockResolvedValue(analyticsSettings)
+    // totalStats fails, rest succeed
     mockFetchTotalStats.mockRejectedValue(new Error('GoatCounter down'))
     mockFetchPathHits.mockResolvedValue(pathHits)
     mockFetchViewsOverTime.mockResolvedValue(viewsOverTimeData)
-    mockFetchBreakdown.mockResolvedValue({ category: 'browsers', entries: [] })
+    mockFetchBreakdown.mockImplementation((category: string) => {
+      if (category === 'browsers') return Promise.resolve(browsersData)
+      if (category === 'systems') return Promise.resolve(osData)
+      if (category === 'languages') return Promise.resolve(languagesData)
+      if (category === 'locations') return Promise.resolve(locationsData)
+      if (category === 'sizes') return Promise.resolve(sizesData)
+      if (category === 'campaigns') return Promise.resolve(campaignsData)
+      return Promise.reject(new Error(`Unexpected category: ${category}`))
+    })
 
     const { result } = renderHook(() => useAnalyticsDashboard('7d'), {
       wrapper: SWRTestWrapper,
     })
 
     await waitFor(() => {
-      expect(result.current.error).toBeDefined()
+      expect(result.current.data).toBeDefined()
     })
 
-    expect(result.current.data).toBeUndefined()
-    expect(result.current.error?.message).toBe('GoatCounter down')
+    // data should be defined (not undefined) — stats falls back to { visitors: 0 }
+    expect(result.current.data).toBeDefined()
+    expect(result.current.data?.stats).toEqual({ visitors: 0 })
+    expect(result.current.data?.paths).toEqual(pathHits)
+    // error should be undefined since allSettled doesn't throw
+    expect(result.current.error).toBeUndefined()
   })
 
   it('preserves settings when stats fetches fail', async () => {
@@ -199,11 +212,13 @@ describe('useAnalyticsDashboard', () => {
     })
 
     await waitFor(() => {
-      expect(result.current.error).toBeDefined()
+      expect(result.current.data).toBeDefined()
     })
 
     expect(result.current.settings).toEqual(analyticsSettings)
-    expect(result.current.error?.message).toBe('GoatCounter down')
+    // With allSettled, all fail gracefully — data is defined with zeros
+    expect(result.current.data?.stats).toEqual({ visitors: 0 })
+    expect(result.current.data?.paths).toEqual({ paths: [] })
   })
 
   it('skips stats fetches when analytics is disabled', async () => {
@@ -365,6 +380,51 @@ describe('useAnalyticsDashboard', () => {
       vi.useRealTimers()
     }
   })
+
+  it('suppresses fetch when custom range has start > end', async () => {
+    mockFetchAnalyticsSettings.mockResolvedValue(analyticsSettings)
+
+    const invalidRange = { start: '2026-03-20', end: '2026-03-01' }
+    const { result } = renderHook(() => useAnalyticsDashboard(invalidRange), {
+      wrapper: SWRTestWrapper,
+    })
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false)
+    })
+
+    expect(mockFetchTotalStats).not.toHaveBeenCalled()
+    expect(mockFetchPathHits).not.toHaveBeenCalled()
+    expect(mockFetchBreakdown).not.toHaveBeenCalled()
+  })
+})
+
+describe('isDateRangeValid', () => {
+  it('returns true for preset ranges', () => {
+    expect(isDateRangeValid('7d')).toBe(true)
+    expect(isDateRangeValid('30d')).toBe(true)
+    expect(isDateRangeValid('90d')).toBe(true)
+  })
+
+  it('returns true when start is empty', () => {
+    expect(isDateRangeValid({ start: '', end: '2026-03-20' })).toBe(true)
+  })
+
+  it('returns true when end is empty', () => {
+    expect(isDateRangeValid({ start: '2026-03-01', end: '' })).toBe(true)
+  })
+
+  it('returns true when start equals end', () => {
+    expect(isDateRangeValid({ start: '2026-03-01', end: '2026-03-01' })).toBe(true)
+  })
+
+  it('returns true when start < end', () => {
+    expect(isDateRangeValid({ start: '2026-03-01', end: '2026-03-20' })).toBe(true)
+  })
+
+  it('returns false when start > end', () => {
+    expect(isDateRangeValid({ start: '2026-03-20', end: '2026-03-01' })).toBe(false)
+  })
 })
 
 describe('usePathReferrers', () => {
@@ -449,6 +509,19 @@ describe('useSiteReferrers', () => {
       localDateToUtcEnd('2026-01-31'),
     )
   })
+
+  it('suppresses fetch when custom range is invalid (start > end)', async () => {
+    const invalidRange = { start: '2026-03-20', end: '2026-03-01' }
+    const { result } = renderHook(() => useSiteReferrers(invalidRange, true), {
+      wrapper: SWRTestWrapper,
+    })
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false)
+    })
+
+    expect(mockFetchSiteReferrers).not.toHaveBeenCalled()
+  })
 })
 
 describe('useBreakdownDetail', () => {
@@ -459,7 +532,7 @@ describe('useBreakdownDetail', () => {
   it('fetches breakdown detail when category and entryId are provided', async () => {
     mockFetchBreakdownDetail.mockResolvedValue(breakdownDetail)
 
-    const { result } = renderHook(() => useBreakdownDetail('browsers', 1), {
+    const { result } = renderHook(() => useBreakdownDetail('browsers', 'chrome-1'), {
       wrapper: SWRTestWrapper,
     })
 
@@ -467,11 +540,11 @@ describe('useBreakdownDetail', () => {
       expect(result.current.data).toEqual(breakdownDetail)
     })
 
-    expect(mockFetchBreakdownDetail).toHaveBeenCalledWith('browsers', 1)
+    expect(mockFetchBreakdownDetail).toHaveBeenCalledWith('browsers', 'chrome-1')
   })
 
   it('does not fetch when category is null', async () => {
-    const { result } = renderHook(() => useBreakdownDetail(null, 1), {
+    const { result } = renderHook(() => useBreakdownDetail(null, 'chrome-1'), {
       wrapper: SWRTestWrapper,
     })
 

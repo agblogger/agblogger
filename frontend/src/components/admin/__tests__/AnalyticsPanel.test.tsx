@@ -279,7 +279,8 @@ describe('AnalyticsPanel', () => {
   })
 
   it('preserves persisted settings when stats are unavailable', async () => {
-    vi.spyOn(console, 'error').mockImplementation(() => {})
+    // With Promise.allSettled (Issue 11), individual stats failures fall back to empty/zero
+    // data — the panel remains usable and settings are preserved.
     mockFetchAnalyticsSettings.mockResolvedValue({
       analytics_enabled: true,
       show_views_on_posts: true,
@@ -287,6 +288,7 @@ describe('AnalyticsPanel', () => {
     mockFetchTotalStats.mockRejectedValue(new Error('GoatCounter down'))
     mockFetchPathHits.mockRejectedValue(new Error('GoatCounter down'))
     mockFetchBreakdown.mockRejectedValue(new Error('GoatCounter down'))
+    mockFetchViewsOverTime.mockRejectedValue(new Error('GoatCounter down'))
     mockUpdateAnalyticsSettings.mockResolvedValue({
       analytics_enabled: false,
       show_views_on_posts: true,
@@ -295,10 +297,12 @@ describe('AnalyticsPanel', () => {
 
     renderPanel()
 
+    // Dashboard still loads (with zero data) — not "Analytics unavailable"
     await waitFor(() => {
-      expect(screen.getByText('Analytics unavailable')).toBeInTheDocument()
+      expect(screen.getByText('Page Views')).toBeInTheDocument()
     })
 
+    // Settings are preserved correctly
     expect(screen.getByRole('switch', { name: /analytics enabled/i })).toHaveAttribute(
       'aria-checked',
       'true',

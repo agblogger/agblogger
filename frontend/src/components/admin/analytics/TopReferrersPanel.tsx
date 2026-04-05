@@ -4,9 +4,10 @@ import type { ReferrerEntry } from '@/api/client'
 interface TopReferrersPanelProps {
   referrers: ReferrerEntry[]
   isLoading: boolean
+  error?: Error
 }
 
-export default function TopReferrersPanel({ referrers, isLoading }: TopReferrersPanelProps) {
+export default function TopReferrersPanel({ referrers, isLoading, error }: TopReferrersPanelProps) {
   return (
     <div className="bg-surface border border-border rounded-lg p-5">
       <h3 className="text-sm font-medium text-ink mb-4">Top referrers</h3>
@@ -18,6 +19,8 @@ export default function TopReferrersPanel({ referrers, isLoading }: TopReferrers
         >
           <Loader2 size={16} className="text-accent animate-spin" aria-hidden="true" />
         </div>
+      ) : error !== undefined ? (
+        <p className="text-muted text-sm">Failed to load referrers. Please try again.</p>
       ) : referrers.length === 0 ? (
         <p className="text-muted text-sm">No referrer data for selected range.</p>
       ) : (

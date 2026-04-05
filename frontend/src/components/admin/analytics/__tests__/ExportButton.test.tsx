@@ -13,6 +13,7 @@ vi.mock('@/api/analytics', () => ({
 }))
 
 import ExportButton from '../ExportButton'
+import { HTTPError } from 'ky'
 
 describe('ExportButton', () => {
   beforeEach(() => {
@@ -55,6 +56,35 @@ describe('ExportButton', () => {
     await clickPromise.catch(() => {})
   })
 
+  it('downloads CSV on successful export', async () => {
+    const blob = new Blob(['col1,col2\n1,2'], { type: 'text/csv' })
+    mockFetchCreateExport.mockResolvedValue({ id: 42 })
+    mockFetchExportStatus.mockResolvedValue({ id: 42, finished: true })
+    mockFetchExportDownload.mockResolvedValue(blob)
+
+    const createObjectURL = vi.fn().mockReturnValue('blob:test')
+    const revokeObjectURL = vi.fn()
+    globalThis.URL.createObjectURL = createObjectURL
+    globalThis.URL.revokeObjectURL = revokeObjectURL
+
+    const user = userEvent.setup()
+    // Render before setting up appendchild spy so React can mount the component
+    render(<ExportButton disabled={false} />)
+
+    // Spy after render so React's initial mount is not intercepted
+    const appendChildSpy = vi.spyOn(document.body, 'appendChild').mockImplementation((el) => el)
+
+    await user.click(screen.getByRole('button', { name: 'Export CSV' }))
+
+    await waitFor(() => {
+      expect(mockFetchExportDownload).toHaveBeenCalledWith(42)
+    })
+    expect(createObjectURL).toHaveBeenCalledWith(blob)
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:test')
+
+    appendChildSpy.mockRestore()
+  })
+
   it('shows error message when fetchCreateExport fails', async () => {
     mockFetchCreateExport.mockRejectedValue(new Error('Network error'))
 
@@ -68,6 +98,25 @@ describe('ExportButton', () => {
     })
     // Button should be re-enabled after error
     expect(screen.getByRole('button', { name: 'Export CSV' })).not.toBeDisabled()
+  })
+
+  it('shows session expired message on 401 error', async () => {
+    // Construct an HTTPError with the required Response, Request, and options arguments.
+    // The options argument uses an unknown cast to satisfy ky's NormalizedOptions shape.
+    const httpError = new HTTPError(
+      new Response(null, { status: 401, statusText: 'Unauthorized' }),
+      new Request('http://localhost/api/admin/analytics/export'),
+      {} as unknown as ConstructorParameters<typeof HTTPError>[2],
+    )
+    mockFetchCreateExport.mockRejectedValue(httpError)
+
+    const user = userEvent.setup()
+    render(<ExportButton disabled={false} />)
+    await user.click(screen.getByRole('button', { name: 'Export CSV' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Session expired. Please log in again.')).toBeInTheDocument()
+    })
   })
 
   it('shows timeout error when export never finishes', async () => {

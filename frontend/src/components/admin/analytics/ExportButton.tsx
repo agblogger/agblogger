@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { fetchCreateExport, fetchExportStatus, fetchExportDownload } from '@/api/analytics'
+import { HTTPError } from '@/api/client'
 
 const MAX_POLLS = 30
 const POLL_INTERVAL_MS = 2000
@@ -50,8 +51,12 @@ export default function ExportButton({ disabled }: ExportButtonProps) {
       a.click()
       a.remove()
       URL.revokeObjectURL(url)
-    } catch {
-      setError('Export failed. Please try again.')
+    } catch (err) {
+      if (err instanceof HTTPError && err.response.status === 401) {
+        setError('Session expired. Please log in again.')
+      } else {
+        setError('Export failed. Please try again.')
+      }
     } finally {
       setExporting(false)
     }

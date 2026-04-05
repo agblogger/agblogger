@@ -71,10 +71,11 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
   } = useAnalyticsDashboard(dateRange)
 
   const analyticsEnabled = persistedSettings?.analytics_enabled ?? false
-  const { data: siteReferrers, isLoading: siteReferrersLoading } = useSiteReferrers(
-    dateRange,
-    analyticsEnabled,
-  )
+  const {
+    data: siteReferrers,
+    isLoading: siteReferrersLoading,
+    error: siteReferrersError,
+  } = useSiteReferrers(dateRange, analyticsEnabled)
 
   const is401 = dashboardError instanceof HTTPError && dashboardError.response.status === 401
   const unavailable = dashboardError !== undefined && !is401
@@ -191,7 +192,11 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
           {/* Top pages + Top referrers side by side */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <TopPagesPanel paths={data?.paths.paths ?? []} />
-            <TopReferrersPanel referrers={siteReferrers?.referrers ?? []} isLoading={siteReferrersLoading} />
+            <TopReferrersPanel
+              referrers={siteReferrers?.referrers ?? []}
+              isLoading={siteReferrersLoading}
+              {...(siteReferrersError !== undefined ? { error: siteReferrersError } : {})}
+            />
           </div>
 
           {/* Browsers + OS */}
