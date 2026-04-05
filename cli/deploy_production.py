@@ -2825,10 +2825,6 @@ def collect_config(project_dir: Path | None = None) -> DeployConfig:
     max_content_size_raw = input("Max content storage size (e.g., 2G, 500M) [unlimited]: ").strip()
     max_content_size = max_content_size_raw or None
 
-    disable_password_change = _prompt_yes_no(
-        "Disable admin password changes in the web UI? (for public demos)",
-        default=False,
-    )
     deploy_goatcounter = _prompt_yes_no(
         "Deploy the optional GoatCounter analytics sidecar?",
         default=True,
@@ -2854,7 +2850,7 @@ def collect_config(project_dir: Path | None = None) -> DeployConfig:
         caddy_public=caddy_public,
         expose_docs=expose_docs,
         max_content_size=max_content_size,
-        disable_password_change=disable_password_change,
+        disable_password_change=False,
         deployment_mode=deployment_mode,
         image_ref=image_ref,
         bundle_dir=DEFAULT_BUNDLE_DIR,

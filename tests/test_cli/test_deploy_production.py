@@ -2986,8 +2986,8 @@ class TestCollectConfigReusesExistingSecrets:
         (tmp_path / DEFAULT_ENV_FILE).write_text(env_content, encoding="utf-8")
 
         # Simulate interactive answers: reuse=yes, mode=local, caddy=none, public=no,
-        # port=8000, trusted hosts=example.com, proxy ips=(none), expose docs=no, disable pw=no
-        inputs = iter(["y", "local", "none", "n", "", "example.com", "", "n", "", "n", "y"])
+        # port=8000, trusted hosts=example.com, proxy ips=(none), expose docs=no
+        inputs = iter(["y", "local", "none", "n", "", "example.com", "", "n", "", "y"])
         monkeypatch.setattr("builtins.input", lambda _prompt: next(inputs))
         monkeypatch.setattr("cli.deploy_production.getpass.getpass", lambda _prompt: "")
 
@@ -3007,10 +3007,8 @@ class TestCollectConfigReusesExistingSecrets:
         # Simulate: secret_key=auto, username=admin, display_name=admin,
         # password+confirm, mode=local,
         # caddy=none, public=no, port=8000, trusted hosts=example.com, proxy ips,
-        # expose docs=no, disable password change=no
-        inputs = iter(
-            ["admin", "", "local", "n", "none", "n", "", "example.com", "", "n", "", "n", "y"]
-        )
+        # expose docs=no
+        inputs = iter(["admin", "", "local", "none", "n", "", "example.com", "", "n", "", "y"])
         passwords = iter(["", "strongpass123", "strongpass123"])
         monkeypatch.setattr("builtins.input", lambda _prompt: next(inputs))
         monkeypatch.setattr(
@@ -3477,7 +3475,6 @@ class TestDnsInfoMessage:
                 "",  # additional proxy ips
                 "n",  # expose docs
                 "",  # max content size (unlimited)
-                "n",  # disable password change
                 "y",  # deploy GoatCounter
             ]
         )
@@ -3740,8 +3737,8 @@ class TestCollectConfigBundleDirReuse:
         (bundle_dir / DEFAULT_ENV_FILE).write_text(env_content, encoding="utf-8")
 
         # Simulate: reuse=yes, mode=local, caddy=none, public=no,
-        # port=8000, trusted hosts, proxy ips, docs=no, disable pw=no
-        inputs = iter(["y", "local", "none", "n", "", "example.com", "", "n", "", "n", "y"])
+        # port=8000, trusted hosts, proxy ips, docs=no
+        inputs = iter(["y", "local", "none", "n", "", "example.com", "", "n", "", "y"])
         monkeypatch.setattr("builtins.input", lambda _prompt: next(inputs))
         monkeypatch.setattr("cli.deploy_production.getpass.getpass", lambda _prompt: "")
 
@@ -3782,8 +3779,8 @@ class TestCollectConfigBundleDirReuse:
         )
 
         # Simulate: reuse=yes, mode=local, caddy=none, public=no,
-        # port=8000, trusted hosts, proxy ips, docs=no, disable pw=no
-        inputs = iter(["y", "local", "none", "n", "", "example.com", "", "n", "", "n", "y"])
+        # port=8000, trusted hosts, proxy ips, docs=no
+        inputs = iter(["y", "local", "none", "n", "", "example.com", "", "n", "", "y"])
         monkeypatch.setattr("builtins.input", lambda _prompt: next(inputs))
         monkeypatch.setattr("cli.deploy_production.getpass.getpass", lambda _prompt: "")
 
@@ -3822,7 +3819,6 @@ class TestCollectConfigExternalCaddy:
                 "",  # extra proxy ips
                 "n",  # expose docs
                 "",  # max content size (unlimited)
-                "n",  # disable password change
                 "y",  # deploy GoatCounter
             ]
         )
@@ -4138,6 +4134,37 @@ def test_config_from_args_sets_none_mode_when_no_caddy_domain() -> None:
 
     config = config_from_args(args)
     assert config.caddy_mode == CADDY_MODE_NONE
+
+
+def test_config_from_args_respects_disable_password_change_flag() -> None:
+    args = argparse.Namespace(
+        secret_key="s" * 64,
+        admin_username="admin",
+        admin_password="strong-password!",
+        admin_display_name=None,
+        caddy_domain=None,
+        caddy_email=None,
+        caddy_public=False,
+        caddy_external=False,
+        shared_caddy_dir=DEFAULT_SHARED_CADDY_DIR,
+        shared_caddy_email=None,
+        trusted_hosts="example.com",
+        trusted_proxy_ips=None,
+        host_port=8000,
+        bind_public=False,
+        expose_docs=False,
+        deployment_mode=DEPLOY_MODE_LOCAL,
+        image_ref=None,
+        bundle_dir=DEFAULT_BUNDLE_DIR,
+        tarball_filename=DEFAULT_IMAGE_TARBALL,
+        platform=None,
+        skip_scan=False,
+        max_content_size=None,
+        disable_password_change=True,
+    )
+
+    config = config_from_args(args)
+    assert config.disable_password_change is True
 
 
 # ── build_caddy_site_snippet ─────────────────────────────────────────
