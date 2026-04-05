@@ -16,6 +16,7 @@ from backend.services.analytics_service import (
     _normalize_goatcounter_end_date,
     _stats_request,
     fetch_breakdown,
+    fetch_breakdown_detail,
     fetch_path_hits,
     fetch_path_referrers,
     fetch_site_referrers,
@@ -1124,3 +1125,43 @@ async def test_fetch_site_referrers_handles_empty_paths(session: AsyncSession) -
         result = await fetch_site_referrers(session)
     assert result is not None
     assert result.referrers == []
+
+
+# ── fetch_breakdown_detail ─────────────────────────────────────────────────────
+
+
+async def test_fetch_breakdown_detail_returns_versions(session: AsyncSession) -> None:
+    """fetch_breakdown_detail returns version entries for a browser/OS."""
+    fake_response = {
+        "stats": [
+            {"name": "Chrome 120", "count": 50},
+            {"name": "Chrome 119", "count": 30},
+        ]
+    }
+    with patch(
+        "backend.services.analytics_service._stats_request",
+        new_callable=AsyncMock,
+        return_value=fake_response,
+    ):
+        result = await fetch_breakdown_detail(session, "browsers", 3)
+
+    assert result is not None
+    assert result.category == "browsers"
+    assert result.entry_id == 3
+    assert len(result.entries) == 2
+    assert result.entries[0].name == "Chrome 120"
+    assert result.entries[0].count == 50
+
+
+async def test_fetch_breakdown_detail_returns_none_when_unavailable(
+    session: AsyncSession,
+) -> None:
+    """fetch_breakdown_detail returns None when GoatCounter is unavailable."""
+    with patch(
+        "backend.services.analytics_service._stats_request",
+        new_callable=AsyncMock,
+        return_value=None,
+    ):
+        result = await fetch_breakdown_detail(session, "browsers", 3)
+
+    assert result is None

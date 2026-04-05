@@ -18,6 +18,9 @@ from backend.models.analytics import AnalyticsSettings
 from backend.schemas.analytics import (
     AnalyticsSettingsResponse,
     BreakdownCategory,
+    BreakdownDetailCategory,
+    BreakdownDetailEntry,
+    BreakdownDetailResponse,
     BreakdownEntry,
     BreakdownResponse,
     DailyViewCount,
@@ -537,6 +540,34 @@ async def fetch_breakdown(
         if isinstance(entry, dict)
     ]
     return BreakdownResponse(category=category, entries=entries)
+
+
+async def fetch_breakdown_detail(
+    session: AsyncSession,
+    category: BreakdownDetailCategory,
+    entry_id: int,
+) -> BreakdownDetailResponse | None:
+    """Proxy GoatCounter version drill-down for a breakdown entry."""
+    settings = await get_analytics_settings(session)
+    if not settings.analytics_enabled:
+        return None
+
+    data = await _stats_request(f"/api/v0/stats/{category}/{entry_id}")
+    if data is None:
+        return None
+
+    stats = data.get("stats", [])
+    total_count = sum(
+        e.get("count", 0)
+        for e in stats
+        if isinstance(e, dict) and isinstance(e.get("count", 0), int)
+    )
+    entries = [
+        BreakdownDetailEntry.from_goatcounter(e, total_count=total_count)
+        for e in stats
+        if isinstance(e, dict)
+    ]
+    return BreakdownDetailResponse(category=category, entry_id=entry_id, entries=entries)
 
 
 async def fetch_view_count(

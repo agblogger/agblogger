@@ -171,6 +171,43 @@ class BreakdownResponse(BaseModel):
     entries: list[BreakdownEntry] = Field(default_factory=list)
 
 
+BreakdownDetailCategory = Literal["browsers", "systems"]
+
+
+class BreakdownDetailEntry(BaseModel):
+    """A version entry within a breakdown category (e.g. Chrome 120)."""
+
+    name: str
+    count: int = Field(ge=0)
+    percent: float = Field(ge=0, le=100)
+
+    @classmethod
+    def from_goatcounter(
+        cls,
+        entry: dict[str, Any],
+        *,
+        total_count: int | None = None,
+    ) -> BreakdownDetailEntry:
+        """Construct from a raw GoatCounter detail entry."""
+        name = entry.get("name", "")
+        if not isinstance(name, str) or not name.strip():
+            name = "Unknown"
+        raw_count = entry.get("count", 0)
+        count = raw_count if isinstance(raw_count, int) else 0
+        percent = entry.get("percent")
+        if percent is None:
+            percent = (count / total_count * 100.0) if total_count and total_count > 0 else 0.0
+        return cls(name=name, count=count, percent=percent)
+
+
+class BreakdownDetailResponse(BaseModel):
+    """Version detail for a breakdown entry (e.g. all Chrome versions)."""
+
+    category: BreakdownDetailCategory
+    entry_id: int = Field(ge=1)
+    entries: list[BreakdownDetailEntry] = Field(default_factory=list)
+
+
 class DailyViewCount(BaseModel):
     """View count for a single day."""
 
