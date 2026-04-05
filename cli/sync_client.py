@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import getpass
 import hashlib
 import json
@@ -427,7 +428,9 @@ class SyncClient:
             config = read_config(self.content_dir)
         except (json.JSONDecodeError, UnicodeDecodeError, OSError) as exc:
             print(
-                f"Warning: Could not read {CONFIG_FILE}: {exc}",
+                f"Warning: Could not read {CONFIG_FILE}: {exc}\n"
+                f"  Three-way merge disabled for this sync; server version "
+                f"will be preferred on all conflicts.",
                 file=sys.stderr,
             )
             return None
@@ -443,7 +446,9 @@ class SyncClient:
             save_config(self.content_dir, config)
         except (json.JSONDecodeError, UnicodeDecodeError, OSError) as exc:
             print(
-                f"Warning: Could not save sync commit hash: {exc}",
+                f"Warning: Could not save sync commit hash: {exc}\n"
+                f"  The next sync may produce incorrect merge results.\n"
+                f"  Ensure {CONFIG_FILE} is writable before syncing again.",
                 file=sys.stderr,
             )
 
@@ -476,8 +481,12 @@ class SyncClient:
         except httpx.TransportError as exc:
             print(f"  ERROR: Failed to download {file_path}: {exc}")
             return False
-        local_path.parent.mkdir(parents=True, exist_ok=True)
-        local_path.write_bytes(resp.content)
+        try:
+            local_path.parent.mkdir(parents=True, exist_ok=True)
+            local_path.write_bytes(resp.content)
+        except OSError as exc:
+            print(f"  ERROR: Failed to write {file_path}: {exc}")
+            return False
         return True
 
     def _backup_conflicted_files(self, conflicts: list[dict[str, Any]]) -> Path | None:
@@ -523,8 +532,11 @@ class SyncClient:
                 # Also remove the parent .backups dir if it is now empty
                 if backups_root.exists() and not any(backups_root.iterdir()):
                     backups_root.rmdir()
-            except OSError:
-                pass
+            except OSError as exc:
+                print(
+                    f"  Warning: Could not clean up empty backup directory: {exc}",
+                    file=sys.stderr,
+                )
             return None
         return backup_dir
 
@@ -577,7 +589,12 @@ class SyncClient:
             if not full_path.exists():
                 print(f"  Skip (missing): {fp}")
                 continue
-            files_to_send.append(("files", (fp, full_path.read_bytes())))
+            try:
+                content = full_path.read_bytes()
+            except OSError as exc:
+                print(f"  Warning: Could not read {fp}, skipping: {exc}")
+                continue
+            files_to_send.append(("files", (fp, content)))
             synced_paths.add(fp)
             print(f"  Upload: {fp}")
 
@@ -590,7 +607,13 @@ class SyncClient:
             )
             resp.raise_for_status()
         except httpx.HTTPStatusError as exc:
-            print(f"Error: Sync commit failed (HTTP {exc.response.status_code})")
+            detail = ""
+            with contextlib.suppress(ValueError, AttributeError):
+                detail = exc.response.json().get("detail", "")
+            if detail:
+                print(f"Error: Sync commit failed (HTTP {exc.response.status_code}): {detail}")
+            else:
+                print(f"Error: Sync commit failed (HTTP {exc.response.status_code})")
             print("Local state may be inconsistent. Re-run sync to recover.")
             return
         commit_data: dict[str, Any] = resp.json()
@@ -624,7 +647,11 @@ class SyncClient:
                 print(f"  Skip (path traversal in delete): {fp}")
                 continue
             if local_path.exists():
-                local_path.unlink()
+                try:
+                    local_path.unlink()
+                except OSError as exc:
+                    print(f"  Warning: Failed to delete {fp}: {exc}")
+                    continue
                 _prune_empty_parents(local_path.parent, stop_at=self.content_dir)
                 print(f"  Delete local: {fp}")
                 synced_paths.add(fp)

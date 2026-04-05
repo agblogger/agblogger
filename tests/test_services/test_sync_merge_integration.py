@@ -753,6 +753,189 @@ class TestSyncCommitRollback:
         # Rollback must remove the first file that was successfully written
         assert not (content_dir / "posts/first-post/index.md").exists()
 
+    async def test_non_http_exception_triggers_rollback(
+        self, merge_client: AsyncClient, merge_settings: Settings
+    ) -> None:
+        """A non-HTTPException (e.g. subprocess.TimeoutExpired from _get_base_content)
+        during the mutation phase must trigger rollback and return HTTP 500, not
+        propagate as an unhandled exception crashing the server."""
+        token = await _login(merge_client)
+        headers = {"Authorization": f"Bearer {token}"}
+        content_dir = merge_settings.content_dir
+
+        metadata = json.dumps({"deleted_files": [], "last_sync_commit": None})
+
+        # Write the first file to disk so the server sees it as an existing file
+        # and tries to do a three-way merge for the second upload (triggering _get_base_content)
+        existing_dir = content_dir / "posts" / "good-post"
+        existing_dir.mkdir(parents=True, exist_ok=True)
+        (existing_dir / "index.md").write_text(
+            "---\ntitle: Good Post\nauthor: admin\ncreated_at: 2026-01-01 00:00:00+00\n"
+            "---\nOriginal body.\n",
+            encoding="utf-8",
+        )
+
+        new_content = b"---\ntitle: Good Post\nauthor: admin\n---\nUpdated body.\n"
+        fail_new_content = b"---\ntitle: Fail Post\nauthor: admin\n---\nBad body.\n"
+
+        # The second file is new, and the first file is modified - when we patch
+        # _get_base_content to raise TimeoutExpired (which is NOT caught by except HTTPException),
+        # the mutation phase will raise a non-HTTP exception.
+        timeout_error = subprocess.TimeoutExpired(cmd="git show", timeout=5.0)
+
+        with patch("backend.api.sync._get_base_content", side_effect=timeout_error):
+            resp = await merge_client.post(
+                "/api/sync/commit",
+                data={"metadata": metadata},
+                files=[
+                    (
+                        "files",
+                        (
+                            "posts/good-post/index.md",
+                            io.BytesIO(new_content),
+                            "text/plain",
+                        ),
+                    ),
+                    (
+                        "files",
+                        (
+                            "posts/new-fail-post/index.md",
+                            io.BytesIO(fail_new_content),
+                            "text/plain",
+                        ),
+                    ),
+                ],
+                headers=headers,
+            )
+
+        # Must return 500, not crash the server (5xx family)
+        assert resp.status_code == 500
+
+        # Rollback must restore good-post/index.md to its original content
+        existing_file = content_dir / "posts/good-post/index.md"
+        assert existing_file.exists(), "Pre-existing file must still exist after rollback"
+        restored = existing_file.read_text(encoding="utf-8")
+        assert "Original body." in restored, (
+            "Pre-existing file must be restored to original content"
+        )
+
+    async def test_rollback_restores_pre_existing_file_content(
+        self, merge_client: AsyncClient, merge_settings: Settings
+    ) -> None:
+        """When the first upload overwrites an existing file but the second write
+        fails, rollback must restore the first file to its ORIGINAL content (not
+        delete it, since it existed before the sync)."""
+        token = await _login(merge_client)
+        headers = {"Authorization": f"Bearer {token}"}
+        content_dir = merge_settings.content_dir
+
+        # Create a pre-existing post that will be overwritten in the first upload
+        existing_dir = content_dir / "posts" / "existing-post"
+        existing_dir.mkdir(parents=True, exist_ok=True)
+        original_content = (
+            "---\ntitle: Existing Post\nauthor: admin\n"
+            "created_at: 2026-01-01 00:00:00+00\n---\nOriginal content.\n"
+        )
+        (existing_dir / "index.md").write_text(original_content, encoding="utf-8")
+
+        overwrite_content = b"---\ntitle: Existing Post\nauthor: admin\n---\nOverwritten content.\n"
+        fail_content = b"---\ntitle: Fail Post\nauthor: admin\n---\nBody.\n"
+        metadata = json.dumps({"deleted_files": [], "last_sync_commit": None})
+
+        _orig_write_text = pathlib.Path.write_text
+
+        def write_that_fails_on_second(
+            self: pathlib.Path,
+            data: str,
+            encoding: str | None = None,
+            errors: str | None = None,
+            newline: str | None = None,
+        ) -> None:
+            if str(self).endswith("posts/new-fail-post/index.md"):
+                raise OSError("Simulated disk failure on new post")
+            _orig_write_text(self, data, encoding=encoding, errors=errors, newline=newline)
+
+        with patch.object(pathlib.Path, "write_text", write_that_fails_on_second):
+            resp = await merge_client.post(
+                "/api/sync/commit",
+                data={"metadata": metadata},
+                files=[
+                    (
+                        "files",
+                        (
+                            "posts/existing-post/index.md",
+                            io.BytesIO(overwrite_content),
+                            "text/plain",
+                        ),
+                    ),
+                    (
+                        "files",
+                        (
+                            "posts/new-fail-post/index.md",
+                            io.BytesIO(fail_content),
+                            "text/plain",
+                        ),
+                    ),
+                ],
+                headers=headers,
+            )
+
+        assert resp.status_code == 500
+
+        # The pre-existing file must be restored to its ORIGINAL content, not deleted
+        existing_file = content_dir / "posts/existing-post/index.md"
+        assert existing_file.exists(), "Pre-existing file must still exist after rollback"
+        restored_content = existing_file.read_text(encoding="utf-8")
+        assert "Original content." in restored_content, (
+            "Pre-existing file must be restored to original content, not overwritten content"
+        )
+
+    async def test_read_text_oserror_returns_500_without_silent_overwrite(
+        self, merge_client: AsyncClient, merge_settings: Settings
+    ) -> None:
+        """OSError from read_text when reading server content must return HTTP 500,
+        not silently treat server content as absent (which would cause data loss)."""
+        token = await _login(merge_client)
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # Use the pre-existing shared post from the fixture
+        client_content = (
+            b"---\ntitle: Shared Post\nauthor: admin\n"
+            b"created_at: 2026-02-01 00:00:00+00\n---\nClient version.\n"
+        )
+        metadata = json.dumps({"deleted_files": [], "last_sync_commit": None})
+
+        _orig_read_text = pathlib.Path.read_text
+
+        def read_text_that_raises(
+            self: pathlib.Path,
+            encoding: str | None = None,
+            errors: str | None = None,
+        ) -> str:
+            if str(self).endswith("posts/shared/index.md"):
+                raise OSError("Permission denied reading server file")
+            return _orig_read_text(self, encoding=encoding, errors=errors)
+
+        with patch.object(pathlib.Path, "read_text", read_text_that_raises):
+            resp = await merge_client.post(
+                "/api/sync/commit",
+                data={"metadata": metadata},
+                files=[
+                    (
+                        "files",
+                        (
+                            "posts/shared/index.md",
+                            io.BytesIO(client_content),
+                            "text/plain",
+                        ),
+                    ),
+                ],
+                headers=headers,
+            )
+
+        # Must return 500, not silently overwrite the server file
+        assert resp.status_code == 500
+
 
 class TestSyncDeletePrunesDirectories:
     """Deleting a post via sync should also remove empty parent directories."""

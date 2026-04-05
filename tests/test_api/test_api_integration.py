@@ -1884,6 +1884,49 @@ class TestSyncSecurity:
         )
         assert resp.status_code == 403
 
+    @pytest.mark.asyncio
+    async def test_sync_download_path_traversal_rejected(self, client: AsyncClient) -> None:
+        login_resp = await client.post(
+            "/api/auth/token-login",
+            json={"username": "admin", "password": "admin123"},
+        )
+        token = login_resp.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # Path traversal attempts using ".." segments: the HTTP client (httpx)
+        # normalises the URL before sending, so "../../etc/passwd" resolves to
+        # "/etc/passwd" and "posts/../../etc/passwd" resolves to "/etc/passwd",
+        # neither of which matches any route.  The server returns 4xx in all
+        # cases — 404 from unmatched routes is equally safe as 400/403 from the
+        # endpoint itself, since no sensitive file contents are returned.
+        for path in ["../../etc/passwd", "posts/../../etc/passwd"]:
+            resp = await client.get(
+                f"/api/sync/download/{path}",
+                headers=headers,
+            )
+            assert resp.status_code in {400, 403, 404}, (
+                f"Expected 4xx for traversal path {path!r}, got {resp.status_code}"
+            )
+            assert b"passwd" not in resp.content
+
+    @pytest.mark.asyncio
+    async def test_sync_commit_rejects_non_canonical_post_markdown_path_in_deleted_files(
+        self, client: AsyncClient, app_settings: Settings
+    ) -> None:
+        login_resp = await client.post(
+            "/api/auth/token-login",
+            json={"username": "admin", "password": "admin123"},
+        )
+        token = login_resp.json()["access_token"]
+
+        metadata = json.dumps({"deleted_files": ["posts/flat.md"]})
+        resp = await client.post(
+            "/api/sync/commit",
+            data={"metadata": metadata},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 403
+
 
 class TestAdmin:
     @pytest.mark.asyncio

@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING
+import stat
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import httpx
 import pytest
 
 from cli.sync_client import SyncClient, validate_server_url
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 class TestValidateServerUrl:
@@ -328,3 +327,286 @@ class TestSaveCommitHashResilience:
 
         config = json.loads((content_dir / ".agblogger.json").read_text())
         assert config["last_sync_commit"] == "abc123"
+
+
+class TestGetLastSyncCommitCorruptConfigWarning:
+    """Issue 3: Corrupt config warning must explain that merge will be degraded."""
+
+    def test_corrupt_config_warning_mentions_merge_degradation(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        content_dir = tmp_path / "content"
+        content_dir.mkdir()
+
+        # Write corrupted config
+        (content_dir / ".agblogger.json").write_text("NOT VALID JSON {{{")
+
+        client = SyncClient.__new__(SyncClient)
+        client.content_dir = content_dir
+
+        result = client._get_last_sync_commit()
+
+        assert result is None
+        captured = capsys.readouterr()
+        # Warning must mention merge degradation consequences
+        assert "merge" in captured.err.lower() or "server version" in captured.err.lower()
+
+
+class TestSaveCommitHashFailureWarning:
+    """Issue 4: Failed commit hash save warning must explain consequences."""
+
+    def test_save_commit_hash_failure_warns_about_next_sync(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        content_dir = tmp_path / "content"
+        content_dir.mkdir()
+
+        # Make the content dir read-only so save_config fails
+        config_path = content_dir / ".agblogger.json"
+        config_path.write_text("{}")
+        config_path.chmod(stat.S_IRUSR)  # read-only for owner
+
+        client = SyncClient.__new__(SyncClient)
+        client.content_dir = content_dir
+
+        try:
+            client._save_commit_hash("abc123")
+        finally:
+            # Restore permissions so tmp_path cleanup works
+            config_path.chmod(stat.S_IRUSR | stat.S_IWUSR)
+
+        captured = capsys.readouterr()
+        # Warning must explain consequence: next sync may produce incorrect results
+        warning = captured.err.lower()
+        assert "warning" in warning
+        assert "next sync" in warning or "incorrect" in warning or "merge" in warning
+
+
+class TestSyncCommitServerErrorDetail:
+    """Issue 5: Server error detail from JSON body should be shown to the user."""
+
+    def test_sync_commit_http_error_shows_server_detail(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        content_dir = tmp_path / "content"
+        content_dir.mkdir()
+
+        plan: dict[str, list[object]] = {
+            "to_upload": [],
+            "to_download": [],
+            "to_delete_remote": [],
+            "to_delete_local": [],
+            "conflicts": [],
+        }
+
+        request = httpx.Request("POST", "http://localhost:8000/api/sync/commit")
+        error_response = httpx.Response(
+            status_code=507,
+            json={"detail": "Storage limit reached"},
+            request=request,
+        )
+        http_error = httpx.HTTPStatusError(
+            "507 Insufficient Storage",
+            request=request,
+            response=error_response,
+        )
+
+        mock_request = MagicMock()
+        mock_request.raise_for_status.side_effect = http_error
+
+        with (
+            patch.object(SyncClient, "_get_last_sync_commit", return_value=None),
+            patch.object(SyncClient, "_request", return_value=mock_request),
+            patch("cli.sync_client.scan_local_files", return_value={}),
+        ):
+            client = SyncClient.__new__(SyncClient)
+            client.content_dir = content_dir
+            client.server_url = "http://localhost:8000"
+            client.client = MagicMock()
+
+            client.sync(plan)
+
+        captured = capsys.readouterr()
+        assert "Storage limit reached" in captured.out
+
+
+class TestSyncLocalDeleteOSError:
+    """Issue 6: OSError during local file deletion must warn and continue, not crash."""
+
+    def test_delete_local_permission_error_warns_and_continues(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        content_dir = tmp_path / "content"
+        content_dir.mkdir()
+
+        # Create two files: one unlink will fail, one will succeed
+        (content_dir / "good.md").write_text("good")
+        (content_dir / "bad.md").write_text("bad")
+
+        plan = {
+            "to_upload": [],
+            "to_download": [],
+            "to_delete_remote": [],
+            "to_delete_local": ["bad.md", "good.md"],
+            "conflicts": [],
+        }
+        commit_response = {
+            "to_download": [],
+            "conflicts": [],
+            "warnings": [],
+            "commit_hash": "abc123",
+        }
+
+        mock_post = MagicMock()
+        mock_post.raise_for_status = MagicMock()
+        mock_post.json.return_value = commit_response
+
+        original_unlink = Path.unlink
+
+        def selective_unlink(self: Path, missing_ok: bool = False) -> None:
+            if self.name == "bad.md":
+                raise PermissionError(f"Permission denied: {self}")
+            original_unlink(self, missing_ok=missing_ok)
+
+        with (
+            patch.object(SyncClient, "_get_last_sync_commit", return_value=None),
+            patch.object(SyncClient, "_save_commit_hash"),
+            patch("cli.sync_client.scan_local_files", return_value={}),
+            patch("cli.sync_client.save_manifest"),
+            patch.object(Path, "unlink", selective_unlink),
+        ):
+            client = SyncClient.__new__(SyncClient)
+            client.content_dir = content_dir
+            client.server_url = "http://localhost:8000"
+            client.client = MagicMock()
+            client.client.post.return_value = mock_post
+
+            # Must not crash
+            client.sync(plan)
+
+        captured = capsys.readouterr()
+        # A warning should mention bad.md
+        assert "Warning" in captured.out or "warning" in captured.out.lower()
+        assert "bad.md" in captured.out
+
+        # good.md should be counted (was successfully deleted), bad.md should not
+        assert "1 file(s) synced" in captured.out
+
+
+class TestDownloadFileWriteBytesOSError:
+    """Issue 7: OSError in write_bytes during download must return False, not crash."""
+
+    def test_download_file_returns_false_on_write_oserror(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        content_dir = tmp_path / "content"
+        content_dir.mkdir()
+
+        mock_resp = MagicMock()
+        mock_resp.raise_for_status = MagicMock()
+        mock_resp.content = b"file content"
+
+        with (
+            patch.object(SyncClient, "_request", return_value=mock_resp),
+            patch.object(Path, "write_bytes", side_effect=OSError("No space left on device")),
+            patch.object(Path, "mkdir"),
+        ):
+            client = SyncClient.__new__(SyncClient)
+            client.content_dir = content_dir
+            client.server_url = "http://localhost:8000"
+            client.client = MagicMock()
+
+            result = client._download_file("posts/test/index.md")
+
+        assert result is False
+        captured = capsys.readouterr()
+        assert "ERROR" in captured.out or "error" in captured.out.lower()
+
+
+class TestUploadFileReadBytesOSError:
+    """Issue 8: OSError in read_bytes during upload must skip file with warning, not crash."""
+
+    def test_unreadable_upload_file_skipped_with_warning(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        content_dir = tmp_path / "content"
+        content_dir.mkdir()
+
+        # Create one unreadable file and one readable file
+        bad_file = content_dir / "bad.md"
+        bad_file.write_text("bad")
+        good_file = content_dir / "good.md"
+        good_file.write_text("good")
+
+        plan = {
+            "to_upload": ["bad.md", "good.md"],
+            "to_download": [],
+            "to_delete_remote": [],
+            "to_delete_local": [],
+            "conflicts": [],
+        }
+        commit_response = {
+            "to_download": [],
+            "conflicts": [],
+            "warnings": [],
+            "commit_hash": "abc123",
+        }
+
+        mock_post = MagicMock()
+        mock_post.raise_for_status = MagicMock()
+        mock_post.json.return_value = commit_response
+
+        original_read_bytes = Path.read_bytes
+
+        def selective_read_bytes(self: Path) -> bytes:
+            if self.name == "bad.md":
+                raise PermissionError(f"Permission denied: {self}")
+            return original_read_bytes(self)
+
+        with (
+            patch.object(SyncClient, "_get_last_sync_commit", return_value=None),
+            patch.object(SyncClient, "_save_commit_hash"),
+            patch("cli.sync_client.scan_local_files", return_value={}),
+            patch("cli.sync_client.save_manifest"),
+            patch.object(Path, "read_bytes", selective_read_bytes),
+        ):
+            client = SyncClient.__new__(SyncClient)
+            client.content_dir = content_dir
+            client.server_url = "http://localhost:8000"
+            client.client = MagicMock()
+            client.client.post.return_value = mock_post
+
+            # Must not crash
+            client.sync(plan)
+
+        captured = capsys.readouterr()
+        # Should warn about bad.md
+        assert "bad.md" in captured.out
+        assert "Warning" in captured.out or "warning" in captured.out.lower()
+        # Should still upload good.md (1 file synced)
+        assert "1 file(s) synced" in captured.out
+
+
+class TestBackupCleanupOSErrorWarning:
+    """Issue 16: OSError during backup cleanup should print a warning, not silently swallow."""
+
+    def test_backup_cleanup_oserror_warns_on_stderr(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        content_dir = tmp_path / "content"
+        content_dir.mkdir()
+
+        # No local files for any conflict path — backed_up will be 0,
+        # so cleanup is triggered. We make shutil.rmtree raise OSError.
+        conflicts = [{"file_path": "posts/missing/index.md"}]
+
+        with patch("cli.sync_client.shutil.rmtree", side_effect=OSError("busy")):
+            client = SyncClient.__new__(SyncClient)
+            client.content_dir = content_dir
+            client.server_url = "http://localhost:8000"
+            client.client = MagicMock()
+
+            client._backup_conflicted_files(conflicts)
+
+        captured = capsys.readouterr()
+        assert "Warning" in captured.err or "warning" in captured.err.lower()

@@ -52,10 +52,12 @@ _MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10 MB
 
 
 def _resolve_safe_path(content_dir: Path, file_path: str) -> Path:
-    """Resolve a file path within content_dir, raising 400 on traversal attempts."""
+    """Resolve a file path within content_dir, raising 403 if the path is outside the
+    sync-managed surface or 400 on directory-traversal escape."""
     target = file_path.lstrip("/")
-    # Keep the canonical directory-backed post invariant explicit at the API
-    # boundary even though the broader managed-path gate also enforces it.
+    # Defense-in-depth: reject non-canonical post paths before reaching the allowlist gate
+    # so a future change to sync_paths cannot silently widen the attack surface for
+    # flat-file post injection.
     if (
         target.startswith("posts/")
         and target.endswith(".md")
@@ -108,7 +110,7 @@ def _prune_empty_directories(start: Path, *, stop_at: Path) -> None:
 def _restore_original_files(
     *, content_dir: Path, original_files: dict[str, bytes | None]
 ) -> list[str]:
-    """Restore files touched by sync to their pre-commit state.
+    """Restore files touched during sync to their state before mutation began.
 
     Returns a list of file paths that failed to restore (empty on full success).
     """
@@ -122,7 +124,8 @@ def _restore_original_files(
             except OSError as exc:
                 logger.error("Sync: failed to remove reverted file %s: %s", file_path, exc)
                 failures.append(file_path)
-            _prune_empty_directories(full_path.parent, stop_at=content_dir)
+            else:
+                _prune_empty_directories(full_path.parent, stop_at=content_dir)
             continue
 
         try:
@@ -387,6 +390,11 @@ async def _sync_commit_inner(
                 except UnicodeDecodeError:
                     # Binary file on server — skip text-based merge
                     server_content = None
+                except OSError as exc:
+                    logger.error("Sync: failed to read server version of %s: %s", target_path, exc)
+                    raise HTTPException(
+                        status_code=500, detail="File I/O error during sync"
+                    ) from exc
 
             client_text: str
             try:
@@ -500,6 +508,12 @@ async def _sync_commit_inner(
         if failures:
             logger.error("Sync rollback incomplete, failed to restore: %s", failures)
         raise
+    except Exception:
+        failures = _restore_original_files(content_dir=content_dir, original_files=original_files)
+        if failures:
+            logger.error("Sync rollback incomplete, failed to restore: %s", failures)
+        logger.exception("Unexpected error during sync commit mutation phase")
+        raise HTTPException(status_code=500, detail="Internal error during sync") from None
 
     await asyncio.to_thread(content_size_tracker.recompute)
     if not content_size_tracker.check(0):
@@ -603,5 +617,13 @@ async def _get_base_content(
             last_sync_commit,
             exc.returncode,
             exc.stderr.strip() if exc.stderr else "no stderr",
+        )
+        return None
+    except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
+        logger.error(
+            "Git error retrieving base for %s at %s: %s",
+            file_path,
+            last_sync_commit,
+            exc,
         )
         return None
