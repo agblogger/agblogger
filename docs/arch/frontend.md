@@ -53,4 +53,5 @@ The frontend does not own markdown rendering. It receives rendered HTML from the
 - `frontend/src/components/share/` contains the social sharing bar and platform-specific sharing components used by the post view.
 - `frontend/src/components/labels/` contains shared label form components (names editor, parents selector) used by both the label creation and label settings pages.
 - `frontend/src/utils/postUrl.ts` provides centralized slug extraction and URL generation for post navigation, used by 6+ pages/components.
+- `frontend/src/components/admin/analytics/` contains extracted analytics sub-components (charts, tables, drill-downs, date picker, export button) that the `AnalyticsPanel.tsx` orchestrator composes into the admin dashboard tab.
 - `frontend/src/api/analytics.ts` contains the analytics API client functions for the admin dashboard and public view counts.

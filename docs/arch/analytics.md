@@ -36,7 +36,14 @@ The endpoint returns the same `views: null` response for draft, disabled, or non
 
 The UI surfaces analytics in two places:
 
-- an admin dashboard tab displaying page-view statistics, referrers, and browser breakdowns with date-range controls
+- an admin dashboard tab with a full set of panels delegated to focused sub-components under `frontend/src/components/admin/analytics/`:
+  - summary cards showing page views, visitors, and the top page
+  - a views-over-time chart with automatic daily/weekly granularity selection
+  - top pages with inline per-path referrer drill-down alongside a site-wide referrers panel
+  - browser and OS breakdowns with version drill-down, and location and language tables
+  - a screen-sizes chart and campaigns table
+  - a custom date range picker with common presets
+  - CSV export via GoatCounter's async export API
 - an optional view count in post metadata, controlled by the admin show-views toggle
 
 ## Security Boundaries
@@ -45,9 +52,11 @@ The GoatCounter sidecar is internal to the deployment. Its API token never leave
 
 ## Code Entry Points
 
-- `backend/api/analytics.py` exposes the admin stats proxy and public view-count endpoints.
+- `backend/api/analytics.py` exposes the admin stats proxy and public view-count endpoints, including site-wide referrer aggregation, breakdown version detail, and the three-step CSV export lifecycle (create, poll, download).
 - `backend/services/analytics_service.py` orchestrates hit recording, stats retrieval, and settings management.
 - `backend/models/analytics.py` contains the durable analytics settings table model.
-- `frontend/src/components/admin/AnalyticsPanel.tsx` is the lazy-loaded admin dashboard tab.
+- `frontend/src/components/admin/AnalyticsPanel.tsx` is the lazy-loaded admin dashboard orchestrator that composes the sub-components below.
+- `frontend/src/components/admin/analytics/` contains the extracted analytics sub-components: charts, tables, drill-downs, the date range picker, and the export button.
+- `frontend/src/hooks/useAnalyticsDashboard.ts` provides composite SWR hooks for the dashboard, including site-wide referrers and breakdown version detail.
 - `frontend/src/api/analytics.ts` contains the analytics API client functions for admin and public use.
 - `goatcounter/entrypoint.sh` is the sidecar's provisioning and startup script, including site-host normalization from deployment-provided environment.
