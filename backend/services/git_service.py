@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import re
 import subprocess
@@ -13,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 _COMMIT_RE = re.compile(r"^[0-9a-f]{4,40}$")
 GIT_TIMEOUT_SECONDS = 30
+_POST_KILL_WAIT_SECONDS = 5.0
 
 
 class GitService:
@@ -45,11 +47,10 @@ class GitService:
         capture_output: bool = True,
     ) -> subprocess.CompletedProcess[str]:
         """Run a subprocess under asyncio so the event loop owns child reaping."""
-        stdout_target = asyncio.subprocess.PIPE if capture_output else asyncio.subprocess.DEVNULL
         process = await asyncio.create_subprocess_exec(
             *command,
             cwd=cwd,
-            stdout=stdout_target,
+            stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
         try:
@@ -59,14 +60,31 @@ class GitService:
             )
         except TimeoutError as exc:
             if process.returncode is None:
-                process.kill()
-                await process.wait()
+                with contextlib.suppress(ProcessLookupError):
+                    process.kill()
+                try:
+                    await asyncio.wait_for(process.wait(), timeout=_POST_KILL_WAIT_SECONDS)
+                except TimeoutError:
+                    logger.error(
+                        "Process %s did not exit after SIGKILL within %ss; handle leaked",
+                        " ".join(command),
+                        _POST_KILL_WAIT_SECONDS,
+                    )
             raise subprocess.TimeoutExpired(cmd=command, timeout=GIT_TIMEOUT_SECONDS) from exc
+        except BaseException:
+            if process.returncode is None:
+                with contextlib.suppress(ProcessLookupError):
+                    process.kill()
+                # asyncio's child watcher reaps the process via SIGCHLD;
+                # no explicit wait() needed here.
+            raise
 
         if process.returncode is None:
+            # Unreachable in practice: communicate() always sets returncode before returning.
+            # This is a defensive assertion against a broken asyncio implementation.
             msg = f"Process {' '.join(command)} finished without a return code"
             raise RuntimeError(msg)
-        stdout = stdout_bytes.decode("utf-8", errors="replace")
+        stdout = stdout_bytes.decode("utf-8", errors="replace") if capture_output else ""
         stderr = stderr_bytes.decode("utf-8", errors="replace")
         result = subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
         if check and result.returncode != 0:

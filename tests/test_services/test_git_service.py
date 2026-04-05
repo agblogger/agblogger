@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import subprocess
 from typing import TYPE_CHECKING
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -290,6 +290,139 @@ class TestGitTimeout:
 
     def test_timeout_constant_is_positive(self) -> None:
         assert GIT_TIMEOUT_SECONDS > 0
+
+
+class TestRunProcessErrorHandling:
+    """_run_process handles errors, cancellation, and resource cleanup correctly."""
+
+    async def test_capture_output_false_returns_empty_stdout(self, tmp_path: Path) -> None:
+        """capture_output=False discards stdout and returns empty string."""
+        gs = GitService(tmp_path)
+        (tmp_path / "file.txt").write_text("hello")
+        await gs.init_repo()
+
+        proc = AsyncMock()
+        proc.communicate.return_value = (b"output that should be ignored", b"")
+        proc.returncode = 0
+
+        with patch(
+            "backend.services.git_service.asyncio.create_subprocess_exec",
+            new_callable=AsyncMock,
+            return_value=proc,
+        ):
+            result = await gs._run("status", capture_output=False, check=False)
+
+        assert result.stdout == ""
+
+    async def test_timeout_error_converts_to_subprocess_timeout_expired(
+        self, tmp_path: Path
+    ) -> None:
+        """TimeoutError from asyncio.wait_for is converted to subprocess.TimeoutExpired."""
+        gs = GitService(tmp_path)
+        proc = AsyncMock()
+        proc.returncode = 0  # already exited; no kill needed
+
+        async def raise_timeout(awaitable: Awaitable[object], *, timeout: float) -> object:
+            if hasattr(awaitable, "close"):
+                awaitable.close()
+            raise TimeoutError()
+
+        with (
+            patch(
+                "backend.services.git_service.asyncio.create_subprocess_exec",
+                new_callable=AsyncMock,
+                return_value=proc,
+            ),
+            patch("backend.services.git_service.asyncio.wait_for", side_effect=raise_timeout),
+            pytest.raises(subprocess.TimeoutExpired),
+        ):
+            await gs._run("status")
+
+    async def test_timeout_raises_timeout_expired_when_kill_raises_process_lookup_error(
+        self, tmp_path: Path
+    ) -> None:
+        """subprocess.TimeoutExpired is raised even if process.kill() raises ProcessLookupError."""
+        gs = GitService(tmp_path)
+        proc = AsyncMock()
+        proc.returncode = None
+        # kill() is synchronous on asyncio.subprocess.Process; must be a sync mock
+        proc.kill = MagicMock(side_effect=ProcessLookupError())
+
+        async def raise_timeout(awaitable: Awaitable[object], *, timeout: float) -> object:
+            if hasattr(awaitable, "close"):
+                awaitable.close()
+            raise TimeoutError()
+
+        with (
+            patch(
+                "backend.services.git_service.asyncio.create_subprocess_exec",
+                new_callable=AsyncMock,
+                return_value=proc,
+            ),
+            patch("backend.services.git_service.asyncio.wait_for", side_effect=raise_timeout),
+            pytest.raises(subprocess.TimeoutExpired),
+        ):
+            await gs._run("status")
+
+    async def test_timeout_waits_for_process_death_with_bounded_timeout(
+        self, tmp_path: Path
+    ) -> None:
+        """After killing on timeout, process.wait() is wrapped in a bounded asyncio.wait_for."""
+        gs = GitService(tmp_path)
+        proc = AsyncMock()
+        proc.returncode = None
+        proc.kill = MagicMock()  # kill() is synchronous on asyncio.subprocess.Process
+        wait_for_call_count = 0
+
+        async def fake_wait_for(awaitable: Awaitable[object], *, timeout: float) -> object:
+            nonlocal wait_for_call_count
+            wait_for_call_count += 1
+            if wait_for_call_count == 1:
+                if hasattr(awaitable, "close"):
+                    awaitable.close()
+                raise TimeoutError()  # simulate communicate() timing out
+            return await awaitable  # let process.wait() complete
+
+        with (
+            patch(
+                "backend.services.git_service.asyncio.create_subprocess_exec",
+                new_callable=AsyncMock,
+                return_value=proc,
+            ),
+            patch("backend.services.git_service.asyncio.wait_for", side_effect=fake_wait_for),
+            pytest.raises(subprocess.TimeoutExpired),
+        ):
+            await gs._run("status")
+
+        assert wait_for_call_count == 2  # once for communicate, once for process.wait
+
+    async def test_cancelled_error_kills_subprocess(self, tmp_path: Path) -> None:
+        """CancelledError propagation kills the subprocess before re-raising."""
+        gs = GitService(tmp_path)
+        proc = AsyncMock()
+        proc.returncode = None
+        proc.kill = MagicMock()  # kill() is synchronous on asyncio.subprocess.Process
+
+        async def raise_cancelled(awaitable: Awaitable[object], *, timeout: float) -> object:
+            if hasattr(awaitable, "close"):
+                awaitable.close()
+            raise asyncio.CancelledError()
+
+        with (
+            patch(
+                "backend.services.git_service.asyncio.create_subprocess_exec",
+                new_callable=AsyncMock,
+                return_value=proc,
+            ),
+            patch(
+                "backend.services.git_service.asyncio.wait_for",
+                side_effect=raise_cancelled,
+            ),
+            pytest.raises(asyncio.CancelledError),
+        ):
+            await gs._run("status")
+
+        proc.kill.assert_called_once()
 
 
 class TestTryCommitTimeout:
