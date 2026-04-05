@@ -133,6 +133,86 @@ class TestAnalyticsAdminAuth:
         assert resp.status_code == 401
 
 
+class TestNewAnalyticsEndpoints:
+    """Tests for new analytics endpoints (dashboard parity)."""
+
+    @pytest.mark.asyncio
+    async def test_views_over_time_unauthenticated(self, client: AsyncClient) -> None:
+        resp = await client.get("/api/admin/analytics/stats/views-over-time")
+        assert resp.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_site_referrers_unauthenticated(self, client: AsyncClient) -> None:
+        resp = await client.get("/api/admin/analytics/stats/referrers")
+        assert resp.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_breakdown_detail_unauthenticated(self, client: AsyncClient) -> None:
+        resp = await client.get("/api/admin/analytics/stats/browsers/1")
+        assert resp.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_export_create_unauthenticated(self, client: AsyncClient) -> None:
+        resp = await client.post("/api/admin/analytics/export")
+        assert resp.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_export_status_unauthenticated(self, client: AsyncClient) -> None:
+        resp = await client.get("/api/admin/analytics/export/1")
+        assert resp.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_export_download_unauthenticated(self, client: AsyncClient) -> None:
+        resp = await client.get("/api/admin/analytics/export/1/download")
+        assert resp.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_views_over_time_503_when_unavailable(self, client: AsyncClient) -> None:
+        token = await _get_admin_token(client)
+        with patch(
+            "backend.services.analytics_service._stats_request",
+            new_callable=AsyncMock,
+            return_value=None,
+        ):
+            resp = await client.get(
+                "/api/admin/analytics/stats/views-over-time",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert resp.status_code == 503
+
+    @pytest.mark.asyncio
+    async def test_site_referrers_503_when_unavailable(self, client: AsyncClient) -> None:
+        token = await _get_admin_token(client)
+        with patch(
+            "backend.services.analytics_service._stats_request",
+            new_callable=AsyncMock,
+            return_value=None,
+        ):
+            resp = await client.get(
+                "/api/admin/analytics/stats/referrers",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert resp.status_code == 503
+
+    @pytest.mark.asyncio
+    async def test_breakdown_detail_invalid_category(self, client: AsyncClient) -> None:
+        token = await _get_admin_token(client)
+        resp = await client.get(
+            "/api/admin/analytics/stats/locations/1",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_breakdown_detail_invalid_id(self, client: AsyncClient) -> None:
+        token = await _get_admin_token(client)
+        resp = await client.get(
+            "/api/admin/analytics/stats/browsers/0",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 422
+
+
 class TestAnalyticsSettings:
     """Tests for analytics settings GET and PUT endpoints."""
 
