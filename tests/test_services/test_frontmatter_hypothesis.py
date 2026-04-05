@@ -213,7 +213,7 @@ class TestNormalizeFrontmatterProperties:
         _write_raw_post(content_dir, file_path, _serialize_post(metadata, body))
 
         with patch("backend.services.sync_service.now_utc", return_value=_FROZEN_NOW):
-            warnings = normalize_post_frontmatter(
+            warnings, _modified = normalize_post_frontmatter(
                 uploaded_files=[file_path],
                 old_manifest={},
                 content_dir=content_dir,
@@ -256,7 +256,7 @@ class TestNormalizeFrontmatterProperties:
         }
 
         with patch("backend.services.sync_service.now_utc", return_value=_FROZEN_NOW):
-            warnings = normalize_post_frontmatter(
+            warnings, _modified = normalize_post_frontmatter(
                 uploaded_files=[file_path],
                 old_manifest=old_manifest,
                 content_dir=content_dir,
@@ -287,7 +287,7 @@ class TestNormalizeFrontmatterProperties:
         outside.write_text(original_outside, encoding="utf-8")
 
         with patch("backend.services.sync_service.now_utc", return_value=_FROZEN_NOW):
-            warnings = normalize_post_frontmatter(
+            warnings, _modified = normalize_post_frontmatter(
                 uploaded_files=[file_path],
                 old_manifest={},
                 content_dir=content_dir,

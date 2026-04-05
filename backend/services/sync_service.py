@@ -581,16 +581,24 @@ def normalize_post_frontmatter(
     uploaded_files: list[str],
     old_manifest: dict[str, FileEntry],
     content_dir: Path,
-) -> list[str]:
+    *,
+    force_edit_paths: set[str] | None = None,
+) -> tuple[list[str], list[str]]:
     """Normalize YAML front matter for uploaded post files during sync.
 
     Fills missing fields (timestamps, title) with defaults, strips the
     leading heading from the body when backfilling title, normalizes existing
     timestamps to strict format, and warns about unrecognized front matter fields.
 
-    Returns a list of warning strings.
+    *force_edit_paths* overrides the ``is_edit`` detection for files that went
+    through a merge — even when the manifest is empty (first sync), merged files
+    should get ``modified_at = current_time`` rather than copying ``created_at``.
+
+    Returns ``(warnings, modified_files)`` where *modified_files* lists paths
+    whose on-disk content was actually changed by normalization.
     """
     warnings: list[str] = []
+    modified_files: list[str] = []
     current_time = format_datetime(now_utc())
 
     for file_path in uploaded_files:
@@ -625,8 +633,10 @@ def normalize_post_frontmatter(
             if key not in RECOGNIZED_FIELDS:
                 warnings.append(f"{file_path}: unrecognized front matter field '{key}'")
 
-        # Determine new vs edit
-        is_edit = file_path in old_manifest
+        # Determine new vs edit — merged files are always edits even on first sync
+        is_edit = file_path in old_manifest or (
+            force_edit_paths is not None and file_path in force_edit_paths
+        )
 
         # Normalize timestamps that already exist
         for ts_field in ("created_at", "modified_at"):
@@ -679,11 +689,18 @@ def normalize_post_frontmatter(
             if new_content != post.content:
                 post.content = new_content
 
-        # Rewrite file on disk
+        # Only rewrite when normalization actually changed the content
+        normalized = fm.dumps(post) + "\n"
+        if normalized == raw:
+            continue
+
         try:
-            full_path.write_text(fm.dumps(post) + "\n", encoding="utf-8")
+            full_path.write_text(normalized, encoding="utf-8")
         except OSError as exc:
             logger.warning("Failed to write normalized front matter for %s: %s", file_path, exc)
             warnings.append(f"{file_path}: failed to write normalized front matter")
+            continue
 
-    return warnings
+        modified_files.append(file_path)
+
+    return warnings, modified_files

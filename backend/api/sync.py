@@ -333,148 +333,163 @@ async def _sync_commit_inner(
         upload_data[upload.filename] = content
 
     original_files: dict[str, bytes | None] = {}
-
-    # ── Apply deletions ──
-    successful_deletions = 0
-    for file_path in deleted_files:
-        full_path = _resolve_safe_path(content_dir, file_path)
-        if full_path.exists() and full_path.is_file():
-            _remember_original_file(
-                original_files=original_files,
-                file_path=file_path,
-                full_path=full_path,
-            )
-            try:
-                full_path.unlink()
-            except OSError as exc:
-                logger.error("Sync: failed to delete %s: %s", file_path.lstrip("/"), exc)
-                sync_warnings.append(f"Failed to delete {file_path.lstrip('/')}")
-                continue
-            successful_deletions += 1
-            logger.info("Sync: deleted file %s", file_path.lstrip("/"))
-
-    # ── Process uploaded files ──
     conflicts: list[SyncConflictInfo] = []
     to_download: list[str] = []
     uploaded_paths: list[str] = []
+    successful_deletions = 0
+    fm_warnings: list[str] = []
 
-    for filename, upload_content in upload_data.items():
-        target_path = filename.lstrip("/")
-        full_path = _resolve_safe_path(content_dir, target_path)
-        _remember_original_file(
-            original_files=original_files,
-            file_path=target_path,
-            full_path=full_path,
-        )
+    try:
+        # ── Apply deletions ──
+        for file_path in deleted_files:
+            full_path = _resolve_safe_path(content_dir, file_path)
+            if full_path.exists() and full_path.is_file():
+                _remember_original_file(
+                    original_files=original_files,
+                    file_path=file_path,
+                    full_path=full_path,
+                )
+                try:
+                    full_path.unlink()
+                except OSError as exc:
+                    logger.error("Sync: failed to delete %s: %s", file_path.lstrip("/"), exc)
+                    sync_warnings.append(f"Failed to delete {file_path.lstrip('/')}")
+                    continue
+                _prune_empty_directories(full_path.parent, stop_at=content_dir)
+                successful_deletions += 1
+                logger.info("Sync: deleted file %s", file_path.lstrip("/"))
 
-        # Read server's current content BEFORE writing upload
-        server_content: str | None = None
-        if full_path.exists() and full_path.is_file():
-            try:
-                server_content = full_path.read_text(encoding="utf-8")
-            except UnicodeDecodeError:
-                # Binary file on server — skip text-based merge
-                server_content = None
-
-        client_text: str
-        try:
-            client_text = upload_content.decode("utf-8")
-        except UnicodeDecodeError:
-            # Binary file — just write it, no merge
-            try:
-                full_path.parent.mkdir(parents=True, exist_ok=True)
-                full_path.write_bytes(upload_content)
-            except OSError as exc:
-                logger.error("Sync: I/O error writing binary %s: %s", target_path, exc)
-                raise HTTPException(status_code=500, detail="File I/O error during sync") from exc
-            uploaded_paths.append(target_path)
-            continue
-
-        # Merge conflict detection: attempt smart merge for markdown posts and labels.toml.
-        if (
-            target_path.startswith("posts/")
-            and target_path.endswith(".md")
-            and not is_directory_post_path(target_path)
-        ):
-            raise HTTPException(
-                status_code=400,
-                detail="Posts must be stored as posts/<slug>/index.md",
+        # ── Process uploaded files ──
+        for filename, upload_content in upload_data.items():
+            target_path = filename.lstrip("/")
+            full_path = _resolve_safe_path(content_dir, target_path)
+            _remember_original_file(
+                original_files=original_files,
+                file_path=target_path,
+                full_path=full_path,
             )
 
-        is_post_md = is_directory_post_path(target_path)
-        is_labels_toml = target_path == "labels.toml"
+            # Read server's current content BEFORE writing upload
+            server_content: str | None = None
+            if full_path.exists() and full_path.is_file():
+                try:
+                    server_content = full_path.read_text(encoding="utf-8")
+                except UnicodeDecodeError:
+                    # Binary file on server — skip text-based merge
+                    server_content = None
 
-        if server_content is not None and server_content != client_text and is_labels_toml:
-            # Semantic merge for labels.toml: set-based merge for names and parents
-            base_content = await _get_base_content(git_service, last_sync_commit, target_path)
-            labels_result = merge_labels_toml(base_content, server_content, client_text)
-
-            if labels_result.field_conflicts:
-                conflicts.append(
-                    SyncConflictInfo(
-                        file_path=target_path,
-                        body_conflicted=False,
-                        field_conflicts=labels_result.field_conflicts,
-                    )
-                )
-
+            client_text: str
             try:
-                full_path.write_text(labels_result.merged_content, encoding="utf-8")
-            except OSError as exc:
-                logger.error("Sync: I/O error writing merged %s: %s", target_path, exc)
-                raise HTTPException(status_code=500, detail="File I/O error during sync") from exc
-            to_download.append(target_path)
-            uploaded_paths.append(target_path)
-
-        elif server_content is not None and server_content != client_text and is_post_md:
-            # Get base version from git for three-way merge
-            base_content = await _get_base_content(git_service, last_sync_commit, target_path)
-            try:
-                merge_result = await merge_post_file(
-                    base_content, server_content, client_text, git_service
-                )
-            except (subprocess.CalledProcessError, OSError) as exc:
-                logger.error("Merge failed for %s: %s", target_path, exc)
-                conflicts.append(
-                    SyncConflictInfo(
-                        file_path=target_path, body_conflicted=True, field_conflicts=[]
-                    )
-                )
+                client_text = upload_content.decode("utf-8")
+            except UnicodeDecodeError:
+                # Binary file — just write it, no merge
+                try:
+                    full_path.parent.mkdir(parents=True, exist_ok=True)
+                    full_path.write_bytes(upload_content)
+                except OSError as exc:
+                    logger.error("Sync: I/O error writing binary %s: %s", target_path, exc)
+                    raise HTTPException(
+                        status_code=500, detail="File I/O error during sync"
+                    ) from exc
+                uploaded_paths.append(target_path)
                 continue
 
-            if merge_result.body_conflicted or merge_result.field_conflicts:
-                conflicts.append(
-                    SyncConflictInfo(
-                        file_path=target_path,
-                        body_conflicted=merge_result.body_conflicted,
-                        field_conflicts=merge_result.field_conflicts,
+            is_post_md = is_directory_post_path(target_path)
+            is_labels_toml = target_path == "labels.toml"
+
+            if server_content is not None and server_content != client_text and is_labels_toml:
+                # Semantic merge for labels.toml
+                base_content = await _get_base_content(git_service, last_sync_commit, target_path)
+                labels_result = merge_labels_toml(base_content, server_content, client_text)
+
+                if labels_result.field_conflicts:
+                    conflicts.append(
+                        SyncConflictInfo(
+                            file_path=target_path,
+                            body_conflicted=False,
+                            field_conflicts=labels_result.field_conflicts,
+                        )
                     )
-                )
 
-            try:
-                full_path.write_text(merge_result.merged_content, encoding="utf-8")
-            except OSError as exc:
-                logger.error("Sync: I/O error writing merged %s: %s", target_path, exc)
-                raise HTTPException(status_code=500, detail="File I/O error during sync") from exc
-            to_download.append(target_path)
+                try:
+                    full_path.write_text(labels_result.merged_content, encoding="utf-8")
+                except OSError as exc:
+                    logger.error("Sync: I/O error writing merged %s: %s", target_path, exc)
+                    raise HTTPException(
+                        status_code=500, detail="File I/O error during sync"
+                    ) from exc
+                to_download.append(target_path)
+                uploaded_paths.append(target_path)
 
-            uploaded_paths.append(target_path)
-        else:
-            # No conflict, or file type without semantic merge: write client's version
-            try:
-                full_path.parent.mkdir(parents=True, exist_ok=True)
-                full_path.write_text(client_text, encoding="utf-8")
-            except OSError as exc:
-                logger.error("Sync: I/O error writing %s: %s", target_path, exc)
-                raise HTTPException(status_code=500, detail="File I/O error during sync") from exc
-            uploaded_paths.append(target_path)
+            elif server_content is not None and server_content != client_text and is_post_md:
+                # Three-way merge for markdown posts
+                base_content = await _get_base_content(git_service, last_sync_commit, target_path)
+                try:
+                    merge_result = await merge_post_file(
+                        base_content, server_content, client_text, git_service
+                    )
+                except (subprocess.CalledProcessError, OSError) as exc:
+                    logger.error("Merge failed for %s: %s", target_path, exc)
+                    conflicts.append(
+                        SyncConflictInfo(
+                            file_path=target_path, body_conflicted=True, field_conflicts=[]
+                        )
+                    )
+                    continue
 
-    # ── Normalize front matter for uploaded + merged post files ──
-    fm_warnings = normalize_post_frontmatter(
-        uploaded_files=uploaded_paths,
-        old_manifest=old_manifest,
-        content_dir=content_dir,
-    )
+                if merge_result.body_conflicted or merge_result.field_conflicts:
+                    conflicts.append(
+                        SyncConflictInfo(
+                            file_path=target_path,
+                            body_conflicted=merge_result.body_conflicted,
+                            field_conflicts=merge_result.field_conflicts,
+                        )
+                    )
+
+                try:
+                    full_path.write_text(merge_result.merged_content, encoding="utf-8")
+                except OSError as exc:
+                    logger.error("Sync: I/O error writing merged %s: %s", target_path, exc)
+                    raise HTTPException(
+                        status_code=500, detail="File I/O error during sync"
+                    ) from exc
+                to_download.append(target_path)
+                uploaded_paths.append(target_path)
+            else:
+                # No conflict, or file type without semantic merge: write client's version
+                try:
+                    full_path.parent.mkdir(parents=True, exist_ok=True)
+                    full_path.write_text(client_text, encoding="utf-8")
+                except OSError as exc:
+                    logger.error("Sync: I/O error writing %s: %s", target_path, exc)
+                    raise HTTPException(
+                        status_code=500, detail="File I/O error during sync"
+                    ) from exc
+                uploaded_paths.append(target_path)
+
+        # ── Normalize front matter for uploaded + merged post files ──
+        # Files already in to_download went through a merge and should be treated
+        # as edits even when the server manifest is empty (first sync).
+        merged_paths = set(to_download)
+        fm_warnings, normalized_files = normalize_post_frontmatter(
+            uploaded_files=uploaded_paths,
+            old_manifest=old_manifest,
+            content_dir=content_dir,
+            force_edit_paths=merged_paths,
+        )
+
+        # Tell client to re-download files whose content changed during normalization
+        # so the client's local copy matches the server manifest exactly.
+        for fp in normalized_files:
+            if fp not in to_download:
+                to_download.append(fp)
+
+    except HTTPException:
+        # Roll back all file mutations before propagating the error
+        failures = _restore_original_files(content_dir=content_dir, original_files=original_files)
+        if failures:
+            logger.error("Sync rollback incomplete, failed to restore: %s", failures)
+        raise
 
     await asyncio.to_thread(content_size_tracker.recompute)
     if not content_size_tracker.check(0):

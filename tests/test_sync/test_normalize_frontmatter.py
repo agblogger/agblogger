@@ -43,7 +43,7 @@ class TestNormalizeNewPost:
             from datetime import UTC, datetime
 
             mock_now.return_value = datetime(2026, 2, 18, 12, 0, 0, tzinfo=UTC)
-            warnings = normalize_post_frontmatter(
+            warnings, _modified = normalize_post_frontmatter(
                 uploaded_files=["posts/hello/index.md"],
                 old_manifest={},
                 content_dir=content_dir,
@@ -161,7 +161,7 @@ class TestNormalizeNewPost:
             from datetime import UTC, datetime
 
             mock_now.return_value = datetime(2026, 2, 18, 12, 0, 0, tzinfo=UTC)
-            warnings = normalize_post_frontmatter(
+            warnings, _modified = normalize_post_frontmatter(
                 uploaded_files=["posts/hello/index.md"],
                 old_manifest={},
                 content_dir=content_dir,
@@ -269,7 +269,7 @@ class TestNormalizeEditedPost:
             from datetime import UTC, datetime
 
             mock_now.return_value = datetime(2026, 2, 18, 12, 0, 0, tzinfo=UTC)
-            warnings = normalize_post_frontmatter(
+            warnings, _modified = normalize_post_frontmatter(
                 uploaded_files=["posts/hello/index.md"],
                 old_manifest=old_manifest,
                 content_dir=content_dir,
@@ -298,7 +298,7 @@ class TestNormalizeUnrecognizedFields:
             from datetime import UTC, datetime
 
             mock_now.return_value = datetime(2026, 2, 18, 12, 0, 0, tzinfo=UTC)
-            warnings = normalize_post_frontmatter(
+            warnings, _modified = normalize_post_frontmatter(
                 uploaded_files=["posts/hello/index.md"],
                 old_manifest={},
                 content_dir=content_dir,
@@ -458,7 +458,7 @@ class TestNormalizeSkipNonPosts:
         original = '[site]\ntitle = "Test"\n'
         (content_dir / "index.toml").write_text(original)
 
-        warnings = normalize_post_frontmatter(
+        warnings, _modified = normalize_post_frontmatter(
             uploaded_files=["index.toml"],
             old_manifest={},
             content_dir=content_dir,
@@ -474,7 +474,7 @@ class TestNormalizeSkipNonPosts:
         original = "---\ntitle: About\n---\n# About\n"
         (content_dir / "about.md").write_text(original)
 
-        warnings = normalize_post_frontmatter(
+        warnings, _modified = normalize_post_frontmatter(
             uploaded_files=["about.md"],
             old_manifest={},
             content_dir=content_dir,
@@ -488,7 +488,7 @@ class TestNormalizeSkipNonPosts:
         content_dir = tmp_path / "content"
         (content_dir / "posts").mkdir(parents=True)
 
-        warnings = normalize_post_frontmatter(
+        warnings, _modified = normalize_post_frontmatter(
             uploaded_files=["posts/missing/index.md"],
             old_manifest={},
             content_dir=content_dir,

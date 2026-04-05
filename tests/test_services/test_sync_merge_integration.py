@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import pathlib
 import subprocess
 import tomllib
 from typing import TYPE_CHECKING
@@ -547,7 +548,9 @@ class TestSyncCommit:
 
         with (
             patch("backend.api.sync.merge_post_file", side_effect=error),
-            patch("backend.api.sync.normalize_post_frontmatter", return_value=[]) as mock_norm,
+            patch(
+                "backend.api.sync.normalize_post_frontmatter", return_value=([], [])
+            ) as mock_norm,
         ):
             metadata = json.dumps({"deleted_files": [], "last_sync_commit": server_commit})
             resp = await merge_client.post(
@@ -688,3 +691,95 @@ class TestSyncRoundTrip:
         # Step 6: Verify content matches server version
         assert "Server-modified content" in modified_content
         assert "New paragraph added by server" in modified_content
+
+
+class TestSyncCommitRollback:
+    """When a file write fails during sync commit, all previously written files
+    must be restored to their pre-sync state."""
+
+    async def test_write_failure_rolls_back_new_files(
+        self, merge_client: AsyncClient, merge_settings: Settings
+    ) -> None:
+        """Upload two new files; second write fails.  The first (successfully
+        written) file must be removed by rollback."""
+        token = await _login(merge_client)
+        headers = {"Authorization": f"Bearer {token}"}
+        content_dir = merge_settings.content_dir
+
+        first_content = b"---\ntitle: First Post\nauthor: admin\n---\nFirst body.\n"
+        fail_content = b"---\ntitle: Fail Post\n---\nBody.\n"
+        metadata = json.dumps({"deleted_files": [], "last_sync_commit": None})
+
+        _orig_write_text = pathlib.Path.write_text
+
+        def write_that_fails(
+            self: pathlib.Path,
+            data: str,
+            encoding: str | None = None,
+            errors: str | None = None,
+            newline: str | None = None,
+        ) -> None:
+            if str(self).endswith("posts/fail-post/index.md"):
+                raise OSError("Simulated disk failure")
+            _orig_write_text(self, data, encoding=encoding, errors=errors, newline=newline)
+
+        with patch.object(pathlib.Path, "write_text", write_that_fails):
+            resp = await merge_client.post(
+                "/api/sync/commit",
+                data={"metadata": metadata},
+                files=[
+                    (
+                        "files",
+                        (
+                            "posts/first-post/index.md",
+                            io.BytesIO(first_content),
+                            "text/plain",
+                        ),
+                    ),
+                    (
+                        "files",
+                        (
+                            "posts/fail-post/index.md",
+                            io.BytesIO(fail_content),
+                            "text/plain",
+                        ),
+                    ),
+                ],
+                headers=headers,
+            )
+
+        assert resp.status_code == 500
+
+        # Rollback must remove the first file that was successfully written
+        assert not (content_dir / "posts/first-post/index.md").exists()
+
+
+class TestSyncDeletePrunesDirectories:
+    """Deleting a post via sync should also remove empty parent directories."""
+
+    async def test_delete_prunes_empty_parent_directory(
+        self, merge_client: AsyncClient, merge_settings: Settings
+    ) -> None:
+        token = await _login(merge_client)
+        headers = {"Authorization": f"Bearer {token}"}
+        content_dir = merge_settings.content_dir
+
+        # Create a post to be deleted
+        post_dir = content_dir / "posts" / "deleteme"
+        post_dir.mkdir(parents=True, exist_ok=True)
+        (post_dir / "index.md").write_text("---\ntitle: Delete Me\n---\nBody.\n", encoding="utf-8")
+
+        metadata = json.dumps({"deleted_files": ["posts/deleteme/index.md"]})
+        resp = await merge_client.post(
+            "/api/sync/commit",
+            data={"metadata": metadata},
+            headers=headers,
+        )
+        assert resp.status_code == 200
+
+        # File must be deleted
+        assert not (post_dir / "index.md").exists()
+        # Empty parent directory must also be pruned
+        assert not post_dir.exists()
+        # But the posts/ directory should still exist (it has other content)
+        assert (content_dir / "posts").exists()

@@ -196,7 +196,7 @@ class TestSyncYamlError:
         post.write_text("---\ntitle: [\n---\nbody")
         from backend.services.sync_service import normalize_post_frontmatter
 
-        warnings = normalize_post_frontmatter(
+        warnings, _modified = normalize_post_frontmatter(
             uploaded_files=["posts/bad/index.md"],
             old_manifest={},
             content_dir=tmp_path,
@@ -305,7 +305,7 @@ class TestSyncTimestampNarrowing:
 
         # The function should handle standard parse errors (ValueError)
         # but not swallow programming bugs (AttributeError)
-        warnings = normalize_post_frontmatter(
+        warnings, _modified = normalize_post_frontmatter(
             uploaded_files=["posts/test/index.md"],
             old_manifest={},
             content_dir=tmp_path,

@@ -93,6 +93,18 @@ def _is_safe_local_path(content_dir: Path, file_path: str) -> Path | None:
     return local_path
 
 
+def _prune_empty_parents(start: Path, *, stop_at: Path) -> None:
+    """Remove empty parent directories from *start* upward, stopping at *stop_at*."""
+    current = start
+    resolved_stop = stop_at.resolve()
+    while current.resolve() != resolved_stop:
+        try:
+            current.rmdir()
+        except OSError:
+            break
+        current = current.parent
+
+
 # ── Config management ────────────────────────────────────────────────
 
 
@@ -113,17 +125,27 @@ def validate_server_url(server_url: str, allow_insecure_http: bool = False) -> s
     return normalized
 
 
-def load_config(dir_path: Path) -> dict[str, str]:
-    """Load sync config from file."""
+def read_config(dir_path: Path) -> dict[str, str]:
+    """Read sync config from file.
+
+    Returns the parsed config dict, or an empty dict if the file doesn't exist.
+    Raises ``json.JSONDecodeError``, ``UnicodeDecodeError``, or ``OSError``
+    when the file exists but cannot be read or parsed.
+    """
     config_path = dir_path / CONFIG_FILE
     if not config_path.exists():
         return {}
+    config: dict[str, str] = json.loads(config_path.read_text())
+    return config
+
+
+def load_config(dir_path: Path) -> dict[str, str]:
+    """Load sync config from file, exiting the process on error."""
     try:
-        config: dict[str, str] = json.loads(config_path.read_text())
+        return read_config(dir_path)
     except (json.JSONDecodeError, UnicodeDecodeError, OSError) as exc:
         print(f"Error: Could not read {CONFIG_FILE}: {exc}")
         sys.exit(1)
-    return config
 
 
 def save_config(dir_path: Path, config: dict[str, str]) -> None:
@@ -401,16 +423,29 @@ class SyncClient:
 
     def _get_last_sync_commit(self) -> str | None:
         """Get the commit hash from the last sync."""
-        config = load_config(self.content_dir)
+        try:
+            config = read_config(self.content_dir)
+        except (json.JSONDecodeError, UnicodeDecodeError, OSError) as exc:
+            print(
+                f"Warning: Could not read {CONFIG_FILE}: {exc}",
+                file=sys.stderr,
+            )
+            return None
         return config.get("last_sync_commit")
 
     def _save_commit_hash(self, commit_hash: str | None) -> None:
         """Save the commit hash from a sync response."""
         if commit_hash is None:
             return
-        config = load_config(self.content_dir)
-        config["last_sync_commit"] = commit_hash
-        save_config(self.content_dir, config)
+        try:
+            config = read_config(self.content_dir)
+            config["last_sync_commit"] = commit_hash
+            save_config(self.content_dir, config)
+        except (json.JSONDecodeError, UnicodeDecodeError, OSError) as exc:
+            print(
+                f"Warning: Could not save sync commit hash: {exc}",
+                file=sys.stderr,
+            )
 
     def status(self) -> dict[str, Any]:
         """Show what would change without syncing."""
@@ -533,6 +568,7 @@ class SyncClient:
         )
 
         files_to_send: list[tuple[str, tuple[str, bytes]]] = []
+        synced_paths: set[str] = set()
         for fp in file_paths_to_upload:
             full_path = _is_safe_local_path(self.content_dir, fp)
             if full_path is None:
@@ -542,6 +578,7 @@ class SyncClient:
                 print(f"  Skip (missing): {fp}")
                 continue
             files_to_send.append(("files", (fp, full_path.read_bytes())))
+            synced_paths.add(fp)
             print(f"  Upload: {fp}")
 
         try:
@@ -575,14 +612,12 @@ class SyncClient:
             if fp not in all_downloads:
                 all_downloads.append(fp)
 
-        downloads_ok = 0
         for fp in all_downloads:
             if self._download_file(fp):
                 print(f"  Download: {fp}")
-                downloads_ok += 1
+                synced_paths.add(fp)
 
         # Delete local files
-        deletes_done = 0
         for fp in to_delete_local:
             local_path = _is_safe_local_path(self.content_dir, fp)
             if local_path is None:
@@ -590,8 +625,9 @@ class SyncClient:
                 continue
             if local_path.exists():
                 local_path.unlink()
+                _prune_empty_parents(local_path.parent, stop_at=self.content_dir)
                 print(f"  Delete local: {fp}")
-                deletes_done += 1
+                synced_paths.add(fp)
 
         # Report conflicts
         for c in response_conflicts:
@@ -609,7 +645,7 @@ class SyncClient:
         local_files = scan_local_files(self.content_dir)
         save_manifest(self.content_dir, local_files)
 
-        total = len(files_to_send) + downloads_ok + deletes_done
+        total = len(synced_paths)
         print(f"Sync complete. {total} file(s) synced, {len(response_conflicts)} conflict(s).")
 
 
