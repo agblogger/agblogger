@@ -598,6 +598,105 @@ async def test_stats_request_returns_none_on_timeout() -> None:
     assert result is None
 
 
+# ── CSV export service functions ───────────────────────────────────────────────
+
+
+async def test_create_export_returns_id(session: AsyncSession) -> None:
+    """create_export returns the export job id from GoatCounter."""
+    from backend.services.analytics_service import create_export
+
+    fake_post_response = MagicMock()
+    fake_post_response.status_code = 202
+    fake_post_response.json.return_value = {"id": 42}
+    fake_post_response.raise_for_status = MagicMock()
+
+    mock_client = AsyncMock()
+    mock_client.post = AsyncMock(return_value=fake_post_response)
+
+    with (
+        patch("backend.services.analytics_service._load_token", return_value="test-token"),
+        patch("backend.services.analytics_service._get_http_client", return_value=mock_client),
+    ):
+        result = await create_export(session)
+
+    assert result is not None
+    assert result.id == 42
+
+
+async def test_create_export_returns_none_when_disabled(session: AsyncSession) -> None:
+    """create_export returns None when analytics is disabled."""
+    from backend.services.analytics_service import create_export, update_analytics_settings
+
+    await update_analytics_settings(session, analytics_enabled=False)
+    result = await create_export(session)
+    assert result is None
+
+
+async def test_get_export_status_finished(session: AsyncSession) -> None:
+    """get_export_status returns finished=True when finished_at is set."""
+    from backend.services.analytics_service import get_export_status
+
+    fake_response = MagicMock()
+    fake_response.status_code = 200
+    fake_response.json.return_value = {"id": 42, "finished_at": "2026-04-05T12:00:00Z"}
+    fake_response.raise_for_status = MagicMock()
+
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(return_value=fake_response)
+
+    with (
+        patch("backend.services.analytics_service._load_token", return_value="test-token"),
+        patch("backend.services.analytics_service._get_http_client", return_value=mock_client),
+    ):
+        result = await get_export_status(session, 42)
+
+    assert result is not None
+    assert result.finished is True
+
+
+async def test_get_export_status_not_finished(session: AsyncSession) -> None:
+    """get_export_status returns finished=False when finished_at is null."""
+    from backend.services.analytics_service import get_export_status
+
+    fake_response = MagicMock()
+    fake_response.status_code = 200
+    fake_response.json.return_value = {"id": 42, "finished_at": None}
+    fake_response.raise_for_status = MagicMock()
+
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(return_value=fake_response)
+
+    with (
+        patch("backend.services.analytics_service._load_token", return_value="test-token"),
+        patch("backend.services.analytics_service._get_http_client", return_value=mock_client),
+    ):
+        result = await get_export_status(session, 42)
+
+    assert result is not None
+    assert result.finished is False
+
+
+async def test_download_export_returns_bytes(session: AsyncSession) -> None:
+    """download_export returns raw bytes from GoatCounter."""
+    from backend.services.analytics_service import download_export
+
+    fake_response = MagicMock()
+    fake_response.status_code = 200
+    fake_response.content = b"csv-data-here"
+    fake_response.raise_for_status = MagicMock()
+
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(return_value=fake_response)
+
+    with (
+        patch("backend.services.analytics_service._load_token", return_value="test-token"),
+        patch("backend.services.analytics_service._get_http_client", return_value=mock_client),
+    ):
+        result = await download_export(session, 42)
+
+    assert result == b"csv-data-here"
+
+
 async def test_stats_request_returns_none_on_invalid_json() -> None:
     """_stats_request returns None when the response body is not valid JSON."""
     import json

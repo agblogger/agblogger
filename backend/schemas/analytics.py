@@ -219,3 +219,16 @@ class ViewsOverTimeResponse(BaseModel):
     """Daily view counts aggregated across all paths."""
 
     days: list[DailyViewCount] = Field(default_factory=list)
+
+
+class ExportCreateResponse(BaseModel):
+    """Response after creating a CSV export job."""
+
+    id: int = Field(ge=0)
+
+
+class ExportStatusResponse(BaseModel):
+    """Status of a CSV export job."""
+
+    id: int = Field(ge=0)
+    finished: bool
