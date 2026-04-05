@@ -9,6 +9,9 @@ const mockFetchTotalStats = vi.fn()
 const mockFetchPathHits = vi.fn()
 const mockFetchPathReferrers = vi.fn()
 const mockFetchBreakdown = vi.fn()
+const mockFetchViewsOverTime = vi.fn()
+const mockFetchSiteReferrers = vi.fn()
+const mockFetchBreakdownDetail = vi.fn()
 
 vi.mock('@/api/analytics', () => ({
   fetchAnalyticsSettings: (...args: unknown[]) =>
@@ -19,6 +22,9 @@ vi.mock('@/api/analytics', () => ({
   fetchPathHits: (...args: unknown[]) => mockFetchPathHits(...args) as unknown,
   fetchPathReferrers: (...args: unknown[]) => mockFetchPathReferrers(...args) as unknown,
   fetchBreakdown: (...args: unknown[]) => mockFetchBreakdown(...args) as unknown,
+  fetchViewsOverTime: (...args: unknown[]) => mockFetchViewsOverTime(...args) as unknown,
+  fetchSiteReferrers: (...args: unknown[]) => mockFetchSiteReferrers(...args) as unknown,
+  fetchBreakdownDetail: (...args: unknown[]) => mockFetchBreakdownDetail(...args) as unknown,
 }))
 
 vi.mock('@/api/client', async () => {
@@ -75,6 +81,9 @@ function setupDefaults() {
     return Promise.resolve(DEFAULT_SYSTEMS)
   })
   mockFetchPathReferrers.mockResolvedValue({ path_id: 0, referrers: [] })
+  mockFetchViewsOverTime.mockResolvedValue({ days: [] })
+  mockFetchSiteReferrers.mockResolvedValue({ referrers: [] })
+  mockFetchBreakdownDetail.mockResolvedValue(null)
 }
 
 function renderPanel(props: { busy?: boolean; onBusyChange?: (busy: boolean) => void } = {}) {

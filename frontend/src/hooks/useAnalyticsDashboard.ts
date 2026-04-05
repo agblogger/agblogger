@@ -5,6 +5,9 @@ import {
   fetchPathHits,
   fetchBreakdown,
   fetchPathReferrers,
+  fetchViewsOverTime,
+  fetchSiteReferrers,
+  fetchBreakdownDetail,
 } from '@/api/analytics'
 import { localDateToUtcEnd, localDateToUtcStart } from '@/utils/date'
 import type {
@@ -13,6 +16,10 @@ import type {
   PathHitsResponse,
   BreakdownResponse,
   PathReferrersResponse,
+  ViewsOverTimeResponse,
+  SiteReferrersResponse,
+  BreakdownDetailCategory,
+  BreakdownDetailResponse,
 } from '@/api/client'
 
 export interface AnalyticsDashboardData {
@@ -21,17 +28,34 @@ export interface AnalyticsDashboardData {
   paths: PathHitsResponse
   browsers: BreakdownResponse
   operatingSystems: BreakdownResponse
+  languages: BreakdownResponse
+  locations: BreakdownResponse
+  sizes: BreakdownResponse
+  campaigns: BreakdownResponse
+  viewsOverTime: ViewsOverTimeResponse
 }
 
-export type DateRange = '7d' | '30d' | '90d'
+export type DateRangePreset = '7d' | '30d' | '90d'
 
-const RANGE_DAYS: Record<DateRange, number> = { '7d': 7, '30d': 30, '90d': 90 }
+export interface CustomDateRange {
+  start: string // YYYY-MM-DD
+  end: string // YYYY-MM-DD
+}
+
+export type DateRange = DateRangePreset | CustomDateRange
+
+const RANGE_DAYS: Record<DateRangePreset, number> = { '7d': 7, '30d': 30, '90d': 90 }
 
 interface AnalyticsDashboardStatsData {
   stats: TotalStatsResponse
   paths: PathHitsResponse
   browsers: BreakdownResponse
   operatingSystems: BreakdownResponse
+  languages: BreakdownResponse
+  locations: BreakdownResponse
+  sizes: BreakdownResponse
+  campaigns: BreakdownResponse
+  viewsOverTime: ViewsOverTimeResponse
 }
 
 function getDisabledDashboardStats(): AnalyticsDashboardStatsData {
@@ -50,6 +74,11 @@ function getDisabledDashboardStats(): AnalyticsDashboardStatsData {
       category: 'systems',
       entries: [],
     },
+    languages: { category: 'languages', entries: [] },
+    locations: { category: 'locations', entries: [] },
+    sizes: { category: 'sizes', entries: [] },
+    campaigns: { category: 'campaigns', entries: [] },
+    viewsOverTime: { days: [] },
   }
 }
 
@@ -68,6 +97,12 @@ function formatLocalDate(date: Date): string {
  * UTC timestamps so the backend does not have to infer client timezone.
  */
 function getDateRange(range: DateRange): { start: string; end: string } {
+  if (typeof range === 'object') {
+    return {
+      start: localDateToUtcStart(range.start),
+      end: localDateToUtcEnd(range.end),
+    }
+  }
   const end = new Date()
   const start = new Date()
   start.setDate(start.getDate() - RANGE_DAYS[range])
@@ -79,7 +114,8 @@ function getDateRange(range: DateRange): { start: string; end: string } {
 
 /**
  * Composite SWR hook that fetches analytics settings first, then conditionally
- * fetches stats (total, paths, browsers, OS) in parallel when analytics is enabled.
+ * fetches stats (total, paths, browsers, OS, languages, locations, sizes,
+ * campaigns, views-over-time) in parallel when analytics is enabled.
  * Returns zeroed-out data when analytics is disabled rather than triggering fetches.
  */
 export function useAnalyticsDashboard(range: DateRange) {
@@ -94,17 +130,37 @@ export function useAnalyticsDashboard(range: DateRange) {
   const dashboardResult = useSWR<AnalyticsDashboardStatsData, Error>(
     analyticsEnabled === true ? ['analytics-dashboard', start, end] : null,
     async () => {
-      const [stats, paths, browsersData, osData] = await Promise.all([
+      const [
+        stats,
+        paths,
+        browsersData,
+        osData,
+        languagesData,
+        locationsData,
+        sizesData,
+        campaignsData,
+        viewsOverTimeData,
+      ] = await Promise.all([
         fetchTotalStats(start, end),
         fetchPathHits(start, end),
         fetchBreakdown('browsers', start, end),
         fetchBreakdown('systems', start, end),
+        fetchBreakdown('languages', start, end),
+        fetchBreakdown('locations', start, end),
+        fetchBreakdown('sizes', start, end),
+        fetchBreakdown('campaigns', start, end),
+        fetchViewsOverTime(start, end),
       ])
       return {
         stats,
         paths,
         browsers: browsersData,
         operatingSystems: osData,
+        languages: languagesData,
+        locations: locationsData,
+        sizes: sizesData,
+        campaigns: campaignsData,
+        viewsOverTime: viewsOverTimeData,
       }
     },
   )
@@ -157,5 +213,23 @@ export function usePathReferrers(pathId: number | null) {
   return useSWR<PathReferrersResponse, Error>(
     pathId !== null ? ['pathReferrers', pathId] : null,
     ([, id]: [string, number]) => fetchPathReferrers(id),
+  )
+}
+
+export function useSiteReferrers(range: DateRange, enabled: boolean) {
+  const { start, end } = getDateRange(range)
+  return useSWR<SiteReferrersResponse, Error>(
+    enabled ? ['site-referrers', start, end] : null,
+    () => fetchSiteReferrers(start, end),
+  )
+}
+
+export function useBreakdownDetail(
+  category: BreakdownDetailCategory | null,
+  entryId: number | null,
+) {
+  return useSWR<BreakdownDetailResponse, Error>(
+    category !== null && entryId !== null ? ['breakdown-detail', category, entryId] : null,
+    ([, cat, id]: [string, BreakdownDetailCategory, number]) => fetchBreakdownDetail(cat, id),
   )
 }

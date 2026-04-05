@@ -8,6 +8,9 @@ const mockFetchTotalStats = vi.fn()
 const mockFetchPathHits = vi.fn()
 const mockFetchBreakdown = vi.fn()
 const mockFetchPathReferrers = vi.fn()
+const mockFetchViewsOverTime = vi.fn()
+const mockFetchSiteReferrers = vi.fn()
+const mockFetchBreakdownDetail = vi.fn()
 
 vi.mock('@/api/analytics', () => ({
   fetchAnalyticsSettings: (...args: unknown[]) => mockFetchAnalyticsSettings(...args) as unknown,
@@ -15,15 +18,21 @@ vi.mock('@/api/analytics', () => ({
   fetchPathHits: (...args: unknown[]) => mockFetchPathHits(...args) as unknown,
   fetchBreakdown: (...args: unknown[]) => mockFetchBreakdown(...args) as unknown,
   fetchPathReferrers: (...args: unknown[]) => mockFetchPathReferrers(...args) as unknown,
+  fetchViewsOverTime: (...args: unknown[]) => mockFetchViewsOverTime(...args) as unknown,
+  fetchSiteReferrers: (...args: unknown[]) => mockFetchSiteReferrers(...args) as unknown,
+  fetchBreakdownDetail: (...args: unknown[]) => mockFetchBreakdownDetail(...args) as unknown,
 }))
 
-import { useAnalyticsDashboard, usePathReferrers } from '../useAnalyticsDashboard'
+import { useAnalyticsDashboard, usePathReferrers, useSiteReferrers, useBreakdownDetail } from '../useAnalyticsDashboard'
 import type {
   AnalyticsSettings,
   TotalStatsResponse,
   PathHitsResponse,
   BreakdownResponse,
   PathReferrersResponse,
+  ViewsOverTimeResponse,
+  SiteReferrersResponse,
+  BreakdownDetailResponse,
 } from '@/api/client'
 
 const nodeProcess = (globalThis as unknown as {
@@ -70,11 +79,50 @@ const pathReferrers: PathReferrersResponse = {
   ],
 }
 
+const languagesData: BreakdownResponse = {
+  category: 'languages',
+  entries: [{ name: 'en', count: 800, percent: 80 }],
+}
+
+const locationsData: BreakdownResponse = {
+  category: 'locations',
+  entries: [{ name: 'US', count: 600, percent: 60 }],
+}
+
+const sizesData: BreakdownResponse = {
+  category: 'sizes',
+  entries: [{ name: 'Desktop', count: 700, percent: 70 }],
+}
+
+const campaignsData: BreakdownResponse = {
+  category: 'campaigns',
+  entries: [],
+}
+
+const viewsOverTimeData: ViewsOverTimeResponse = {
+  days: [{ date: '2026-03-19', views: 42 }],
+}
+
+const siteReferrers: SiteReferrersResponse = {
+  referrers: [{ referrer: 'https://hn.algolia.com', count: 10 }],
+}
+
+const breakdownDetail: BreakdownDetailResponse = {
+  category: 'browsers',
+  entry_id: 1,
+  entries: [{ name: 'Chrome', count: 500, percent: 100 }],
+}
+
 const emptyStats = {
   stats: { visitors: 0 },
   paths: { paths: [] },
   browsers: { category: 'browsers', entries: [] },
   operatingSystems: { category: 'systems', entries: [] },
+  languages: { category: 'languages', entries: [] },
+  locations: { category: 'locations', entries: [] },
+  sizes: { category: 'sizes', entries: [] },
+  campaigns: { category: 'campaigns', entries: [] },
+  viewsOverTime: { days: [] },
 }
 
 describe('useAnalyticsDashboard', () => {
@@ -83,13 +131,18 @@ describe('useAnalyticsDashboard', () => {
     vi.useRealTimers()
   })
 
-  it('fetches all 5 resources in parallel and returns composite data', async () => {
+  it('fetches all resources in parallel and returns composite data', async () => {
     mockFetchAnalyticsSettings.mockResolvedValue(analyticsSettings)
     mockFetchTotalStats.mockResolvedValue(totalStats)
     mockFetchPathHits.mockResolvedValue(pathHits)
+    mockFetchViewsOverTime.mockResolvedValue(viewsOverTimeData)
     mockFetchBreakdown.mockImplementation((category: string) => {
       if (category === 'browsers') return Promise.resolve(browsersData)
       if (category === 'systems') return Promise.resolve(osData)
+      if (category === 'languages') return Promise.resolve(languagesData)
+      if (category === 'locations') return Promise.resolve(locationsData)
+      if (category === 'sizes') return Promise.resolve(sizesData)
+      if (category === 'campaigns') return Promise.resolve(campaignsData)
       return Promise.reject(new Error(`Unexpected category: ${category}`))
     })
 
@@ -107,6 +160,11 @@ describe('useAnalyticsDashboard', () => {
       paths: pathHits,
       browsers: browsersData,
       operatingSystems: osData,
+      languages: languagesData,
+      locations: locationsData,
+      sizes: sizesData,
+      campaigns: campaignsData,
+      viewsOverTime: viewsOverTimeData,
     })
   })
 
@@ -114,11 +172,8 @@ describe('useAnalyticsDashboard', () => {
     mockFetchAnalyticsSettings.mockResolvedValue(analyticsSettings)
     mockFetchTotalStats.mockRejectedValue(new Error('GoatCounter down'))
     mockFetchPathHits.mockResolvedValue(pathHits)
-    mockFetchBreakdown.mockImplementation((category: string) => {
-      if (category === 'browsers') return Promise.resolve(browsersData)
-      if (category === 'systems') return Promise.resolve(osData)
-      return Promise.reject(new Error(`Unexpected category: ${category}`))
-    })
+    mockFetchViewsOverTime.mockResolvedValue(viewsOverTimeData)
+    mockFetchBreakdown.mockResolvedValue({ category: 'browsers', entries: [] })
 
     const { result } = renderHook(() => useAnalyticsDashboard('7d'), {
       wrapper: SWRTestWrapper,
@@ -137,6 +192,7 @@ describe('useAnalyticsDashboard', () => {
     mockFetchTotalStats.mockRejectedValue(new Error('GoatCounter down'))
     mockFetchPathHits.mockRejectedValue(new Error('GoatCounter down'))
     mockFetchBreakdown.mockRejectedValue(new Error('GoatCounter down'))
+    mockFetchViewsOverTime.mockRejectedValue(new Error('GoatCounter down'))
 
     const { result } = renderHook(() => useAnalyticsDashboard('7d'), {
       wrapper: SWRTestWrapper,
@@ -184,9 +240,14 @@ describe('useAnalyticsDashboard', () => {
       })
     mockFetchTotalStats.mockResolvedValue(totalStats)
     mockFetchPathHits.mockResolvedValue(pathHits)
+    mockFetchViewsOverTime.mockResolvedValue(viewsOverTimeData)
     mockFetchBreakdown.mockImplementation((category: string) => {
       if (category === 'browsers') return Promise.resolve(browsersData)
       if (category === 'systems') return Promise.resolve(osData)
+      if (category === 'languages') return Promise.resolve(languagesData)
+      if (category === 'locations') return Promise.resolve(locationsData)
+      if (category === 'sizes') return Promise.resolve(sizesData)
+      if (category === 'campaigns') return Promise.resolve(campaignsData)
       return Promise.reject(new Error(`Unexpected category: ${category}`))
     })
 
@@ -201,6 +262,7 @@ describe('useAnalyticsDashboard', () => {
     mockFetchTotalStats.mockClear()
     mockFetchPathHits.mockClear()
     mockFetchBreakdown.mockClear()
+    mockFetchViewsOverTime.mockClear()
 
     await act(async () => {
       await result.current.mutate()
@@ -216,15 +278,21 @@ describe('useAnalyticsDashboard', () => {
     expect(mockFetchTotalStats).not.toHaveBeenCalled()
     expect(mockFetchPathHits).not.toHaveBeenCalled()
     expect(mockFetchBreakdown).not.toHaveBeenCalled()
+    expect(mockFetchViewsOverTime).not.toHaveBeenCalled()
   })
 
-  it('calls fetchBreakdown twice — once for browsers and once for systems', async () => {
+  it('calls fetchBreakdown for all 6 categories in parallel', async () => {
     mockFetchAnalyticsSettings.mockResolvedValue(analyticsSettings)
     mockFetchTotalStats.mockResolvedValue(totalStats)
     mockFetchPathHits.mockResolvedValue(pathHits)
+    mockFetchViewsOverTime.mockResolvedValue(viewsOverTimeData)
     mockFetchBreakdown.mockImplementation((category: string) => {
       if (category === 'browsers') return Promise.resolve(browsersData)
       if (category === 'systems') return Promise.resolve(osData)
+      if (category === 'languages') return Promise.resolve(languagesData)
+      if (category === 'locations') return Promise.resolve(locationsData)
+      if (category === 'sizes') return Promise.resolve(sizesData)
+      if (category === 'campaigns') return Promise.resolve(campaignsData)
       return Promise.reject(new Error(`Unexpected category: ${category}`))
     })
 
@@ -236,9 +304,13 @@ describe('useAnalyticsDashboard', () => {
       expect(result.current.data).toBeDefined()
     })
 
-    expect(mockFetchBreakdown).toHaveBeenCalledTimes(2)
+    expect(mockFetchBreakdown).toHaveBeenCalledTimes(6)
     expect(mockFetchBreakdown).toHaveBeenCalledWith('browsers', expect.any(String), expect.any(String))
     expect(mockFetchBreakdown).toHaveBeenCalledWith('systems', expect.any(String), expect.any(String))
+    expect(mockFetchBreakdown).toHaveBeenCalledWith('languages', expect.any(String), expect.any(String))
+    expect(mockFetchBreakdown).toHaveBeenCalledWith('locations', expect.any(String), expect.any(String))
+    expect(mockFetchBreakdown).toHaveBeenCalledWith('sizes', expect.any(String), expect.any(String))
+    expect(mockFetchBreakdown).toHaveBeenCalledWith('campaigns', expect.any(String), expect.any(String))
   })
 
   it('formats dashboard ranges as UTC timestamps for the selected local calendar dates', async () => {
@@ -250,9 +322,14 @@ describe('useAnalyticsDashboard', () => {
     mockFetchAnalyticsSettings.mockResolvedValue(analyticsSettings)
     mockFetchTotalStats.mockResolvedValue(totalStats)
     mockFetchPathHits.mockResolvedValue(pathHits)
+    mockFetchViewsOverTime.mockResolvedValue(viewsOverTimeData)
     mockFetchBreakdown.mockImplementation((category: string) => {
       if (category === 'browsers') return Promise.resolve(browsersData)
       if (category === 'systems') return Promise.resolve(osData)
+      if (category === 'languages') return Promise.resolve(languagesData)
+      if (category === 'locations') return Promise.resolve(locationsData)
+      if (category === 'sizes') return Promise.resolve(sizesData)
+      if (category === 'campaigns') return Promise.resolve(campaignsData)
       return Promise.reject(new Error(`Unexpected category: ${category}`))
     })
 
@@ -320,5 +397,135 @@ describe('usePathReferrers', () => {
 
     expect(mockFetchPathReferrers).not.toHaveBeenCalled()
     expect(result.current.data).toBeUndefined()
+  })
+})
+
+describe('useSiteReferrers', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('fetches site-wide referrers when enabled', async () => {
+    mockFetchSiteReferrers.mockResolvedValue(siteReferrers)
+
+    const { result } = renderHook(() => useSiteReferrers('7d', true), {
+      wrapper: SWRTestWrapper,
+    })
+
+    await waitFor(() => {
+      expect(result.current.data).toEqual(siteReferrers)
+    })
+
+    expect(mockFetchSiteReferrers).toHaveBeenCalledWith(expect.any(String), expect.any(String))
+  })
+
+  it('does not fetch when disabled', async () => {
+    const { result } = renderHook(() => useSiteReferrers('7d', false), {
+      wrapper: SWRTestWrapper,
+    })
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false)
+    })
+
+    expect(mockFetchSiteReferrers).not.toHaveBeenCalled()
+    expect(result.current.data).toBeUndefined()
+  })
+
+  it('accepts a custom date range object', async () => {
+    mockFetchSiteReferrers.mockResolvedValue(siteReferrers)
+
+    const customRange = { start: '2026-01-01', end: '2026-01-31' }
+    const { result } = renderHook(() => useSiteReferrers(customRange, true), {
+      wrapper: SWRTestWrapper,
+    })
+
+    await waitFor(() => {
+      expect(result.current.data).toEqual(siteReferrers)
+    })
+
+    expect(mockFetchSiteReferrers).toHaveBeenCalledWith(
+      localDateToUtcStart('2026-01-01'),
+      localDateToUtcEnd('2026-01-31'),
+    )
+  })
+})
+
+describe('useBreakdownDetail', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('fetches breakdown detail when category and entryId are provided', async () => {
+    mockFetchBreakdownDetail.mockResolvedValue(breakdownDetail)
+
+    const { result } = renderHook(() => useBreakdownDetail('browsers', 1), {
+      wrapper: SWRTestWrapper,
+    })
+
+    await waitFor(() => {
+      expect(result.current.data).toEqual(breakdownDetail)
+    })
+
+    expect(mockFetchBreakdownDetail).toHaveBeenCalledWith('browsers', 1)
+  })
+
+  it('does not fetch when category is null', async () => {
+    const { result } = renderHook(() => useBreakdownDetail(null, 1), {
+      wrapper: SWRTestWrapper,
+    })
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false)
+    })
+
+    expect(mockFetchBreakdownDetail).not.toHaveBeenCalled()
+    expect(result.current.data).toBeUndefined()
+  })
+
+  it('does not fetch when entryId is null', async () => {
+    const { result } = renderHook(() => useBreakdownDetail('browsers', null), {
+      wrapper: SWRTestWrapper,
+    })
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false)
+    })
+
+    expect(mockFetchBreakdownDetail).not.toHaveBeenCalled()
+    expect(result.current.data).toBeUndefined()
+  })
+})
+
+describe('useAnalyticsDashboard with CustomDateRange', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.useRealTimers()
+  })
+
+  it('passes custom start/end as UTC timestamps to fetchers', async () => {
+    mockFetchAnalyticsSettings.mockResolvedValue(analyticsSettings)
+    mockFetchTotalStats.mockResolvedValue(totalStats)
+    mockFetchPathHits.mockResolvedValue(pathHits)
+    mockFetchViewsOverTime.mockResolvedValue(viewsOverTimeData)
+    mockFetchBreakdown.mockResolvedValue({ category: 'browsers', entries: [] })
+
+    const customRange = { start: '2026-01-01', end: '2026-01-31' }
+    const { result } = renderHook(() => useAnalyticsDashboard(customRange), {
+      wrapper: SWRTestWrapper,
+    })
+
+    await waitFor(() => {
+      expect(result.current.data).toBeDefined()
+    })
+
+    expect(mockFetchTotalStats).toHaveBeenCalledWith(
+      localDateToUtcStart('2026-01-01'),
+      localDateToUtcEnd('2026-01-31'),
+    )
+    expect(mockFetchPathHits).toHaveBeenCalledWith(
+      localDateToUtcStart('2026-01-01'),
+      localDateToUtcEnd('2026-01-31'),
+    )
   })
 })
