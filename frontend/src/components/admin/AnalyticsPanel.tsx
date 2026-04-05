@@ -1,18 +1,19 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { BarChart2, Loader2 } from 'lucide-react'
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-} from 'recharts'
+import { useMemo } from 'react'
 
 import { updateAnalyticsSettings } from '@/api/analytics'
 import { HTTPError } from '@/api/client'
 import type { AnalyticsSettings } from '@/api/client'
-import { useAnalyticsDashboard, usePathReferrers, type DateRange } from '@/hooks/useAnalyticsDashboard'
+import type { DateRange } from '@/hooks/useAnalyticsDashboard'
+import { useAnalyticsDashboard, useSiteReferrers } from '@/hooks/useAnalyticsDashboard'
+import DateRangePicker from './analytics/DateRangePicker'
+import ExportButton from './analytics/ExportButton'
+import ViewsOverTimeChart from './analytics/ViewsOverTimeChart'
+import TopPagesPanel from './analytics/TopPagesPanel'
+import TopReferrersPanel from './analytics/TopReferrersPanel'
+import BreakdownBarChart from './analytics/BreakdownBarChart'
+import BreakdownTable from './analytics/BreakdownTable'
 
 interface AnalyticsPanelProps {
   busy: boolean
@@ -58,7 +59,6 @@ function ToggleSwitch({
 
 export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelProps) {
   const [dateRange, setDateRange] = useState<DateRange>('7d')
-  const [selectedPath, setSelectedPath] = useState<{ path: string; path_id: number } | null>(null)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
 
@@ -69,7 +69,12 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
     isLoading: loading,
     mutate: dashboardMutate,
   } = useAnalyticsDashboard(dateRange)
-  const { data: referrerData, error: referrerError, isLoading: referrersLoading } = usePathReferrers(selectedPath?.path_id ?? null)
+
+  const analyticsEnabled = persistedSettings?.analytics_enabled ?? false
+  const { data: siteReferrers, isLoading: siteReferrersLoading } = useSiteReferrers(
+    dateRange,
+    analyticsEnabled,
+  )
 
   const is401 = dashboardError instanceof HTTPError && dashboardError.response.status === 401
   const unavailable = dashboardError !== undefined && !is401
@@ -80,22 +85,19 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
     show_views_on_posts: false,
   }
   const settingsLoaded = persistedSettings !== undefined
+
+  // GoatCounter's per-path "count" is unique visitors per path, so summing
+  // across paths gives "total page views" — distinct from the site-wide
+  // "Visitors" metric (GoatCounter's "total") which deduplicates across paths.
   const sortedPaths = useMemo(
     () => [...(data?.paths.paths ?? [])].sort((a, b) => b.views - a.views),
     [data],
   )
-  // GoatCounter's per-path "count" is unique visitors per path, so summing
-  // across paths gives "total page views" — distinct from the site-wide
-  // "Visitors" metric (GoatCounter's "total") which deduplicates across paths.
   const pageViews = useMemo(
     () => sortedPaths.reduce((sum, p) => sum + p.views, 0),
     [sortedPaths],
   )
   const topPage = sortedPaths.length > 0 && sortedPaths[0] ? sortedPaths[0].path : '—'
-  const browsers = data?.browsers.entries ?? []
-  const operatingSystems = data?.operatingSystems.entries ?? []
-  const referrers = referrerData?.referrers ?? []
-  const referrerErrorMsg = referrerError !== undefined ? 'Failed to load referrers. Please try again.' : null
 
   const localBusy = saving
   useEffect(() => {
@@ -126,26 +128,7 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
     <div className="space-y-6">
       {/* Top bar */}
       <div className="flex flex-wrap items-center justify-between gap-4">
-        {/* Date range buttons */}
-        <div className="flex items-center gap-1">
-          {(['7d', '30d', '90d'] as const).map((range) => (
-            <button
-              key={range}
-              onClick={() => { setDateRange(range); setSelectedPath(null) }}
-              disabled={allBusy || loading}
-              aria-label={`Last ${range === '7d' ? '7 days' : range === '30d' ? '30 days' : '90 days'}`}
-              className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                dateRange === range
-                  ? 'bg-accent text-white'
-                  : 'text-muted hover:text-ink border border-border hover:bg-surface'
-              }`}
-            >
-              {range}
-            </button>
-          ))}
-        </div>
-
-        {/* Toggle switches */}
+        <DateRangePicker value={dateRange} onChange={setDateRange} disabled={allBusy || loading} />
         <div className="flex flex-wrap items-center gap-6">
           <ToggleSwitch
             id="analytics-enabled"
@@ -161,6 +144,7 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
             disabled={allBusy || loading || !settingsLoaded}
             onChange={(value) => void handleToggle('show_views_on_posts', value)}
           />
+          <ExportButton disabled={allBusy || loading || !settings.analytics_enabled} />
         </div>
       </div>
 
@@ -201,161 +185,31 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
             </div>
           </div>
 
-          {/* Top pages table */}
-          <div className="bg-surface border border-border rounded-lg p-5">
-            <h3 className="text-sm font-medium text-ink mb-4">Top pages</h3>
-            {sortedPaths.length === 0 ? (
-              <p className="text-muted text-sm">No page data for selected range.</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border">
-                      <th className="text-left py-2 pr-4 text-muted font-medium">Page path</th>
-                      <th className="text-right py-2 text-muted font-medium">Views</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sortedPaths.map((p) => (
-                      <tr
-                        key={p.path}
-                        role="button"
-                        tabIndex={0}
-                        className="border-b border-border last:border-0 hover:bg-base cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-accent/40"
-                        onClick={() => setSelectedPath({ path: p.path, path_id: p.path_id })}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault()
-                            setSelectedPath({ path: p.path, path_id: p.path_id })
-                          }
-                        }}
-                        aria-label={`View referrers for ${p.path}`}
-                      >
-                        <td className="py-2 pr-4 text-ink font-mono text-xs">{p.path}</td>
-                        <td className="py-2 text-right text-ink">{p.views.toLocaleString()}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+          {/* Views over time */}
+          <ViewsOverTimeChart days={data?.viewsOverTime.days ?? []} />
+
+          {/* Top pages + Top referrers side by side */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <TopPagesPanel paths={data?.paths.paths ?? []} />
+            <TopReferrersPanel referrers={siteReferrers?.referrers ?? []} isLoading={siteReferrersLoading} />
           </div>
 
-          {/* Page detail drill-down */}
-          {selectedPath !== null && (
-            <div className="bg-surface border border-border rounded-lg p-5">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-medium text-ink">
-                  Referrers for{' '}
-                  <span className="font-mono text-xs text-accent">{selectedPath.path}</span>
-                </h3>
-                <button
-                  onClick={() => setSelectedPath(null)}
-                  aria-label="Close referrers panel"
-                  className="text-xs text-muted hover:text-ink transition-colors"
-                >
-                  Close
-                </button>
-              </div>
-              {referrersLoading ? (
-                <div
-                  className="flex items-center justify-center py-6"
-                  role="status"
-                  aria-label="Loading"
-                >
-                  <Loader2 size={16} className="text-accent animate-spin" />
-                </div>
-              ) : referrerErrorMsg !== null ? (
-                <p className="text-sm text-red-600 dark:text-red-400">{referrerErrorMsg}</p>
-              ) : referrers.length === 0 ? (
-                <p className="text-muted text-sm">No referrer data for this page.</p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-border">
-                        <th className="text-left py-2 pr-4 text-muted font-medium">Referrer</th>
-                        <th className="text-right py-2 text-muted font-medium">Count</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {referrers.map((r) => (
-                        <tr
-                          key={r.referrer}
-                          className="border-b border-border last:border-0"
-                        >
-                          <td className="py-2 pr-4 text-ink">{r.referrer}</td>
-                          <td className="py-2 text-right text-ink">{r.count.toLocaleString()}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Breakdown panels */}
+          {/* Browsers + OS */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* Browsers */}
-            <div className="bg-surface border border-border rounded-lg p-5">
-              <h3 className="text-sm font-medium text-ink mb-4">Browsers</h3>
-              {browsers.length === 0 ? (
-                <p className="text-muted text-sm">No data.</p>
-              ) : (
-                <ResponsiveContainer width="100%" height={180}>
-                  <BarChart
-                    data={browsers.slice(0, 8)}
-                    layout="vertical"
-                    margin={{ left: 0, right: 8, top: 0, bottom: 0 }}
-                  >
-                    <XAxis type="number" tick={{ fontSize: 10 }} unit="%" />
-                    <YAxis
-                      type="category"
-                      dataKey="name"
-                      tick={{ fontSize: 10 }}
-                      width={70}
-                    />
-                    <Tooltip formatter={(v) => [`${v as number}%`, 'Share']} />
-                    <Bar
-                      dataKey="percent"
-                      fill="var(--color-accent, #6366f1)"
-                      fillOpacity={0.75}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </div>
+            <BreakdownBarChart title="Browsers" entries={data?.browsers.entries ?? []} drillDownCategory="browsers" />
+            <BreakdownBarChart title="Operating Systems" entries={data?.operatingSystems.entries ?? []} drillDownCategory="systems" />
+          </div>
 
-            {/* Operating Systems */}
-            <div className="bg-surface border border-border rounded-lg p-5">
-              <h3 className="text-sm font-medium text-ink mb-4">Operating Systems</h3>
-              {operatingSystems.length === 0 ? (
-                <p className="text-muted text-sm">No data.</p>
-              ) : (
-                <ResponsiveContainer width="100%" height={180}>
-                  <BarChart
-                    data={operatingSystems.slice(0, 8)}
-                    layout="vertical"
-                    margin={{ left: 0, right: 8, top: 0, bottom: 0 }}
-                  >
-                    <XAxis type="number" tick={{ fontSize: 10 }} unit="%" />
-                    <YAxis
-                      type="category"
-                      dataKey="name"
-                      tick={{ fontSize: 10 }}
-                      width={70}
-                    />
-                    <Tooltip formatter={(v) => [`${v as number}%`, 'Share']} />
-                    <Bar
-                      dataKey="percent"
-                      fill="var(--color-accent, #6366f1)"
-                      fillOpacity={0.6}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </div>
+          {/* Locations + Languages */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <BreakdownTable title="Locations" nameLabel="Country" entries={data?.locations.entries ?? []} />
+            <BreakdownTable title="Languages" nameLabel="Language" entries={data?.languages.entries ?? []} />
+          </div>
+
+          {/* Screen Sizes + Campaigns */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <BreakdownBarChart title="Screen Sizes" entries={data?.sizes.entries ?? []} />
+            <BreakdownTable title="Campaigns" nameLabel="Campaign" entries={data?.campaigns.entries ?? []} />
           </div>
         </>
       )}

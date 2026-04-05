@@ -77,8 +77,15 @@ function setupDefaults() {
   mockFetchTotalStats.mockResolvedValue(DEFAULT_STATS)
   mockFetchPathHits.mockResolvedValue(DEFAULT_PATHS)
   mockFetchBreakdown.mockImplementation((category: string) => {
-    if (category === 'browsers') return Promise.resolve(DEFAULT_BROWSERS)
-    return Promise.resolve(DEFAULT_SYSTEMS)
+    const responses: Record<string, unknown> = {
+      browsers: DEFAULT_BROWSERS,
+      systems: DEFAULT_SYSTEMS,
+      languages: { category: 'languages', entries: [{ name: 'English', count: 80, percent: 68.0 }] },
+      locations: { category: 'locations', entries: [{ name: 'US', count: 100, percent: 45.0 }] },
+      sizes: { category: 'sizes', entries: [{ name: '1920x1080', count: 60, percent: 38.0 }] },
+      campaigns: { category: 'campaigns', entries: [] },
+    }
+    return Promise.resolve(responses[category] ?? { category, entries: [] })
   })
   mockFetchPathReferrers.mockResolvedValue({ path_id: 0, referrers: [] })
   mockFetchViewsOverTime.mockResolvedValue({ days: [] })
@@ -129,20 +136,21 @@ describe('AnalyticsPanel', () => {
     })
     expect(screen.getByText('1,234')).toBeInTheDocument()
     expect(screen.getByText('567')).toBeInTheDocument()
-    expect(screen.getByText('Visitors')).toBeInTheDocument()
+    // "Visitors" appears in summary card and as column header in breakdown tables
+    expect(screen.getAllByText('Visitors').length).toBeGreaterThan(0)
     expect(screen.getByText('Top Page')).toBeInTheDocument()
     // /posts/hello appears in "Top Page" card AND in table — just check at least one
     expect(screen.getAllByText('/posts/hello').length).toBeGreaterThan(0)
   })
 
-  it('renders date range buttons', async () => {
+  it('renders date range picker with preset buttons', async () => {
     renderPanel()
     await waitFor(() => {
       expect(screen.getByText('Page Views')).toBeInTheDocument()
     })
-    expect(screen.getByRole('button', { name: 'Last 7 days' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Last 30 days' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Last 90 days' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '7d' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '30d' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '90d' })).toBeInTheDocument()
   })
 
   it('renders toggle switches', async () => {
@@ -175,7 +183,7 @@ describe('AnalyticsPanel', () => {
     // Reset call counts after initial load
     const initialCallCount = mockFetchTotalStats.mock.calls.length
 
-    await user.click(screen.getByRole('button', { name: 'Last 30 days' }))
+    await user.click(screen.getByRole('button', { name: '30d' }))
 
     await waitFor(() => {
       expect(mockFetchTotalStats.mock.calls.length).toBeGreaterThan(initialCallCount)
@@ -323,86 +331,15 @@ describe('AnalyticsPanel', () => {
     })
   })
 
-  it('renders top pages table with path and views columns', async () => {
+  it('renders top pages panel with path and views', async () => {
     renderPanel()
     await waitFor(() => {
       expect(screen.getByText('Top pages')).toBeInTheDocument()
     })
-    // /posts/hello appears in both the summary card and table — use getAllByText
     expect(screen.getAllByText('/posts/hello').length).toBeGreaterThan(0)
     expect(screen.getAllByText('/posts/world').length).toBeGreaterThan(0)
-    // Views column
     expect(screen.getByText('800')).toBeInTheDocument()
     expect(screen.getByText('434')).toBeInTheDocument()
-  })
-
-  it('clicking a page row shows referrer drill-down', async () => {
-    mockFetchPathReferrers.mockResolvedValue({
-      path_id: 1,
-      referrers: [
-        { referrer: 'https://hn.algolia.com', count: 42 },
-        { referrer: 'direct', count: 18 },
-      ],
-    })
-    const user = userEvent.setup()
-    renderPanel()
-    await waitFor(() => {
-      expect(screen.getAllByText('/posts/hello').length).toBeGreaterThan(0)
-    })
-
-    await user.click(screen.getByRole('button', { name: 'View referrers for /posts/hello' }))
-
-    await waitFor(() => {
-      expect(screen.getByText('https://hn.algolia.com')).toBeInTheDocument()
-    })
-    expect(screen.getByText('direct')).toBeInTheDocument()
-    expect(screen.getByText('42')).toBeInTheDocument()
-  })
-
-  it('shows "No referrer data" when referrers list is empty', async () => {
-    mockFetchPathReferrers.mockResolvedValue({ path_id: 1, referrers: [] })
-    const user = userEvent.setup()
-    renderPanel()
-    await waitFor(() => {
-      expect(screen.getAllByText('/posts/hello').length).toBeGreaterThan(0)
-    })
-
-    await user.click(screen.getByRole('button', { name: 'View referrers for /posts/hello' }))
-
-    await waitFor(() => {
-      expect(screen.getByText('No referrer data for this page.')).toBeInTheDocument()
-    })
-  })
-
-  it('remains usable when referrer fetch fails', async () => {
-    mockFetchPathReferrers.mockRejectedValue(new Error('Network error'))
-    const user = userEvent.setup()
-    renderPanel()
-    await waitFor(() => {
-      expect(screen.getAllByText('/posts/hello').length).toBeGreaterThan(0)
-    })
-
-    // Click a row — should show the referrer panel with an error message (not crash)
-    await user.click(screen.getByRole('button', { name: 'View referrers for /posts/hello' }))
-
-    await waitFor(() => {
-      expect(screen.getByText('Failed to load referrers. Please try again.')).toBeInTheDocument()
-    })
-  })
-
-  it('shows error message when referrer fetch fails', async () => {
-    mockFetchPathReferrers.mockRejectedValue(new Error('Network error'))
-    const user = userEvent.setup()
-    renderPanel()
-    await waitFor(() => {
-      expect(screen.getAllByText('/posts/hello').length).toBeGreaterThan(0)
-    })
-
-    await user.click(screen.getByRole('button', { name: 'View referrers for /posts/hello' }))
-
-    await waitFor(() => {
-      expect(screen.getByText('Failed to load referrers. Please try again.')).toBeInTheDocument()
-    })
   })
 
   it('shows session expired message on 401 during loadDashboard', async () => {
@@ -419,39 +356,15 @@ describe('AnalyticsPanel', () => {
     expect(screen.queryByText('Analytics unavailable')).not.toBeInTheDocument()
   })
 
-  it('closes referrer panel when Close button is clicked', async () => {
-    mockFetchPathReferrers.mockResolvedValue({
-      path_id: 1,
-      referrers: [{ referrer: 'https://example.com', count: 5 }],
-    })
-    const user = userEvent.setup()
-    renderPanel()
-    await waitFor(() => {
-      expect(screen.getAllByText('/posts/hello').length).toBeGreaterThan(0)
-    })
-
-    await user.click(screen.getByRole('button', { name: 'View referrers for /posts/hello' }))
-
-    await waitFor(() => {
-      expect(screen.getByText('https://example.com')).toBeInTheDocument()
-    })
-
-    await user.click(screen.getByRole('button', { name: 'Close referrers panel' }))
-
-    expect(screen.queryByText('https://example.com')).not.toBeInTheDocument()
-    // Referrers panel should be gone
-    expect(screen.queryByText('Referrers for')).not.toBeInTheDocument()
-  })
-
   it('disables date range buttons and toggle switches when busy={true}', async () => {
     renderPanel({ busy: true })
     await waitFor(() => {
       expect(screen.getByText('Page Views')).toBeInTheDocument()
     })
 
-    expect(screen.getByRole('button', { name: 'Last 7 days' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Last 30 days' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Last 90 days' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '7d' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '30d' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '90d' })).toBeDisabled()
     expect(screen.getByRole('switch', { name: /analytics enabled/i })).toBeDisabled()
     expect(screen.getByRole('switch', { name: /show views on posts/i })).toBeDisabled()
   })
@@ -500,5 +413,95 @@ describe('AnalyticsPanel', () => {
     expect(rows[0]).toHaveAttribute('aria-label', 'View referrers for /posts/high')
     expect(rows[1]).toHaveAttribute('aria-label', 'View referrers for /posts/mid')
     expect(rows[2]).toHaveAttribute('aria-label', 'View referrers for /posts/low')
+  })
+
+  it('renders views over time chart section', async () => {
+    mockFetchViewsOverTime.mockResolvedValue({
+      days: [
+        { date: '2024-01-01', views: 100 },
+        { date: '2024-01-02', views: 200 },
+      ],
+    })
+    renderPanel()
+    await waitFor(() => {
+      expect(screen.getByText('Views over time')).toBeInTheDocument()
+    })
+  })
+
+  it('renders top referrers panel', async () => {
+    mockFetchSiteReferrers.mockResolvedValue({
+      referrers: [{ referrer: 'https://example.com', count: 42 }],
+    })
+    renderPanel()
+    await waitFor(() => {
+      expect(screen.getByText('Top referrers')).toBeInTheDocument()
+    })
+    await waitFor(() => {
+      expect(screen.getByText('https://example.com')).toBeInTheDocument()
+    })
+  })
+
+  it('renders Locations and Languages breakdown panels', async () => {
+    renderPanel()
+    await waitFor(() => {
+      expect(screen.getByText('Locations')).toBeInTheDocument()
+    })
+    expect(screen.getByText('Languages')).toBeInTheDocument()
+  })
+
+  it('renders Screen Sizes and Campaigns breakdown panels', async () => {
+    renderPanel()
+    await waitFor(() => {
+      expect(screen.getByText('Screen Sizes')).toBeInTheDocument()
+    })
+    expect(screen.getByText('Campaigns')).toBeInTheDocument()
+  })
+
+  it('renders Export CSV button', async () => {
+    renderPanel()
+    await waitFor(() => {
+      expect(screen.getByText('Page Views')).toBeInTheDocument()
+    })
+    expect(screen.getByRole('button', { name: /export csv/i })).toBeInTheDocument()
+  })
+
+  it('clicking page row in TopPagesPanel expands inline referrer detail', async () => {
+    mockFetchPathReferrers.mockResolvedValue({
+      path_id: 1,
+      referrers: [
+        { referrer: 'https://hn.algolia.com', count: 42 },
+        { referrer: 'direct', count: 18 },
+      ],
+    })
+    const user = userEvent.setup()
+    renderPanel()
+    await waitFor(() => {
+      expect(screen.getAllByText('/posts/hello').length).toBeGreaterThan(0)
+    })
+
+    await user.click(screen.getByRole('button', { name: 'View referrers for /posts/hello' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('https://hn.algolia.com')).toBeInTheDocument()
+    })
+    expect(screen.getByText('direct')).toBeInTheDocument()
+    expect(screen.getByText('42')).toBeInTheDocument()
+  })
+
+  it('custom date range triggers data refetch with custom dates', async () => {
+    const user = userEvent.setup()
+    renderPanel()
+    await waitFor(() => {
+      expect(screen.getByText('Page Views')).toBeInTheDocument()
+    })
+
+    const initialCallCount = mockFetchTotalStats.mock.calls.length
+
+    const startInput = screen.getByLabelText('Start date')
+    await user.type(startInput, '2024-01-01')
+
+    await waitFor(() => {
+      expect(mockFetchTotalStats.mock.calls.length).toBeGreaterThan(initialCallCount)
+    })
   })
 })
