@@ -54,10 +54,19 @@ _MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10 MB
 def _resolve_safe_path(content_dir: Path, file_path: str) -> Path:
     """Resolve a file path within content_dir, raising 400 on traversal attempts."""
     target = file_path.lstrip("/")
+    # Keep the canonical directory-backed post invariant explicit at the API
+    # boundary even though the broader managed-path gate also enforces it.
+    if (
+        target.startswith("posts/")
+        and target.endswith(".md")
+        and not is_directory_post_path(target)
+    ):
+        raise HTTPException(status_code=403, detail="Sync access to this path is not allowed")
     if not is_sync_managed_path(target):
         raise HTTPException(status_code=403, detail="Sync access to this path is not allowed")
+    resolved_content_dir = content_dir.resolve()
     full_path = (content_dir / target).resolve()
-    if not full_path.is_relative_to(content_dir.resolve()):
+    if not full_path.is_relative_to(resolved_content_dir):
         raise HTTPException(status_code=400, detail="Invalid file path")
     return full_path
 
@@ -86,7 +95,8 @@ def _remember_original_file(
 def _prune_empty_directories(start: Path, *, stop_at: Path) -> None:
     """Remove empty parent directories from *start* upward, stopping at *stop_at*."""
     current = start
-    while current != stop_at:
+    resolved_stop = stop_at.resolve()
+    while current.resolve() != resolved_stop:
         try:
             current.rmdir()
         except OSError:

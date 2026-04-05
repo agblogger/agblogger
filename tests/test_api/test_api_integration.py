@@ -1812,6 +1812,31 @@ class TestSyncCycleWarnings:
 
 class TestSyncSecurity:
     @pytest.mark.asyncio
+    async def test_sync_commit_rejects_non_canonical_post_markdown_path(
+        self, client: AsyncClient, app_settings: Settings
+    ) -> None:
+        login_resp = await client.post(
+            "/api/auth/token-login",
+            json={"username": "admin", "password": "admin123"},
+        )
+        token = login_resp.json()["access_token"]
+
+        metadata = json.dumps({"deleted_files": []})
+        resp = await client.post(
+            "/api/sync/commit",
+            data={"metadata": metadata},
+            files=[
+                (
+                    "files",
+                    ("posts/foo.md", b"# invalid post layout\n", "text/plain"),
+                ),
+            ],
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 403
+        assert not (app_settings.content_dir / "posts" / "foo.md").exists()
+
+    @pytest.mark.asyncio
     async def test_sync_commit_upload_path_traversal_rejected(self, client: AsyncClient) -> None:
         login_resp = await client.post(
             "/api/auth/token-login",

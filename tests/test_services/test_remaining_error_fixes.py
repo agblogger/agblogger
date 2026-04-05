@@ -268,6 +268,29 @@ class TestSyncDeletionOSError:
         assert any("failed to delete" in r.message.lower() for r in caplog.records)
 
 
+class TestSyncPruneBoundaries:
+    """Empty-directory pruning must stop at the canonical content root."""
+
+    def test_prune_empty_directories_stops_at_resolved_symlink_root(self, tmp_path: Path) -> None:
+        from backend.api.sync import _prune_empty_directories
+
+        real_root_parent = tmp_path / "real-root-parent"
+        real_root_parent.mkdir()
+        real_content_dir = real_root_parent / "content-real"
+        nested_dir = real_content_dir / "posts" / "hello"
+        nested_dir.mkdir(parents=True)
+
+        symlink_content_dir = tmp_path / "content-link"
+        symlink_content_dir.symlink_to(real_content_dir, target_is_directory=True)
+
+        _prune_empty_directories(nested_dir, stop_at=symlink_content_dir)
+
+        assert real_content_dir.exists()
+        assert real_root_parent.exists()
+        assert not nested_dir.exists()
+        assert not (real_content_dir / "posts").exists()
+
+
 # ── Issue 10: _validate_path does not echo user input ──
 
 
