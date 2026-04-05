@@ -17,6 +17,7 @@ import {
   Position,
   MarkerType,
 } from '@xyflow/react'
+import { useSWRConfig } from 'swr'
 import '@xyflow/react/dist/style.css'
 import Dagre from '@dagrejs/dagre'
 import LoadingSpinner from '@/components/LoadingSpinner'
@@ -128,6 +129,7 @@ function layoutGraph(
 export default function LabelGraphPage({ search }: { search: string }) {
   const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
+  const { mutate } = useSWRConfig()
   const initialNodes: Node[] = []
   const initialEdges: Edge[] = []
   const { data: graphData, error: graphErr, isLoading: loading, mutate: mutateGraph } = useLabelGraph()
@@ -211,15 +213,17 @@ export default function LabelGraphPage({ search }: { search: string }) {
           childId,
           (currentParents) => [...new Set([...currentParents, parentId])],
         )
-        // Refetch graph via SWR mutate
-        await mutateGraph()
+        await Promise.all([
+          mutateGraph(),
+          mutate(['labels', user.id], undefined, { revalidate: true }),
+        ])
       } catch {
         setEditError('Failed to add parent relationship.')
       } finally {
         setMutating(false)
       }
     },
-    [graphData, user, mutating, mutateGraph, persistParentEdit],
+    [graphData, mutate, user, mutating, mutateGraph, persistParentEdit],
   )
 
   const onEdgeClick = useCallback(
@@ -239,14 +243,17 @@ export default function LabelGraphPage({ search }: { search: string }) {
           childId,
           (currentParents) => currentParents.filter((parent) => parent !== parentId),
         )
-        await mutateGraph()
+        await Promise.all([
+          mutateGraph(),
+          mutate(['labels', user.id], undefined, { revalidate: true }),
+        ])
       } catch {
         setEditError('Failed to remove parent relationship.')
       } finally {
         setMutating(false)
       }
     },
-    [graphData, user, mutating, mutateGraph, persistParentEdit],
+    [graphData, mutate, user, mutating, mutateGraph, persistParentEdit],
   )
 
   const interactiveFlowProps = useMemo<

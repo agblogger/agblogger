@@ -127,6 +127,7 @@ describe('LabelSettingsPage', () => {
 
   it('shows 404 error', async () => {
     mockFetchLabels.mockResolvedValue([])
+    mockFetchLabel.mockRejectedValue(mockHttpError(404))
     renderSettings()
 
     await waitFor(() => {
@@ -155,7 +156,6 @@ describe('LabelSettingsPage', () => {
   })
 
   it('loads and displays label names', async () => {
-    mockFetchLabel.mockResolvedValue(testLabel)
     mockFetchLabels.mockResolvedValue(allLabels)
     renderSettings()
 
@@ -174,6 +174,18 @@ describe('LabelSettingsPage', () => {
     })
 
     expect(mockFetchLabel).not.toHaveBeenCalled()
+  })
+
+  it('falls back to label detail when the shared labels collection misses the selected label', async () => {
+    mockFetchLabels.mockResolvedValue(allLabels.filter((label) => label.id !== 'swe'))
+    mockFetchLabel.mockResolvedValue(testLabel)
+    renderSettings()
+
+    await waitFor(() => {
+      expect(screen.getByText('software engineering')).toBeInTheDocument()
+    })
+
+    expect(mockFetchLabel).toHaveBeenCalledWith('swe')
   })
 
   it('reprocesses the selected label when labels revalidate with fresh server data', async () => {
@@ -206,6 +218,7 @@ describe('LabelSettingsPage', () => {
     mockFetchLabels
       .mockResolvedValueOnce(allLabels)
       .mockResolvedValueOnce(allLabels.filter((label) => label.id !== 'swe'))
+    mockFetchLabel.mockRejectedValue(mockHttpError(404))
     renderSettings()
 
     await waitFor(() => {
@@ -240,7 +253,6 @@ describe('LabelSettingsPage', () => {
   })
 
   it('adds a name', async () => {
-    mockFetchLabel.mockResolvedValue(testLabel)
     mockFetchLabels.mockResolvedValue(allLabels)
     const user = userEvent.setup()
     renderSettings()
@@ -256,7 +268,6 @@ describe('LabelSettingsPage', () => {
   })
 
   it('rejects empty/duplicate names', async () => {
-    mockFetchLabel.mockResolvedValue(testLabel)
     mockFetchLabels.mockResolvedValue(allLabels)
     const user = userEvent.setup()
     renderSettings()

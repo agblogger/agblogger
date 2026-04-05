@@ -6,6 +6,7 @@ import { SWRConfig } from 'swr'
 
 import type { UserResponse, LabelGraphResponse } from '@/api/client'
 import { MockHTTPError } from '@/test/MockHTTPError'
+import { useLabels } from '@/hooks/useLabels'
 
 vi.mock('@/api/client', async () => {
   const { MockHTTPError } = await import('@/test/MockHTTPError')
@@ -14,11 +15,13 @@ vi.mock('@/api/client', async () => {
 
 const mockFetchLabelGraph = vi.fn()
 const mockFetchLabel = vi.fn()
+const mockFetchLabels = vi.fn()
 const mockUpdateLabel = vi.fn()
 
 vi.mock('@/api/labels', () => ({
   fetchLabelGraph: (...args: unknown[]) => mockFetchLabelGraph(...args) as unknown,
   fetchLabel: (...args: unknown[]) => mockFetchLabel(...args) as unknown,
+  fetchLabels: (...args: unknown[]) => mockFetchLabels(...args) as unknown,
   updateLabel: (...args: unknown[]) => mockUpdateLabel(...args) as unknown,
 }))
 
@@ -143,6 +146,11 @@ function renderGraph(search = '') {
       </MemoryRouter>
     </SWRConfig>,
   )
+}
+
+function LabelsProbe() {
+  useLabels()
+  return null
 }
 
 describe('LabelGraphPage', () => {
@@ -321,6 +329,7 @@ describe('LabelGraphPage', () => {
 
   it('onConnect adds parent relationship', async () => {
     mockFetchLabelGraph.mockResolvedValue(graphData)
+    mockFetchLabels.mockResolvedValue([])
     mockFetchLabel.mockResolvedValue({
       id: 'math',
       names: ['mathematics', 'maths'],
@@ -361,6 +370,7 @@ describe('LabelGraphPage', () => {
 
   it('onConnect shows error on failure', async () => {
     mockFetchLabelGraph.mockResolvedValue(graphData)
+    mockFetchLabels.mockResolvedValue([])
     mockUpdateLabel.mockRejectedValue(new Error('Network error'))
 
     renderGraph()
@@ -399,6 +409,7 @@ describe('LabelGraphPage', () => {
   it('onEdgeClick removes parent relationship on confirm', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     mockFetchLabelGraph.mockResolvedValue(graphData)
+    mockFetchLabels.mockResolvedValue([])
     mockFetchLabel.mockResolvedValue({
       id: 'swe',
       names: ['software engineering', 'programming'],
@@ -460,6 +471,7 @@ describe('LabelGraphPage', () => {
   it('onEdgeClick shows error on failure', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     mockFetchLabelGraph.mockResolvedValue(graphData)
+    mockFetchLabels.mockResolvedValue([])
     mockUpdateLabel.mockRejectedValue(new Error('Network error'))
 
     renderGraph()
@@ -491,5 +503,48 @@ describe('LabelGraphPage', () => {
 
     // No onEdgeClick should be set when unauthenticated
     expect(capturedFlowProps.onEdgeClick).toBeUndefined()
+  })
+
+  it('revalidates the shared labels cache after adding a parent relationship', async () => {
+    mockFetchLabelGraph.mockResolvedValue(graphData)
+    mockFetchLabels.mockResolvedValue([])
+    mockFetchLabel.mockResolvedValue({
+      id: 'math',
+      names: ['mathematics'],
+      is_implicit: false,
+      parents: [],
+      children: [],
+      post_count: 3,
+    })
+    mockUpdateLabel.mockResolvedValue({})
+
+    render(
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        <MemoryRouter>
+          <LabelsProbe />
+          <LabelGraphPage search="" />
+        </MemoryRouter>
+      </SWRConfig>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByTestId('react-flow')).toBeInTheDocument()
+    })
+    await waitFor(() => {
+      expect(mockFetchLabels).toHaveBeenCalledTimes(1)
+    })
+
+    await act(async () => {
+      await (capturedFlowProps.onConnect!({
+        source: 'cs',
+        target: 'math',
+        sourceHandle: null,
+        targetHandle: null,
+      }) as unknown as Promise<void>)
+    })
+
+    await waitFor(() => {
+      expect(mockFetchLabels).toHaveBeenCalledTimes(2)
+    })
   })
 })

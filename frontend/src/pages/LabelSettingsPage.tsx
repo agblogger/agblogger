@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import AlertBanner from '@/components/AlertBanner'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import BackLink from '@/components/BackLink'
@@ -8,7 +8,7 @@ import { Settings, Trash2 } from 'lucide-react'
 
 import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
 import { useRequireAdmin } from '@/hooks/useRequireAdmin'
-import { updateLabel, deleteLabel } from '@/api/labels'
+import { fetchLabel, updateLabel, deleteLabel } from '@/api/labels'
 import { HTTPError } from '@/api/client'
 import type { LabelResponse } from '@/api/client'
 import { useLabels } from '@/hooks/useLabels'
@@ -67,41 +67,87 @@ export default function LabelSettingsPage() {
     return !haveSameElements(parents, savedParents)
   }, [names, savedNames, parents, savedParents])
 
+  const isDirtyRef = useRef(isDirty)
+  const currentLabelIdRef = useRef<string | null>(label?.id ?? null)
+
+  useEffect(() => {
+    isDirtyRef.current = isDirty
+  }, [isDirty])
+
+  useEffect(() => {
+    currentLabelIdRef.current = label?.id ?? null
+  }, [label?.id])
+
+  const applyResolvedLabel = useCallback((resolvedLabel: LabelResponse) => {
+    setLabel(resolvedLabel)
+    setSavedNames(resolvedLabel.names)
+    setSavedParents(resolvedLabel.parents)
+    if (!isDirtyRef.current || currentLabelIdRef.current !== resolvedLabel.id) {
+      setNames(resolvedLabel.names)
+      setParents(resolvedLabel.parents)
+    }
+    setError(null)
+    setLabelLoading(false)
+  }, [])
+
   useEffect(() => {
     if (!isReady) return
     if (labelId === undefined) return
     if (allLabelsLoading) return
 
+    let cancelled = false
+
+    function handleLoadError(err: unknown) {
+      if (cancelled) return
+
+      setLabel(null)
+      if (err instanceof HTTPError && err.response.status === 404) {
+        setError('Label not found.')
+      } else if (err instanceof HTTPError && err.response.status === 401) {
+        setError('Session expired. Please log in again.')
+      } else {
+        setError('Failed to load label data. Please try again later.')
+      }
+      setLabelLoading(false)
+    }
+
     if (allLabelsErr instanceof HTTPError && allLabelsErr.response.status === 401) {
       setError('Session expired. Please log in again.')
       setLabelLoading(false)
-      return
+      return () => {
+        cancelled = true
+      }
     }
 
     if (allLabelsErr !== undefined) {
       setError('Failed to load label data. Please try again later.')
       setLabelLoading(false)
-      return
+      return () => {
+        cancelled = true
+      }
     }
 
     const matchingLabel = allLabels.find((candidate) => candidate.id === labelId)
-    if (matchingLabel === undefined) {
-      setLabel(null)
-      setError('Label not found.')
-      setLabelLoading(false)
-      return
+    if (matchingLabel !== undefined) {
+      applyResolvedLabel(matchingLabel)
+      return () => {
+        cancelled = true
+      }
     }
 
-    setLabel(matchingLabel)
-    setSavedNames(matchingLabel.names)
-    setSavedParents(matchingLabel.parents)
-    if (!isDirty || label?.id !== matchingLabel.id) {
-      setNames(matchingLabel.names)
-      setParents(matchingLabel.parents)
+    void fetchLabel(labelId)
+      .then((resolvedLabel) => {
+        if (cancelled) return
+        applyResolvedLabel(resolvedLabel)
+      })
+      .catch((err: unknown) => {
+        handleLoadError(err)
+      })
+
+    return () => {
+      cancelled = true
     }
-    setError(null)
-    setLabelLoading(false)
-  }, [allLabels, allLabelsErr, allLabelsLoading, isDirty, isReady, label?.id, labelId])
+  }, [allLabels, allLabelsErr, allLabelsLoading, applyResolvedLabel, isReady, labelId])
 
   const excludedIds = useMemo(() => {
     if (labelId === undefined) return new Set<string>()
