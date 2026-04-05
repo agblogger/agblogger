@@ -37,8 +37,7 @@ interface AnalyticsDashboardStatsData {
 function getDisabledDashboardStats(): AnalyticsDashboardStatsData {
   return {
     stats: {
-      total_views: 0,
-      total_unique: 0,
+      visitors: 0,
     },
     paths: {
       paths: [],

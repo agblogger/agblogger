@@ -288,7 +288,6 @@ export interface PathHit {
   path_id: number
   path: string
   views: number
-  unique: number
 }
 
 export interface PathHitsResponse {
@@ -296,8 +295,7 @@ export interface PathHitsResponse {
 }
 
 export interface TotalStatsResponse {
-  total_views: number
-  total_unique: number
+  visitors: number
 }
 
 export interface ReferrerEntry {

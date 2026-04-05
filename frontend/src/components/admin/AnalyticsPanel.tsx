@@ -84,6 +84,10 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
     () => [...(data?.paths.paths ?? [])].sort((a, b) => b.views - a.views),
     [data],
   )
+  const pageViews = useMemo(
+    () => sortedPaths.reduce((sum, p) => sum + p.views, 0),
+    [sortedPaths],
+  )
   const topPage = sortedPaths.length > 0 && sortedPaths[0] ? sortedPaths[0].path : '—'
   const browsers = data?.browsers.entries ?? []
   const operatingSystems = data?.operatingSystems.entries ?? []
@@ -179,12 +183,12 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
           {/* Summary cards */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="bg-surface border border-border rounded-lg px-5 py-4">
-              <p className="text-xs text-muted uppercase tracking-wide mb-1">Total Views</p>
-              <p className="text-2xl font-semibold text-ink">{(data?.stats.total_views ?? 0).toLocaleString()}</p>
+              <p className="text-xs text-muted uppercase tracking-wide mb-1">Page Views</p>
+              <p className="text-2xl font-semibold text-ink">{pageViews.toLocaleString()}</p>
             </div>
             <div className="bg-surface border border-border rounded-lg px-5 py-4">
-              <p className="text-xs text-muted uppercase tracking-wide mb-1">Unique Visitors</p>
-              <p className="text-2xl font-semibold text-ink">{(data?.stats.total_unique ?? 0).toLocaleString()}</p>
+              <p className="text-xs text-muted uppercase tracking-wide mb-1">Visitors</p>
+              <p className="text-2xl font-semibold text-ink">{(data?.stats.visitors ?? 0).toLocaleString()}</p>
             </div>
             <div className="bg-surface border border-border rounded-lg px-5 py-4">
               <p className="text-xs text-muted uppercase tracking-wide mb-1">Top Page</p>
@@ -205,8 +209,7 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
                   <thead>
                     <tr className="border-b border-border">
                       <th className="text-left py-2 pr-4 text-muted font-medium">Page path</th>
-                      <th className="text-right py-2 pr-4 text-muted font-medium">Views</th>
-                      <th className="text-right py-2 text-muted font-medium">Unique</th>
+                      <th className="text-right py-2 text-muted font-medium">Views</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -226,8 +229,7 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
                         aria-label={`View referrers for ${p.path}`}
                       >
                         <td className="py-2 pr-4 text-ink font-mono text-xs">{p.path}</td>
-                        <td className="py-2 pr-4 text-right text-ink">{p.views.toLocaleString()}</td>
-                        <td className="py-2 text-right text-ink">{p.unique.toLocaleString()}</td>
+                        <td className="py-2 text-right text-ink">{p.views.toLocaleString()}</td>
                       </tr>
                     ))}
                   </tbody>

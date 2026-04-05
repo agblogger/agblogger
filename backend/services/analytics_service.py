@@ -434,7 +434,7 @@ async def fetch_path_hits(
         return None
     paths: list[PathHit] = []
     for entry in data.get("hits", []):
-        path_id = entry.get("id", entry.get("path_id"))
+        path_id = entry.get("path_id", entry.get("id"))
         if not path_id or path_id < 1:
             continue
         path = entry.get("path", "")

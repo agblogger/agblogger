@@ -502,7 +502,7 @@ class TestStatsServiceUnavailable:
 
         with patch(
             "backend.services.analytics_service._stats_request",
-            new=AsyncMock(return_value={"total": 1, "total_unique": 1}),
+            new=AsyncMock(return_value={"total": 1}),
         ) as mock_req:
             resp = await client.get(
                 "/api/admin/analytics/stats/total",
@@ -603,18 +603,13 @@ class TestDateParameterValidation:
 class TestSchemaValidation:
     """Tests for Pydantic ge=0 constraints on count fields."""
 
-    def test_total_stats_rejects_negative_total_views(self) -> None:
+    def test_total_stats_rejects_negative_visitors(self) -> None:
         with pytest.raises(ValidationError):
-            TotalStatsResponse(total_views=-1, total_unique=0)
-
-    def test_total_stats_rejects_negative_total_unique(self) -> None:
-        with pytest.raises(ValidationError):
-            TotalStatsResponse(total_views=0, total_unique=-1)
+            TotalStatsResponse(visitors=-1)
 
     def test_total_stats_accepts_zero(self) -> None:
-        resp = TotalStatsResponse(total_views=0, total_unique=0)
-        assert resp.total_views == 0
-        assert resp.total_unique == 0
+        resp = TotalStatsResponse(visitors=0)
+        assert resp.visitors == 0
 
     def test_breakdown_entry_rejects_negative_count(self) -> None:
         with pytest.raises(ValidationError):
@@ -706,20 +701,20 @@ class TestPathHitSchemaValidation:
     def test_path_id_zero_raises_validation_error(self) -> None:
         """path_id=0 is meaningless and should be rejected."""
         with pytest.raises(ValidationError):
-            PathHit(path_id=0, path="/test", views=1, unique=1)
+            PathHit(path_id=0, path="/test", views=1)
 
     def test_path_id_negative_raises_validation_error(self) -> None:
         with pytest.raises(ValidationError):
-            PathHit(path_id=-1, path="/test", views=1, unique=1)
+            PathHit(path_id=-1, path="/test", views=1)
 
     def test_path_id_one_succeeds(self) -> None:
-        hit = PathHit(path_id=1, path="/test", views=1, unique=1)
+        hit = PathHit(path_id=1, path="/test", views=1)
         assert hit.path_id == 1
 
     def test_empty_path_raises_validation_error(self) -> None:
         """Empty path string should be rejected."""
         with pytest.raises(ValidationError):
-            PathHit(path_id=1, path="", views=1, unique=1)
+            PathHit(path_id=1, path="", views=1)
 
 
 class TestPathReferrersResponseSchemaValidation:

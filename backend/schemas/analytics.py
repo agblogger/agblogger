@@ -37,39 +37,40 @@ class ViewCountResponse(BaseModel):
 
 
 class TotalStatsResponse(BaseModel):
-    """Aggregated total stats across all paths."""
+    """Aggregated total stats across all paths.
 
-    total_views: int = Field(ge=0)
-    total_unique: int = Field(ge=0)
+    GoatCounter only tracks unique views (first-visit per session),
+    so ``visitors`` maps directly to GoatCounter's ``total`` field.
+    """
+
+    visitors: int = Field(ge=0)
 
     @classmethod
     def from_goatcounter(cls, data: dict[str, Any]) -> TotalStatsResponse:
         """Construct from a raw GoatCounter JSON dict, logging DEBUG on missing keys."""
-        missing = [k for k in ("total", "total_unique") if k not in data]
-        if missing:
+        if "total" not in data:
             logger.debug(
-                "GoatCounter total stats response missing expected keys: %s (got: %s)",
-                missing,
+                "GoatCounter total stats response missing 'total' key (got: %s)",
                 list(data.keys()),
             )
-        return cls(
-            total_views=data.get("total", 0),
-            total_unique=data.get("total_unique", data.get("total", 0)),
-        )
+        return cls(visitors=data.get("total", 0))
 
 
 class PathHit(BaseModel):
-    """Hit counts for a single path."""
+    """Visitor counts for a single path.
+
+    GoatCounter only tracks unique views (first-visit per session per path),
+    so ``views`` maps directly to GoatCounter's ``count`` field.
+    """
 
     path_id: int = Field(ge=1)
     path: str = Field(min_length=1)
     views: int = Field(ge=0)
-    unique: int = Field(ge=0)
 
     @classmethod
     def from_goatcounter(cls, entry: dict[str, Any]) -> PathHit:
         """Construct from a raw GoatCounter hit entry, logging DEBUG on missing keys."""
-        missing = [k for k in ("id", "path", "count", "count_unique") if k not in entry]
+        missing = [k for k in ("path_id", "path", "count") if k not in entry]
         if missing:
             logger.debug(
                 "GoatCounter hit entry missing expected keys: %s (got: %s)",
@@ -77,10 +78,9 @@ class PathHit(BaseModel):
                 list(entry.keys()),
             )
         return cls(
-            path_id=entry.get("id", entry.get("path_id", 0)),
+            path_id=entry.get("path_id", entry.get("id", 0)),
             path=entry.get("path", ""),
             views=entry.get("count", 0),
-            unique=entry.get("count_unique", entry.get("count", 0)),
         )
 
 
@@ -133,19 +133,22 @@ class BreakdownEntry(BaseModel):
         total_count: int | None = None,
     ) -> BreakdownEntry:
         """Construct from a raw GoatCounter breakdown entry, logging DEBUG on missing keys."""
-        missing = [k for k in ("name", "count", "percent") if k not in entry]
+        missing = [k for k in ("name", "count") if k not in entry]
         if missing:
             logger.debug(
                 "GoatCounter breakdown entry missing expected keys: %s (got: %s)",
                 missing,
                 list(entry.keys()),
             )
+        name = entry.get("name", "")
+        if not isinstance(name, str) or not name.strip():
+            name = "Unknown"
         count = entry.get("count", 0)
         percent = entry.get("percent")
         if percent is None:
             percent = (count / total_count * 100.0) if total_count and total_count > 0 else 0.0
         return cls(
-            name=entry.get("name", ""),
+            name=name,
             count=count,
             percent=percent,
         )

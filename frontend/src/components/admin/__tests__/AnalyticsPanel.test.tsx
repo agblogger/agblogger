@@ -41,12 +41,12 @@ import { MockHTTPError } from '@/test/MockHTTPError'
 
 const DEFAULT_SETTINGS = { analytics_enabled: true, show_views_on_posts: false }
 
-const DEFAULT_STATS = { total_views: 1234, total_unique: 567 }
+const DEFAULT_STATS = { visitors: 567 }
 
 const DEFAULT_PATHS = {
   paths: [
-    { path_id: 1, path: '/posts/hello', views: 800, unique: 300 },
-    { path_id: 2, path: '/posts/world', views: 434, unique: 267 },
+    { path_id: 1, path: '/posts/hello', views: 800 },
+    { path_id: 2, path: '/posts/world', views: 434 },
   ],
 }
 
@@ -116,11 +116,11 @@ describe('AnalyticsPanel', () => {
 
     // After data loads, shows summary cards
     await waitFor(() => {
-      expect(screen.getByText('Total Views')).toBeInTheDocument()
+      expect(screen.getByText('Page Views')).toBeInTheDocument()
     })
     expect(screen.getByText('1,234')).toBeInTheDocument()
     expect(screen.getByText('567')).toBeInTheDocument()
-    expect(screen.getByText('Unique Visitors')).toBeInTheDocument()
+    expect(screen.getByText('Visitors')).toBeInTheDocument()
     expect(screen.getByText('Top Page')).toBeInTheDocument()
     // /posts/hello appears in "Top Page" card AND in table — just check at least one
     expect(screen.getAllByText('/posts/hello').length).toBeGreaterThan(0)
@@ -129,7 +129,7 @@ describe('AnalyticsPanel', () => {
   it('renders date range buttons', async () => {
     renderPanel()
     await waitFor(() => {
-      expect(screen.getByText('Total Views')).toBeInTheDocument()
+      expect(screen.getByText('Page Views')).toBeInTheDocument()
     })
     expect(screen.getByRole('button', { name: 'Last 7 days' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Last 30 days' })).toBeInTheDocument()
@@ -139,7 +139,7 @@ describe('AnalyticsPanel', () => {
   it('renders toggle switches', async () => {
     renderPanel()
     await waitFor(() => {
-      expect(screen.getByText('Total Views')).toBeInTheDocument()
+      expect(screen.getByText('Page Views')).toBeInTheDocument()
     })
     expect(screen.getByRole('switch', { name: /analytics enabled/i })).toBeInTheDocument()
     expect(screen.getByRole('switch', { name: /show views on posts/i })).toBeInTheDocument()
@@ -148,7 +148,7 @@ describe('AnalyticsPanel', () => {
   it('reflects settings from API in toggle switches', async () => {
     renderPanel()
     await waitFor(() => {
-      expect(screen.getByText('Total Views')).toBeInTheDocument()
+      expect(screen.getByText('Page Views')).toBeInTheDocument()
     })
     const analyticsSwitch = screen.getByRole('switch', { name: /analytics enabled/i })
     expect(analyticsSwitch).toHaveAttribute('aria-checked', 'true')
@@ -160,7 +160,7 @@ describe('AnalyticsPanel', () => {
     const user = userEvent.setup()
     renderPanel()
     await waitFor(() => {
-      expect(screen.getByText('Total Views')).toBeInTheDocument()
+      expect(screen.getByText('Page Views')).toBeInTheDocument()
     })
 
     // Reset call counts after initial load
@@ -187,7 +187,7 @@ describe('AnalyticsPanel', () => {
     const user = userEvent.setup()
     renderPanel()
     await waitFor(() => {
-      expect(screen.getByText('Total Views')).toBeInTheDocument()
+      expect(screen.getByText('Page Views')).toBeInTheDocument()
     })
 
     const analyticsSwitch = screen.getByRole('switch', { name: /analytics enabled/i })
@@ -211,7 +211,7 @@ describe('AnalyticsPanel', () => {
     const user = userEvent.setup()
     renderPanel({ onBusyChange })
     await waitFor(() => {
-      expect(screen.getByText('Total Views')).toBeInTheDocument()
+      expect(screen.getByText('Page Views')).toBeInTheDocument()
     })
 
     const analyticsSwitch = screen.getByRole('switch', { name: /analytics enabled/i })
@@ -234,7 +234,7 @@ describe('AnalyticsPanel', () => {
     const user = userEvent.setup()
     renderPanel()
     await waitFor(() => {
-      expect(screen.getByText('Total Views')).toBeInTheDocument()
+      expect(screen.getByText('Page Views')).toBeInTheDocument()
     })
 
     const analyticsSwitch = screen.getByRole('switch', { name: /analytics enabled/i })
@@ -250,7 +250,7 @@ describe('AnalyticsPanel', () => {
     const user = userEvent.setup()
     renderPanel()
     await waitFor(() => {
-      expect(screen.getByText('Total Views')).toBeInTheDocument()
+      expect(screen.getByText('Page Views')).toBeInTheDocument()
     })
 
     const analyticsSwitch = screen.getByRole('switch', { name: /analytics enabled/i })
@@ -437,7 +437,7 @@ describe('AnalyticsPanel', () => {
   it('disables date range buttons and toggle switches when busy={true}', async () => {
     renderPanel({ busy: true })
     await waitFor(() => {
-      expect(screen.getByText('Total Views')).toBeInTheDocument()
+      expect(screen.getByText('Page Views')).toBeInTheDocument()
     })
 
     expect(screen.getByRole('button', { name: 'Last 7 days' })).toBeDisabled()
@@ -475,9 +475,9 @@ describe('AnalyticsPanel', () => {
   it('renders top pages table sorted by views descending', async () => {
     mockFetchPathHits.mockResolvedValue({
       paths: [
-        { path_id: 3, path: '/posts/low', views: 50, unique: 20 },
-        { path_id: 1, path: '/posts/high', views: 900, unique: 400 },
-        { path_id: 2, path: '/posts/mid', views: 300, unique: 150 },
+        { path_id: 3, path: '/posts/low', views: 50 },
+        { path_id: 1, path: '/posts/high', views: 900 },
+        { path_id: 2, path: '/posts/mid', views: 300 },
       ],
     })
     renderPanel()

@@ -36,14 +36,13 @@ const analyticsSettings: AnalyticsSettings = {
 }
 
 const totalStats: TotalStatsResponse = {
-  total_views: 1000,
-  total_unique: 500,
+  visitors: 500,
 }
 
 const pathHits: PathHitsResponse = {
   paths: [
-    { path_id: 1, path: '/post/hello', views: 200, unique: 100 },
-    { path_id: 2, path: '/post/world', views: 150, unique: 80 },
+    { path_id: 1, path: '/post/hello', views: 200 },
+    { path_id: 2, path: '/post/world', views: 150 },
   ],
 }
 
@@ -72,7 +71,7 @@ const pathReferrers: PathReferrersResponse = {
 }
 
 const emptyStats = {
-  stats: { total_views: 0, total_unique: 0 },
+  stats: { visitors: 0 },
   paths: { paths: [] },
   browsers: { category: 'browsers', entries: [] },
   operatingSystems: { category: 'systems', entries: [] },

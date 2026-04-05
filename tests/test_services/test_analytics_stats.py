@@ -42,7 +42,7 @@ async def session(db_session: AsyncSession, _create_tables: None) -> AsyncSessio
 
 async def test_fetch_total_stats_returns_correct_data(session: AsyncSession) -> None:
     """fetch_total_stats maps GoatCounter response to TotalStatsResponse."""
-    fake_response = {"total": 120, "total_unique": 85}
+    fake_response = {"total": 120}
 
     with patch(
         "backend.services.analytics_service._stats_request",
@@ -51,12 +51,11 @@ async def test_fetch_total_stats_returns_correct_data(session: AsyncSession) -> 
     ):
         result = await fetch_total_stats(session, start="2025-01-01", end="2025-01-31")
 
-    assert result.total_views == 120
-    assert result.total_unique == 85
+    assert result.visitors == 120
 
 
-async def test_fetch_total_stats_falls_back_when_unique_missing(session: AsyncSession) -> None:
-    """Current GoatCounter builds omit total_unique; fall back to total."""
+async def test_fetch_total_stats_maps_total_to_unique_visitors(session: AsyncSession) -> None:
+    """GoatCounter's 'total' field represents unique visitors."""
     fake_response = {"total": 120}
 
     with patch(
@@ -66,8 +65,7 @@ async def test_fetch_total_stats_falls_back_when_unique_missing(session: AsyncSe
     ):
         result = await fetch_total_stats(session)
 
-    assert result.total_views == 120
-    assert result.total_unique == 120
+    assert result.visitors == 120
 
 
 async def test_fetch_total_stats_uses_inclusive_bare_end_date(session: AsyncSession) -> None:
@@ -110,7 +108,7 @@ async def test_fetch_total_stats_returns_none_when_analytics_disabled(
     with patch(
         "backend.services.analytics_service._stats_request",
         new_callable=AsyncMock,
-        return_value={"total": 120, "total_unique": 85},
+        return_value={"total": 120},
     ) as mock_req:
         result = await fetch_total_stats(session)
 
@@ -125,8 +123,8 @@ async def test_fetch_path_hits_returns_correct_data(session: AsyncSession) -> No
     """fetch_path_hits maps GoatCounter hits to PathHitsResponse."""
     fake_response = {
         "hits": [
-            {"id": 1, "path": "/post/hello", "count": 42, "count_unique": 30},
-            {"id": 2, "path": "/post/world", "count": 17, "count_unique": 12},
+            {"path_id": 1, "path": "/post/hello", "count": 42},
+            {"path_id": 2, "path": "/post/world", "count": 17},
         ]
     }
 
@@ -141,17 +139,16 @@ async def test_fetch_path_hits_returns_correct_data(session: AsyncSession) -> No
     assert result.paths[0].path_id == 1
     assert result.paths[0].path == "/post/hello"
     assert result.paths[0].views == 42
-    assert result.paths[0].unique == 30
     assert result.paths[1].path_id == 2
     assert result.paths[1].path == "/post/world"
     assert result.paths[1].views == 17
 
 
-async def test_fetch_path_hits_accepts_path_id_and_missing_unique(session: AsyncSession) -> None:
-    """Current GoatCounter builds use path_id and may omit count_unique."""
+async def test_fetch_path_hits_accepts_legacy_id_field(session: AsyncSession) -> None:
+    """GoatCounter v2 uses 'path_id', but 'id' is accepted as fallback."""
     fake_response = {
         "hits": [
-            {"path_id": 7, "path": "/post/hello", "count": 42},
+            {"id": 7, "path": "/post/hello", "count": 42},
         ]
     }
 
@@ -165,7 +162,6 @@ async def test_fetch_path_hits_accepts_path_id_and_missing_unique(session: Async
     assert len(result.paths) == 1
     assert result.paths[0].path_id == 7
     assert result.paths[0].views == 42
-    assert result.paths[0].unique == 42
 
 
 async def test_fetch_path_hits_uses_inclusive_bare_end_date(session: AsyncSession) -> None:
@@ -187,8 +183,8 @@ async def test_fetch_path_hits_skips_entries_with_missing_id(session: AsyncSessi
     """Issue 7: entries without an id field should be skipped."""
     fake_response = {
         "hits": [
-            {"id": 1, "path": "/post/hello", "count": 42, "count_unique": 30},
-            {"path": "/post/no-id", "count": 5, "count_unique": 3},  # no id
+            {"id": 1, "path": "/post/hello", "count": 42},
+            {"path": "/post/no-id", "count": 5},  # no id
         ]
     }
     with patch(
@@ -206,8 +202,8 @@ async def test_fetch_path_hits_skips_entries_with_zero_id(session: AsyncSession)
     """Issue 7: entries with id=0 should be skipped."""
     fake_response = {
         "hits": [
-            {"id": 0, "path": "/post/zero", "count": 10, "count_unique": 5},
-            {"id": 2, "path": "/post/valid", "count": 7, "count_unique": 4},
+            {"id": 0, "path": "/post/zero", "count": 10},
+            {"id": 2, "path": "/post/valid", "count": 7},
         ]
     }
     with patch(
@@ -225,8 +221,8 @@ async def test_fetch_path_hits_skips_entries_with_empty_path(session: AsyncSessi
     """Suggestion 6: entries with empty path should be skipped."""
     fake_response = {
         "hits": [
-            {"id": 1, "path": "", "count": 10, "count_unique": 5},
-            {"id": 2, "path": "/post/valid", "count": 7, "count_unique": 4},
+            {"id": 1, "path": "", "count": 10},
+            {"id": 2, "path": "/post/valid", "count": 7},
         ]
     }
     with patch(
@@ -788,25 +784,22 @@ async def test_fetch_path_hits_logs_debug_on_missing_keys(
 
 
 def test_total_stats_response_from_goatcounter_maps_fields() -> None:
-    """TotalStatsResponse.from_goatcounter maps total and total_unique correctly."""
-    data = {"total": 120, "total_unique": 85}
+    """TotalStatsResponse.from_goatcounter maps GoatCounter's total to unique_visitors."""
+    data = {"total": 120}
     result = TotalStatsResponse.from_goatcounter(data)
-    assert result.total_views == 120
-    assert result.total_unique == 85
+    assert result.visitors == 120
 
 
 def test_total_stats_response_from_goatcounter_defaults_on_missing_keys() -> None:
     """TotalStatsResponse.from_goatcounter defaults to 0 when keys are missing."""
     result = TotalStatsResponse.from_goatcounter({})
-    assert result.total_views == 0
-    assert result.total_unique == 0
+    assert result.visitors == 0
 
 
-def test_total_stats_response_from_goatcounter_falls_back_to_total() -> None:
-    """Missing total_unique falls back to total for newer GoatCounter payloads."""
-    result = TotalStatsResponse.from_goatcounter({"total": 120})
-    assert result.total_views == 120
-    assert result.total_unique == 120
+def test_total_stats_response_from_goatcounter_ignores_unknown_keys() -> None:
+    """Extra GoatCounter fields are silently ignored."""
+    result = TotalStatsResponse.from_goatcounter({"total": 120, "total_events": 10})
+    assert result.visitors == 120
 
 
 def test_normalize_goatcounter_end_date_moves_bare_date_to_next_day() -> None:
@@ -840,39 +833,36 @@ def test_total_stats_response_from_goatcounter_logs_debug_on_missing_keys(
 
 
 def test_path_hit_from_goatcounter_maps_fields() -> None:
-    """PathHit.from_goatcounter maps all expected fields correctly."""
-    entry = {"id": 3, "path": "/post/test", "count": 42, "count_unique": 30}
-    result = PathHit.from_goatcounter(entry)
-    assert result.path_id == 3
-    assert result.path == "/post/test"
-    assert result.views == 42
-    assert result.unique == 30
-
-
-def test_path_hit_from_goatcounter_accepts_path_id_and_missing_unique() -> None:
-    """Missing count_unique falls back to count; path_id aliases id."""
+    """PathHit.from_goatcounter maps GoatCounter's path_id, path, count fields."""
     entry = {"path_id": 3, "path": "/post/test", "count": 42}
     result = PathHit.from_goatcounter(entry)
     assert result.path_id == 3
     assert result.path == "/post/test"
     assert result.views == 42
-    assert result.unique == 42
+
+
+def test_path_hit_from_goatcounter_accepts_legacy_id_field() -> None:
+    """GoatCounter v2 uses 'path_id', but 'id' is accepted as fallback."""
+    entry = {"id": 3, "path": "/post/test", "count": 42}
+    result = PathHit.from_goatcounter(entry)
+    assert result.path_id == 3
+    assert result.path == "/post/test"
+    assert result.views == 42
 
 
 def test_path_hit_from_goatcounter_defaults_on_missing_keys() -> None:
     """PathHit.from_goatcounter defaults numeric fields to 0 when absent."""
-    entry = {"id": 1, "path": "/post/test"}
+    entry = {"path_id": 1, "path": "/post/test"}
     result = PathHit.from_goatcounter(entry)
     assert result.views == 0
-    assert result.unique == 0
 
 
 def test_path_hit_from_goatcounter_logs_debug_on_missing_keys(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """PathHit.from_goatcounter logs DEBUG when count or count_unique are absent."""
+    """PathHit.from_goatcounter logs DEBUG when count is absent."""
     with caplog.at_level(logging.DEBUG, logger="backend.schemas.analytics"):
-        PathHit.from_goatcounter({"id": 1, "path": "/post/test"})
+        PathHit.from_goatcounter({"path_id": 1, "path": "/post/test"})
 
     assert any(r.levelno == logging.DEBUG for r in caplog.records)
     log_messages = " ".join(r.message for r in caplog.records)
@@ -931,11 +921,18 @@ def test_breakdown_entry_from_goatcounter_computes_percent_when_missing() -> Non
 
 
 def test_breakdown_entry_from_goatcounter_defaults_on_missing_keys() -> None:
-    """BreakdownEntry.from_goatcounter defaults to zeros when keys are absent."""
+    """BreakdownEntry.from_goatcounter defaults to "Unknown" name and zeros when keys are absent."""
     result = BreakdownEntry.from_goatcounter({})
-    assert result.name == ""
+    assert result.name == "Unknown"
     assert result.count == 0
     assert result.percent == 0.0
+
+
+def test_breakdown_entry_from_goatcounter_maps_blank_name_to_unknown() -> None:
+    """Empty or whitespace-only browser/OS names are labelled 'Unknown'."""
+    assert BreakdownEntry.from_goatcounter({"name": "", "count": 5}).name == "Unknown"
+    assert BreakdownEntry.from_goatcounter({"name": "  ", "count": 3}).name == "Unknown"
+    assert BreakdownEntry.from_goatcounter({"name": None, "count": 1}).name == "Unknown"
 
 
 def test_breakdown_entry_from_goatcounter_logs_debug_on_missing_keys(
