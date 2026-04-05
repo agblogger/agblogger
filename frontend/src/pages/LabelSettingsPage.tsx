@@ -106,6 +106,7 @@ export default function LabelSettingsPage() {
       } else if (err instanceof HTTPError && err.response.status === 401) {
         setError('Session expired. Please log in again.')
       } else {
+        console.error('Failed to load label:', err)
         setError('Failed to load label data. Please try again later.')
       }
       setLabelLoading(false)

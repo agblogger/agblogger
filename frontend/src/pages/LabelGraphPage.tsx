@@ -213,15 +213,16 @@ export default function LabelGraphPage({ search }: { search: string }) {
           childId,
           (currentParents) => [...new Set([...currentParents, parentId])],
         )
-        await Promise.all([
-          mutateGraph(),
-          mutate(['labels', user.id], undefined, { revalidate: true }),
-        ])
       } catch {
         setEditError('Failed to add parent relationship.')
+        return
       } finally {
         setMutating(false)
       }
+      await Promise.all([
+        mutateGraph(),
+        mutate(['labels', user.id], undefined, { revalidate: true }),
+      ]).catch(() => undefined)
     },
     [graphData, mutate, user, mutating, mutateGraph, persistParentEdit],
   )
@@ -243,15 +244,16 @@ export default function LabelGraphPage({ search }: { search: string }) {
           childId,
           (currentParents) => currentParents.filter((parent) => parent !== parentId),
         )
-        await Promise.all([
-          mutateGraph(),
-          mutate(['labels', user.id], undefined, { revalidate: true }),
-        ])
       } catch {
         setEditError('Failed to remove parent relationship.')
+        return
       } finally {
         setMutating(false)
       }
+      await Promise.all([
+        mutateGraph(),
+        mutate(['labels', user.id], undefined, { revalidate: true }),
+      ]).catch(() => undefined)
     },
     [graphData, mutate, user, mutating, mutateGraph, persistParentEdit],
   )

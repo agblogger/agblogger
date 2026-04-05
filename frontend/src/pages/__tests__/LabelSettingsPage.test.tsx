@@ -214,6 +214,42 @@ describe('LabelSettingsPage', () => {
     expect(screen.getByRole('checkbox', { name: /#cs/i })).not.toBeChecked()
   })
 
+  it('preserves dirty form state when labels revalidate with fresh server data', async () => {
+    mockFetchLabels
+      .mockResolvedValueOnce(allLabels)
+      .mockResolvedValueOnce(withPrimaryLabel({ ...testLabel, names: ['software craftsmanship'], parents: ['math'] }))
+    const user = userEvent.setup()
+    renderSettings()
+
+    await waitFor(() => {
+      expect(screen.getByText('software engineering')).toBeInTheDocument()
+    })
+
+    // Make a form edit so the form is dirty
+    await user.type(screen.getByPlaceholderText('Add a display name...'), 'coding')
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+    expect(screen.getByText('coding')).toBeInTheDocument()
+
+    await waitFor(() => {
+      expect(capturedMutate).not.toBeNull()
+    })
+
+    // Trigger SWR revalidation with updated server data
+    await act(async () => {
+      await capturedMutate!(['labels', 1])
+    })
+
+    // User's in-progress edits should be preserved
+    await waitFor(() => {
+      expect(screen.getByText('coding')).toBeInTheDocument()
+    })
+    expect(screen.getByText('software engineering')).toBeInTheDocument()
+    expect(screen.queryByText('software craftsmanship')).not.toBeInTheDocument()
+
+    // Save button should remain enabled (still dirty)
+    expect(screen.getByRole('button', { name: /save/i })).toBeEnabled()
+  })
+
   it('shows not found when labels revalidate without the selected label', async () => {
     mockFetchLabels
       .mockResolvedValueOnce(allLabels)
