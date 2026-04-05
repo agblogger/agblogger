@@ -321,6 +321,14 @@ describe('LabelGraphPage', () => {
 
   it('onConnect adds parent relationship', async () => {
     mockFetchLabelGraph.mockResolvedValue(graphData)
+    mockFetchLabel.mockResolvedValue({
+      id: 'math',
+      names: ['mathematics', 'maths'],
+      is_implicit: false,
+      parents: ['physics'],
+      children: [],
+      post_count: 3,
+    })
     mockUpdateLabel.mockResolvedValue({})
     // After update, refetch returns updated graph
     mockFetchLabelGraph.mockResolvedValueOnce(graphData).mockResolvedValueOnce({
@@ -344,8 +352,11 @@ describe('LabelGraphPage', () => {
       }) as unknown as Promise<void>)
     })
 
-    expect(mockFetchLabel).not.toHaveBeenCalled()
-    expect(mockUpdateLabel).toHaveBeenCalledWith('math', { names: ['mathematics'], parents: ['cs'] })
+    expect(mockFetchLabel).toHaveBeenCalledWith('math')
+    expect(mockUpdateLabel).toHaveBeenCalledWith('math', {
+      names: ['mathematics', 'maths'],
+      parents: ['physics', 'cs'],
+    })
   })
 
   it('onConnect shows error on failure', async () => {
@@ -388,6 +399,14 @@ describe('LabelGraphPage', () => {
   it('onEdgeClick removes parent relationship on confirm', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     mockFetchLabelGraph.mockResolvedValue(graphData)
+    mockFetchLabel.mockResolvedValue({
+      id: 'swe',
+      names: ['software engineering', 'programming'],
+      is_implicit: false,
+      parents: ['cs', 'math'],
+      children: [],
+      post_count: 5,
+    })
     mockUpdateLabel.mockResolvedValue({})
     // After removal, refetch returns graph without the edge
     mockFetchLabelGraph.mockResolvedValueOnce(graphData).mockResolvedValueOnce({
@@ -410,8 +429,11 @@ describe('LabelGraphPage', () => {
     })
 
     expect(window.confirm).toHaveBeenCalledWith('Remove parent #cs from #swe?')
-    expect(mockFetchLabel).not.toHaveBeenCalled()
-    expect(mockUpdateLabel).toHaveBeenCalledWith('swe', { names: ['software engineering'], parents: [] })
+    expect(mockFetchLabel).toHaveBeenCalledWith('swe')
+    expect(mockUpdateLabel).toHaveBeenCalledWith('swe', {
+      names: ['software engineering', 'programming'],
+      parents: ['math'],
+    })
   })
 
   it('onEdgeClick does nothing when confirm is cancelled', async () => {

@@ -1,9 +1,9 @@
-import { createElement } from 'react'
-import { render, screen, waitFor } from '@testing-library/react'
+import { createElement, useEffect } from 'react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { SWRConfig } from 'swr'
+import { SWRConfig, useSWRConfig } from 'swr'
 
 import type { UserResponse, LabelResponse } from '@/api/client'
 import { mockHttpError } from '@/test/MockHTTPError'
@@ -79,6 +79,16 @@ function withPrimaryLabel(label: LabelResponse, labels: LabelResponse[] = allLab
   return [label, ...labels.filter((candidate) => candidate.id !== label.id)]
 }
 
+let capturedMutate: ReturnType<typeof useSWRConfig>['mutate'] | null = null
+
+function CaptureMutate() {
+  const { mutate } = useSWRConfig()
+  useEffect(() => {
+    capturedMutate = mutate
+  }, [mutate])
+  return null
+}
+
 function renderSettings(labelId = 'swe') {
   const router = createMemoryRouter(
     [{ path: '/labels/:labelId/settings', element: createElement(LabelSettingsPage) }],
@@ -86,6 +96,7 @@ function renderSettings(labelId = 'swe') {
   )
   return render(
     createElement(SWRConfig, { value: { provider: () => new Map(), dedupingInterval: 0 } },
+      createElement(CaptureMutate),
       createElement(RouterProvider, { router }),
     ),
   )
@@ -96,6 +107,7 @@ describe('LabelSettingsPage', () => {
     vi.clearAllMocks()
     mockUser = { id: 1, username: 'admin', email: 'a@t.com', display_name: null }
     mockIsInitialized = true
+    capturedMutate = null
   })
 
   it('redirects to login when unauthenticated', () => {
@@ -162,6 +174,55 @@ describe('LabelSettingsPage', () => {
     })
 
     expect(mockFetchLabel).not.toHaveBeenCalled()
+  })
+
+  it('reprocesses the selected label when labels revalidate with fresh server data', async () => {
+    mockFetchLabels
+      .mockResolvedValueOnce(allLabels)
+      .mockResolvedValueOnce(withPrimaryLabel({ ...testLabel, names: ['software craftsmanship'], parents: ['math'] }))
+    renderSettings()
+
+    await waitFor(() => {
+      expect(screen.getByText('software engineering')).toBeInTheDocument()
+    })
+
+    await waitFor(() => {
+      expect(capturedMutate).not.toBeNull()
+    })
+
+    await act(async () => {
+      await capturedMutate!(['labels', 1])
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText('software craftsmanship')).toBeInTheDocument()
+    })
+    expect(screen.queryByText('software engineering')).not.toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: /#math/i })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: /#cs/i })).not.toBeChecked()
+  })
+
+  it('shows not found when labels revalidate without the selected label', async () => {
+    mockFetchLabels
+      .mockResolvedValueOnce(allLabels)
+      .mockResolvedValueOnce(allLabels.filter((label) => label.id !== 'swe'))
+    renderSettings()
+
+    await waitFor(() => {
+      expect(screen.getByText('software engineering')).toBeInTheDocument()
+    })
+
+    await waitFor(() => {
+      expect(capturedMutate).not.toBeNull()
+    })
+
+    await act(async () => {
+      await capturedMutate!(['labels', 1])
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText('Label not found.')).toBeInTheDocument()
+    })
   })
 
   it('removes a name (but not if only one left)', async () => {

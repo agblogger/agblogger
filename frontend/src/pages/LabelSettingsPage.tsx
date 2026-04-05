@@ -38,7 +38,6 @@ export default function LabelSettingsPage() {
   const [label, setLabel] = useState<LabelResponse | null>(null)
   const [labelLoading, setLabelLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [initializedLabelId, setInitializedLabelId] = useState<string | null>(null)
 
   // Editable state
   const [names, setNames] = useState<string[]>([])
@@ -55,47 +54,54 @@ export default function LabelSettingsPage() {
 
   useEffect(() => {
     setLabel(null)
-    setInitializedLabelId(null)
+    setNames([])
+    setParents([])
+    setSavedNames([])
+    setSavedParents([])
     setError(null)
     setLabelLoading(true)
   }, [labelId])
+
+  const isDirty = useMemo(() => {
+    if (!haveSameOrder(names, savedNames)) return true
+    return !haveSameElements(parents, savedParents)
+  }, [names, savedNames, parents, savedParents])
 
   useEffect(() => {
     if (!isReady) return
     if (labelId === undefined) return
     if (allLabelsLoading) return
-    if (initializedLabelId === labelId) return
 
     if (allLabelsErr instanceof HTTPError && allLabelsErr.response.status === 401) {
       setError('Session expired. Please log in again.')
       setLabelLoading(false)
-      setInitializedLabelId(labelId)
       return
     }
 
     if (allLabelsErr !== undefined) {
       setError('Failed to load label data. Please try again later.')
       setLabelLoading(false)
-      setInitializedLabelId(labelId)
       return
     }
 
     const matchingLabel = allLabels.find((candidate) => candidate.id === labelId)
     if (matchingLabel === undefined) {
+      setLabel(null)
       setError('Label not found.')
       setLabelLoading(false)
-      setInitializedLabelId(labelId)
       return
     }
 
     setLabel(matchingLabel)
-    setNames(matchingLabel.names)
-    setParents(matchingLabel.parents)
     setSavedNames(matchingLabel.names)
     setSavedParents(matchingLabel.parents)
+    if (!isDirty || label?.id !== matchingLabel.id) {
+      setNames(matchingLabel.names)
+      setParents(matchingLabel.parents)
+    }
+    setError(null)
     setLabelLoading(false)
-    setInitializedLabelId(labelId)
-  }, [allLabels, allLabelsErr, allLabelsLoading, initializedLabelId, isReady, labelId])
+  }, [allLabels, allLabelsErr, allLabelsLoading, isDirty, isReady, label?.id, labelId])
 
   const excludedIds = useMemo(() => {
     if (labelId === undefined) return new Set<string>()
@@ -104,11 +110,6 @@ export default function LabelSettingsPage() {
     descendants.add(labelId)
     return descendants
   }, [labelId, allLabels])
-
-  const isDirty = useMemo(() => {
-    if (!haveSameOrder(names, savedNames)) return true
-    return !haveSameElements(parents, savedParents)
-  }, [names, savedNames, parents, savedParents])
 
   const { markSaved } = useUnsavedChanges(isDirty)
 

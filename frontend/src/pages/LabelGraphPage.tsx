@@ -21,7 +21,7 @@ import '@xyflow/react/dist/style.css'
 import Dagre from '@dagrejs/dagre'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import { useAuthStore } from '@/stores/authStore'
-import { updateLabel } from '@/api/labels'
+import { fetchLabel, updateLabel } from '@/api/labels'
 import { HTTPError } from '@/api/client'
 import { matchesLabelSearch } from '@/components/labels/searchUtils'
 import type { LabelGraphResponse } from '@/api/client'
@@ -146,19 +146,6 @@ export default function LabelGraphPage({ search }: { search: string }) {
     () => (graphData ? computeDepths(graphData) : new Map<string, number>()),
     [graphData],
   )
-  const labelNodesById = useMemo(
-    () => new Map((graphData?.nodes ?? []).map((node) => [node.id, node])),
-    [graphData],
-  )
-  const parentIdsByChildId = useMemo(() => {
-    const parentsByChild = new Map<string, string[]>()
-    for (const edge of graphData?.edges ?? []) {
-      const parents = parentsByChild.get(edge.source) ?? []
-      parents.push(edge.target)
-      parentsByChild.set(edge.source, parents)
-    }
-    return parentsByChild
-  }, [graphData])
 
   useEffect(() => {
     if (!graphData) return
@@ -166,6 +153,15 @@ export default function LabelGraphPage({ search }: { search: string }) {
     setNodes(n)
     setEdges(e)
   }, [graphData, depthMap, setNodes, setEdges, user])
+
+  const persistParentEdit = useCallback(async (
+    childId: string,
+    applyParents: (currentParents: string[]) => string[],
+  ) => {
+    const latestLabel = await fetchLabel(childId)
+    const nextParents = applyParents(latestLabel.parents)
+    await updateLabel(childId, { names: latestLabel.names, parents: nextParents })
+  }, [])
 
   // Search highlight
   const filteredNodes = useMemo(() => {
@@ -211,13 +207,10 @@ export default function LabelGraphPage({ search }: { search: string }) {
       setMutating(true)
       setEditError(null)
       try {
-        const childNode = labelNodesById.get(childId)
-        if (!childNode) {
-          throw new Error(`Missing label node for ${childId}`)
-        }
-        const currentParents = parentIdsByChildId.get(childId) ?? []
-        const newParents = [...new Set([...currentParents, parentId])]
-        await updateLabel(childId, { names: childNode.names, parents: newParents })
+        await persistParentEdit(
+          childId,
+          (currentParents) => [...new Set([...currentParents, parentId])],
+        )
         // Refetch graph via SWR mutate
         await mutateGraph()
       } catch {
@@ -226,7 +219,7 @@ export default function LabelGraphPage({ search }: { search: string }) {
         setMutating(false)
       }
     },
-    [graphData, user, mutating, mutateGraph, labelNodesById, parentIdsByChildId],
+    [graphData, user, mutating, mutateGraph, persistParentEdit],
   )
 
   const onEdgeClick = useCallback(
@@ -242,13 +235,10 @@ export default function LabelGraphPage({ search }: { search: string }) {
       setMutating(true)
       setEditError(null)
       try {
-        const childNode = labelNodesById.get(childId)
-        if (!childNode) {
-          throw new Error(`Missing label node for ${childId}`)
-        }
-        const currentParents = parentIdsByChildId.get(childId) ?? []
-        const newParents = currentParents.filter((p) => p !== parentId)
-        await updateLabel(childId, { names: childNode.names, parents: newParents })
+        await persistParentEdit(
+          childId,
+          (currentParents) => currentParents.filter((parent) => parent !== parentId),
+        )
         await mutateGraph()
       } catch {
         setEditError('Failed to remove parent relationship.')
@@ -256,7 +246,7 @@ export default function LabelGraphPage({ search }: { search: string }) {
         setMutating(false)
       }
     },
-    [graphData, user, mutating, mutateGraph, labelNodesById, parentIdsByChildId],
+    [graphData, user, mutating, mutateGraph, persistParentEdit],
   )
 
   const interactiveFlowProps = useMemo<
