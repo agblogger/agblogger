@@ -91,8 +91,7 @@ export default function BreakdownBarChart({
 
     const entryId = entry.gc_id
     if (entryId === undefined || entryId === null || entryId === '') return
-    const isSame = drillDown !== null && drillDown.entryId === entryId
-    setDrillDown(isSame ? null : { name: entry.name, entryId })
+    setDrillDown((prev) => (prev !== null && prev.entryId === entryId ? null : { name: entry.name, entryId }))
   }
 
   return (

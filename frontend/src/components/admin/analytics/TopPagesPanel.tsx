@@ -65,11 +65,7 @@ export default function TopPagesPanel({ paths }: TopPagesPanelProps) {
   const [expanded, setExpanded] = useState<ExpandedRow | null>(null)
 
   function handleRowClick(hit: PathHit) {
-    if (expanded !== null && expanded.path_id === hit.path_id) {
-      setExpanded(null)
-    } else {
-      setExpanded({ path: hit.path, path_id: hit.path_id })
-    }
+    setExpanded((prev) => (prev !== null && prev.path_id === hit.path_id ? null : { path: hit.path, path_id: hit.path_id }))
   }
 
   const sorted = useMemo(() => [...paths].sort((a, b) => b.views - a.views), [paths])

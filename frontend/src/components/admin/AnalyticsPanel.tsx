@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { BarChart2, Loader2 } from 'lucide-react'
 
 import { updateAnalyticsSettings } from '@/api/analytics'
@@ -92,13 +92,9 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
   )
   const topPage = sortedPaths.length > 0 && sortedPaths[0] ? sortedPaths[0].path : '—'
 
-  const localBusy = saving
-  useEffect(() => {
-    onBusyChange(localBusy)
-  }, [localBusy, onBusyChange])
-
   async function handleToggle(field: keyof AnalyticsSettings, value: boolean) {
     setSaving(true)
+    onBusyChange(true)
     setSaveError(null)
     try {
       await updateAnalyticsSettings({ ...settings, [field]: value })
@@ -111,10 +107,11 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
       }
     } finally {
       setSaving(false)
+      onBusyChange(false)
     }
   }
 
-  const allBusy = busy || localBusy
+  const allBusy = busy || saving
   const displayError = saveError ?? sessionExpiredError
 
   return (
