@@ -75,6 +75,10 @@ const allLabelsWithTwoParents: LabelResponse[] = [
   ...allLabels.slice(1),
 ]
 
+function withPrimaryLabel(label: LabelResponse, labels: LabelResponse[] = allLabels): LabelResponse[] {
+  return [label, ...labels.filter((candidate) => candidate.id !== label.id)]
+}
+
 function renderSettings(labelId = 'swe') {
   const router = createMemoryRouter(
     [{ path: '/labels/:labelId/settings', element: createElement(LabelSettingsPage) }],
@@ -110,9 +114,6 @@ describe('LabelSettingsPage', () => {
   })
 
   it('shows 404 error', async () => {
-    mockFetchLabel.mockRejectedValue(
-      mockHttpError(404),
-    )
     mockFetchLabels.mockResolvedValue([])
     renderSettings()
 
@@ -122,10 +123,9 @@ describe('LabelSettingsPage', () => {
   })
 
   it('shows 401 error', async () => {
-    mockFetchLabel.mockRejectedValue(
+    mockFetchLabels.mockRejectedValue(
       mockHttpError(401),
     )
-    mockFetchLabels.mockResolvedValue([])
     renderSettings()
 
     await waitFor(() => {
@@ -134,8 +134,7 @@ describe('LabelSettingsPage', () => {
   })
 
   it('shows generic error', async () => {
-    mockFetchLabel.mockRejectedValue(new Error('Network'))
-    mockFetchLabels.mockResolvedValue([])
+    mockFetchLabels.mockRejectedValue(new Error('Network'))
     renderSettings()
 
     await waitFor(() => {
@@ -154,10 +153,20 @@ describe('LabelSettingsPage', () => {
     expect(screen.getByText('programming')).toBeInTheDocument()
   })
 
+  it('hydrates the selected label from the loaded label collection without fetching label detail', async () => {
+    mockFetchLabels.mockResolvedValue(allLabels)
+    renderSettings()
+
+    await waitFor(() => {
+      expect(screen.getByText('software engineering')).toBeInTheDocument()
+    })
+
+    expect(mockFetchLabel).not.toHaveBeenCalled()
+  })
+
   it('removes a name (but not if only one left)', async () => {
     const singleNameLabel = { ...testLabel, names: ['only-name'] }
-    mockFetchLabel.mockResolvedValue(singleNameLabel)
-    mockFetchLabels.mockResolvedValue(allLabels)
+    mockFetchLabels.mockResolvedValue(withPrimaryLabel(singleNameLabel))
     renderSettings()
 
     await waitFor(() => {
@@ -345,8 +354,7 @@ describe('LabelSettingsPage', () => {
   })
 
   it('allows saving with no display names', async () => {
-    mockFetchLabel.mockResolvedValue({ ...testLabel, names: [] })
-    mockFetchLabels.mockResolvedValue(allLabels)
+    mockFetchLabels.mockResolvedValue(withPrimaryLabel({ ...testLabel, names: [] }))
     mockUpdateLabel.mockResolvedValue({ ...testLabel, names: [], parents: ['cs', 'math'] })
     const user = userEvent.setup()
     renderSettings()
@@ -509,7 +517,6 @@ describe('LabelSettingsPage', () => {
   })
 
   it('reverting a multi-parent selection back to the original set disables save even if order changes', async () => {
-    mockFetchLabel.mockResolvedValue(multiParentLabel)
     mockFetchLabels.mockResolvedValue(allLabelsWithTwoParents)
     const user = userEvent.setup()
     renderSettings()

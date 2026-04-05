@@ -23,7 +23,7 @@ export default function PostPage() {
   const { '*': slug } = useParams()
   const navigate = useNavigate()
   const { data: post, error: postError, isLoading: loading, mutate: mutatePost } = usePost(slug ?? null)
-  const postSlug = post !== undefined ? filePathToSlug(post.file_path) : null
+  const postSlug = slug !== undefined ? filePathToSlug(slug) : null
   const { data: viewData } = useViewCount(postSlug)
   const viewCount = viewData?.views ?? null
   const loadError = postError !== undefined

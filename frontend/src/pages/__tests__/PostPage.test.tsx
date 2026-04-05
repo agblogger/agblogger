@@ -151,6 +151,28 @@ describe('PostPage', () => {
     expect(screen.getByText('Content here')).toBeInTheDocument()
   })
 
+  it('fetches view count from the route slug before post detail resolves', async () => {
+    let resolvePost!: (value: PostDetail) => void
+    mockFetchPost.mockReturnValue(
+      new Promise<PostDetail>((resolve) => {
+        resolvePost = resolve
+      }),
+    )
+    mockFetchViewCount.mockResolvedValue({ views: 42 })
+
+    renderPostPage('/post/hello')
+
+    await waitFor(() => {
+      expect(mockFetchViewCount).toHaveBeenCalledWith('hello')
+    })
+
+    resolvePost(postDetail)
+
+    await waitFor(() => {
+      expect(screen.getByText('Hello World')).toBeInTheDocument()
+    })
+  })
+
   it('shows 404 for missing post', async () => {
     mockFetchPost.mockRejectedValue(mockHttpError(404))
     renderPostPage()

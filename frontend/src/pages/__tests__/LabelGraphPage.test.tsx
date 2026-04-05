@@ -321,7 +321,6 @@ describe('LabelGraphPage', () => {
 
   it('onConnect adds parent relationship', async () => {
     mockFetchLabelGraph.mockResolvedValue(graphData)
-    mockFetchLabel.mockResolvedValue({ id: 'math', names: ['mathematics'], parents: [], children: [], post_count: 3, is_implicit: false })
     mockUpdateLabel.mockResolvedValue({})
     // After update, refetch returns updated graph
     mockFetchLabelGraph.mockResolvedValueOnce(graphData).mockResolvedValueOnce({
@@ -345,13 +344,13 @@ describe('LabelGraphPage', () => {
       }) as unknown as Promise<void>)
     })
 
-    expect(mockFetchLabel).toHaveBeenCalledWith('math')
+    expect(mockFetchLabel).not.toHaveBeenCalled()
     expect(mockUpdateLabel).toHaveBeenCalledWith('math', { names: ['mathematics'], parents: ['cs'] })
   })
 
   it('onConnect shows error on failure', async () => {
     mockFetchLabelGraph.mockResolvedValue(graphData)
-    mockFetchLabel.mockRejectedValue(new Error('Network error'))
+    mockUpdateLabel.mockRejectedValue(new Error('Network error'))
 
     renderGraph()
 
@@ -389,9 +388,6 @@ describe('LabelGraphPage', () => {
   it('onEdgeClick removes parent relationship on confirm', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     mockFetchLabelGraph.mockResolvedValue(graphData)
-    mockFetchLabel.mockResolvedValue({
-      id: 'swe', names: ['software engineering'], parents: ['cs'], children: [], post_count: 5, is_implicit: false,
-    })
     mockUpdateLabel.mockResolvedValue({})
     // After removal, refetch returns graph without the edge
     mockFetchLabelGraph.mockResolvedValueOnce(graphData).mockResolvedValueOnce({
@@ -414,7 +410,7 @@ describe('LabelGraphPage', () => {
     })
 
     expect(window.confirm).toHaveBeenCalledWith('Remove parent #cs from #swe?')
-    expect(mockFetchLabel).toHaveBeenCalledWith('swe')
+    expect(mockFetchLabel).not.toHaveBeenCalled()
     expect(mockUpdateLabel).toHaveBeenCalledWith('swe', { names: ['software engineering'], parents: [] })
   })
 
@@ -442,7 +438,7 @@ describe('LabelGraphPage', () => {
   it('onEdgeClick shows error on failure', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     mockFetchLabelGraph.mockResolvedValue(graphData)
-    mockFetchLabel.mockRejectedValue(new Error('Network error'))
+    mockUpdateLabel.mockRejectedValue(new Error('Network error'))
 
     renderGraph()
 

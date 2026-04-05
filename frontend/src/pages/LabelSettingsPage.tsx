@@ -8,7 +8,7 @@ import { Settings, Trash2 } from 'lucide-react'
 
 import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
 import { useRequireAdmin } from '@/hooks/useRequireAdmin'
-import { fetchLabel, updateLabel, deleteLabel } from '@/api/labels'
+import { updateLabel, deleteLabel } from '@/api/labels'
 import { HTTPError } from '@/api/client'
 import type { LabelResponse } from '@/api/client'
 import { useLabels } from '@/hooks/useLabels'
@@ -33,11 +33,12 @@ export default function LabelSettingsPage() {
   const navigate = useNavigate()
   const { isReady } = useRequireAdmin()
 
-  const { data: allLabels = [], isLoading: allLabelsLoading } = useLabels()
+  const { data: allLabels = [], error: allLabelsErr, isLoading: allLabelsLoading } = useLabels()
 
   const [label, setLabel] = useState<LabelResponse | null>(null)
   const [labelLoading, setLabelLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [initializedLabelId, setInitializedLabelId] = useState<string | null>(null)
 
   // Editable state
   const [names, setNames] = useState<string[]>([])
@@ -53,31 +54,48 @@ export default function LabelSettingsPage() {
   const loading = labelLoading || allLabelsLoading
 
   useEffect(() => {
+    setLabel(null)
+    setInitializedLabelId(null)
+    setError(null)
+    setLabelLoading(true)
+  }, [labelId])
+
+  useEffect(() => {
     if (!isReady) return
     if (labelId === undefined) return
-    setLabelLoading(true)
-    setError(null)
-    void fetchLabel(labelId)
-      .then((l) => {
-        setLabel(l)
-        setNames(l.names)
-        setParents(l.parents)
-        setSavedNames(l.names)
-        setSavedParents(l.parents)
-      })
-      .catch((err: unknown) => {
-        if (err instanceof HTTPError && err.response.status === 404) {
-          setError('Label not found.')
-        } else if (err instanceof HTTPError && err.response.status === 401) {
-          setError('Session expired. Please log in again.')
-        } else {
-          setError('Failed to load label data. Please try again later.')
-        }
-      })
-      .finally(() => {
-        setLabelLoading(false)
-      })
-  }, [labelId, isReady])
+    if (allLabelsLoading) return
+    if (initializedLabelId === labelId) return
+
+    if (allLabelsErr instanceof HTTPError && allLabelsErr.response.status === 401) {
+      setError('Session expired. Please log in again.')
+      setLabelLoading(false)
+      setInitializedLabelId(labelId)
+      return
+    }
+
+    if (allLabelsErr !== undefined) {
+      setError('Failed to load label data. Please try again later.')
+      setLabelLoading(false)
+      setInitializedLabelId(labelId)
+      return
+    }
+
+    const matchingLabel = allLabels.find((candidate) => candidate.id === labelId)
+    if (matchingLabel === undefined) {
+      setError('Label not found.')
+      setLabelLoading(false)
+      setInitializedLabelId(labelId)
+      return
+    }
+
+    setLabel(matchingLabel)
+    setNames(matchingLabel.names)
+    setParents(matchingLabel.parents)
+    setSavedNames(matchingLabel.names)
+    setSavedParents(matchingLabel.parents)
+    setLabelLoading(false)
+    setInitializedLabelId(labelId)
+  }, [allLabels, allLabelsErr, allLabelsLoading, initializedLabelId, isReady, labelId])
 
   const excludedIds = useMemo(() => {
     if (labelId === undefined) return new Set<string>()
