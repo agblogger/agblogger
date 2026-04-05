@@ -488,7 +488,7 @@ stamp-build:
 
 # Build standalone CLI executable for the current platform
 build-cli: stamp-build
-    uv run pyinstaller \
+    uv run --extra dev pyinstaller \
         --onefile \
         --name agblogger \
         --strip \
