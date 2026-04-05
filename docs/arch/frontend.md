@@ -49,9 +49,8 @@ The frontend does not own markdown rendering. It receives rendered HTML from the
 - `frontend/src/api/` contains the HTTP client and API-facing modules that connect the SPA to the backend.
 - `frontend/src/hooks/` contains SWR data-fetching hooks (with server-preloaded fallback data support) and client-side enhancements layered on top of backend-rendered content and editor workflows.
 - `frontend/src/utils/preload.ts` provides the preload system: low-level utilities for reading JSON metadata and extracting HTML from the server-rendered DOM, plus a declarative consumer API that merges both sources into typed objects.
+- `frontend/src/utils/postUrl.ts` provides centralized slug extraction and URL generation for post navigation.
 - `frontend/src/components/search/` contains the live search dropdown components used by the header for as-you-type search previews.
 - `frontend/src/components/share/` contains the social sharing bar and platform-specific sharing components used by the post view.
 - `frontend/src/components/labels/` contains shared label form components (names editor, parents selector) used by both the label creation and label settings pages.
-- `frontend/src/utils/postUrl.ts` provides centralized slug extraction and URL generation for post navigation, used by 6+ pages/components.
-- `frontend/src/components/admin/analytics/` contains extracted analytics sub-components (charts, tables, drill-downs, date picker, export button) that the `AnalyticsPanel.tsx` orchestrator composes into the admin dashboard tab.
-- `frontend/src/api/analytics.ts` contains the analytics API client functions for the admin dashboard and public view counts.
+- `frontend/src/components/admin/analytics/` contains analytics sub-components: charts, tables, drill-downs, the date range picker, and the export button.

@@ -56,7 +56,7 @@ The GoatCounter sidecar is internal to the deployment. Its API token never leave
 - `backend/services/analytics_service.py` orchestrates hit recording, stats retrieval, and settings management.
 - `backend/models/analytics.py` contains the durable analytics settings table model.
 - `frontend/src/components/admin/AnalyticsPanel.tsx` is the lazy-loaded admin dashboard orchestrator that composes the sub-components below.
-- `frontend/src/components/admin/analytics/` contains the extracted analytics sub-components: charts, tables, drill-downs, the date range picker, and the export button.
+- `frontend/src/components/admin/analytics/` contains analytics sub-components (charts, tables, drill-downs, date picker, export button) that the `AnalyticsPanel.tsx` orchestrator composes into the admin dashboard tab.
 - `frontend/src/hooks/useAnalyticsDashboard.ts` provides composite SWR hooks for the dashboard, including site-wide referrers and breakdown version detail.
-- `frontend/src/api/analytics.ts` contains the analytics API client functions for admin and public use.
+- `frontend/src/api/analytics.ts` contains the analytics API client functions for the admin dashboard and public view counts.
 - `goatcounter/entrypoint.sh` is the sidecar's provisioning and startup script, including site-host normalization from deployment-provided environment.
