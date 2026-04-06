@@ -1064,6 +1064,9 @@ class TestKillAndWaitOSErrorLogging:
             if "kill" in r.message.lower() or "sigkill" in r.message.lower()
         ]
         assert kill_warnings, f"Expected WARNING log about kill failure; got: {caplog.text}"
+        assert kill_warnings[0].exc_info is not None, (
+            "Kill failure WARNING must include exc_info=True"
+        )
 
 
 class TestWriteMergeInputsErrorLogging:
@@ -1088,6 +1091,14 @@ class TestWriteMergeInputsErrorLogging:
             await gs.merge_file_content("base\n", "ours\n", "theirs\n")
 
         assert "Failed to write merge input files" in caplog.text
+        error_records = [
+            r for r in caplog.records
+            if r.levelno == logging.ERROR and "Failed to write merge input files" in r.message
+        ]
+        assert error_records, "Expected ERROR log record for write failure"
+        assert error_records[0].exc_info is not None, (
+            "Write failure ERROR must include exc_info=True"
+        )
 
 
 class TestCommitAllHeadCommitNoneLogging:
