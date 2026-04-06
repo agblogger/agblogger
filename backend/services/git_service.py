@@ -207,7 +207,12 @@ class GitService:
                     message,
                 )
             elif isinstance(exc, subprocess.TimeoutExpired):
-                logger.error("Git commit timed out: %s", message)
+                logger.error(
+                    "Git commit timed out after %ss: %s",
+                    GIT_TIMEOUT_SECONDS,
+                    message,
+                    exc_info=True,
+                )
             else:
                 logger.error(
                     "Git subprocess OSError (errno %s): %s — %s",

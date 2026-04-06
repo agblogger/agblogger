@@ -784,6 +784,29 @@ class TestTryCommitErrorHandling:
         assert result is None
         assert "git: not found" in caplog.text
 
+    async def test_try_commit_timeout_includes_exc_info(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Timeout log record must include exc_info so Sentry can see the exception."""
+        gs = GitService(tmp_path)
+        (tmp_path / "file.txt").write_text("hello")
+        await gs.init_repo()
+
+        timeout_exc = subprocess.TimeoutExpired(cmd=["git", "commit"], timeout=30)
+        with (
+            patch.object(gs, "commit_all", new_callable=AsyncMock, side_effect=timeout_exc),
+            caplog.at_level(logging.ERROR, logger="backend.services.git_service"),
+        ):
+            result = await gs.try_commit("test commit")
+
+        assert result is None
+        error_records = [
+            r for r in caplog.records
+            if r.levelno == logging.ERROR and "timed out" in r.message.lower()
+        ]
+        assert error_records, f"Expected ERROR log about timeout; got: {caplog.text}"
+        assert error_records[0].exc_info is not None, "Timeout log must include exc_info"
+
 
 class TestFileNotFoundPropagation:
     """FileNotFoundError from create_subprocess_exec propagates through _run_process."""
