@@ -218,7 +218,10 @@ async def download_csv_export(
     return Response(
         content=data,
         media_type="text/csv",
-        headers={"Content-Disposition": f"attachment; filename=analytics-export-{export_id}.csv"},
+        headers={
+            "Content-Disposition": f"attachment; filename=analytics-export-{export_id}.csv",
+            "Content-Encoding": "gzip",
+        },
     )
 
 
