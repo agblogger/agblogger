@@ -330,6 +330,74 @@ class TestMergePostFileConflictMarkers:
         assert "client different line" in result.merged_content
 
 
+# ── Log level and state correctness for merge_post_file failure paths ──
+
+
+class TestMergePostFileGitMergeLogging:
+    """Log level and body_conflicted correctness for merge_post_file failure paths."""
+
+    async def test_git_merge_body_failure_logged_at_error_level(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """When git merge-file fails, the fallback must be logged at ERROR, not WARNING."""
+        import logging
+
+        git = GitService(tmp_path)
+        await git.init_repo()
+
+        meta = {"title": "T"}
+        base = _make_post(meta, "base line\n")
+        server = _make_post(meta, "server different line\n")
+        client = _make_post(meta, "client different line\n")
+
+        with (
+            patch.object(
+                git,
+                "merge_file_content",
+                new_callable=AsyncMock,
+                side_effect=OSError("disk full"),
+            ),
+            caplog.at_level(logging.ERROR, logger="backend.services.sync_service"),
+        ):
+            await merge_post_file(base, server, client, git)
+
+        merge_fail_records = [
+            r
+            for r in caplog.records
+            if "merge failed" in r.message.lower() or "git merge" in r.message.lower()
+        ]
+        assert merge_fail_records, f"Expected log about git merge failure; got: {caplog.text}"
+        levels = [r.levelname for r in merge_fail_records]
+        assert all(r.levelno == logging.ERROR for r in merge_fail_records), (
+            f"Expected ERROR level for merge failure; got: {levels}"
+        )
+
+    async def test_yaml_dumps_fallback_sets_body_conflicted(self, tmp_path: Path) -> None:
+        """YAML serialization failure must force body_conflicted=True to avoid misleading client."""
+        import yaml
+
+        git = GitService(tmp_path)
+        await git.init_repo()
+
+        meta = {"title": "T"}
+        # server == client body: body_conflicted would be False without the fix
+        same_body = "same body line\n"
+        server = _make_post(meta, same_body)
+        client = _make_post(meta, same_body)
+        base = _make_post(meta, same_body)
+
+        with patch(
+            "backend.services.sync_service.fm.dumps",
+            side_effect=yaml.YAMLError("yaml fail"),
+        ):
+            result = await merge_post_file(base, server, client, git)
+
+        assert result.body_conflicted is True, (
+            "YAML serialization failure must set body_conflicted=True; "
+            f"got: body_conflicted={result.body_conflicted}"
+        )
+
+
 # ── Issue #13: update_label checks cycles against stale edges ──
 
 

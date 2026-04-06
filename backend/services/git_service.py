@@ -85,16 +85,15 @@ class GitService:
         # BaseException, not Exception: must also handle CancelledError and KeyboardInterrupt
         except BaseException:
             if process.returncode is None:
-                logger.warning(
+                logger.debug(
                     "Killing subprocess %s due to exception during communicate()",
                     " ".join(command),
-                    exc_info=True,
                 )
                 # Best-effort cleanup: if kill/wait fails, the original exception takes priority
                 try:
                     await self._kill_and_wait_for_process_exit(process, command)
                 except BaseException:
-                    logger.warning(
+                    logger.error(
                         "Failed to kill subprocess %s during exception cleanup",
                         " ".join(command),
                         exc_info=True,
@@ -171,6 +170,7 @@ class GitService:
                 "Ensure 'git' is installed and the content directory is writable.",
                 self.content_dir,
                 exc,
+                exc_info=True,
             )
             raise
 

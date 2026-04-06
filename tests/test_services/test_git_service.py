@@ -906,6 +906,112 @@ class TestBaseExceptionHandlerKillLogging:
 
         assert "Failed to kill subprocess" in caplog.text
 
+    async def test_kill_failure_during_exception_cleanup_logged_at_error_level(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Kill failure during exception cleanup must be logged at ERROR, not WARNING."""
+        gs = GitService(tmp_path)
+        proc = AsyncMock()
+        proc.returncode = None
+        proc.kill = MagicMock()
+        call_count = 0
+
+        async def fake_wait_for(
+            awaitable: Coroutine[object, object, object], *, timeout: float
+        ) -> object:
+            nonlocal call_count
+            call_count += 1
+            awaitable.close()
+            if call_count == 1:
+                raise asyncio.CancelledError()
+            raise RuntimeError("broken event loop")
+
+        with (
+            patch(
+                "backend.services.git_service.asyncio.create_subprocess_exec",
+                new_callable=AsyncMock,
+                return_value=proc,
+            ),
+            patch(
+                "backend.services.git_service.asyncio.wait_for",
+                side_effect=fake_wait_for,
+            ),
+            caplog.at_level(logging.ERROR, logger="backend.services.git_service"),
+            pytest.raises(asyncio.CancelledError),
+        ):
+            await gs._run("status")
+
+        assert any(
+            "Failed to kill subprocess" in r.message and r.levelno == logging.ERROR
+            for r in caplog.records
+        ), f"Expected ERROR record for kill failure; got: {caplog.records!r}"
+
+    async def test_cancel_during_communicate_not_logged_at_warning(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Routine subprocess kill on CancelledError must not produce a WARNING log."""
+        gs = GitService(tmp_path)
+        proc = AsyncMock()
+        proc.returncode = None
+        proc.kill = MagicMock()
+
+        async def raise_cancelled(
+            awaitable: Coroutine[object, object, object], *, timeout: float
+        ) -> object:
+            awaitable.close()
+            raise asyncio.CancelledError()
+
+        with (
+            patch(
+                "backend.services.git_service.asyncio.create_subprocess_exec",
+                new_callable=AsyncMock,
+                return_value=proc,
+            ),
+            patch(
+                "backend.services.git_service.asyncio.wait_for",
+                side_effect=raise_cancelled,
+            ),
+            caplog.at_level(logging.WARNING, logger="backend.services.git_service"),
+            pytest.raises(asyncio.CancelledError),
+        ):
+            await gs._run("status")
+
+        kill_attempt_warnings = [
+            r for r in caplog.records if "due to exception during communicate" in r.message
+        ]
+        assert not kill_attempt_warnings, (
+            "Routine cancel-cleanup must not produce a WARNING; "
+            f"got: {[(r.levelname, r.message) for r in kill_attempt_warnings]}"
+        )
+
+
+class TestInitRepoErrorExcInfo:
+    """init_repo error log includes exc_info for traceback preservation."""
+
+    async def test_init_repo_error_includes_exc_info(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """CalledProcessError from init_repo must be logged with exc_info=True."""
+        gs = GitService(tmp_path)
+        error = subprocess.CalledProcessError(1, "git init", stderr="permission denied")
+
+        with (
+            patch.object(gs, "_run", new_callable=AsyncMock, side_effect=error),
+            caplog.at_level(logging.ERROR, logger="backend.services.git_service"),
+            pytest.raises(subprocess.CalledProcessError),
+        ):
+            await gs.init_repo()
+
+        error_records = [
+            r
+            for r in caplog.records
+            if r.levelno == logging.ERROR and "Failed to initialize" in r.message
+        ]
+        assert error_records, f"Expected ERROR log from init_repo; got: {caplog.text}"
+        assert all(r.exc_info is not None and r.exc_info[0] is not None for r in error_records), (
+            "init_repo error must be logged with exc_info=True"
+        )
+
 
 class TestHeadCommitLogging:
     """head_commit logs unexpected git exit codes."""

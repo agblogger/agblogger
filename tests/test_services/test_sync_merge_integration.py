@@ -1051,6 +1051,395 @@ class TestGetBaseContentGitErrors:
             "merge base" in w.lower() or "three-way" in w.lower() for w in data.get("warnings", [])
         ), f"Expected merge base warning; got: {data.get('warnings')}"
 
+    async def test_commit_exists_timeout_expired_during_merge_adds_warning(
+        self, merge_client: AsyncClient, merge_settings: Settings
+    ) -> None:
+        """TimeoutExpired from commit_exists degrades gracefully with a merge-base warning."""
+        from backend.services.git_service import GitService
+
+        token = await _login(merge_client)
+        headers = {"Authorization": f"Bearer {token}"}
+
+        client_content = (
+            "---\ntitle: Shared Post\ncreated_at: 2026-02-01 00:00:00+00\nauthor: admin\n"
+            "labels:\n- '#a'\n---\n\nClient edited body.\n"
+        )
+
+        with patch.object(
+            GitService,
+            "commit_exists",
+            new_callable=AsyncMock,
+            side_effect=subprocess.TimeoutExpired("git cat-file", 30),
+        ):
+            resp = await merge_client.post(
+                "/api/sync/commit",
+                data={"metadata": json.dumps({"deleted_files": [], "last_sync_commit": "a" * 40})},
+                files=[
+                    (
+                        "files",
+                        (
+                            "posts/shared/index.md",
+                            io.BytesIO(client_content.encode()),
+                            "text/plain",
+                        ),
+                    ),
+                ],
+                headers=headers,
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert any(
+            "merge base" in w.lower() or "three-way" in w.lower() for w in data.get("warnings", [])
+        ), f"Expected merge base warning; got: {data.get('warnings')}"
+
+    async def test_commit_exists_called_process_error_during_merge_adds_warning(
+        self, merge_client: AsyncClient, merge_settings: Settings
+    ) -> None:
+        """CalledProcessError from commit_exists degrades gracefully with a merge-base warning."""
+        from backend.services.git_service import GitService
+
+        token = await _login(merge_client)
+        headers = {"Authorization": f"Bearer {token}"}
+
+        client_content = (
+            "---\ntitle: Shared Post\ncreated_at: 2026-02-01 00:00:00+00\nauthor: admin\n"
+            "labels:\n- '#a'\n---\n\nClient edited body.\n"
+        )
+
+        with patch.object(
+            GitService,
+            "commit_exists",
+            new_callable=AsyncMock,
+            side_effect=subprocess.CalledProcessError(128, "git cat-file", stderr="error"),
+        ):
+            resp = await merge_client.post(
+                "/api/sync/commit",
+                data={"metadata": json.dumps({"deleted_files": [], "last_sync_commit": "a" * 40})},
+                files=[
+                    (
+                        "files",
+                        (
+                            "posts/shared/index.md",
+                            io.BytesIO(client_content.encode()),
+                            "text/plain",
+                        ),
+                    ),
+                ],
+                headers=headers,
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert any(
+            "merge base" in w.lower() or "three-way" in w.lower() for w in data.get("warnings", [])
+        ), f"Expected merge base warning; got: {data.get('warnings')}"
+
+    async def test_show_file_at_commit_called_process_error_during_merge_adds_warning(
+        self, merge_client: AsyncClient, merge_settings: Settings
+    ) -> None:
+        """CalledProcessError from show_file_at_commit degrades with a merge-base warning."""
+        from backend.services.git_service import GitService
+
+        token = await _login(merge_client)
+        headers = {"Authorization": f"Bearer {token}"}
+
+        client_content = (
+            "---\ntitle: Shared Post\ncreated_at: 2026-02-01 00:00:00+00\nauthor: admin\n"
+            "labels:\n- '#a'\n---\n\nClient edited body.\n"
+        )
+
+        with (
+            patch.object(GitService, "commit_exists", new_callable=AsyncMock, return_value=True),
+            patch.object(
+                GitService,
+                "show_file_at_commit",
+                new_callable=AsyncMock,
+                side_effect=subprocess.CalledProcessError(128, "git show", stderr="bad object"),
+            ),
+        ):
+            resp = await merge_client.post(
+                "/api/sync/commit",
+                data={"metadata": json.dumps({"deleted_files": [], "last_sync_commit": "a" * 40})},
+                files=[
+                    (
+                        "files",
+                        (
+                            "posts/shared/index.md",
+                            io.BytesIO(client_content.encode()),
+                            "text/plain",
+                        ),
+                    ),
+                ],
+                headers=headers,
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert any(
+            "merge base" in w.lower() or "three-way" in w.lower() for w in data.get("warnings", [])
+        ), f"Expected merge base warning; got: {data.get('warnings')}"
+
+    async def test_show_file_at_commit_timeout_during_merge_adds_warning(
+        self, merge_client: AsyncClient, merge_settings: Settings
+    ) -> None:
+        """TimeoutExpired from show_file_at_commit degrades with a merge-base warning."""
+        from backend.services.git_service import GitService
+
+        token = await _login(merge_client)
+        headers = {"Authorization": f"Bearer {token}"}
+
+        client_content = (
+            "---\ntitle: Shared Post\ncreated_at: 2026-02-01 00:00:00+00\nauthor: admin\n"
+            "labels:\n- '#a'\n---\n\nClient edited body.\n"
+        )
+
+        with (
+            patch.object(GitService, "commit_exists", new_callable=AsyncMock, return_value=True),
+            patch.object(
+                GitService,
+                "show_file_at_commit",
+                new_callable=AsyncMock,
+                side_effect=subprocess.TimeoutExpired("git show", 30),
+            ),
+        ):
+            resp = await merge_client.post(
+                "/api/sync/commit",
+                data={"metadata": json.dumps({"deleted_files": [], "last_sync_commit": "a" * 40})},
+                files=[
+                    (
+                        "files",
+                        (
+                            "posts/shared/index.md",
+                            io.BytesIO(client_content.encode()),
+                            "text/plain",
+                        ),
+                    ),
+                ],
+                headers=headers,
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert any(
+            "merge base" in w.lower() or "three-way" in w.lower() for w in data.get("warnings", [])
+        ), f"Expected merge base warning; got: {data.get('warnings')}"
+
+    async def test_show_file_at_commit_oserror_during_merge_adds_warning(
+        self, merge_client: AsyncClient, merge_settings: Settings
+    ) -> None:
+        """OSError from show_file_at_commit degrades gracefully with a merge-base warning."""
+        from backend.services.git_service import GitService
+
+        token = await _login(merge_client)
+        headers = {"Authorization": f"Bearer {token}"}
+
+        client_content = (
+            "---\ntitle: Shared Post\ncreated_at: 2026-02-01 00:00:00+00\nauthor: admin\n"
+            "labels:\n- '#a'\n---\n\nClient edited body.\n"
+        )
+
+        with (
+            patch.object(GitService, "commit_exists", new_callable=AsyncMock, return_value=True),
+            patch.object(
+                GitService,
+                "show_file_at_commit",
+                new_callable=AsyncMock,
+                side_effect=OSError("permission denied"),
+            ),
+        ):
+            resp = await merge_client.post(
+                "/api/sync/commit",
+                data={"metadata": json.dumps({"deleted_files": [], "last_sync_commit": "a" * 40})},
+                files=[
+                    (
+                        "files",
+                        (
+                            "posts/shared/index.md",
+                            io.BytesIO(client_content.encode()),
+                            "text/plain",
+                        ),
+                    ),
+                ],
+                headers=headers,
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert any(
+            "merge base" in w.lower() or "three-way" in w.lower() for w in data.get("warnings", [])
+        ), f"Expected merge base warning; got: {data.get('warnings')}"
+
+    async def test_commit_exists_oserror_labels_toml_adds_warning(
+        self, merge_client: AsyncClient, merge_settings: Settings
+    ) -> None:
+        """OSError from commit_exists during labels.toml merge adds a merge-base warning."""
+        from backend.services.git_service import GitService
+
+        token = await _login(merge_client)
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # Write a server-side labels.toml so the merge branch is triggered
+        content_dir = merge_settings.content_dir
+        (content_dir / "labels.toml").write_text(
+            "[labels]\n[labels.foo]\nnames = ['foo']\n", encoding="utf-8"
+        )
+        client_labels = "[labels]\n[labels.bar]\nnames = ['bar']\n"
+
+        with patch.object(
+            GitService,
+            "commit_exists",
+            new_callable=AsyncMock,
+            side_effect=OSError("permission denied"),
+        ):
+            resp = await merge_client.post(
+                "/api/sync/commit",
+                data={"metadata": json.dumps({"deleted_files": [], "last_sync_commit": "a" * 40})},
+                files=[
+                    (
+                        "files",
+                        ("labels.toml", io.BytesIO(client_labels.encode()), "text/plain"),
+                    ),
+                ],
+                headers=headers,
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert any(
+            "merge base" in w.lower() or "three-way" in w.lower() for w in data.get("warnings", [])
+        ), f"Expected merge base warning for labels.toml; got: {data.get('warnings')}"
+
+
+class TestMergePostFileTimeoutAtApi:
+    """TimeoutExpired from merge_post_file is handled at API level: 200 with conflict."""
+
+    async def test_merge_post_file_timeout_returns_200_with_conflict(
+        self, merge_client: AsyncClient, merge_settings: Settings
+    ) -> None:
+        """When merge_post_file raises TimeoutExpired, sync returns 200 with body_conflicted."""
+        token = await _login(merge_client)
+        headers = {"Authorization": f"Bearer {token}"}
+
+        resp = await merge_client.post(
+            "/api/sync/status",
+            json={"client_manifest": []},
+            headers=headers,
+        )
+        server_commit = resp.json()["server_commit"]
+
+        # Edit server version so server_content != client_text (triggers merge path)
+        resp = await merge_client.put(
+            "/api/posts/posts/shared/index.md",
+            json={
+                "title": "Shared Post",
+                "body": "Server edited paragraph.\n\nParagraph two.\n",
+                "labels": ["a"],
+                "is_draft": False,
+            },
+            headers=headers,
+        )
+        assert resp.status_code == 200
+
+        client_content = (
+            "---\ntitle: Shared Post\ncreated_at: 2026-02-01 00:00:00+00\nauthor: admin\n"
+            "labels:\n- '#a'\n---\n\nClient edited paragraph.\n\nParagraph two.\n"
+        )
+
+        with patch(
+            "backend.api.sync.merge_post_file",
+            new_callable=AsyncMock,
+            side_effect=subprocess.TimeoutExpired("git merge-file", 30),
+        ):
+            metadata = json.dumps({"deleted_files": [], "last_sync_commit": server_commit})
+            resp = await merge_client.post(
+                "/api/sync/commit",
+                data={"metadata": metadata},
+                files=[
+                    (
+                        "files",
+                        (
+                            "posts/shared/index.md",
+                            io.BytesIO(client_content.encode()),
+                            "text/plain",
+                        ),
+                    ),
+                ],
+                headers=headers,
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["conflicts"]) == 1
+        assert data["conflicts"][0]["file_path"] == "posts/shared/index.md"
+        assert data["conflicts"][0]["body_conflicted"] is True
+
+
+class TestGetBaseContentExcInfo:
+    """_get_base_content logs include exc_info for traceback preservation."""
+
+    async def test_get_base_content_timeout_in_show_file_includes_exc_info(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """TimeoutExpired from show_file_at_commit must be logged with exc_info=True."""
+        import logging
+
+        from backend.api.sync import _get_base_content
+        from backend.services.git_service import GitService
+
+        gs = GitService(tmp_path)
+        await gs.init_repo()
+
+        with (
+            patch.object(gs, "commit_exists", new_callable=AsyncMock, return_value=True),
+            patch.object(
+                gs,
+                "show_file_at_commit",
+                new_callable=AsyncMock,
+                side_effect=subprocess.TimeoutExpired("git show", 30),
+            ),
+            caplog.at_level(logging.ERROR, logger="backend.api.sync"),
+        ):
+            result = await _get_base_content(gs, "a" * 40, "posts/test/index.md")
+
+        assert result == (None, True)
+        error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
+        assert error_records, f"Expected ERROR log; got: {caplog.text}"
+        assert all(r.exc_info is not None and r.exc_info[0] is not None for r in error_records), (
+            "_get_base_content timeout error must include exc_info=True"
+        )
+
+    async def test_get_base_content_oserror_in_show_file_includes_exc_info(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """OSError from show_file_at_commit must be logged with exc_info=True."""
+        import logging
+
+        from backend.api.sync import _get_base_content
+        from backend.services.git_service import GitService
+
+        gs = GitService(tmp_path)
+        await gs.init_repo()
+
+        with (
+            patch.object(gs, "commit_exists", new_callable=AsyncMock, return_value=True),
+            patch.object(
+                gs,
+                "show_file_at_commit",
+                new_callable=AsyncMock,
+                side_effect=OSError("permission denied"),
+            ),
+            caplog.at_level(logging.ERROR, logger="backend.api.sync"),
+        ):
+            result = await _get_base_content(gs, "a" * 40, "posts/test/index.md")
+
+        assert result == (None, True)
+        error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
+        assert error_records, f"Expected ERROR log; got: {caplog.text}"
+        assert all(r.exc_info is not None and r.exc_info[0] is not None for r in error_records), (
+            "_get_base_content OSError must include exc_info=True"
+        )
+
 
 class TestLabelsTomlParseErrorSentinel:
     """_parse_error sentinel must not appear in the API response field_conflicts."""

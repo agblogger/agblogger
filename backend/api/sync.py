@@ -235,7 +235,7 @@ async def sync_status(
     try:
         server_commit = await git_service.head_commit()
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
-        logger.error("Failed to read git HEAD during sync status: %s", exc)
+        logger.error("Failed to read git HEAD during sync status: %s", exc, exc_info=True)
         status_warnings.append(
             "Git history unavailable; sync may not detect all changes correctly."
         )
@@ -469,7 +469,7 @@ async def _sync_commit_inner(
                         base_content, server_content, client_text, git_service
                     )
                 except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
-                    logger.error("Merge failed for %s: %s", target_path, exc)
+                    logger.error("Merge failed for %s: %s", target_path, exc, exc_info=True)
                     conflicts.append(
                         SyncConflictInfo(
                             file_path=target_path, body_conflicted=True, field_conflicts=[]
@@ -551,7 +551,7 @@ async def _sync_commit_inner(
     try:
         await git_service.commit_all(f"Sync commit by {username}")
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
-        logger.error("Git commit failed during sync by %s: %s", username, exc)
+        logger.error("Git commit failed during sync by %s: %s", username, exc, exc_info=True)
         sync_warnings.append(
             "Git commit failed; sync history may be degraded. "
             "Three-way merge on the next sync may produce incorrect results."
@@ -592,7 +592,7 @@ async def _sync_commit_inner(
         try:
             commit_hash = await git_service.head_commit()
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
-            logger.error("Failed to read git HEAD after sync commit: %s", exc)
+            logger.error("Failed to read git HEAD after sync commit: %s", exc, exc_info=True)
             sync_warnings.append(
                 "Failed to read commit hash after sync; data was committed successfully "
                 "but sync history tracking may be degraded."
@@ -659,5 +659,6 @@ async def _get_base_content(
             file_path,
             last_sync_commit,
             exc,
+            exc_info=True,
         )
         return None, True
