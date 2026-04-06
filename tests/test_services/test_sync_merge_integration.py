@@ -971,9 +971,7 @@ class TestSyncDeletePrunesDirectories:
 class TestGetBaseContentGitErrors:
     """When commit_exists raises OSError, sync degrades gracefully with a warning."""
 
-    async def test_commit_exists_oserror_returns_200(
-        self, merge_client: AsyncClient
-    ) -> None:
+    async def test_commit_exists_oserror_returns_200(self, merge_client: AsyncClient) -> None:
         """Sync returns 200 (not 500) when commit_exists raises OSError."""
         from backend.services.git_service import GitService
 
@@ -989,11 +987,13 @@ class TestGetBaseContentGitErrors:
             resp = await merge_client.post(
                 "/api/sync/commit",
                 data={
-                    "metadata": json.dumps({
-                        "deleted_files": [],
-                        "last_sync_commit": "a" * 40,
-                        "files": [],
-                    })
+                    "metadata": json.dumps(
+                        {
+                            "deleted_files": [],
+                            "last_sync_commit": "a" * 40,
+                            "files": [],
+                        }
+                    )
                 },
                 headers=headers,
             )
@@ -1048,8 +1048,7 @@ class TestGetBaseContentGitErrors:
         assert resp.status_code == 200
         data = resp.json()
         assert any(
-            "merge base" in w.lower() or "three-way" in w.lower()
-            for w in data.get("warnings", [])
+            "merge base" in w.lower() or "three-way" in w.lower() for w in data.get("warnings", [])
         ), f"Expected merge base warning; got: {data.get('warnings')}"
 
 

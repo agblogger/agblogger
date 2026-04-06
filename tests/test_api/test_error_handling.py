@@ -550,9 +550,7 @@ class TestSyncGitFailure:
         assert any("git commit failed" in warning.lower() for warning in data["warnings"])
 
     @pytest.mark.asyncio
-    async def test_sync_commit_permission_error_returns_warning(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_sync_commit_permission_error_returns_warning(self, client: AsyncClient) -> None:
         """PermissionError from commit_all is caught and returns 200 with a warning."""
         token = await login(client)
         with patch(
@@ -1643,7 +1641,4 @@ class TestSyncStatusHeadCommitFailure:
         assert resp.status_code == 200
         data = resp.json()
         assert data["server_commit"] is None
-        assert any(
-            "git" in w.lower() or "history" in w.lower()
-            for w in data.get("warnings", [])
-        )
+        assert any("git" in w.lower() or "history" in w.lower() for w in data.get("warnings", []))

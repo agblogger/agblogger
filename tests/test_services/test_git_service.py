@@ -801,7 +801,8 @@ class TestTryCommitErrorHandling:
 
         assert result is None
         error_records = [
-            r for r in caplog.records
+            r
+            for r in caplog.records
             if r.levelno == logging.ERROR and "timed out" in r.message.lower()
         ]
         assert error_records, f"Expected ERROR log about timeout; got: {caplog.text}"
@@ -1092,7 +1093,8 @@ class TestWriteMergeInputsErrorLogging:
 
         assert "Failed to write merge input files" in caplog.text
         error_records = [
-            r for r in caplog.records
+            r
+            for r in caplog.records
             if r.levelno == logging.ERROR and "Failed to write merge input files" in r.message
         ]
         assert error_records, "Expected ERROR log record for write failure"
