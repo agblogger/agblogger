@@ -3,16 +3,21 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import subprocess
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from backend.services.git_service import GIT_TIMEOUT_SECONDS, GitService
+from backend.services.git_service import (
+    _POST_KILL_WAIT_SECONDS,
+    GIT_TIMEOUT_SECONDS,
+    GitService,
+)
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable
+    from collections.abc import Awaitable, Coroutine
     from pathlib import Path
 
 
@@ -335,6 +340,7 @@ class TestGitTimeout:
         assert conflicted is False
         assert captured_timeout["value"] == GIT_TIMEOUT_SECONDS
         mock_exec.assert_awaited_once()
+        assert mock_exec.await_args is not None
         assert mock_exec.await_args.args[:3] == ("git", "merge-file", "-p")
 
     def test_timeout_constant_is_positive(self) -> None:
@@ -371,9 +377,10 @@ class TestRunProcessErrorHandling:
         proc = AsyncMock()
         proc.returncode = 0  # already exited; no kill needed
 
-        async def raise_timeout(awaitable: Awaitable[object], *, timeout: float) -> object:
-            if hasattr(awaitable, "close"):
-                awaitable.close()
+        async def raise_timeout(
+            awaitable: Coroutine[object, object, object], *, timeout: float
+        ) -> object:
+            awaitable.close()
             raise TimeoutError()
 
         with (
@@ -397,9 +404,10 @@ class TestRunProcessErrorHandling:
         # kill() is synchronous on asyncio.subprocess.Process; must be a sync mock
         proc.kill = MagicMock(side_effect=ProcessLookupError())
 
-        async def raise_timeout(awaitable: Awaitable[object], *, timeout: float) -> object:
-            if hasattr(awaitable, "close"):
-                awaitable.close()
+        async def raise_timeout(
+            awaitable: Coroutine[object, object, object], *, timeout: float
+        ) -> object:
+            awaitable.close()
             raise TimeoutError()
 
         with (
@@ -421,14 +429,14 @@ class TestRunProcessErrorHandling:
         proc = AsyncMock()
         proc.returncode = None
         proc.kill = MagicMock()  # kill() is synchronous on asyncio.subprocess.Process
-        wait_for_call_count = 0
+        captured_timeouts: list[float] = []
 
-        async def fake_wait_for(awaitable: Awaitable[object], *, timeout: float) -> object:
-            nonlocal wait_for_call_count
-            wait_for_call_count += 1
-            if wait_for_call_count == 1:
-                if hasattr(awaitable, "close"):
-                    awaitable.close()
+        async def fake_wait_for(
+            awaitable: Coroutine[object, object, object], *, timeout: float
+        ) -> object:
+            captured_timeouts.append(timeout)
+            if len(captured_timeouts) == 1:
+                awaitable.close()
                 raise TimeoutError()  # simulate communicate() timing out
             return await awaitable  # let process.wait() complete
 
@@ -443,7 +451,8 @@ class TestRunProcessErrorHandling:
         ):
             await gs._run("status")
 
-        assert wait_for_call_count == 2  # once for communicate, once for process.wait
+        assert len(captured_timeouts) == 2  # once for communicate, once for process.wait
+        assert captured_timeouts[1] == _POST_KILL_WAIT_SECONDS
 
     async def test_cancelled_error_kills_subprocess(self, tmp_path: Path) -> None:
         """CancelledError propagation kills the subprocess before re-raising."""
@@ -452,9 +461,10 @@ class TestRunProcessErrorHandling:
         proc.returncode = None
         proc.kill = MagicMock()  # kill() is synchronous on asyncio.subprocess.Process
 
-        async def raise_cancelled(awaitable: Awaitable[object], *, timeout: float) -> object:
-            if hasattr(awaitable, "close"):
-                awaitable.close()
+        async def raise_cancelled(
+            awaitable: Coroutine[object, object, object], *, timeout: float
+        ) -> object:
+            awaitable.close()
             raise asyncio.CancelledError()
 
         with (
@@ -472,6 +482,121 @@ class TestRunProcessErrorHandling:
             await gs._run("status")
 
         proc.kill.assert_called_once()
+
+    async def test_leaked_handle_logged_when_post_kill_wait_times_out(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """When process.wait() also times out after SIGKILL, an error is logged."""
+        gs = GitService(tmp_path)
+        proc = AsyncMock()
+        proc.returncode = None
+        proc.kill = MagicMock()
+
+        async def fake_wait_for(
+            awaitable: Coroutine[object, object, object], *, timeout: float
+        ) -> object:
+            awaitable.close()
+            raise TimeoutError()  # both communicate and wait time out
+
+        with (
+            patch(
+                "backend.services.git_service.asyncio.create_subprocess_exec",
+                new_callable=AsyncMock,
+                return_value=proc,
+            ),
+            patch("backend.services.git_service.asyncio.wait_for", side_effect=fake_wait_for),
+            caplog.at_level(logging.ERROR, logger="backend.services.git_service"),
+            pytest.raises(subprocess.TimeoutExpired),
+        ):
+            await gs._run("status")
+
+        assert "handle leaked" in caplog.text
+
+    async def test_returncode_none_after_communicate_raises_runtime_error(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """RuntimeError is raised if returncode is None after communicate() succeeds."""
+        gs = GitService(tmp_path)
+        proc = AsyncMock()
+        proc.communicate.return_value = (b"output", b"")
+        proc.returncode = None  # stays None — simulates broken asyncio
+
+        with (
+            patch(
+                "backend.services.git_service.asyncio.create_subprocess_exec",
+                new_callable=AsyncMock,
+                return_value=proc,
+            ),
+            caplog.at_level(logging.ERROR, logger="backend.services.git_service"),
+            pytest.raises(RuntimeError, match="finished without a return code"),
+        ):
+            await gs._run("status", check=False)
+
+        assert "finished without a return code" in caplog.text
+
+    async def test_non_utf8_output_decoded_with_replacement_and_logged(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Non-UTF-8 bytes in stdout/stderr are replaced with U+FFFD and logged."""
+        gs = GitService(tmp_path)
+        proc = AsyncMock()
+        proc.communicate.return_value = (b"\xff\xfe invalid", b"\x80 stderr")
+        proc.returncode = 0
+
+        with (
+            patch(
+                "backend.services.git_service.asyncio.create_subprocess_exec",
+                new_callable=AsyncMock,
+                return_value=proc,
+            ),
+            caplog.at_level(logging.WARNING, logger="backend.services.git_service"),
+        ):
+            result = await gs._run("status", check=False)
+
+        assert "\ufffd" in result.stdout
+        assert "\ufffd" in result.stderr
+        assert "Non-UTF-8 bytes in stdout" in caplog.text
+        assert "Non-UTF-8 bytes in stderr" in caplog.text
+
+    async def test_check_true_raises_called_process_error_with_correct_attrs(
+        self, tmp_path: Path
+    ) -> None:
+        """check=True raises CalledProcessError with returncode, output, and stderr."""
+        gs = GitService(tmp_path)
+        proc = AsyncMock()
+        proc.communicate.return_value = (b"some output", b"some error")
+        proc.returncode = 1
+
+        with (
+            patch(
+                "backend.services.git_service.asyncio.create_subprocess_exec",
+                new_callable=AsyncMock,
+                return_value=proc,
+            ),
+            pytest.raises(subprocess.CalledProcessError) as exc_info,
+        ):
+            await gs._run("status")
+
+        assert exc_info.value.returncode == 1
+        assert exc_info.value.output == "some output"
+        assert exc_info.value.stderr == "some error"
+
+    async def test_capture_output_false_still_populates_stderr(self, tmp_path: Path) -> None:
+        """capture_output=False discards stdout but preserves stderr."""
+        gs = GitService(tmp_path)
+        proc = AsyncMock()
+        proc.communicate.return_value = (b"ignored", b"stderr content")
+        proc.returncode = 0
+
+        with patch(
+            "backend.services.git_service.asyncio.create_subprocess_exec",
+            new_callable=AsyncMock,
+            return_value=proc,
+        ):
+            result = await gs._run("status", capture_output=False, check=False)
+
+        assert result.stdout == ""
+        assert result.stderr == "stderr content"
 
 
 class TestTryCommitTimeout:

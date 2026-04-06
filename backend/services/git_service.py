@@ -64,16 +64,33 @@ class GitService:
             raise subprocess.TimeoutExpired(cmd=command, timeout=GIT_TIMEOUT_SECONDS) from exc
         except BaseException:
             if process.returncode is None:
-                await self._kill_and_wait_for_process_exit(process, command)
+                logger.warning(
+                    "Killing subprocess %s due to exception during communicate()",
+                    " ".join(command),
+                    exc_info=True,
+                )
+                with contextlib.suppress(Exception):
+                    await self._kill_and_wait_for_process_exit(process, command)
             raise
 
         if process.returncode is None:
             # Unreachable in practice: communicate() always sets returncode before returning.
             # This is a defensive assertion against a broken asyncio implementation.
             msg = f"Process {' '.join(command)} finished without a return code"
+            logger.error(msg)
             raise RuntimeError(msg)
         stdout = stdout_bytes.decode("utf-8", errors="replace") if capture_output else ""
         stderr = stderr_bytes.decode("utf-8", errors="replace")
+        if capture_output and "\ufffd" in stdout:
+            logger.warning(
+                "Non-UTF-8 bytes in stdout of %s replaced with U+FFFD",
+                " ".join(command),
+            )
+        if "\ufffd" in stderr:
+            logger.warning(
+                "Non-UTF-8 bytes in stderr of %s replaced with U+FFFD",
+                " ".join(command),
+            )
         result = subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
         if check and result.returncode != 0:
             raise subprocess.CalledProcessError(
@@ -88,11 +105,13 @@ class GitService:
         self, process: asyncio.subprocess.Process, command: list[str]
     ) -> None:
         """Terminate a subprocess and wait briefly for the OS handle to close."""
-        with contextlib.suppress(ProcessLookupError):
+        try:
             process.kill()
+        except ProcessLookupError:
+            logger.debug("Process %s already exited before kill", " ".join(command))
         try:
             await asyncio.wait_for(process.wait(), timeout=_POST_KILL_WAIT_SECONDS)
-        except TimeoutError:
+        except BaseException:
             logger.error(
                 "Process %s did not exit after SIGKILL within %ss; handle leaked",
                 " ".join(command),
@@ -228,7 +247,10 @@ class GitService:
                 )
             return result.stdout, result.returncode > 0
         finally:
-            await asyncio.to_thread(temp_dir.cleanup)
+            try:
+                await asyncio.to_thread(temp_dir.cleanup)
+            except OSError:
+                logger.warning("Failed to clean up temp dir %s", temp_dir.name, exc_info=True)
 
     @staticmethod
     def _write_merge_inputs(
