@@ -417,7 +417,14 @@ async def _sync_commit_inner(
 
             if server_content is not None and server_content != client_text and is_labels_toml:
                 # Semantic merge for labels.toml
-                base_content = await _get_base_content(git_service, last_sync_commit, target_path)
+                base_content, base_git_error = await _get_base_content(
+                    git_service, last_sync_commit, target_path
+                )
+                if base_git_error:
+                    sync_warnings.append(
+                        f"Could not retrieve merge base for {target_path}; "
+                        "three-way merge was not possible."
+                    )
                 labels_result = merge_labels_toml(base_content, server_content, client_text)
 
                 if labels_result.field_conflicts:
@@ -441,7 +448,14 @@ async def _sync_commit_inner(
 
             elif server_content is not None and server_content != client_text and is_post_md:
                 # Three-way merge for markdown posts
-                base_content = await _get_base_content(git_service, last_sync_commit, target_path)
+                base_content, base_git_error = await _get_base_content(
+                    git_service, last_sync_commit, target_path
+                )
+                if base_git_error:
+                    sync_warnings.append(
+                        f"Could not retrieve merge base for {target_path}; "
+                        "three-way merge was not possible."
+                    )
                 try:
                     merge_result = await merge_post_file(
                         base_content, server_content, client_text, git_service
@@ -594,22 +608,34 @@ async def _get_base_content(
     git_service: GitService,
     last_sync_commit: str | None,
     file_path: str,
-) -> str | None:
+) -> tuple[str | None, bool]:
     """Retrieve the base version of a file from git history.
 
-    Returns None if no valid commit is available or the file didn't exist at that commit.
+    Returns (content, had_git_error). Content is None if no valid commit is available
+    or the file didn't exist at that commit. had_git_error is True only when git itself
+    failed (timeout, OSError, etc.) so callers can add a sync warning.
     """
     if last_sync_commit is None:
-        return None
-    if not await git_service.commit_exists(last_sync_commit):
-        logger.warning(
-            "Sync base commit %s not found in repo; falling back to no base for %s",
-            last_sync_commit,
-            file_path,
-        )
-        return None
+        return None, False
     try:
-        return await git_service.show_file_at_commit(last_sync_commit, file_path)
+        if not await git_service.commit_exists(last_sync_commit):
+            logger.warning(
+                "Sync base commit %s not found in repo; falling back to no base for %s",
+                last_sync_commit,
+                file_path,
+            )
+            return None, False
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
+        logger.error(
+            "Git error checking commit existence for %s at %s: %s",
+            file_path,
+            last_sync_commit,
+            exc,
+            exc_info=True,
+        )
+        return None, True
+    try:
+        return await git_service.show_file_at_commit(last_sync_commit, file_path), False
     except subprocess.CalledProcessError as exc:
         logger.error(
             "Git error retrieving base for %s at %s (exit %d): %s",
@@ -618,7 +644,7 @@ async def _get_base_content(
             exc.returncode,
             exc.stderr.strip() if exc.stderr else "no stderr",
         )
-        return None
+        return None, True
     except (subprocess.TimeoutExpired, OSError) as exc:
         logger.error(
             "Git error retrieving base for %s at %s: %s",
@@ -626,4 +652,4 @@ async def _get_base_content(
             last_sync_commit,
             exc,
         )
-        return None
+        return None, True

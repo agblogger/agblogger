@@ -9,7 +9,7 @@ import pathlib
 import subprocess
 import tomllib
 from typing import TYPE_CHECKING
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 import tomli_w
@@ -966,3 +966,88 @@ class TestSyncDeletePrunesDirectories:
         assert not post_dir.exists()
         # But the posts/ directory should still exist (it has other content)
         assert (content_dir / "posts").exists()
+
+
+class TestGetBaseContentGitErrors:
+    """When commit_exists raises OSError, sync degrades gracefully with a warning."""
+
+    async def test_commit_exists_oserror_returns_200(
+        self, merge_client: AsyncClient
+    ) -> None:
+        """Sync returns 200 (not 500) when commit_exists raises OSError."""
+        from backend.services.git_service import GitService
+
+        token = await _login(merge_client)
+        headers = {"Authorization": f"Bearer {token}"}
+
+        with patch.object(
+            GitService,
+            "commit_exists",
+            new_callable=AsyncMock,
+            side_effect=OSError("permission denied"),
+        ):
+            resp = await merge_client.post(
+                "/api/sync/commit",
+                data={
+                    "metadata": json.dumps({
+                        "deleted_files": [],
+                        "last_sync_commit": "a" * 40,
+                        "files": [],
+                    })
+                },
+                headers=headers,
+            )
+
+        assert resp.status_code == 200
+
+    async def test_commit_exists_oserror_during_merge_adds_warning(
+        self, merge_client: AsyncClient, merge_settings: Settings
+    ) -> None:
+        """When commit_exists raises OSError during a merge, a sync warning is added."""
+        from backend.services.git_service import GitService
+
+        token = await _login(merge_client)
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # The fixture creates posts/shared/index.md — client sends a different version
+        # to trigger the three-way merge code path
+        client_content = (
+            "---\ntitle: Shared Post\ncreated_at: 2026-02-01 00:00:00+00\nauthor: admin\n"
+            "labels:\n- '#a'\n---\n\nClient edited body.\n"
+        )
+        checksum = hashlib.sha256(client_content.encode()).hexdigest()
+        file_path = "posts/shared/index.md"
+        metadata = {
+            "deleted_files": [],
+            "last_sync_commit": "a" * 40,
+            "files": [{"path": file_path, "checksum": checksum}],
+        }
+
+        with patch.object(
+            GitService,
+            "commit_exists",
+            new_callable=AsyncMock,
+            side_effect=OSError("permission denied"),
+        ):
+            resp = await merge_client.post(
+                "/api/sync/commit",
+                data={"metadata": json.dumps(metadata)},
+                files=[
+                    (
+                        "files",
+                        (
+                            "posts/shared/index.md",
+                            io.BytesIO(client_content.encode()),
+                            "text/plain",
+                        ),
+                    ),
+                ],
+                headers=headers,
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert any(
+            "merge base" in w.lower() or "three-way" in w.lower()
+            for w in data.get("warnings", [])
+        ), f"Expected merge base warning; got: {data.get('warnings')}"
