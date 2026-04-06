@@ -460,7 +460,7 @@ async def _sync_commit_inner(
                     merge_result = await merge_post_file(
                         base_content, server_content, client_text, git_service
                     )
-                except (subprocess.CalledProcessError, OSError) as exc:
+                except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
                     logger.error("Merge failed for %s: %s", target_path, exc)
                     conflicts.append(
                         SyncConflictInfo(
@@ -522,12 +522,12 @@ async def _sync_commit_inner(
         if failures:
             logger.error("Sync rollback incomplete, failed to restore: %s", failures)
         raise
-    except Exception:
+    except Exception as exc:
         failures = _restore_original_files(content_dir=content_dir, original_files=original_files)
         if failures:
             logger.error("Sync rollback incomplete, failed to restore: %s", failures)
         logger.exception("Unexpected error during sync commit mutation phase")
-        raise HTTPException(status_code=500, detail="Internal error during sync") from None
+        raise HTTPException(status_code=500, detail="Internal error during sync") from exc
 
     await asyncio.to_thread(content_size_tracker.recompute)
     if not content_size_tracker.check(0):
