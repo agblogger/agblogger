@@ -10,11 +10,11 @@ GOATCOUNTER_SITE_HOST_RAW="${GOATCOUNTER_SITE_HOST_RAW%%/*}"
 GOATCOUNTER_SITE_HOST_RAW="${GOATCOUNTER_SITE_HOST_RAW%%:*}"
 GOATCOUNTER_VHOST="${GOATCOUNTER_SITE_HOST_RAW:-stats.internal}"
 GOATCOUNTER_TOKEN_NAME="agblogger"
-GOATCOUNTER_CREATE_PERMISSIONS="count,site_read"
-# GoatCounter stores permissions as a bitmask. We need count (2), site_read (8),
-# and stats (64). The current CLI build rejects "-perm stats", so we repair the
-# token row with SQL after creating or locating it.
-GOATCOUNTER_REQUIRED_PERMISSIONS=74
+GOATCOUNTER_CREATE_PERMISSIONS="count,export,site_read"
+# GoatCounter stores permissions as a bitmask. We need count (2), export (4),
+# site_read (8), and stats (64). The current CLI build rejects "-perm stats",
+# so we repair the token row with SQL after creating or locating it.
+GOATCOUNTER_REQUIRED_PERMISSIONS=78
 
 mkdir -p /data/goatcounter
 mkdir -p /data/goatcounter-token

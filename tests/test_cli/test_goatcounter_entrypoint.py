@@ -65,8 +65,9 @@ def test_entrypoint_site_creation_exits_on_unexpected_failure() -> None:
 def test_entrypoint_perm_flag_has_bitmask_comment() -> None:
     """The API token must request the explicit GoatCounter permissions it needs."""
     entrypoint = Path("goatcounter/entrypoint.sh").read_text()
-    assert 'GOATCOUNTER_CREATE_PERMISSIONS="count,site_read"' in entrypoint
-    assert "GOATCOUNTER_REQUIRED_PERMISSIONS=74" in entrypoint
+    # count(2) + export(4) + site_read(8) + stats(64) = 78
+    assert 'GOATCOUNTER_CREATE_PERMISSIONS="count,export,site_read"' in entrypoint
+    assert "GOATCOUNTER_REQUIRED_PERMISSIONS=78" in entrypoint
     assert "update api_tokens set permissions = $GOATCOUNTER_REQUIRED_PERMISSIONS" in entrypoint
     assert "where token = '$TOKEN'" in entrypoint
     assert '-user "$USER_ID"' in entrypoint

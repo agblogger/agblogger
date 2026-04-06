@@ -117,8 +117,7 @@ describe('AnalyticsPanel', () => {
       expect(screen.getByText('Page Views')).toBeInTheDocument()
     })
     expect(screen.getByText('1,234')).toBeInTheDocument()
-    expect(screen.getByText('567')).toBeInTheDocument()
-    // "Visitors" appears in summary card and as column header in breakdown tables
+    // "Visitors" appears as a column header in breakdown tables (not as a summary card)
     expect(screen.getAllByText('Visitors').length).toBeGreaterThan(0)
     expect(screen.getByText('Top Page')).toBeInTheDocument()
     // /posts/hello appears in "Top Page" card AND in table — just check at least one

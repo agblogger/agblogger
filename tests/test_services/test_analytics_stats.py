@@ -686,6 +686,26 @@ def test_breakdown_entry_from_goatcounter_logs_debug_on_missing_keys(
     assert any(r.levelno == logging.DEBUG for r in caplog.records)
 
 
+def test_breakdown_entry_from_goatcounter_uses_id_as_display_name_for_sizes() -> None:
+    """GoatCounter size entries have empty name; the id field carries the category key."""
+
+    # Regression: screen sizes were all showing "Unknown" because the id field was ignored.
+    def name_for(id_val: str) -> str:
+        return BreakdownEntry.from_goatcounter({"id": id_val, "name": "", "count": 1}).name
+
+    assert name_for("phone") == "Phone"
+    assert name_for("tablet") == "Tablet"
+    assert name_for("desktop") == "Desktop"
+    assert name_for("desktophd") == "Desktop HD"
+    assert name_for("unknown") == "Unknown"
+
+
+def test_breakdown_entry_from_goatcounter_uses_raw_id_for_unknown_categories() -> None:
+    """Unknown id values are used as-is when name is blank."""
+    result = BreakdownEntry.from_goatcounter({"id": "somecategory", "name": "", "count": 1})
+    assert result.name == "somecategory"
+
+
 # ── fetch_breakdown_detail ─────────────────────────────────────────────────────
 
 

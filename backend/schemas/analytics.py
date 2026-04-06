@@ -124,6 +124,16 @@ class SiteReferrersResponse(BaseModel):
     referrers: list[ReferrerEntry] = Field(default_factory=list)
 
 
+# GoatCounter returns empty `name` for size entries and uses `id` for the category key.
+_GOATCOUNTER_SIZE_DISPLAY_NAMES: dict[str, str] = {
+    "phone": "Phone",
+    "tablet": "Tablet",
+    "desktop": "Desktop",
+    "desktophd": "Desktop HD",
+    "unknown": "Unknown",
+}
+
+
 class BreakdownEntry(BaseModel):
     """A single breakdown entry (browser, OS, country, etc.)."""
 
@@ -150,7 +160,13 @@ class BreakdownEntry(BaseModel):
             )
         name = entry.get("name", "")
         if not isinstance(name, str) or not name.strip():
-            name = "Unknown"
+            raw_id = entry.get("id", "")
+            raw_id_str = raw_id if isinstance(raw_id, str) else str(raw_id)
+            name = (
+                _GOATCOUNTER_SIZE_DISPLAY_NAMES.get(raw_id_str, raw_id_str)
+                if raw_id_str
+                else "Unknown"
+            )
         raw_count = entry.get("count", 0)
         count = raw_count if isinstance(raw_count, int) else 0
         percent = entry.get("percent")

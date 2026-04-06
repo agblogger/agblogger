@@ -79,9 +79,6 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
   }
   const settingsLoaded = persistedSettings !== undefined
 
-  // GoatCounter's per-path "count" is unique visitors per path, so summing
-  // across paths gives "total page views" — distinct from the site-wide
-  // "Visitors" metric (GoatCounter's "total") which deduplicates across paths.
   const sortedPaths = useMemo(
     () => [...(data?.paths.paths ?? [])].sort((a, b) => b.views - a.views),
     [data],
@@ -158,14 +155,10 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
       ) : (
         <>
           {/* Summary cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="bg-surface border border-border rounded-lg px-5 py-4">
               <p className="text-xs text-muted uppercase tracking-wide mb-1">Page Views</p>
               <p className="text-2xl font-semibold text-ink">{pageViews.toLocaleString()}</p>
-            </div>
-            <div className="bg-surface border border-border rounded-lg px-5 py-4">
-              <p className="text-xs text-muted uppercase tracking-wide mb-1">Visitors</p>
-              <p className="text-2xl font-semibold text-ink">{(data?.stats.visitors ?? 0).toLocaleString()}</p>
             </div>
             <div className="bg-surface border border-border rounded-lg px-5 py-4">
               <p className="text-xs text-muted uppercase tracking-wide mb-1">Top Page</p>
@@ -193,16 +186,16 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
             <BreakdownBarChart title="Operating Systems" entries={data?.operatingSystems.entries ?? []} drillDownCategory="systems" />
           </div>
 
-          {/* Locations + Languages */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <BreakdownTable title="Locations" nameLabel="Country" entries={data?.locations.entries ?? []} />
-            <BreakdownTable title="Languages" nameLabel="Language" entries={data?.languages.entries ?? []} />
-          </div>
-
           {/* Screen Sizes + Campaigns */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <BreakdownBarChart title="Screen Sizes" entries={data?.sizes.entries ?? []} />
             <BreakdownTable title="Campaigns" nameLabel="Campaign" entries={data?.campaigns.entries ?? []} />
+          </div>
+
+          {/* Locations + Languages */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <BreakdownTable title="Locations" nameLabel="Country" entries={data?.locations.entries ?? []} />
+            <BreakdownTable title="Languages" nameLabel="Language" entries={data?.languages.entries ?? []} />
           </div>
         </>
       )}
