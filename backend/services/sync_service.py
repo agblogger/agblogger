@@ -555,7 +555,7 @@ async def merge_post_file(
             merged_body, body_conflicted = await git_service.merge_file_content(
                 base_body, server_body, client_body
             )
-        except (subprocess.TimeoutExpired, subprocess.CalledProcessError) as exc:
+        except (subprocess.TimeoutExpired, subprocess.CalledProcessError, OSError) as exc:
             logger.warning("Git merge failed (%s), using server version", exc, exc_info=True)
             merged_body = server_body
             body_conflicted = True

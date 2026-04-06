@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import logging
 import re
 import subprocess
@@ -46,7 +45,12 @@ class GitService:
         check: bool = True,
         capture_output: bool = True,
     ) -> subprocess.CompletedProcess[str]:
-        """Run a subprocess under asyncio so the event loop owns child reaping."""
+        """Run a subprocess under asyncio so the event loop owns child reaping.
+
+        Converts asyncio TimeoutError to subprocess.TimeoutExpired. Kills the
+        subprocess on any exception (timeout, cancellation, etc.) before re-raising.
+        Non-UTF-8 bytes in output are replaced with U+FFFD and logged.
+        """
         process = await asyncio.create_subprocess_exec(
             *command,
             cwd=cwd,
@@ -60,8 +64,16 @@ class GitService:
             )
         except TimeoutError as exc:
             if process.returncode is None:
-                await self._kill_and_wait_for_process_exit(process, command)
+                try:
+                    await self._kill_and_wait_for_process_exit(process, command)
+                except BaseException:
+                    logger.warning(
+                        "Failed to reap subprocess %s after timeout",
+                        " ".join(command),
+                        exc_info=True,
+                    )
             raise subprocess.TimeoutExpired(cmd=command, timeout=GIT_TIMEOUT_SECONDS) from exc
+        # BaseException, not Exception: must also handle CancelledError and KeyboardInterrupt
         except BaseException:
             if process.returncode is None:
                 logger.warning(
@@ -69,8 +81,15 @@ class GitService:
                     " ".join(command),
                     exc_info=True,
                 )
-                with contextlib.suppress(BaseException):
+                # Best-effort cleanup: if kill/wait fails, the original exception takes priority
+                try:
                     await self._kill_and_wait_for_process_exit(process, command)
+                except BaseException:
+                    logger.warning(
+                        "Failed to kill subprocess %s during exception cleanup",
+                        " ".join(command),
+                        exc_info=True,
+                    )
             raise
 
         if process.returncode is None:
@@ -104,11 +123,11 @@ class GitService:
     async def _kill_and_wait_for_process_exit(
         self, process: asyncio.subprocess.Process, command: list[str]
     ) -> None:
-        """Terminate a subprocess and wait briefly for the OS handle to close."""
+        """Send SIGKILL to a subprocess and wait briefly for the OS handle to close."""
         try:
             process.kill()
-        except ProcessLookupError:
-            logger.debug("Process %s already exited before kill", " ".join(command))
+        except OSError:
+            logger.debug("Failed to kill process %s", " ".join(command), exc_info=True)
         try:
             await asyncio.wait_for(process.wait(), timeout=_POST_KILL_WAIT_SECONDS)
         except TimeoutError:
@@ -162,7 +181,7 @@ class GitService:
         """
         try:
             return await self.commit_all(message)
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
             if isinstance(exc, subprocess.CalledProcessError):
                 logger.error(
                     "Git commit failed (exit %d): %s — %s",
@@ -170,23 +189,42 @@ class GitService:
                     exc.stderr.strip() if exc.stderr else "no stderr",
                     message,
                 )
-            else:
+            elif isinstance(exc, subprocess.TimeoutExpired):
                 logger.error("Git commit timed out: %s", message)
+            else:
+                logger.error("Git subprocess error: %s — %s", exc, message)
             return None
 
     async def head_commit(self) -> str | None:
         """Return the current HEAD commit hash, or None if the repo has no commits."""
         result = await self._run("rev-parse", "HEAD", check=False)
-        if result.returncode != 0:
-            return None
-        return result.stdout.strip()
+        if result.returncode == 0:
+            return result.stdout.strip()
+        # Exit 128 = expected "no commits yet"; other codes are unexpected.
+        if result.returncode != 128:
+            logger.warning(
+                "Unexpected git rev-parse exit code %d: %s",
+                result.returncode,
+                result.stderr.strip(),
+            )
+        return None
 
     async def commit_exists(self, commit_hash: str) -> bool:
         """Check if a commit hash exists in the repo."""
         if not _COMMIT_RE.match(commit_hash):
             return False
         result = await self._run("cat-file", "-t", commit_hash, check=False)
-        return result.returncode == 0 and result.stdout.strip() == "commit"
+        if result.returncode == 0:
+            return result.stdout.strip() == "commit"
+        # Exit 128 = expected "object not found"; other codes are unexpected.
+        if result.returncode != 128:
+            logger.warning(
+                "Unexpected git cat-file exit code %d for %s: %s",
+                result.returncode,
+                commit_hash,
+                result.stderr.strip(),
+            )
+        return False
 
     async def show_file_at_commit(self, commit_hash: str, file_path: str) -> str | None:
         """Return file content at a specific commit, or None if file doesn't exist there.
@@ -240,8 +278,12 @@ class GitService:
                 capture_output=True,
                 cwd=None,
             )
-            # exit 0 = clean merge, positive exit = number of conflicts (capped at 127),
-            # negative exit = signal, exit >= 128 = git error
+            # git merge-file exit codes:
+            #   0      = clean merge
+            #   1..127 = number of conflicts (returned as has_conflicts=True)
+            #   < 0    = killed by signal
+            #   >= 128 = git internal error
+            # Only signal/error codes are treated as failures:
             if result.returncode < 0 or result.returncode >= 128:
                 raise subprocess.CalledProcessError(
                     result.returncode, "git merge-file", result.stdout, result.stderr

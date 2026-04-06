@@ -194,8 +194,8 @@ class TestMergePostFileYAMLDumpsError:
 # ── Issue #12: merge_file_content can raise subprocess.TimeoutExpired ──
 
 
-class TestMergePostFileTimeoutExpired:
-    """subprocess.TimeoutExpired from git merge-file should not crash merge_post_file."""
+class TestMergePostFileSubprocessErrors:
+    """subprocess errors from git merge-file should not crash merge_post_file."""
 
     async def test_timeout_expired_returns_server_with_conflict(self, tmp_path: Path) -> None:
         git = GitService(tmp_path)

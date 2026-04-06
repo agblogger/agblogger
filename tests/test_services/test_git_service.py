@@ -233,7 +233,7 @@ class TestHeadCommitEmptyRepo:
 
 
 class TestGitTimeout:
-    """Async git subprocesses are launched with timeout enforcement."""
+    """Async git subprocesses enforce timeouts and clean up on cancellation."""
 
     async def test_run_uses_asyncio_subprocess_with_timeout(self, tmp_path: Path) -> None:
         gs = GitService(tmp_path)
@@ -431,7 +431,7 @@ class TestRunProcessErrorHandling:
         gs = GitService(tmp_path)
         proc = AsyncMock()
         proc.returncode = None
-        proc.kill = MagicMock()  # kill() is synchronous on asyncio.subprocess.Process
+        proc.kill = MagicMock()
         captured_timeouts: list[float] = []
 
         async def fake_wait_for(
@@ -462,7 +462,7 @@ class TestRunProcessErrorHandling:
         gs = GitService(tmp_path)
         proc = AsyncMock()
         proc.returncode = None
-        proc.kill = MagicMock()  # kill() is synchronous on asyncio.subprocess.Process
+        proc.kill = MagicMock()
 
         async def raise_cancelled(
             awaitable: Coroutine[object, object, object], *, timeout: float
@@ -489,7 +489,7 @@ class TestRunProcessErrorHandling:
     async def test_leaked_handle_logged_when_post_kill_wait_times_out(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ) -> None:
-        """When process.wait() also times out after SIGKILL, an error is logged."""
+        """When process.wait() times out after kill, an error about a leaked handle is logged."""
         gs = GitService(tmp_path)
         proc = AsyncMock()
         proc.returncode = None
@@ -724,16 +724,250 @@ class TestRunProcessErrorHandling:
         assert "Non-UTF-8 bytes in stderr" in caplog.text
 
 
-class TestTryCommitTimeout:
-    """Issue 2: try_commit should catch TimeoutExpired in addition to CalledProcessError."""
+class TestTryCommitErrorHandling:
+    """try_commit catches subprocess errors and logs them instead of raising."""
 
-    async def test_try_commit_catches_timeout(self, tmp_path: Path) -> None:
+    async def test_try_commit_catches_timeout_and_logs(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
         gs = GitService(tmp_path)
         (tmp_path / "file.txt").write_text("hello")
         await gs.init_repo()
 
         timeout_exc = subprocess.TimeoutExpired(cmd=["git", "commit"], timeout=30)
-        with patch.object(gs, "commit_all", new_callable=AsyncMock, side_effect=timeout_exc):
+        with (
+            patch.object(gs, "commit_all", new_callable=AsyncMock, side_effect=timeout_exc),
+            caplog.at_level(logging.ERROR, logger="backend.services.git_service"),
+        ):
             result = await gs.try_commit("test commit")
 
         assert result is None
+        assert "timed out" in caplog.text
+
+    async def test_try_commit_catches_called_process_error_and_logs(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        gs = GitService(tmp_path)
+        (tmp_path / "file.txt").write_text("hello")
+        await gs.init_repo()
+
+        cpe = subprocess.CalledProcessError(1, "git commit", output="", stderr="index.lock exists")
+        with (
+            patch.object(gs, "commit_all", new_callable=AsyncMock, side_effect=cpe),
+            caplog.at_level(logging.ERROR, logger="backend.services.git_service"),
+        ):
+            result = await gs.try_commit("test commit")
+
+        assert result is None
+        assert "exit 1" in caplog.text
+        assert "index.lock exists" in caplog.text
+
+    async def test_try_commit_catches_os_error_and_logs(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """OSError (e.g. FileNotFoundError when git binary is missing) is caught and logged."""
+        gs = GitService(tmp_path)
+        (tmp_path / "file.txt").write_text("hello")
+        await gs.init_repo()
+
+        with (
+            patch.object(
+                gs,
+                "commit_all",
+                new_callable=AsyncMock,
+                side_effect=FileNotFoundError("git: not found"),
+            ),
+            caplog.at_level(logging.ERROR, logger="backend.services.git_service"),
+        ):
+            result = await gs.try_commit("test commit")
+
+        assert result is None
+        assert "git: not found" in caplog.text
+
+
+class TestFileNotFoundPropagation:
+    """FileNotFoundError from create_subprocess_exec propagates through _run_process."""
+
+    async def test_file_not_found_propagates_from_create_subprocess_exec(
+        self, tmp_path: Path
+    ) -> None:
+        gs = GitService(tmp_path)
+
+        with (
+            patch(
+                "backend.services.git_service.asyncio.create_subprocess_exec",
+                new_callable=AsyncMock,
+                side_effect=FileNotFoundError("No such file or directory: 'git'"),
+            ),
+            pytest.raises(FileNotFoundError, match="git"),
+        ):
+            await gs._run("status")
+
+
+class TestTimeoutHandlerKillFailure:
+    """Timeout handler logs and continues when kill-and-wait raises."""
+
+    async def test_timeout_handler_logs_kill_failure_and_raises_timeout_expired(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """If _kill_and_wait raises during timeout cleanup, TimeoutExpired is still raised."""
+        gs = GitService(tmp_path)
+        proc = AsyncMock()
+        proc.returncode = None
+        proc.kill = MagicMock()
+        call_count = 0
+
+        async def fake_wait_for(
+            awaitable: Coroutine[object, object, object], *, timeout: float
+        ) -> object:
+            nonlocal call_count
+            call_count += 1
+            awaitable.close()
+            if call_count == 1:
+                raise TimeoutError()  # communicate() times out
+            raise RuntimeError("broken event loop")  # process.wait() fails unexpectedly
+
+        with (
+            patch(
+                "backend.services.git_service.asyncio.create_subprocess_exec",
+                new_callable=AsyncMock,
+                return_value=proc,
+            ),
+            patch("backend.services.git_service.asyncio.wait_for", side_effect=fake_wait_for),
+            caplog.at_level(logging.WARNING, logger="backend.services.git_service"),
+            pytest.raises(subprocess.TimeoutExpired),
+        ):
+            await gs._run("status")
+
+        assert "Failed to reap subprocess" in caplog.text
+
+
+class TestBaseExceptionHandlerKillLogging:
+    """BaseException handler logs kill failures instead of silently suppressing them."""
+
+    async def test_base_exception_handler_logs_kill_failure(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """If _kill_and_wait raises during cleanup, the failure is logged."""
+        gs = GitService(tmp_path)
+        proc = AsyncMock()
+        proc.returncode = None
+        proc.kill = MagicMock()
+        call_count = 0
+
+        async def fake_wait_for(
+            awaitable: Coroutine[object, object, object], *, timeout: float
+        ) -> object:
+            nonlocal call_count
+            call_count += 1
+            awaitable.close()
+            if call_count == 1:
+                raise asyncio.CancelledError()  # original exception from communicate
+            raise RuntimeError("broken event loop")  # process.wait() fails unexpectedly
+
+        with (
+            patch(
+                "backend.services.git_service.asyncio.create_subprocess_exec",
+                new_callable=AsyncMock,
+                return_value=proc,
+            ),
+            patch(
+                "backend.services.git_service.asyncio.wait_for",
+                side_effect=fake_wait_for,
+            ),
+            caplog.at_level(logging.WARNING, logger="backend.services.git_service"),
+            pytest.raises(asyncio.CancelledError),
+        ):
+            await gs._run("status")
+
+        assert "Failed to kill subprocess" in caplog.text
+
+
+class TestHeadCommitLogging:
+    """head_commit logs unexpected git exit codes."""
+
+    async def test_head_commit_logs_unexpected_exit_code(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        gs = GitService(tmp_path)
+        (tmp_path / "file.txt").write_text("hello")
+        await gs.init_repo()
+
+        bad_result = subprocess.CompletedProcess(
+            ["git", "rev-parse", "HEAD"], returncode=1, stdout="", stderr="unknown error"
+        )
+        with (
+            patch.object(gs, "_run", new_callable=AsyncMock, return_value=bad_result),
+            caplog.at_level(logging.WARNING, logger="backend.services.git_service"),
+        ):
+            result = await gs.head_commit()
+
+        assert result is None
+        assert "Unexpected git rev-parse exit code 1" in caplog.text
+
+    async def test_head_commit_does_not_log_for_exit_128(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Exit 128 (no commits) is expected and should not produce a warning."""
+        gs = GitService(tmp_path)
+
+        no_commits_result = subprocess.CompletedProcess(
+            ["git", "rev-parse", "HEAD"],
+            returncode=128,
+            stdout="",
+            stderr="fatal: bad default revision 'HEAD'",
+        )
+        with (
+            patch.object(gs, "_run", new_callable=AsyncMock, return_value=no_commits_result),
+            caplog.at_level(logging.WARNING, logger="backend.services.git_service"),
+        ):
+            result = await gs.head_commit()
+
+        assert result is None
+        assert "Unexpected" not in caplog.text
+
+
+class TestCommitExistsLogging:
+    """commit_exists logs unexpected git exit codes."""
+
+    async def test_commit_exists_logs_unexpected_exit_code(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        gs = GitService(tmp_path)
+        (tmp_path / "file.txt").write_text("hello")
+        await gs.init_repo()
+
+        bad_result = subprocess.CompletedProcess(
+            ["git", "cat-file", "-t", "abcd1234"], returncode=1, stdout="", stderr="unknown error"
+        )
+        with (
+            patch.object(gs, "_run", new_callable=AsyncMock, return_value=bad_result),
+            caplog.at_level(logging.WARNING, logger="backend.services.git_service"),
+        ):
+            result = await gs.commit_exists("abcd1234")
+
+        assert result is False
+        assert "Unexpected git cat-file exit code 1" in caplog.text
+
+    async def test_commit_exists_does_not_log_for_exit_128(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Exit 128 (object not found) is expected and should not produce a warning."""
+        gs = GitService(tmp_path)
+        (tmp_path / "file.txt").write_text("hello")
+        await gs.init_repo()
+
+        not_found_result = subprocess.CompletedProcess(
+            ["git", "cat-file", "-t", "abcd1234"],
+            returncode=128,
+            stdout="",
+            stderr="fatal: could not get object info",
+        )
+        with (
+            patch.object(gs, "_run", new_callable=AsyncMock, return_value=not_found_result),
+            caplog.at_level(logging.WARNING, logger="backend.services.git_service"),
+        ):
+            result = await gs.commit_exists("abcd1234")
+
+        assert result is False
+        assert "Unexpected" not in caplog.text

@@ -202,3 +202,51 @@ class TestMergeFileContent:
             with pytest.raises(subprocess.CalledProcessError) as exc_info:
                 await git.merge_file_content("base\n", "ours\n", "theirs\n")
             assert exc_info.value.returncode == 128
+
+    async def test_raises_on_negative_exit_code(self, tmp_path: Path) -> None:
+        """Negative exit codes (signal death) from git merge-file are treated as errors."""
+        git = GitService(tmp_path)
+        await git.init_repo()
+
+        proc = AsyncMock()
+        proc.communicate.return_value = (b"", b"")
+        proc.returncode = -9  # killed by SIGKILL
+
+        with patch(
+            "backend.services.git_service.asyncio.create_subprocess_exec",
+            new_callable=AsyncMock,
+            return_value=proc,
+        ):
+            with pytest.raises(subprocess.CalledProcessError) as exc_info:
+                await git.merge_file_content("base\n", "ours\n", "theirs\n")
+            assert exc_info.value.returncode == -9
+
+    async def test_write_failure_still_cleans_up_temp_dir(self, tmp_path: Path) -> None:
+        """If _write_merge_inputs raises, the temp directory is still cleaned up."""
+        git = GitService(tmp_path)
+        await git.init_repo()
+
+        cleanup_called = False
+        original_cleanup = tempfile.TemporaryDirectory.cleanup
+
+        def tracking_cleanup(self: tempfile.TemporaryDirectory[str]) -> None:
+            nonlocal cleanup_called
+            cleanup_called = True
+            original_cleanup(self)
+
+        with (
+            patch(
+                "backend.services.git_service.tempfile.TemporaryDirectory.cleanup",
+                autospec=True,
+                side_effect=tracking_cleanup,
+            ),
+            patch.object(
+                GitService,
+                "_write_merge_inputs",
+                side_effect=OSError("disk full"),
+            ),
+            pytest.raises(OSError, match="disk full"),
+        ):
+            await git.merge_file_content("base\n", "ours\n", "theirs\n")
+
+        assert cleanup_called
