@@ -353,15 +353,6 @@ export interface BreakdownDetailResponse {
   entries: BreakdownDetailEntry[]
 }
 
-export interface ExportCreateResponse {
-  id: number
-}
-
-export interface ExportStatusResponse {
-  id: number
-  finished: boolean
-}
-
 export interface DashboardResponse {
   stats: TotalStatsResponse
   paths: PathHitsResponse

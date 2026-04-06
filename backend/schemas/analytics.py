@@ -242,19 +242,6 @@ class ViewsOverTimeResponse(BaseModel):
     days: list[DailyViewCount] = Field(default_factory=list)
 
 
-class ExportCreateResponse(BaseModel):
-    """Response after creating a CSV export job."""
-
-    id: int = Field(ge=1)
-
-
-class ExportStatusResponse(BaseModel):
-    """Status of a CSV export job."""
-
-    id: int = Field(ge=1)
-    finished: bool
-
-
 class DashboardResponse(BaseModel):
     """All analytics dashboard data in a single response.
 

@@ -6,8 +6,6 @@ import type {
   BreakdownDetailCategory,
   BreakdownDetailResponse,
   DashboardResponse,
-  ExportCreateResponse,
-  ExportStatusResponse,
 } from './client'
 
 export async function fetchAnalyticsSettings(): Promise<AnalyticsSettings> {
@@ -42,16 +40,4 @@ export async function fetchBreakdownDetail(
   return api
     .get(`admin/analytics/stats/${category}/${entryId}`)
     .json<BreakdownDetailResponse>()
-}
-
-export async function fetchCreateExport(): Promise<ExportCreateResponse> {
-  return api.post('admin/analytics/export').json<ExportCreateResponse>()
-}
-
-export async function fetchExportStatus(exportId: number): Promise<ExportStatusResponse> {
-  return api.get(`admin/analytics/export/${exportId}`).json<ExportStatusResponse>()
-}
-
-export async function fetchExportDownload(exportId: number): Promise<Blob> {
-  return api.get(`admin/analytics/export/${exportId}/download`).blob()
 }

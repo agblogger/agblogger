@@ -7,7 +7,6 @@ import re
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
-from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,20 +19,15 @@ from backend.schemas.analytics import (
     BreakdownDetailCategory,
     BreakdownDetailResponse,
     DashboardResponse,
-    ExportCreateResponse,
-    ExportStatusResponse,
     PathReferrersResponse,
     ViewCountResponse,
 )
 from backend.services.analytics_service import (
-    create_export,
-    download_export,
     fetch_breakdown_detail,
     fetch_dashboard,
     fetch_path_referrers,
     fetch_view_count,
     get_analytics_settings,
-    get_export_status,
     update_analytics_settings,
 )
 from backend.utils.datetime import parse_datetime
@@ -178,51 +172,6 @@ async def get_breakdown_detail(
     if result is None:
         raise HTTPException(status_code=503, detail="Analytics service unavailable")
     return result
-
-
-@admin_router.post("/export", response_model=ExportCreateResponse)
-async def create_csv_export(
-    session: Annotated[AsyncSession, Depends(get_session)],
-    _user: Annotated[AdminUser, Depends(require_admin)],
-) -> ExportCreateResponse:
-    """Create a CSV export job on GoatCounter."""
-    result = await create_export(session)
-    if result is None:
-        raise HTTPException(status_code=503, detail="Analytics service unavailable")
-    return result
-
-
-@admin_router.get("/export/{export_id}", response_model=ExportStatusResponse)
-async def get_csv_export_status(
-    export_id: Annotated[int, Path(ge=1)],
-    session: Annotated[AsyncSession, Depends(get_session)],
-    _user: Annotated[AdminUser, Depends(require_admin)],
-) -> ExportStatusResponse:
-    """Check the status of a CSV export job."""
-    result = await get_export_status(session, export_id)
-    if result is None:
-        raise HTTPException(status_code=503, detail="Analytics service unavailable")
-    return result
-
-
-@admin_router.get("/export/{export_id}/download")
-async def download_csv_export(
-    export_id: Annotated[int, Path(ge=1)],
-    session: Annotated[AsyncSession, Depends(get_session)],
-    _user: Annotated[AdminUser, Depends(require_admin)],
-) -> Response:
-    """Download a completed CSV export."""
-    data = await download_export(session, export_id)
-    if data is None:
-        raise HTTPException(status_code=503, detail="Analytics service unavailable")
-    return Response(
-        content=data,
-        media_type="text/csv",
-        headers={
-            "Content-Disposition": f"attachment; filename=analytics-export-{export_id}.csv",
-            "Content-Encoding": "gzip",
-        },
-    )
 
 
 # ── Public endpoints ───────────────────────────────────────────────────────────

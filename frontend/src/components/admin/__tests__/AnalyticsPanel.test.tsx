@@ -443,14 +443,6 @@ describe('AnalyticsPanel', () => {
     expect(screen.getByText('Campaigns')).toBeInTheDocument()
   })
 
-  it('renders Export CSV button', async () => {
-    renderPanel()
-    await waitFor(() => {
-      expect(screen.getByText('Page Views')).toBeInTheDocument()
-    })
-    expect(screen.getByRole('button', { name: /export csv/i })).toBeInTheDocument()
-  })
-
   it('clicking page row in TopPagesPanel expands inline referrer detail', async () => {
     mockFetchPathReferrers.mockResolvedValue({
       path_id: 1,

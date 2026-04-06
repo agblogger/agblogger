@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import gzip
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, patch
 
@@ -126,42 +125,6 @@ class TestNewAnalyticsEndpoints:
     async def test_breakdown_detail_unauthenticated(self, client: AsyncClient) -> None:
         resp = await client.get("/api/admin/analytics/stats/browsers/1")
         assert resp.status_code == 401
-
-    @pytest.mark.asyncio
-    async def test_export_create_unauthenticated(self, client: AsyncClient) -> None:
-        resp = await client.post("/api/admin/analytics/export")
-        assert resp.status_code == 401
-
-    @pytest.mark.asyncio
-    async def test_export_status_unauthenticated(self, client: AsyncClient) -> None:
-        resp = await client.get("/api/admin/analytics/export/1")
-        assert resp.status_code == 401
-
-    @pytest.mark.asyncio
-    async def test_export_download_unauthenticated(self, client: AsyncClient) -> None:
-        resp = await client.get("/api/admin/analytics/export/1/download")
-        assert resp.status_code == 401
-
-    @pytest.mark.asyncio
-    async def test_export_download_returns_gzip_content_encoding(self, client: AsyncClient) -> None:
-        """Download endpoint must advertise Content-Encoding: gzip so clients decompress."""
-        token = await _get_admin_token(client)
-        csv_bytes = b"Path,Title\n/foo,Foo\n"
-        compressed = gzip.compress(csv_bytes)
-        with patch(
-            "backend.api.analytics.download_export",
-            new=AsyncMock(return_value=compressed),
-        ):
-            resp = await client.get(
-                "/api/admin/analytics/export/1/download",
-                headers={"Authorization": f"Bearer {token}"},
-            )
-        assert resp.status_code == 200
-        assert resp.headers["content-encoding"] == "gzip"
-        assert resp.headers["content-type"].startswith("text/csv")
-        # httpx transparently decompresses Content-Encoding: gzip, so resp.content
-        # is the decoded CSV — confirms the server sent valid gzip-encoded data
-        assert resp.content == csv_bytes
 
     @pytest.mark.asyncio
     async def test_breakdown_detail_invalid_category(self, client: AsyncClient) -> None:

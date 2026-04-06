@@ -25,8 +25,6 @@ from backend.schemas.analytics import (
     BreakdownResponse,
     DailyViewCount,
     DashboardResponse,
-    ExportCreateResponse,
-    ExportStatusResponse,
     PathHit,
     PathHitsResponse,
     PathReferrersResponse,
@@ -619,114 +617,6 @@ async def fetch_dashboard(
             else SiteReferrersResponse(referrers=[])
         ),
     )
-
-
-async def create_export(
-    session: AsyncSession,
-) -> ExportCreateResponse | None:
-    """Create a CSV export job on GoatCounter."""
-    settings = await get_analytics_settings(session)
-    if not settings.analytics_enabled:
-        return None
-
-    token = _load_token()
-    if token is None:
-        return None
-
-    try:
-        client = _get_http_client()
-        response = await client.post(
-            f"{GOATCOUNTER_URL}/api/v0/export",
-            json={},
-            headers=_goatcounter_headers(token),
-            timeout=_STATS_TIMEOUT,
-        )
-        response.raise_for_status()
-        data = response.json()
-        export_id = data.get("id")
-        if not isinstance(export_id, int) or export_id <= 0:
-            logger.error(
-                "GoatCounter export creation response missing valid 'id' field: %r",
-                data,
-            )
-            return None
-        return ExportCreateResponse(id=export_id)
-    except _STATS_ERRORS:
-        logger.warning("Failed to create GoatCounter export", exc_info=True)
-        return None
-
-
-async def get_export_status(
-    session: AsyncSession,
-    export_id: int,
-) -> ExportStatusResponse | None:
-    """Check the status of a GoatCounter CSV export job."""
-    settings = await get_analytics_settings(session)
-    if not settings.analytics_enabled:
-        return None
-
-    token = _load_token()
-    if token is None:
-        return None
-
-    try:
-        client = _get_http_client()
-        response = await client.get(
-            f"{GOATCOUNTER_URL}/api/v0/export/{export_id}",
-            headers=_goatcounter_headers(token),
-            timeout=_STATS_TIMEOUT,
-        )
-        response.raise_for_status()
-        data = response.json()
-        response_id = data.get("id")
-        if not isinstance(response_id, int):
-            logger.error(
-                "GoatCounter export status response missing valid 'id' field for export %d: %r",
-                export_id,
-                data,
-            )
-            return None
-        return ExportStatusResponse(
-            id=response_id,
-            finished=data.get("finished_at") is not None,
-        )
-    except _STATS_ERRORS:
-        logger.warning("Failed to check GoatCounter export %d status", export_id, exc_info=True)
-        return None
-
-
-async def download_export(
-    session: AsyncSession,
-    export_id: int,
-) -> bytes | None:
-    """Download a completed GoatCounter CSV export."""
-    settings = await get_analytics_settings(session)
-    if not settings.analytics_enabled:
-        return None
-
-    token = _load_token()
-    if token is None:
-        return None
-
-    try:
-        client = _get_http_client()
-        response = await client.get(
-            f"{GOATCOUNTER_URL}/api/v0/export/{export_id}/download",
-            headers=_goatcounter_headers(token),
-            timeout=_STATS_TIMEOUT,
-        )
-        response.raise_for_status()
-        if response.status_code == 202:
-            logger.warning("GoatCounter export %d not yet ready (202)", export_id)
-            return None
-        content = response.content
-        if not content:
-            logger.warning("GoatCounter returned empty body for export %d download", export_id)
-            return None
-        return content
-    except _STATS_ERRORS:
-        logger.warning("Failed to download GoatCounter export %d", export_id, exc_info=True)
-        return None
 
 
 async def close_analytics_client() -> None:

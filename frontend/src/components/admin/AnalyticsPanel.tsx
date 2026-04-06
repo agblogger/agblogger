@@ -7,7 +7,6 @@ import type { AnalyticsSettings } from '@/api/client'
 import type { DateRange } from '@/hooks/useAnalyticsDashboard'
 import { useAnalyticsDashboard } from '@/hooks/useAnalyticsDashboard'
 import DateRangePicker from './analytics/DateRangePicker'
-import ExportButton from './analytics/ExportButton'
 import ViewsOverTimeChart from './analytics/ViewsOverTimeChart'
 import TopPagesPanel from './analytics/TopPagesPanel'
 import TopReferrersPanel from './analytics/TopReferrersPanel'
@@ -131,7 +130,6 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
             disabled={allBusy || loading || !settingsLoaded}
             onChange={(value) => void handleToggle('show_views_on_posts', value)}
           />
-          <ExportButton disabled={allBusy || loading || !settings.analytics_enabled} />
         </div>
       </div>
 

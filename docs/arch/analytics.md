@@ -43,7 +43,6 @@ The UI surfaces analytics in two places:
   - browser and OS breakdowns with version drill-down, and location and language tables
   - a screen-sizes chart and campaigns table
   - a custom date range picker with common presets
-  - CSV export via GoatCounter's async export API
 - an optional view count in post metadata, controlled by the admin show-views toggle
 
 ## Security Boundaries
@@ -52,11 +51,11 @@ The GoatCounter sidecar is internal to the deployment. Its API token never leave
 
 ## Code Entry Points
 
-- `backend/api/analytics.py` exposes the admin stats proxy and public view-count endpoints, including site-wide referrer aggregation, breakdown version detail, and the three-step CSV export lifecycle (create, poll, download).
+- `backend/api/analytics.py` exposes the admin stats proxy and public view-count endpoints, including site-wide referrer aggregation and breakdown version detail.
 - `backend/services/analytics_service.py` orchestrates hit recording, stats retrieval, and settings management.
 - `backend/models/analytics.py` contains the durable analytics settings table model.
 - `frontend/src/components/admin/AnalyticsPanel.tsx` is the lazy-loaded admin dashboard orchestrator that composes the sub-components below.
-- `frontend/src/components/admin/analytics/` contains analytics sub-components (charts, tables, drill-downs, date picker, export button) that the `AnalyticsPanel.tsx` orchestrator composes into the admin dashboard tab.
+- `frontend/src/components/admin/analytics/` contains analytics sub-components (charts, tables, drill-downs, date picker) that the `AnalyticsPanel.tsx` orchestrator composes into the admin dashboard tab.
 - `frontend/src/hooks/useAnalyticsDashboard.ts` provides composite SWR hooks for the dashboard, including site-wide referrers and breakdown version detail.
 - `frontend/src/api/analytics.ts` contains the analytics API client functions for the admin dashboard and public view counts.
 - `goatcounter/entrypoint.sh` is the sidecar's provisioning and startup script, including site-host normalization from deployment-provided environment.
