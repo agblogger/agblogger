@@ -591,7 +591,14 @@ def build_setup_script_content(config: DeployConfig) -> str:
         and config.shared_caddy_config is not None
         and config.caddy_config is not None
     ):
-        caddy_dir = str(config.shared_caddy_config.caddy_dir)
+        caddy_dir_raw = str(config.shared_caddy_config.caddy_dir)
+        # Convert ~ prefix to $HOME so the path resolves on the remote server, not locally.
+        if caddy_dir_raw == "~":
+            caddy_dir_shell = '"$HOME"'
+        elif caddy_dir_raw.startswith("~/"):
+            caddy_dir_shell = f'"$HOME/{caddy_dir_raw[2:]}"'
+        else:
+            caddy_dir_shell = _bash_quote(caddy_dir_raw)
         caddyfile_content = build_shared_caddyfile_content(
             config.shared_caddy_config.acme_email,
         )
@@ -603,7 +610,7 @@ def build_setup_script_content(config: DeployConfig) -> str:
             [
                 "# ── Bootstrap shared Caddy ───────────────────────────────────────────",
                 'echo "Setting up shared Caddy reverse proxy..."',
-                f"CADDY_DIR={_bash_quote(caddy_dir)}",
+                f"CADDY_DIR={caddy_dir_shell}",
                 "if readlink -f \"$(command -v docker)\" 2>/dev/null | grep -q '^/snap/'; then",
                 '    case "$CADDY_DIR" in',
                 '        "$HOME"/*|./*|../*|~/*) ;;',
@@ -2780,9 +2787,10 @@ def collect_config(project_dir: Path | None = None) -> DeployConfig:
         acme_prompt = f"ACME email for shared Caddy [{default_acme or 'none'}]: "
         acme_input = input(acme_prompt).strip()
         acme_email = acme_input or default_acme
-        shared_caddy_config = SharedCaddyConfig(
-            caddy_dir=Path(shared_caddy_dir).expanduser(), acme_email=acme_email
-        )
+        caddy_dir = Path(shared_caddy_dir)
+        if deployment_mode == DEPLOY_MODE_LOCAL:
+            caddy_dir = caddy_dir.expanduser()
+        shared_caddy_config = SharedCaddyConfig(caddy_dir=caddy_dir, acme_email=acme_email)
     else:
         host_bind_ip = (
             PUBLIC_BIND_IP
@@ -2894,8 +2902,11 @@ def config_from_args(args: argparse.Namespace) -> DeployConfig:
         if args.caddy_external:
             caddy_mode = CADDY_MODE_EXTERNAL
             shared_email = args.shared_caddy_email or args.caddy_email
+            caddy_dir = Path(args.shared_caddy_dir)
+            if args.deployment_mode == DEPLOY_MODE_LOCAL:
+                caddy_dir = caddy_dir.expanduser()
             shared_caddy_config = SharedCaddyConfig(
-                caddy_dir=Path(args.shared_caddy_dir).expanduser(),
+                caddy_dir=caddy_dir,
                 acme_email=shared_email,
             )
             host_bind_ip = LOCALHOST_BIND_IP

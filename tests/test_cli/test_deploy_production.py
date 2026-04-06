@@ -3659,6 +3659,39 @@ def test_config_from_args_external_caddy_with_explicit_shared_email() -> None:
     assert config.shared_caddy_config.acme_email == "global@example.com"
 
 
+def test_config_from_args_external_caddy_remote_keeps_tilde() -> None:
+    """For remote deploys, caddy_dir with ~ must not be expanded to local home."""
+    args = argparse.Namespace(
+        secret_key="s" * 64,
+        admin_username="admin",
+        admin_password="strong-password!",
+        admin_display_name=None,
+        caddy_domain="blog.example.com",
+        caddy_email="ops@example.com",
+        caddy_public=False,
+        caddy_external=True,
+        shared_caddy_dir=DEFAULT_SHARED_CADDY_DIR,
+        shared_caddy_email=None,
+        trusted_hosts="blog.example.com",
+        trusted_proxy_ips=None,
+        host_port=8000,
+        bind_public=False,
+        expose_docs=False,
+        deployment_mode=DEPLOY_MODE_TARBALL,
+        image_ref="ghcr.io/example/agblogger:v1.0",
+        bundle_dir=DEFAULT_BUNDLE_DIR,
+        tarball_filename=DEFAULT_IMAGE_TARBALL,
+        platform=None,
+        skip_scan=False,
+        max_content_size=None,
+        disable_password_change=False,
+    )
+    config = config_from_args(args)
+    assert config.shared_caddy_config is not None
+    # Path must not be expanded on the local machine
+    assert config.shared_caddy_config.caddy_dir == Path(DEFAULT_SHARED_CADDY_DIR)
+
+
 # ── Task 17: dry_run and print_config_summary for external Caddy ──────
 
 
@@ -3843,6 +3876,52 @@ class TestCollectConfigExternalCaddy:
         assert config.shared_caddy_config is not None
         assert config.shared_caddy_config.caddy_dir == Path(DEFAULT_SHARED_CADDY_DIR).expanduser()
         assert config.shared_caddy_config.acme_email == "ops@example.com"
+
+    def test_remote_deploy_keeps_tilde_unexpanded(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """For remote deploy modes, caddy_dir with ~ must not be expanded to local home."""
+        from cli.deploy_production import collect_config
+
+        _stub_no_trivy(monkeypatch)
+
+        inputs = iter(
+            [
+                "admin",  # admin username
+                "",  # admin display name (default=admin)
+                "tarball",  # deployment mode
+                "ghcr.io/example/agblogger:v1.0",  # image ref
+                DEFAULT_IMAGE_TARBALL,  # tarball filename
+                "external",  # caddy mode
+                "blog.example.com",  # caddy domain
+                "ops@example.com",  # caddy email
+                DEFAULT_SHARED_CADDY_DIR,  # shared caddy dir
+                "",  # acme email (use default)
+                "blog.example.com",  # trusted hosts
+                "",  # extra proxy ips
+                "n",  # expose docs
+                "",  # max content size (unlimited)
+                "y",  # deploy GoatCounter
+            ]
+        )
+        getpass_inputs = iter(
+            [
+                "x" * 64,  # secret key (≥32 chars)
+                "strong-password!",  # admin password
+                "strong-password!",  # admin password confirmation
+            ]
+        )
+        monkeypatch.setattr("builtins.input", lambda _prompt: next(inputs))
+        monkeypatch.setattr(
+            "cli.deploy_production.getpass.getpass",
+            lambda _prompt: next(getpass_inputs),
+        )
+
+        config = collect_config(tmp_path)
+
+        assert config.shared_caddy_config is not None
+        # Path must not be expanded on the local machine for remote deploys
+        assert config.shared_caddy_config.caddy_dir == Path(DEFAULT_SHARED_CADDY_DIR)
 
 
 # ── Health timeout message ───────────────────────────────────────────
@@ -4765,6 +4844,28 @@ class TestBuildSetupScript:
         assert "mkdir -p" in script
         assert "CADDY_DIR='/opt/caddy'" in script
         assert 'mkdir -p "$CADDY_DIR/sites"' in script
+
+    def test_external_caddy_tilde_path_uses_home_variable(self) -> None:
+        """Tilde in caddy_dir must resolve to remote $HOME, not local home."""
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+            caddy_config=CaddyConfig(domain="blog.example.com", email="admin@example.com"),
+            caddy_mode=CADDY_MODE_EXTERNAL,
+            shared_caddy_config=SharedCaddyConfig(
+                caddy_dir=Path("~/.local/share/caddy"),
+                acme_email=None,
+            ),
+        )
+        script = build_setup_script_content(config)
+        lines = script.split("\n")
+        # The CADDY_DIR= assignment line must use $HOME (double-quoted) for remote expansion
+        assert any(line == 'CADDY_DIR="$HOME/.local/share/caddy"' for line in lines)
+        # Must NOT embed the local machine's expanded home path in CADDY_DIR= assignment
+        import os
+
+        local_home = os.path.expanduser("~")
+        assert not any(line.startswith(f"CADDY_DIR='{local_home}") for line in lines)
         # Shared Caddyfile heredoc
         assert "import /etc/caddy/sites/*.caddy" in script
         # Shared compose heredoc
