@@ -549,6 +549,27 @@ class TestSyncGitFailure:
         assert data["status"] == "error"
         assert any("git commit failed" in warning.lower() for warning in data["warnings"])
 
+    @pytest.mark.asyncio
+    async def test_sync_commit_permission_error_returns_warning(
+        self, client: AsyncClient
+    ) -> None:
+        """PermissionError (OSError subclass) from commit_all is caught and returns 200 with warning."""
+        token = await login(client)
+        with patch(
+            "backend.api.sync.GitService.commit_all",
+            new_callable=AsyncMock,
+            side_effect=PermissionError(13, "read-only filesystem"),
+        ):
+            resp = await client.post(
+                "/api/sync/commit",
+                data={"metadata": '{"deleted_files": [], "last_sync_commit": null}'},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "error"
+        assert any("git commit failed" in warning.lower() for warning in data["warnings"])
+
 
 class TestSyncConfigReloadFailure:
     """Sync commit handles config reload failure gracefully with a warning."""
@@ -1600,3 +1621,29 @@ class TestSyncStatusHeadCommitFailure:
             )
         assert resp.status_code == 200
         assert resp.json()["server_commit"] is None
+
+    @pytest.mark.asyncio
+    async def test_sync_status_returns_null_server_commit_on_oserror(
+        self, client: AsyncClient
+    ) -> None:
+        """OSError from head_commit is caught and returns 200 with null server_commit."""
+        token = await login(client)
+        headers = {"Authorization": f"Bearer {token}"}
+
+        with patch(
+            "backend.api.sync.GitService.head_commit",
+            new_callable=AsyncMock,
+            side_effect=PermissionError(13, "permission denied"),
+        ):
+            resp = await client.post(
+                "/api/sync/status",
+                json={"client_manifest": []},
+                headers=headers,
+            )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["server_commit"] is None
+        assert any(
+            "git" in w.lower() or "history" in w.lower()
+            for w in data.get("warnings", [])
+        )
