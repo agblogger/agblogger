@@ -138,6 +138,40 @@ class TestMergeFileContent:
         assert cleanup_threads
         assert all(thread_id != main_thread for thread_id in cleanup_threads)
 
+    async def test_temp_dir_cleanup_oserror_is_logged_and_result_still_returned(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """When temp_dir.cleanup() raises OSError, the merge result is still returned."""
+        import logging
+
+        git = GitService(tmp_path)
+        await git.init_repo()
+
+        original_cleanup = tempfile.TemporaryDirectory.cleanup
+
+        def failing_cleanup(self: tempfile.TemporaryDirectory[str]) -> None:
+            original_cleanup(self)
+            raise OSError("simulated cleanup failure")
+
+        with (
+            patch(
+                "backend.services.git_service.tempfile.TemporaryDirectory.cleanup",
+                autospec=True,
+                side_effect=failing_cleanup,
+            ),
+            caplog.at_level(logging.WARNING, logger="backend.services.git_service"),
+        ):
+            merged, conflicted = await git.merge_file_content(
+                "line1\nline2\nline3\n",
+                "line1 changed\nline2\nline3\n",
+                "line1\nline2\nline3 changed\n",
+            )
+
+        assert not conflicted
+        assert "line1 changed" in merged
+        assert "line3 changed" in merged
+        assert "Failed to clean up temp dir" in caplog.text
+
     async def test_merge_preserves_non_ascii_content(self, tmp_path: Path) -> None:
         """Merge must correctly handle non-ASCII characters (CJK, emoji, accented)."""
         git = GitService(tmp_path)

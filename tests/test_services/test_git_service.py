@@ -357,7 +357,7 @@ class TestRunProcessErrorHandling:
         await gs.init_repo()
 
         proc = AsyncMock()
-        proc.communicate.return_value = (b"output that should be ignored", b"")
+        proc.communicate.return_value = (None, b"")
         proc.returncode = 0
 
         with patch(
@@ -376,6 +376,7 @@ class TestRunProcessErrorHandling:
         gs = GitService(tmp_path)
         proc = AsyncMock()
         proc.returncode = 0  # already exited; no kill needed
+        proc.kill = MagicMock()
 
         async def raise_timeout(
             awaitable: Coroutine[object, object, object], *, timeout: float
@@ -393,6 +394,8 @@ class TestRunProcessErrorHandling:
             pytest.raises(subprocess.TimeoutExpired),
         ):
             await gs._run("status")
+
+        proc.kill.assert_not_called()
 
     async def test_timeout_raises_timeout_expired_when_kill_raises_process_lookup_error(
         self, tmp_path: Path
@@ -585,7 +588,7 @@ class TestRunProcessErrorHandling:
         """capture_output=False discards stdout but preserves stderr."""
         gs = GitService(tmp_path)
         proc = AsyncMock()
-        proc.communicate.return_value = (b"ignored", b"stderr content")
+        proc.communicate.return_value = (None, b"stderr content")
         proc.returncode = 0
 
         with patch(
@@ -597,6 +600,128 @@ class TestRunProcessErrorHandling:
 
         assert result.stdout == ""
         assert result.stderr == "stderr content"
+
+    async def test_capture_output_false_uses_devnull_for_stdout(self, tmp_path: Path) -> None:
+        """capture_output=False creates subprocess with stdout=DEVNULL."""
+        gs = GitService(tmp_path)
+        proc = AsyncMock()
+        proc.communicate.return_value = (None, b"")
+        proc.returncode = 0
+
+        with patch(
+            "backend.services.git_service.asyncio.create_subprocess_exec",
+            new_callable=AsyncMock,
+            return_value=proc,
+        ) as mock_exec:
+            await gs._run("status", capture_output=False, check=False)
+
+        assert mock_exec.await_args is not None
+        assert mock_exec.await_args.kwargs["stdout"] == asyncio.subprocess.DEVNULL
+
+    async def test_capture_output_true_uses_pipe_for_stdout(self, tmp_path: Path) -> None:
+        """capture_output=True (default) creates subprocess with stdout=PIPE."""
+        gs = GitService(tmp_path)
+        proc = AsyncMock()
+        proc.communicate.return_value = (b"output", b"")
+        proc.returncode = 0
+
+        with patch(
+            "backend.services.git_service.asyncio.create_subprocess_exec",
+            new_callable=AsyncMock,
+            return_value=proc,
+        ) as mock_exec:
+            await gs._run("status", check=False)
+
+        assert mock_exec.await_args is not None
+        assert mock_exec.await_args.kwargs["stdout"] == asyncio.subprocess.PIPE
+
+    async def test_cancelled_error_skips_kill_when_process_already_exited(
+        self, tmp_path: Path
+    ) -> None:
+        """BaseException handler does not call kill() if returncode is already set."""
+        gs = GitService(tmp_path)
+        proc = AsyncMock()
+        proc.returncode = 0  # already exited
+        proc.kill = MagicMock()
+
+        async def raise_cancelled(
+            awaitable: Coroutine[object, object, object], *, timeout: float
+        ) -> object:
+            awaitable.close()
+            raise asyncio.CancelledError()
+
+        with (
+            patch(
+                "backend.services.git_service.asyncio.create_subprocess_exec",
+                new_callable=AsyncMock,
+                return_value=proc,
+            ),
+            patch(
+                "backend.services.git_service.asyncio.wait_for",
+                side_effect=raise_cancelled,
+            ),
+            pytest.raises(asyncio.CancelledError),
+        ):
+            await gs._run("status")
+
+        proc.kill.assert_not_called()
+
+    async def test_base_exception_handler_suppresses_kill_failure(self, tmp_path: Path) -> None:
+        """If _kill_and_wait_for_process_exit raises, the original exception still propagates."""
+        gs = GitService(tmp_path)
+        proc = AsyncMock()
+        proc.returncode = None
+        proc.kill = MagicMock()
+
+        call_count = 0
+
+        async def raise_cancelled_then_timeout(
+            awaitable: Coroutine[object, object, object], *, timeout: float
+        ) -> object:
+            nonlocal call_count
+            call_count += 1
+            awaitable.close()
+            if call_count == 1:
+                raise asyncio.CancelledError()  # original exception from communicate
+            raise TimeoutError()  # kill_and_wait's process.wait() times out
+
+        with (
+            patch(
+                "backend.services.git_service.asyncio.create_subprocess_exec",
+                new_callable=AsyncMock,
+                return_value=proc,
+            ),
+            patch(
+                "backend.services.git_service.asyncio.wait_for",
+                side_effect=raise_cancelled_then_timeout,
+            ),
+            pytest.raises(asyncio.CancelledError),
+        ):
+            await gs._run("status")
+
+        proc.kill.assert_called_once()
+
+    async def test_non_utf8_stderr_logged_with_capture_output_false(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Non-UTF-8 bytes in stderr trigger a warning even when capture_output=False."""
+        gs = GitService(tmp_path)
+        proc = AsyncMock()
+        proc.communicate.return_value = (None, b"\x80 bad stderr")
+        proc.returncode = 0
+
+        with (
+            patch(
+                "backend.services.git_service.asyncio.create_subprocess_exec",
+                new_callable=AsyncMock,
+                return_value=proc,
+            ),
+            caplog.at_level(logging.WARNING, logger="backend.services.git_service"),
+        ):
+            result = await gs._run("status", capture_output=False, check=False)
+
+        assert "\ufffd" in result.stderr
+        assert "Non-UTF-8 bytes in stderr" in caplog.text
 
 
 class TestTryCommitTimeout:

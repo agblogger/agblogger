@@ -218,6 +218,27 @@ class TestMergePostFileTimeoutExpired:
         parsed = fm.loads(result.merged_content)
         assert "server different line" in parsed.content
 
+    async def test_called_process_error_returns_server_with_conflict(self, tmp_path: Path) -> None:
+        git = GitService(tmp_path)
+        await git.init_repo()
+
+        meta = {"title": "T"}
+        base = _make_post(meta, "base line\n")
+        server = _make_post(meta, "server different line\n")
+        client = _make_post(meta, "client different line\n")
+
+        with patch.object(
+            git,
+            "merge_file_content",
+            new_callable=AsyncMock,
+            side_effect=subprocess.CalledProcessError(128, "git merge-file"),
+        ):
+            result = await merge_post_file(base, server, client, git)
+
+        assert result.body_conflicted
+        parsed = fm.loads(result.merged_content)
+        assert "server different line" in parsed.content
+
 
 # ── Issue #13: update_label checks cycles against stale edges ──
 

@@ -50,7 +50,7 @@ class GitService:
         process = await asyncio.create_subprocess_exec(
             *command,
             cwd=cwd,
-            stdout=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE if capture_output else asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.PIPE,
         )
         try:
@@ -69,7 +69,7 @@ class GitService:
                     " ".join(command),
                     exc_info=True,
                 )
-                with contextlib.suppress(Exception):
+                with contextlib.suppress(BaseException):
                     await self._kill_and_wait_for_process_exit(process, command)
             raise
 
@@ -79,8 +79,8 @@ class GitService:
             msg = f"Process {' '.join(command)} finished without a return code"
             logger.error(msg)
             raise RuntimeError(msg)
-        stdout = stdout_bytes.decode("utf-8", errors="replace") if capture_output else ""
-        stderr = stderr_bytes.decode("utf-8", errors="replace")
+        stdout = stdout_bytes.decode("utf-8", errors="replace") if stdout_bytes else ""
+        stderr = stderr_bytes.decode("utf-8", errors="replace") if stderr_bytes else ""
         if capture_output and "\ufffd" in stdout:
             logger.warning(
                 "Non-UTF-8 bytes in stdout of %s replaced with U+FFFD",
@@ -111,11 +111,12 @@ class GitService:
             logger.debug("Process %s already exited before kill", " ".join(command))
         try:
             await asyncio.wait_for(process.wait(), timeout=_POST_KILL_WAIT_SECONDS)
-        except BaseException:
+        except TimeoutError:
             logger.error(
                 "Process %s did not exit after SIGKILL within %ss; handle leaked",
                 " ".join(command),
                 _POST_KILL_WAIT_SECONDS,
+                exc_info=True,
             )
 
     async def init_repo(self) -> None:
