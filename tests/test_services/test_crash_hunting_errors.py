@@ -190,6 +190,41 @@ class TestMergePostFileYAMLDumpsError:
 
         assert result.merged_content == server
 
+    async def test_yaml_dumps_error_is_logged_at_error_level(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """YAMLError in fm.dumps must be logged at ERROR level, not WARNING."""
+        import logging
+
+        import yaml
+
+        git = GitService(tmp_path)
+        await git.init_repo()
+
+        meta = {"title": "T"}
+        base = _make_post(meta, "Base body.\n")
+        server = _make_post(meta, "Server body.\n")
+        client = _make_post(meta, "Server body.\n")
+
+        with (
+            patch(
+                "backend.services.sync_service.fm.dumps",
+                side_effect=yaml.YAMLError("yaml fail"),
+            ),
+            caplog.at_level(logging.WARNING, logger="backend.services.sync_service"),
+        ):
+            await merge_post_file(base, server, client, git)
+
+        yaml_error_records = [
+            r
+            for r in caplog.records
+            if "yaml" in r.message.lower() or "serialize" in r.message.lower()
+        ]
+        assert yaml_error_records, f"Expected log about YAML error; got: {caplog.text}"
+        assert all(r.levelno == logging.ERROR for r in yaml_error_records), (
+            f"Expected ERROR level, got: {[r.levelname for r in yaml_error_records]}"
+        )
+
 
 # ── Issue #12: merge_file_content can raise subprocess.TimeoutExpired ──
 
@@ -238,6 +273,61 @@ class TestMergePostFileSubprocessErrors:
         assert result.body_conflicted
         parsed = fm.loads(result.merged_content)
         assert "server different line" in parsed.content
+
+    async def test_oserror_returns_server_with_conflict(self, tmp_path: Path) -> None:
+        """OSError (e.g. disk full before git runs) falls back to server content."""
+        git = GitService(tmp_path)
+        await git.init_repo()
+
+        meta = {"title": "T"}
+        base = _make_post(meta, "base line\n")
+        server = _make_post(meta, "server different line\n")
+        client = _make_post(meta, "client different line\n")
+
+        with patch.object(
+            git,
+            "merge_file_content",
+            new_callable=AsyncMock,
+            side_effect=OSError("disk full"),
+        ):
+            result = await merge_post_file(base, server, client, git)
+
+        assert result.body_conflicted
+        parsed = fm.loads(result.merged_content)
+        assert "server different line" in parsed.content
+
+
+class TestMergePostFileConflictMarkers:
+    """When merge_file_content succeeds with conflicts, markers are preserved in merged_content."""
+
+    async def test_conflict_markers_preserved_when_merge_succeeds_with_conflicts(
+        self, tmp_path: Path
+    ) -> None:
+        """If merge_file_content returns conflict-marker text, that text should appear in result."""
+        git = GitService(tmp_path)
+        await git.init_repo()
+
+        meta = {"title": "T"}
+        base = _make_post(meta, "base line\n")
+        server = _make_post(meta, "server different line\n")
+        client = _make_post(meta, "client different line\n")
+
+        conflict_text = (
+            "<<<<<<< ours\nserver different line\n=======\nclient different line\n>>>>>>> theirs\n"
+        )
+
+        with patch.object(
+            git,
+            "merge_file_content",
+            new_callable=AsyncMock,
+            return_value=(conflict_text, True),
+        ):
+            result = await merge_post_file(base, server, client, git)
+
+        assert result.body_conflicted
+        # Conflict markers must be preserved — not silently replaced by server_body
+        assert "<<<<<<<" in result.merged_content
+        assert "client different line" in result.merged_content
 
 
 # ── Issue #13: update_label checks cycles against stale edges ──

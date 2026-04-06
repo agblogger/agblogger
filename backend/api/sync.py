@@ -234,7 +234,7 @@ async def sync_status(
     status_warnings: list[str] = []
     try:
         server_commit = await git_service.head_commit()
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError) as exc:
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
         logger.error("Failed to read git HEAD during sync status: %s", exc)
         status_warnings.append(
             "Git history unavailable; sync may not detect all changes correctly."
@@ -528,7 +528,7 @@ async def _sync_commit_inner(
     username = user.display_name or user.username
     try:
         await git_service.commit_all(f"Sync commit by {username}")
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError) as exc:
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
         logger.error("Git commit failed during sync by %s: %s", username, exc)
         sync_warnings.append(
             "Git commit failed; sync history may be degraded. "
@@ -569,7 +569,7 @@ async def _sync_commit_inner(
     if not git_failed:
         try:
             commit_hash = await git_service.head_commit()
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError) as exc:
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
             logger.error("Failed to read git HEAD after sync commit: %s", exc)
             sync_warnings.append(
                 "Failed to read commit hash after sync; data was committed successfully "
@@ -619,7 +619,7 @@ async def _get_base_content(
             exc.stderr.strip() if exc.stderr else "no stderr",
         )
         return None
-    except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
+    except (subprocess.TimeoutExpired, OSError) as exc:
         logger.error(
             "Git error retrieving base for %s at %s: %s",
             file_path,

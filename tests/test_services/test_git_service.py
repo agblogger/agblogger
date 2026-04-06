@@ -971,3 +971,166 @@ class TestCommitExistsLogging:
 
         assert result is False
         assert "Unexpected" not in caplog.text
+
+
+class TestCreateSubprocessExecOSErrorLogging:
+    """OSError from create_subprocess_exec is logged at ERROR level and propagated."""
+
+    async def test_os_error_from_create_subprocess_exec_is_logged_at_error(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """PermissionError from create_subprocess_exec is logged at ERROR and re-raised."""
+        gs = GitService(tmp_path)
+
+        with (
+            patch(
+                "backend.services.git_service.asyncio.create_subprocess_exec",
+                new_callable=AsyncMock,
+                side_effect=PermissionError("permission denied: git"),
+            ),
+            caplog.at_level(logging.ERROR, logger="backend.services.git_service"),
+            pytest.raises(PermissionError, match="permission denied"),
+        ):
+            await gs._run("status")
+
+        assert "Failed to launch subprocess" in caplog.text
+
+
+class TestKillAndWaitOSErrorLogging:
+    """process.kill() raising OSError is logged at WARNING, not DEBUG."""
+
+    async def test_kill_oserror_is_logged_at_warning(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A plain OSError (e.g. PermissionError) from kill() is logged at WARNING level."""
+        gs = GitService(tmp_path)
+        proc = AsyncMock()
+        proc.returncode = None
+        proc.kill = MagicMock(side_effect=PermissionError("operation not permitted"))
+        call_count = 0
+
+        async def raise_timeout_then_complete(awaitable: object, *, timeout: float) -> object:
+            nonlocal call_count
+            call_count += 1
+            if hasattr(awaitable, "close"):
+                awaitable.close()
+            if call_count == 1:
+                raise TimeoutError()
+            # Second call: process.wait() — return normally
+            return -9
+
+        with (
+            patch(
+                "backend.services.git_service.asyncio.create_subprocess_exec",
+                new_callable=AsyncMock,
+                return_value=proc,
+            ),
+            patch(
+                "backend.services.git_service.asyncio.wait_for",
+                side_effect=raise_timeout_then_complete,
+            ),
+            caplog.at_level(logging.WARNING, logger="backend.services.git_service"),
+            pytest.raises(subprocess.TimeoutExpired),
+        ):
+            await gs._run("status")
+
+        warning_records = [r for r in caplog.records if r.levelno == logging.WARNING]
+        kill_warnings = [
+            r
+            for r in warning_records
+            if "kill" in r.message.lower() or "sigkill" in r.message.lower()
+        ]
+        assert kill_warnings, f"Expected WARNING log about kill failure; got: {caplog.text}"
+
+
+class TestWriteMergeInputsErrorLogging:
+    """OSError from _write_merge_inputs is logged with specific context before propagating."""
+
+    async def test_write_inputs_oserror_triggers_error_log(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """When _write_merge_inputs raises OSError, an ERROR log about file writing is emitted."""
+        gs = GitService(tmp_path)
+        await gs.init_repo()
+
+        with (
+            patch.object(
+                GitService,
+                "_write_merge_inputs",
+                side_effect=OSError("No space left on device"),
+            ),
+            caplog.at_level(logging.ERROR, logger="backend.services.git_service"),
+            pytest.raises(OSError, match="No space left"),
+        ):
+            await gs.merge_file_content("base\n", "ours\n", "theirs\n")
+
+        assert "Failed to write merge input files" in caplog.text
+
+
+class TestCommitAllHeadCommitNoneLogging:
+    """commit_all logs an error when head_commit() returns None after a successful commit."""
+
+    async def test_logs_error_when_head_commit_returns_none_after_commit(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """If head_commit() returns None after a successful git commit, an ERROR is logged."""
+        gs = GitService(tmp_path)
+        (tmp_path / "file.txt").write_text("hello")
+        await gs.init_repo()
+        (tmp_path / "new.txt").write_text("content")
+
+        with (
+            patch.object(gs, "head_commit", new_callable=AsyncMock, return_value=None),
+            caplog.at_level(logging.ERROR, logger="backend.services.git_service"),
+        ):
+            result = await gs.commit_all("test commit")
+
+        assert result is None
+        assert "HEAD could not be resolved" in caplog.text
+
+
+class TestTryCommitOSErrorErrno:
+    """try_commit logs errno and traceback for OSError."""
+
+    async def test_try_commit_os_error_logs_errno(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """OSError in try_commit is logged using an explicit errno format string."""
+        import errno as errno_mod
+
+        gs = GitService(tmp_path)
+        (tmp_path / "file.txt").write_text("hello")
+        await gs.init_repo()
+
+        exc = PermissionError(errno_mod.EACCES, "permission denied")
+        with (
+            patch.object(gs, "commit_all", new_callable=AsyncMock, side_effect=exc),
+            caplog.at_level(logging.ERROR, logger="backend.services.git_service"),
+        ):
+            result = await gs.try_commit("test commit")
+
+        assert result is None
+        # The log message must use an explicit "(errno N)" format, not just str(exc)
+        assert "(errno" in caplog.text
+
+    async def test_try_commit_os_error_logs_traceback(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """OSError in try_commit is logged with exc_info so the traceback is preserved."""
+        gs = GitService(tmp_path)
+        (tmp_path / "file.txt").write_text("hello")
+        await gs.init_repo()
+
+        with (
+            patch.object(
+                gs,
+                "commit_all",
+                new_callable=AsyncMock,
+                side_effect=OSError("disk error"),
+            ),
+            caplog.at_level(logging.ERROR, logger="backend.services.git_service"),
+        ):
+            await gs.try_commit("test commit")
+
+        error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
+        assert any(r.exc_info is not None and r.exc_info[0] is not None for r in error_records)

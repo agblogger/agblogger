@@ -559,15 +559,17 @@ async def merge_post_file(
             logger.warning("Git merge failed (%s), using server version", exc, exc_info=True)
             merged_body = server_body
             body_conflicted = True
-        if body_conflicted:
-            merged_body = server_body
 
     # Reassemble
     merged_post = fm.Post(merged_body, **fm_result.merged)
     try:
         merged_content = fm.dumps(merged_post) + "\n"
     except yaml.YAMLError as exc:
-        logger.warning("Failed to serialize merged post: %s", exc)
+        logger.error(
+            "Failed to serialize merged post; falling back to server content: %s",
+            exc,
+            exc_info=True,
+        )
         merged_content = server
 
     return PostMergeResult(

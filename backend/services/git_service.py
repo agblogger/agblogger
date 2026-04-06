@@ -51,12 +51,21 @@ class GitService:
         subprocess on any exception (timeout, cancellation, etc.) before re-raising.
         Non-UTF-8 bytes in output are replaced with U+FFFD and logged.
         """
-        process = await asyncio.create_subprocess_exec(
-            *command,
-            cwd=cwd,
-            stdout=asyncio.subprocess.PIPE if capture_output else asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.PIPE,
-        )
+        try:
+            process = await asyncio.create_subprocess_exec(
+                *command,
+                cwd=cwd,
+                stdout=asyncio.subprocess.PIPE if capture_output else asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.PIPE,
+            )
+        except OSError as exc:
+            logger.error(
+                "Failed to launch subprocess %s: %s",
+                " ".join(command),
+                exc,
+                exc_info=True,
+            )
+            raise
         try:
             stdout_bytes, stderr_bytes = await asyncio.wait_for(
                 process.communicate(),
@@ -127,7 +136,9 @@ class GitService:
         try:
             process.kill()
         except OSError:
-            logger.debug("Failed to kill process %s", " ".join(command), exc_info=True)
+            logger.warning(
+                "Failed to send SIGKILL to subprocess %s", " ".join(command), exc_info=True
+            )
         try:
             await asyncio.wait_for(process.wait(), timeout=_POST_KILL_WAIT_SECONDS)
         except TimeoutError:
@@ -171,7 +182,13 @@ class GitService:
             if result.returncode == 0:
                 return None
             await self._run("commit", "-m", message)
-            return await self.head_commit()
+            commit_hash = await self.head_commit()
+            if commit_hash is None:
+                logger.error(
+                    "Git commit succeeded but HEAD could not be resolved for message: %s",
+                    message,
+                )
+            return commit_hash
 
     async def try_commit(self, message: str) -> str | None:
         """Stage and commit, logging an error on failure instead of raising.
@@ -192,7 +209,13 @@ class GitService:
             elif isinstance(exc, subprocess.TimeoutExpired):
                 logger.error("Git commit timed out: %s", message)
             else:
-                logger.error("Git subprocess error: %s — %s", exc, message)
+                logger.error(
+                    "Git subprocess OSError (errno %s): %s — %s",
+                    exc.errno,
+                    exc,
+                    message,
+                    exc_info=True,
+                )
             return None
 
     async def head_commit(self) -> str | None:
@@ -262,15 +285,24 @@ class GitService:
             base_f = tmp / "base"
             ours_f = tmp / "ours"
             theirs_f = tmp / "theirs"
-            await asyncio.to_thread(
-                self._write_merge_inputs,
-                base_f,
-                base,
-                ours_f,
-                ours,
-                theirs_f,
-                theirs,
-            )
+            try:
+                await asyncio.to_thread(
+                    self._write_merge_inputs,
+                    base_f,
+                    base,
+                    ours_f,
+                    ours,
+                    theirs_f,
+                    theirs,
+                )
+            except OSError as exc:
+                logger.error(
+                    "Failed to write merge input files to %s: %s",
+                    tmp,
+                    exc,
+                    exc_info=True,
+                )
+                raise
 
             result = await self._run_process(
                 ["git", "merge-file", "-p", str(ours_f), str(base_f), str(theirs_f)],
