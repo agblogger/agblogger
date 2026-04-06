@@ -553,7 +553,7 @@ class TestSyncGitFailure:
     async def test_sync_commit_permission_error_returns_warning(
         self, client: AsyncClient
     ) -> None:
-        """PermissionError (OSError subclass) from commit_all is caught and returns 200 with warning."""
+        """PermissionError from commit_all is caught and returns 200 with a warning."""
         token = await login(client)
         with patch(
             "backend.api.sync.GitService.commit_all",
