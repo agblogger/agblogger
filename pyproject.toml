@@ -1,6 +1,6 @@
 [project]
 name = "agblogger"
-version = "0.1.1"
+version = "0.1.2"
 description = "A markdown-first blogging platform with bidirectional sync, label DAG, and cross-posting"
 requires-python = ">=3.14"
 license = "MIT"
