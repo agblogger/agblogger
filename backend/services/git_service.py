@@ -165,7 +165,7 @@ class GitService:
                 if result.returncode != 0:
                     await self._run("commit", "-m", "Initial commit")
                     logger.info("Created initial commit for existing content")
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError) as exc:
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
             logger.error(
                 "Failed to initialize git repo in %s: %s. "
                 "Ensure 'git' is installed and the content directory is writable.",

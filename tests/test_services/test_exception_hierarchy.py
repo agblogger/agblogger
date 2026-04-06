@@ -104,6 +104,51 @@ class TestGitServiceInitRepoTimeoutExpired:
         assert any("git" in r.message.lower() for r in caplog.records)
 
 
+class TestGitServiceInitRepoOSError:
+    """init_repo must catch OSError (superset of FileNotFoundError)."""
+
+    async def test_init_repo_catches_permission_error(self, tmp_path: Path) -> None:
+        from backend.services.git_service import GitService
+
+        content_dir = tmp_path / "content"
+        content_dir.mkdir()
+        gs = GitService(content_dir)
+
+        with (
+            patch.object(
+                gs,
+                "_run",
+                side_effect=PermissionError(13, "permission denied"),
+            ),
+            pytest.raises(PermissionError),
+        ):
+            await gs.init_repo()
+
+    async def test_init_repo_logs_permission_error(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        import logging
+
+        from backend.services.git_service import GitService
+
+        content_dir = tmp_path / "content"
+        content_dir.mkdir()
+        gs = GitService(content_dir)
+
+        with (
+            patch.object(
+                gs,
+                "_run",
+                side_effect=PermissionError(13, "permission denied"),
+            ),
+            caplog.at_level(logging.ERROR, logger="backend.services.git_service"),
+            pytest.raises(PermissionError),
+        ):
+            await gs.init_repo()
+
+        assert any("git" in r.message.lower() for r in caplog.records)
+
+
 class TestPandocRetryPreservesExceptionChain:
     """Pandoc retry must preserve the exception chain, not discard with `from None`."""
 
