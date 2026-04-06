@@ -427,12 +427,20 @@ async def _sync_commit_inner(
                     )
                 labels_result = merge_labels_toml(base_content, server_content, client_text)
 
-                if labels_result.field_conflicts:
+                real_field_conflicts = [
+                    fc for fc in labels_result.field_conflicts if not fc.startswith("_")
+                ]
+                if "_parse_error" in labels_result.field_conflicts:
+                    sync_warnings.append(
+                        "Could not parse labels.toml during merge; "
+                        "your version was kept but the file may be corrupted."
+                    )
+                if real_field_conflicts:
                     conflicts.append(
                         SyncConflictInfo(
                             file_path=target_path,
                             body_conflicted=False,
-                            field_conflicts=labels_result.field_conflicts,
+                            field_conflicts=real_field_conflicts,
                         )
                     )
 

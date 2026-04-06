@@ -1051,3 +1051,89 @@ class TestGetBaseContentGitErrors:
             "merge base" in w.lower() or "three-way" in w.lower()
             for w in data.get("warnings", [])
         ), f"Expected merge base warning; got: {data.get('warnings')}"
+
+
+class TestLabelsTomlParseErrorSentinel:
+    """_parse_error sentinel must not appear in the API response field_conflicts."""
+
+    async def test_parse_error_sentinel_not_in_api_response(
+        self, merge_client: AsyncClient, merge_settings: Settings
+    ) -> None:
+        """When labels.toml merge returns _parse_error, it must not appear in conflicts."""
+        from backend.services.sync_service import LabelsMergeResult
+
+        token = await _login(merge_client)
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # Write a server-side labels.toml so the merge branch is triggered
+        content_dir = merge_settings.content_dir
+        (content_dir / "labels.toml").write_text(
+            "[labels]\n[labels.foo]\nnames = ['foo']\n", encoding="utf-8"
+        )
+        client_labels = "[labels]\n[labels.bar]\nnames = ['bar']\n"
+
+        with patch(
+            "backend.api.sync.merge_labels_toml",
+            return_value=LabelsMergeResult(
+                merged_content="[labels]\n", field_conflicts=["_parse_error"]
+            ),
+        ):
+            resp = await merge_client.post(
+                "/api/sync/commit",
+                data={"metadata": json.dumps({"deleted_files": [], "last_sync_commit": None})},
+                files=[
+                    (
+                        "files",
+                        ("labels.toml", io.BytesIO(client_labels.encode()), "text/plain"),
+                    ),
+                ],
+                headers=headers,
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        for conflict in data.get("conflicts", []):
+            assert "_parse_error" not in conflict.get("field_conflicts", []), (
+                "_parse_error is an internal sentinel and must not appear in API response"
+            )
+
+    async def test_parse_error_adds_sync_warning(
+        self, merge_client: AsyncClient, merge_settings: Settings
+    ) -> None:
+        """When _parse_error occurs, a human-readable warning appears in the response."""
+        from backend.services.sync_service import LabelsMergeResult
+
+        token = await _login(merge_client)
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # Write a server-side labels.toml so the merge branch is triggered
+        content_dir = merge_settings.content_dir
+        (content_dir / "labels.toml").write_text(
+            "[labels]\n[labels.foo]\nnames = ['foo']\n", encoding="utf-8"
+        )
+        client_labels = "[labels]\n[labels.bar]\nnames = ['bar']\n"
+
+        with patch(
+            "backend.api.sync.merge_labels_toml",
+            return_value=LabelsMergeResult(
+                merged_content="[labels]\n", field_conflicts=["_parse_error"]
+            ),
+        ):
+            resp = await merge_client.post(
+                "/api/sync/commit",
+                data={"metadata": json.dumps({"deleted_files": [], "last_sync_commit": None})},
+                files=[
+                    (
+                        "files",
+                        ("labels.toml", io.BytesIO(client_labels.encode()), "text/plain"),
+                    ),
+                ],
+                headers=headers,
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert any(
+            "labels" in w.lower() and ("parse" in w.lower() or "corrupt" in w.lower())
+            for w in data.get("warnings", [])
+        ), f"Expected labels parse warning; got warnings: {data.get('warnings')}"
