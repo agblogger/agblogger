@@ -1,16 +1,32 @@
 # ── Bootstrap ───────────────────────────────────────────────────────
 
-# Set up a fresh worktree: deps, env file, and local db directory
+# Bootstrap prerequisites (idempotent: silent no-op when everything is already set up)
 setup:
-    @echo "── Backend: sync dependencies ──"
-    uv sync --extra dev
-    @echo "\n── Frontend: install dependencies ──"
-    cd frontend && npm install
-    @echo "\n── Environment: ensure .env exists ──"
-    if [ -f .env ]; then echo ".env already exists (leaving as-is)"; else cp .env.example .env && echo "Created .env from .env.example"; fi
-    @echo "\n── Database: ensure local dir exists ──"
-    mkdir -p data/db
-    @echo "\n✓ Fresh worktree setup complete"
+    #!/usr/bin/env bash
+    set -euo pipefail
+    did_something=0
+    if [ ! -d .venv ]; then
+        echo "── Backend: sync dependencies ──"
+        uv sync --extra dev
+        did_something=1
+    fi
+    if [ ! -d frontend/node_modules ]; then
+        echo "── Frontend: install dependencies ──"
+        (cd frontend && npm install)
+        did_something=1
+    fi
+    if [ ! -f .env ]; then
+        cp .env.example .env
+        echo "Created .env from .env.example"
+        did_something=1
+    fi
+    if [ ! -d data/db ]; then
+        mkdir -p data/db
+        did_something=1
+    fi
+    if [ "$did_something" -eq 1 ]; then
+        echo "✓ Setup complete"
+    fi
 
 # Remove generated artifacts, local runtime state, reports, and content
 clean:
@@ -528,7 +544,7 @@ frontend_port := "5173"
 localdir := justfile_directory() / ".local"
 
 # Start backend and frontend in the background (override ports: just start backend_port=9000 frontend_port=9173)
-start:
+start: setup
     python3 -m cli.dev_server start --localdir "{{ localdir }}" --backend-port "{{ backend_port }}" --frontend-port "{{ frontend_port }}"
 
 # Stop the running dev server
