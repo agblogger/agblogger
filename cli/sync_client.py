@@ -188,7 +188,7 @@ def format_plan_summary(plan: dict[str, Any]) -> str:
     for f in plan.get("to_delete_remote", []):
         lines.append(f"  - {f} (delete remote)")
     for c in plan.get("conflicts", []):
-        lines.append(f"  ! {c['file_path']} (reconcile on sync)")
+        lines.append(f"  ~ {c['file_path']} (both modified)")
     return "\n".join(lines)
 
 
@@ -760,7 +760,7 @@ def main() -> None:
                 print(f"  To download:      {len(plan.get('to_download', []))}")
                 print(f"  To delete local:  {len(plan.get('to_delete_local', []))}")
                 print(f"  To delete remote: {len(plan.get('to_delete_remote', []))}")
-                print(f"  Conflicts:        {len(plan.get('conflicts', []))}")
+                print(f"  Both modified:    {len(plan.get('conflicts', []))}")
 
                 for f in plan.get("to_upload", []):
                     print(f"    + {f} (upload)")
@@ -771,7 +771,7 @@ def main() -> None:
                 for f in plan.get("to_delete_remote", []):
                     print(f"    - {f} (delete remote)")
                 for c in plan.get("conflicts", []):
-                    print(f"    ! {c['file_path']} (reconcile on sync)")
+                    print(f"    ~ {c['file_path']} (both modified)")
 
             elif args.command == "sync":
                 plan = client.status()
