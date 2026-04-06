@@ -65,7 +65,7 @@ function VersionDetail({
             {data.entries.map((e) => (
               <tr key={e.name} className="border-b border-border last:border-0">
                 <td className="py-1 pr-4 text-ink">{e.name}</td>
-                <td className="py-1 text-right text-ink">{e.percent.toFixed(1)}%</td>
+                <td className="py-1 text-right text-ink">{Math.round(e.percent)}%</td>
               </tr>
             ))}
           </tbody>
@@ -101,11 +101,11 @@ export default function BreakdownBarChart({
         <p className="text-muted text-sm">No data.</p>
       ) : (
         <>
-          <ResponsiveContainer width="100%" height={Math.max(100, topEntries.length * 24)}>
+          <ResponsiveContainer width="100%" height={Math.max(120, topEntries.length * 30)}>
             <BarChart
               data={topEntries}
               layout="vertical"
-              margin={{ left: 0, right: 8, top: 0, bottom: 0 }}
+              margin={{ left: 0, right: 8, top: 8, bottom: 0 }}
               onClick={(chartData) => {
                 if (chartData.activeTooltipIndex != null && typeof chartData.activeTooltipIndex === 'number') {
                   handleBarClick(null, chartData.activeTooltipIndex)
@@ -119,7 +119,7 @@ export default function BreakdownBarChart({
                 tick={{ fontSize: 10 }}
                 width={70}
               />
-              <Tooltip formatter={(v) => [`${v as number}%`, 'Share']} />
+              <Tooltip formatter={(v) => [`${Math.round(v as number)}%`, 'Share']} />
               <Bar
                 dataKey="percent"
                 fill="var(--color-accent, #6366f1)"

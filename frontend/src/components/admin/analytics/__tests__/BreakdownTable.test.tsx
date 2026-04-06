@@ -29,10 +29,10 @@ describe('BreakdownTable', () => {
     render(<BreakdownTable title="Locations" nameLabel="Country" entries={DEFAULT_ENTRIES} />)
     expect(screen.getByText('United States')).toBeInTheDocument()
     expect(screen.getByText('1,200')).toBeInTheDocument()
-    expect(screen.getByText('60.0%')).toBeInTheDocument()
+    expect(screen.getByText('60%')).toBeInTheDocument()
     expect(screen.getByText('Germany')).toBeInTheDocument()
     expect(screen.getByText('400')).toBeInTheDocument()
-    expect(screen.getByText('20.0%')).toBeInTheDocument()
+    expect(screen.getByText('20%')).toBeInTheDocument()
   })
 
   it('shows "No data." when entries is empty', () => {

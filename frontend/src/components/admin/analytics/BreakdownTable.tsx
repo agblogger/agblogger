@@ -27,7 +27,7 @@ export default function BreakdownTable({ title, nameLabel, entries }: BreakdownT
                 <tr key={e.name} className="border-b border-border last:border-0">
                   <td className="py-2 pr-4 text-ink">{e.name}</td>
                   <td className="py-2 pr-4 text-right text-ink">{e.count.toLocaleString()}</td>
-                  <td className="py-2 text-right text-ink">{e.percent.toFixed(1)}%</td>
+                  <td className="py-2 text-right text-ink">{Math.round(e.percent)}%</td>
                 </tr>
               ))}
             </tbody>
