@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 # Ensure all durable model modules are imported so their tables register
 # on DurableBase.metadata before autogenerate runs.
 import backend.models.crosspost
+import backend.models.sync
 import backend.models.user
 
 # Import DurableBase so Alembic sees only durable table metadata.

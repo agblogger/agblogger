@@ -5,10 +5,10 @@ from __future__ import annotations
 from sqlalchemy import Integer, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
-from backend.models.base import CacheBase
+from backend.models.base import DurableBase
 
 
-class SyncManifest(CacheBase):
+class SyncManifest(DurableBase):
     """Sync manifest entry tracking file state at last sync."""
 
     __tablename__ = "sync_manifest"

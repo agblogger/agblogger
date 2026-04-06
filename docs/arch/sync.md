@@ -42,5 +42,5 @@ The sync client is a separate CLI companion that uses the same authenticated API
 
 - `backend/api/sync.py` defines the sync HTTP endpoints.
 - `backend/services/sync_service.py` contains sync planning, merge, and commit orchestration.
-- `backend/models/sync.py` contains the sync manifest model and `backend/api/sync.py` defines sync-specific request/response schemas inline.
+- `backend/models/sync.py` contains the sync manifest model (`SyncManifest`, a `DurableBase` table) and `backend/api/sync.py` defines sync-specific request/response schemas inline.
 - `cli/sync_client.py` implements the local companion client.

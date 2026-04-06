@@ -35,6 +35,7 @@ class TestAlembicMigration:
         "social_accounts",
         "cross_posts",
         "analytics_settings",
+        "sync_manifest",
     }
 
     CACHE_TABLES: ClassVar[set[str]] = {
@@ -42,7 +43,6 @@ class TestAlembicMigration:
         "labels_cache",
         "label_parents_cache",
         "post_labels_cache",
-        "sync_manifest",
     }
 
     async def test_run_durable_migrations_creates_durable_tables(
@@ -119,7 +119,6 @@ class TestCacheTableSetup:
             "labels_cache",
             "label_parents_cache",
             "post_labels_cache",
-            "sync_manifest",
             "posts_fts",
         }
         assert expected_cache.issubset(table_names)
@@ -145,7 +144,6 @@ class TestCacheTableSetup:
             "labels_cache",
             "label_parents_cache",
             "post_labels_cache",
-            "sync_manifest",
             "posts_fts",
         }
         assert expected_cache.issubset(table_names)
@@ -197,6 +195,49 @@ class TestCacheTableSetup:
 
         assert len(rows) == 1
         assert rows[0][0] == "testuser"
+
+    async def test_sync_manifest_preserved_across_cache_table_setup(
+        self,
+        db_engine: AsyncEngine,
+    ) -> None:
+        """sync_manifest data must survive setup_cache_tables (it is durable, not a cache).
+
+        Regression test: sync_manifest was previously in CacheBase and was cleared on every
+        server restart, causing files modified server-side to show as conflicts instead of
+        downloads on the next sync.
+        """
+        from backend.main import run_durable_migrations, setup_cache_tables
+
+        await run_durable_migrations(db_engine)
+        await setup_cache_tables(db_engine)
+
+        async with db_engine.begin() as conn:
+            await conn.execute(
+                text(
+                    "INSERT INTO sync_manifest"
+                    " (file_path, content_hash, file_size, file_mtime, synced_at)"
+                    " VALUES (:file_path, :content_hash, :file_size, :file_mtime, :synced_at)"
+                ),
+                {
+                    "file_path": "posts/test/index.md",
+                    "content_hash": "abc123",
+                    "file_size": 100,
+                    "file_mtime": "1.0",
+                    "synced_at": "2026-01-01T00:00:00",
+                },
+            )
+
+        # Simulate server restart: setup_cache_tables is called again
+        await setup_cache_tables(db_engine)
+
+        async with db_engine.connect() as conn:
+            result = await conn.execute(text("SELECT COUNT(*) FROM sync_manifest"))
+            count = result.scalar()
+
+        assert count == 1, (
+            "sync_manifest was cleared by setup_cache_tables — "
+            "it must be durable to preserve sync state across server restarts"
+        )
 
 
 class TestMigrationSchemaMatch:
@@ -658,6 +699,7 @@ class TestTablePartitionInvariants:
             "social_accounts",
             "cross_posts",
             "analytics_settings",
+            "sync_manifest",
         }
         assert set(DurableBase.metadata.tables.keys()) == expected
 
@@ -670,7 +712,6 @@ class TestTablePartitionInvariants:
             "labels_cache",
             "label_parents_cache",
             "post_labels_cache",
-            "sync_manifest",
             "pages_cache",
         }
         assert set(CacheBase.metadata.tables.keys()) == expected

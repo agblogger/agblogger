@@ -13,7 +13,8 @@ if TYPE_CHECKING:
 class DurableBase(DeclarativeBase):
     """Base class for durable tables managed by Alembic migrations.
 
-    Tables: admin_users, admin_refresh_tokens, social_accounts, cross_posts, analytics_settings.
+    Tables: admin_users, admin_refresh_tokens, social_accounts, cross_posts,
+    analytics_settings, sync_manifest.
     """
 
 
@@ -21,7 +22,7 @@ class CacheBase(DeclarativeBase):
     """Base class for cache tables dropped and regenerated on startup.
 
     Tables: posts_cache, pages_cache, labels_cache, label_parents_cache,
-    post_labels_cache, sync_manifest.
+    post_labels_cache.
     """
 
 
