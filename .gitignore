@@ -43,6 +43,7 @@ reports/
 .env
 .env.*
 !.env.example
+deploy-blog.sh
 
 # ── Database ────────────────────────────────────────────────────────
 *.db
