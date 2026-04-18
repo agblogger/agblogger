@@ -22,7 +22,7 @@ dependencies = [
     "tomli-w>=1.1",
     # Auth
     "pyjwt>=2.12",
-    "cryptography>=46.0.6",
+    "cryptography>=46.0.7",
     "bcrypt>=4.0",
     # Validation & settings
     "pydantic[email]>=2.10",
@@ -35,13 +35,13 @@ dependencies = [
     "httpx>=0.28",
     "httpcore>=1.0,<2",
     # Multipart file uploads
-    "python-multipart>=0.0.20",
+    "python-multipart>=0.0.26",
     "grapheme>=0.6.0",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.3",
+    "pytest>=9.0.3",
     "pytest-asyncio>=0.25",
     "pytest-cov>=6.0",
     "httpx>=0.28",

@@ -110,7 +110,7 @@ class TestFormatPlanSummary:
 
     def test_conflict(self) -> None:
         result = format_plan_summary(_plan(conflicts=[{"file_path": "posts/c/index.md"}]))
-        assert "  ! posts/c/index.md (reconcile on sync)" in result
+        assert "  ~ posts/c/index.md (both modified)" in result
 
     def test_empty_plan(self) -> None:
         assert format_plan_summary(_plan()) == ""
