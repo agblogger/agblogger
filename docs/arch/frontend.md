@@ -21,7 +21,7 @@ SWR handles most server data fetching and caching; Zustand coordinates session, 
 
 Single-resource reads (individual posts, pages, label detail) use SWR hooks for caching and revalidation. Paginated and filtered views (timeline, search) use manual `useEffect`+`useState` because their query parameters change frequently with URL param sync.
 
-The timeline route treats the URL as the canonical filter state. Pagination, label filters, author filters, and date filters all round-trip through query params, with date ranges encoded as API-ready UTC/ISO timestamps in the URL while the UI still renders local `YYYY-MM-DD` input values.
+The timeline route treats the URL as the canonical filter state. Pagination, label filters, and date filters all round-trip through query params, with date ranges encoded as API-ready UTC/ISO timestamps in the URL while the UI still renders local `YYYY-MM-DD` input values.
 
 Auth-sensitive reads scope their cache key by user ID so the cache invalidates on login/logout. Write operations always use direct API calls.
 

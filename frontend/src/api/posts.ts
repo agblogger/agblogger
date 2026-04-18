@@ -15,7 +15,6 @@ export interface PostListParams {
   labels?: string
   labelMode?: 'or' | 'and'
   includeSublabels?: boolean
-  author?: string
   from?: string
   to?: string
   sort?: 'created_at' | 'modified_at' | 'title' | 'author'

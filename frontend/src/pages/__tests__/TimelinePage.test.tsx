@@ -505,14 +505,13 @@ describe('TimelinePage', () => {
   it('passes filter params from URL to fetchPosts', async () => {
     mockFetchPosts.mockResolvedValue(postsResponse)
     renderTimeline(
-      `/?labels=swe,cs&author=Admin&from=${encodeURIComponent(localDateToUtcStart('2026-01-01'))}&to=${encodeURIComponent(localDateToUtcEnd('2026-02-01'))}`,
+      `/?labels=swe,cs&from=${encodeURIComponent(localDateToUtcStart('2026-01-01'))}&to=${encodeURIComponent(localDateToUtcEnd('2026-02-01'))}`,
     )
 
     await waitFor(() => {
       expect(mockFetchPosts).toHaveBeenCalledWith(
         expect.objectContaining({
           labels: 'swe,cs',
-          author: 'Admin',
           from: localDateToUtcStart('2026-01-01'),
           to: localDateToUtcEnd('2026-02-01'),
         }),

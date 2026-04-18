@@ -1070,7 +1070,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         labels: str | None = None,
         label_mode: Literal["and", "or"] | None = Query(None, alias="labelMode"),
         include_sublabels: bool = Query(False, alias="includeSublabels"),
-        author: str | None = None,
         from_date: str | None = Query(None, alias="from"),
         to_date: str | None = Query(None, alias="to"),
     ) -> HTMLResponse:
@@ -1114,7 +1113,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         labels=labels.split(",") if labels else None,
                         label_mode=label_mode or "or",
                         include_descendants=include_sublabels,
-                        author=author,
                         from_date=from_date,
                         to_date=to_date,
                         include_drafts=is_authenticated,

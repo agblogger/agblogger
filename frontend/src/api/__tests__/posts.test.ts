@@ -32,7 +32,6 @@ describe('fetchPosts', () => {
     const params = options.searchParams
     expect(params.has('page')).toBe(true)
     expect(params.has('label')).toBe(false)
-    expect(params.has('author')).toBe(false)
   })
 
   it('converts all param values to strings', async () => {
@@ -45,12 +44,11 @@ describe('fetchPosts', () => {
   })
 
   it('passes string params unchanged', async () => {
-    await fetchPosts({ label: 'swe', author: 'Admin', sort: 'created_at', order: 'desc' })
+    await fetchPosts({ label: 'swe', sort: 'created_at', order: 'desc' })
 
     const [, options] = mockGet.mock.calls[0] as [string, { searchParams: URLSearchParams }]
     const params = options.searchParams
     expect(params.get('label')).toBe('swe')
-    expect(params.get('author')).toBe('Admin')
     expect(params.get('sort')).toBe('created_at')
     expect(params.get('order')).toBe('desc')
   })

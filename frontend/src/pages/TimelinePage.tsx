@@ -56,7 +56,6 @@ export default function TimelinePage() {
     labels: searchParams.get('labels')?.split(',').filter(Boolean) ?? [],
     labelMode: parsedLabelMode,
     includeSublabels: searchParams.get('includeSublabels') === 'true',
-    author: searchParams.get('author') ?? '',
     fromDate: utcTimestampToLocalDateInput(urlFromDate),
     toDate: utcTimestampToLocalDateInput(urlToDate),
   }), [searchParams, parsedLabelMode, urlFromDate, urlToDate])
@@ -70,7 +69,6 @@ export default function TimelinePage() {
       if (f.labels.length > 0) params.set('labels', f.labels.join(','))
       if (f.labelMode !== 'or') params.set('labelMode', f.labelMode)
       if (f.includeSublabels) params.set('includeSublabels', 'true')
-      if (f.author) params.set('author', f.author)
       if (f.fromDate) params.set('from', localDateToUtcStart(f.fromDate))
       if (f.toDate) params.set('to', localDateToUtcEnd(f.toDate))
       // Reset page when filters change
@@ -92,7 +90,6 @@ export default function TimelinePage() {
     const labelModeParam = searchParams.get('labelMode')
     const labelMode: 'or' | 'and' = labelModeParam === 'and' ? 'and' : 'or'
     const includeSublabels = searchParams.get('includeSublabels') === 'true'
-    const author = searchParams.get('author') ?? ''
     const fromDate = searchParams.get('from') ?? ''
     const toDate = searchParams.get('to') ?? ''
 
@@ -107,7 +104,6 @@ export default function TimelinePage() {
         if (labels.length > 0) params.labels = labels.join(',')
         if (labelMode !== 'or') params.labelMode = labelMode
         if (includeSublabels) params.includeSublabels = true
-        if (author) params.author = author
         if (fromDate) params.from = fromDate
         if (toDate) params.to = toDate
         const d = await fetchPosts(params)
@@ -272,7 +268,7 @@ export default function TimelinePage() {
       ) : !data || data.posts.length === 0 ? (
         <div className="text-center py-24">
           <FileText size={48} className="mx-auto text-muted/40 mb-4" />
-          {filterState.labels.length > 0 || filterState.author || filterState.fromDate || filterState.toDate ? (
+          {filterState.labels.length > 0 || filterState.fromDate || filterState.toDate ? (
             <>
               <p className="font-display text-2xl text-muted italic">No posts found</p>
               <p className="text-sm text-muted mt-2">Try adjusting your filters.</p>

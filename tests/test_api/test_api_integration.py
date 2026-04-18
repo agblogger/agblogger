@@ -137,6 +137,16 @@ class TestPosts:
         assert "Hello World" in titles
 
     @pytest.mark.asyncio
+    async def test_author_query_param_does_not_filter_posts(self, client: AsyncClient) -> None:
+        resp = await client.get("/api/posts", params={"author": "admin"})
+        assert resp.status_code == 200
+        data = resp.json()
+        titles = [p["title"] for p in data["posts"]]
+        assert "Hello World" in titles
+        assert "No Author Post" in titles
+        assert "Directory Post" in titles
+
+    @pytest.mark.asyncio
     async def test_get_post(self, client: AsyncClient) -> None:
         resp = await client.get("/api/posts/posts/hello/index.md")
         assert resp.status_code == 200
@@ -322,25 +332,14 @@ class TestFiltering:
             assert "swe" in post["labels"]
 
     @pytest.mark.asyncio
-    async def test_filter_by_author(self, client: AsyncClient) -> None:
+    async def test_author_query_param_is_ignored(self, client: AsyncClient) -> None:
         resp = await client.get("/api/posts", params={"author": "Admin"})
         assert resp.status_code == 200
         data = resp.json()
-        assert data["total"] >= 1
-
-    @pytest.mark.asyncio
-    async def test_filter_by_author_case_insensitive(self, client: AsyncClient) -> None:
-        resp = await client.get("/api/posts", params={"author": "admin"})
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["total"] >= 1
-
-    @pytest.mark.asyncio
-    async def test_filter_by_author_partial_match(self, client: AsyncClient) -> None:
-        resp = await client.get("/api/posts", params={"author": "Adm"})
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["total"] >= 1
+        titles = [p["title"] for p in data["posts"]]
+        assert "Hello World" in titles
+        assert "No Author Post" in titles
+        assert "Directory Post" in titles
 
     @pytest.mark.asyncio
     async def test_filter_by_date_range(self, client: AsyncClient) -> None:
@@ -350,11 +349,14 @@ class TestFiltering:
         assert data["total"] >= 1
 
     @pytest.mark.asyncio
-    async def test_filter_no_results(self, client: AsyncClient) -> None:
+    async def test_unknown_author_still_does_not_filter(self, client: AsyncClient) -> None:
         resp = await client.get("/api/posts", params={"author": "Nonexistent"})
         assert resp.status_code == 200
         data = resp.json()
-        assert data["total"] == 0
+        titles = [p["title"] for p in data["posts"]]
+        assert "Hello World" in titles
+        assert "No Author Post" in titles
+        assert "Directory Post" in titles
 
     @pytest.mark.asyncio
     async def test_label_mode_or(self, client: AsyncClient) -> None:

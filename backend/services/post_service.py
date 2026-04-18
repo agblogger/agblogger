@@ -83,7 +83,6 @@ async def list_posts(
     labels: list[str] | None = None,
     label_mode: Literal["or", "and"] = "or",
     include_descendants: bool = False,
-    author: str | None = None,
     from_date: str | None = None,
     to_date: str | None = None,
     include_drafts: bool = False,
@@ -97,10 +96,6 @@ async def list_posts(
 
     if not include_drafts:
         stmt = stmt.where(PostCache.is_draft.is_(False))
-
-    if author:
-        escaped = author.replace("%", r"\%").replace("_", r"\_")
-        stmt = stmt.where(_resolved_author.ilike(f"%{escaped}%", escape="\\"))
 
     if from_date:
         try:

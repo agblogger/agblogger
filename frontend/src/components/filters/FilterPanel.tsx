@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { X, Calendar, User, Tag } from 'lucide-react'
+import { X, Calendar, Tag } from 'lucide-react'
 import { filterLabelsBySearch } from '@/components/labels/searchUtils'
 import { useFilterPanelStore } from '@/stores/filterPanelStore'
 import { useLabels } from '@/hooks/useLabels'
@@ -8,7 +8,6 @@ export interface FilterState {
   labels: string[]
   labelMode: 'or' | 'and'
   includeSublabels: boolean
-  author: string
   fromDate: string
   toDate: string
 }
@@ -17,7 +16,6 @@ const EMPTY_FILTER: FilterState = {
   labels: [],
   labelMode: 'or',
   includeSublabels: false,
-  author: '',
   fromDate: '',
   toDate: '',
 }
@@ -40,16 +38,11 @@ export default function FilterPanel({ value, onChange }: FilterPanelProps) {
   const expanded = panelState === 'open'
 
   useEffect(() => {
-    const count =
-      value.labels.length +
-      (value.author ? 1 : 0) +
-      (value.fromDate ? 1 : 0) +
-      (value.toDate ? 1 : 0)
+    const count = value.labels.length + (value.fromDate ? 1 : 0) + (value.toDate ? 1 : 0)
     setActiveFilterCount(count)
-  }, [value.labels.length, value.author, value.fromDate, value.toDate, setActiveFilterCount])
+  }, [value.labels.length, value.fromDate, value.toDate, setActiveFilterCount])
 
-  const hasActive =
-    value.labels.length > 0 || value.author !== '' || value.fromDate !== '' || value.toDate !== ''
+  const hasActive = value.labels.length > 0 || value.fromDate !== '' || value.toDate !== ''
 
   const filteredLabels = useMemo(
     () => filterLabelsBySearch(allLabels, labelSearch),
@@ -83,14 +76,6 @@ export default function FilterPanel({ value, onChange }: FilterPanelProps) {
               </button>
             </span>
           ))}
-          {value.author && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-tag-bg text-tag-text text-xs rounded-md">
-              {value.author}
-              <button onClick={() => onChange({ ...value, author: '' })} className="hover:text-accent">
-                <X size={10} />
-              </button>
-            </span>
-          )}
           {(value.fromDate || value.toDate) && (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-tag-bg text-tag-text text-xs rounded-md">
               {value.fromDate || '...'} - {value.toDate || '...'}
@@ -207,23 +192,6 @@ export default function FilterPanel({ value, onChange }: FilterPanelProps) {
                 />
               </div>
             </div>
-
-            {/* Author */}
-            <div>
-              <div className="flex items-center gap-1.5 text-xs font-mono text-muted uppercase tracking-wider mb-2">
-                <User size={12} />
-                Author
-              </div>
-              <input
-                type="text"
-                value={value.author}
-                onChange={(e) => onChange({ ...value, author: e.target.value })}
-                placeholder="Filter by author..."
-                className="w-full max-w-xs text-sm px-2.5 py-1.5 border border-border rounded-md bg-paper
-                  focus:outline-none focus:border-accent/50"
-              />
-            </div>
-
             {/* Actions */}
             <div className="flex items-center gap-3 pt-2 border-t border-border/50">
               <button

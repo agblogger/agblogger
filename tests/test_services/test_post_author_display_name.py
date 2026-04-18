@@ -141,39 +141,6 @@ class TestListPostsAuthorDisplayName:
         assert result.posts[0].author == "nodisplay"
 
     @pytest.mark.asyncio
-    async def test_filter_by_display_name(self, session: AsyncSession) -> None:
-        """Filtering by author=John should match the display name, not the username."""
-        await _create_user(session, username="admin", display_name="John Smith")
-        await _create_post(session, file_path="posts/a/index.md", title="Post A", author="admin")
-        await session.commit()
-
-        # Should match "John" in display name
-        result = await list_posts(session, author="John")
-        assert len(result.posts) == 1
-        assert result.posts[0].title == "Post A"
-
-        # Should NOT match "admin" (the raw username) when display name is set
-        # Actually, COALESCE means we search the resolved name. "admin" != "John Smith"
-        result_raw = await list_posts(session, author="admin")
-        assert len(result_raw.posts) == 0
-
-    @pytest.mark.asyncio
-    async def test_filter_by_username_fallback(self, session: AsyncSession) -> None:
-        """When user has no display name, filtering by username still works."""
-        await _create_user(session, username="nodisplay", display_name=None)
-        await _create_post(
-            session,
-            file_path="posts/b/index.md",
-            title="Post B",
-            author="nodisplay",
-        )
-        await session.commit()
-
-        result = await list_posts(session, author="nodisplay")
-        assert len(result.posts) == 1
-        assert result.posts[0].title == "Post B"
-
-    @pytest.mark.asyncio
     async def test_sort_by_author_uses_display_name(self, session: AsyncSession) -> None:
         """Sorting by author should sort on the resolved display name."""
         await _create_user(session, username="alice", display_name="Zara")
