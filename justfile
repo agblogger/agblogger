@@ -1,14 +1,15 @@
 # ── Bootstrap ───────────────────────────────────────────────────────
 
-# Bootstrap prerequisites (idempotent: silent no-op when everything is already set up)
+# Bootstrap prerequisites (idempotent: always reconcile Python dev deps; quiet by default)
 setup:
     #!/usr/bin/env bash
     set -euo pipefail
     did_something=0
-    if [ ! -d .venv ]; then
+    if [ "{{ v }}" = "" ]; then
+        uv sync --extra dev >/dev/null 2>&1
+    else
         echo "── Backend: sync dependencies ──"
         uv sync --extra dev
-        did_something=1
     fi
     if [ ! -d frontend/node_modules ]; then
         echo "── Frontend: install dependencies ──"
