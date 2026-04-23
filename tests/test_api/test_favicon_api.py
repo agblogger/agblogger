@@ -65,9 +65,7 @@ class TestUploadFavicon:
         assert (app_settings.content_dir / "assets" / "favicon.png").exists()
 
     @pytest.mark.asyncio
-    async def test_upload_svg_accepted(
-        self, client: AsyncClient, app_settings: Settings
-    ) -> None:
+    async def test_upload_svg_accepted(self, client: AsyncClient, app_settings: Settings) -> None:
         token = await _login(client)
         svg_data = b"<svg xmlns='http://www.w3.org/2000/svg'></svg>"
 
@@ -116,9 +114,7 @@ class TestUploadFavicon:
 
 class TestRemoveFavicon:
     @pytest.mark.asyncio
-    async def test_remove_clears_favicon(
-        self, client: AsyncClient, app_settings: Settings
-    ) -> None:
+    async def test_remove_clears_favicon(self, client: AsyncClient, app_settings: Settings) -> None:
         token = await _login(client)
         # Upload first
         await client.post(
@@ -150,3 +146,81 @@ class TestRemoveFavicon:
     async def test_remove_requires_admin_auth(self, client: AsyncClient) -> None:
         resp = await client.delete("/api/admin/favicon")
         assert resp.status_code == 401
+
+
+class TestPublicFaviconRoute:
+    @pytest.mark.asyncio
+    async def test_returns_404_when_not_configured(self, client: AsyncClient) -> None:
+        resp = await client.get("/favicon.ico")
+        assert resp.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_returns_png_when_configured(
+        self, client: AsyncClient, app_settings: Settings
+    ) -> None:
+        token = await _login(client)
+        png_data = b"\x89PNG\r\n\x1a\n" + b"\x00" * 20
+        await client.post(
+            "/api/admin/favicon",
+            files={"file": ("favicon.png", png_data, "image/png")},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        resp = await client.get("/favicon.ico")
+
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == "image/png"
+        assert resp.content == png_data
+
+    @pytest.mark.asyncio
+    async def test_returns_svg_with_correct_content_type(
+        self, client: AsyncClient, app_settings: Settings
+    ) -> None:
+        token = await _login(client)
+        svg_data = b"<svg xmlns='http://www.w3.org/2000/svg'></svg>"
+        await client.post(
+            "/api/admin/favicon",
+            files={"file": ("icon.svg", svg_data, "image/svg+xml")},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        resp = await client.get("/favicon.ico")
+
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == "image/svg+xml"
+
+
+class TestFaviconHtmlInjection:
+    @pytest.mark.asyncio
+    async def test_index_html_has_no_favicon_link_when_unset(
+        self, client: AsyncClient, app_settings: Settings
+    ) -> None:
+        frontend_dir = app_settings.frontend_dir
+        frontend_dir.mkdir(parents=True, exist_ok=True)
+        (frontend_dir / "index.html").write_text(
+            '<!doctype html><html><head></head><body><div id="root"></div></body></html>'
+        )
+
+        resp = await client.get("/")
+        assert resp.status_code == 200
+        assert '<link rel="icon"' not in resp.text
+
+    @pytest.mark.asyncio
+    async def test_index_html_has_favicon_link_when_set(
+        self, client: AsyncClient, app_settings: Settings
+    ) -> None:
+        frontend_dir = app_settings.frontend_dir
+        frontend_dir.mkdir(parents=True, exist_ok=True)
+        (frontend_dir / "index.html").write_text(
+            '<!doctype html><html><head></head><body><div id="root"></div></body></html>'
+        )
+        token = await _login(client)
+        await client.post(
+            "/api/admin/favicon",
+            files={"file": ("favicon.png", b"\x89PNG\r\n\x1a\n", "image/png")},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        resp = await client.get("/")
+        assert resp.status_code == 200
+        assert '<link rel="icon" href="/favicon.ico">' in resp.text

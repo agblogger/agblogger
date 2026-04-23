@@ -139,6 +139,14 @@ def _markdown_response(
     )
 
 
+def _inject_favicon_link(html: str, favicon: str | None) -> str:
+    """Insert <link rel="icon"> before </head> when a favicon is configured."""
+    if favicon is None:
+        return html
+    link = '<link rel="icon" href="/favicon.ico">'
+    return html.replace("</head>", f"{link}</head>", 1)
+
+
 def _html_or_markdown_response(
     request: Request,
     *,
@@ -151,7 +159,13 @@ def _html_or_markdown_response(
     _append_vary_header(response_headers, "Accept")
     if _accepts_markdown(request):
         return _markdown_response(markdown, status_code=status_code, headers=response_headers)
-    return HTMLResponse(html, status_code=status_code, headers=response_headers)
+    cm: ContentManager | None = getattr(request.app.state, "content_manager", None)
+    favicon = cm.site_config.favicon if cm is not None else None
+    return HTMLResponse(
+        _inject_favicon_link(html, favicon),
+        status_code=status_code,
+        headers=response_headers,
+    )
 
 
 def _looks_like_post_asset_path(file_path: str) -> bool:
@@ -701,6 +715,34 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(render_router)
     app.include_router(sync_router)
     app.include_router(crosspost_router)
+
+    @app.get("/favicon.ico", include_in_schema=False, response_model=None)
+    async def favicon_route(request: Request) -> Response:
+        content_manager: ContentManager = request.app.state.content_manager
+        favicon = content_manager.site_config.favicon
+        if favicon is None:
+            return Response(status_code=404)
+        try:
+            favicon_path = content_manager._validate_path(favicon)
+        except ValueError:
+            logger.warning("Invalid favicon path in site config: %s", favicon)
+            return Response(status_code=404)
+        if not favicon_path.exists():
+            return Response(status_code=404)
+        ext = favicon_path.suffix.lower()
+        content_types = {
+            ".png": "image/png",
+            ".ico": "image/x-icon",
+            ".svg": "image/svg+xml",
+            ".webp": "image/webp",
+        }
+        media_type = content_types.get(ext, "application/octet-stream")
+        try:
+            data = await asyncio.to_thread(favicon_path.read_bytes)
+        except OSError as exc:
+            logger.warning("Failed to read favicon file %s: %s", favicon_path, exc)
+            return Response(status_code=404)
+        return Response(content=data, media_type=media_type)
 
     # Global exception handlers — safety net for unhandled exceptions
 
