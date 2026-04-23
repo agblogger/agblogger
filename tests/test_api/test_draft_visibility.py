@@ -336,6 +336,23 @@ class TestRenamedDraftRedirectVisibility:
         assert redirect_resp.headers["location"] == f"/post/{new_slug}"
         assert redirect_resp.headers["cache-control"] == "private, no-store"
 
+    @pytest.mark.asyncio
+    async def test_renamed_draft_old_public_slug_does_not_redirect(
+        self, client: AsyncClient
+    ) -> None:
+        """Public post routes must not leak renamed draft slugs."""
+        token = await _login(client, "admin", "admin123")
+        original_path, _new_path = await self._create_and_rename_draft(
+            client,
+            _auth_headers(token),
+        )
+        original_slug = original_path.removeprefix("posts/").removesuffix("/index.md")
+
+        resp = await client.get(f"/post/{original_slug}", follow_redirects=False)
+
+        assert resp.status_code == 404
+        assert "location" not in resp.headers
+
 
 class TestDraftAssetAccess:
     """Assets inside a draft post directory must be gated to the post's author."""

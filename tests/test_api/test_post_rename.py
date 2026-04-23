@@ -512,6 +512,35 @@ class TestPostRename:
         assert resp.json()["title"] == "Follow Target"
 
     @pytest.mark.asyncio
+    async def test_old_public_slug_redirects_directly_to_new_slug(
+        self, client: AsyncClient
+    ) -> None:
+        """GET /post/{old_slug} should redirect once to the canonical renamed slug."""
+        token = await _login(client)
+        data = await _create_post(client, token, "Public Redirect Source")
+        original_path = data["file_path"]
+        original_slug = original_path.removeprefix("posts/").removesuffix("/index.md")
+
+        resp = await client.put(
+            f"/api/posts/{original_path}",
+            json={
+                "title": "Public Redirect Target",
+                "body": "Some content here.\n",
+                "labels": [],
+                "is_draft": False,
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+        new_path = resp.json()["file_path"]
+        new_slug = new_path.removeprefix("posts/").removesuffix("/index.md")
+
+        redirect_resp = await client.get(f"/post/{original_slug}", follow_redirects=False)
+
+        assert redirect_resp.status_code == 301
+        assert redirect_resp.headers["location"] == f"/post/{new_slug}"
+
+    @pytest.mark.asyncio
     async def test_symlink_redirect_rejects_path_traversal(self, client: AsyncClient) -> None:
         """GET /api/posts/ with .. segments should return 404, not probe the filesystem."""
         resp = await client.get("/api/posts/posts/../../etc/passwd")

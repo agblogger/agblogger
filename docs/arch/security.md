@@ -18,7 +18,7 @@ Browser authentication is cookie-based, CSRF protection is required for unsafe b
 
 ## Authorization Boundaries
 
-Authorization is enforced at the API boundary. Published content is broadly readable, while mutations are concentrated behind admin authentication and admin-scoped account boundaries. Draft content is treated as non-public content rather than merely unpublished public content.
+Authorization is enforced at the API boundary. Published content is broadly readable, while mutations are concentrated behind admin authentication and admin-scoped account boundaries. Draft content is treated as non-public content rather than merely unpublished public content. Public compatibility redirects must preserve that rule: renamed published posts may redirect to their canonical slug, but renamed draft aliases must not reveal the new location.
 
 ## Content Security
 
