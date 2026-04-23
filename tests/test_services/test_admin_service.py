@@ -12,7 +12,12 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from backend.exceptions import InternalServerError
 from backend.filesystem.content_manager import ContentManager
-from backend.filesystem.toml_manager import PageConfig, SiteConfig, parse_site_config, write_site_config
+from backend.filesystem.toml_manager import (
+    PageConfig,
+    SiteConfig,
+    parse_site_config,
+    write_site_config,
+)
 from backend.models.page import PageCache
 from backend.services.admin_service import (
     create_page,
@@ -798,8 +803,13 @@ class TestSetFavicon:
         cfg = cm.site_config
         write_site_config(
             cm.content_dir,
-            SiteConfig(title=cfg.title, description=cfg.description,
-                       timezone=cfg.timezone, favicon="assets/favicon.ico", pages=cfg.pages),
+            SiteConfig(
+                title=cfg.title,
+                description=cfg.description,
+                timezone=cfg.timezone,
+                favicon="assets/favicon.ico",
+                pages=cfg.pages,
+            ),
         )
         cm.reload_config()
 
@@ -824,8 +834,13 @@ class TestRemoveFavicon:
         cfg = cm.site_config
         write_site_config(
             cm.content_dir,
-            SiteConfig(title=cfg.title, description=cfg.description,
-                       timezone=cfg.timezone, favicon="assets/favicon.png", pages=cfg.pages),
+            SiteConfig(
+                title=cfg.title,
+                description=cfg.description,
+                timezone=cfg.timezone,
+                favicon="assets/favicon.png",
+                pages=cfg.pages,
+            ),
         )
         cm.reload_config()
 
@@ -843,8 +858,13 @@ class TestRemoveFavicon:
         cfg = cm.site_config
         write_site_config(
             cm.content_dir,
-            SiteConfig(title=cfg.title, description=cfg.description,
-                       timezone=cfg.timezone, favicon="assets/favicon.png", pages=cfg.pages),
+            SiteConfig(
+                title=cfg.title,
+                description=cfg.description,
+                timezone=cfg.timezone,
+                favicon="assets/favicon.png",
+                pages=cfg.pages,
+            ),
         )
         cm.reload_config()
 

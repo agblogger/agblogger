@@ -96,6 +96,7 @@ Field meanings:
 - `site.title`: site title presented in the UI and related outputs
 - `site.description`: short site summary used where the application needs a top-level description
 - `site.timezone`: canonical site timezone for content- and display-related decisions
+- `site.favicon`: optional relative path within `content/` for the site favicon image
 - `[[pages]]`: top-level page definitions used for navigation and presentation structure
 - `pages.id`: stable page identifier referenced by the application
 - `pages.title`: human-readable page label shown in navigation or page chrome

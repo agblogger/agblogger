@@ -361,7 +361,7 @@ async def delete_page(
             async with session_factory() as session:
                 await session.execute(sa_delete(PageCache).where(PageCache.page_id == page_id))
                 await session.commit()
-        except (SQLAlchemyError, OSError):
+        except SQLAlchemyError, OSError:
             logger.warning(
                 "Failed to remove cache for page %s; will clean on rebuild",
                 page_id,
@@ -379,7 +379,7 @@ def update_page_order(cm: ContentManager, pages: list[PageConfig]) -> None:
 
 def set_favicon(cm: ContentManager, *, extension: str, data: bytes) -> SiteConfig:
     """Save favicon bytes to content/assets/favicon{extension} and update index.toml."""
-    if not re.fullmatch(r'\.[a-zA-Z0-9]+', extension):
+    if not re.fullmatch(r"\.[a-zA-Z0-9]+", extension):
         msg = f"Invalid favicon extension: {extension!r}"
         raise ValueError(msg)
     assets_dir = cm.content_dir / "assets"
