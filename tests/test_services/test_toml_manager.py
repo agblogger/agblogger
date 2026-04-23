@@ -144,3 +144,9 @@ def test_parse_site_config_favicon_missing_returns_none(tmp_path: Path) -> None:
     (tmp_path / "index.toml").write_text('[site]\ntitle = "Blog"\n')
     result = parse_site_config(tmp_path)
     assert result.favicon is None
+
+
+def test_parse_site_config_non_string_favicon_returns_none(tmp_path: Path) -> None:
+    (tmp_path / "index.toml").write_text('[site]\ntitle = "Blog"\nfavicon = 42\n')
+    result = parse_site_config(tmp_path)
+    assert result.favicon is None

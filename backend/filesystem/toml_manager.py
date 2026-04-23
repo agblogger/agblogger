@@ -104,11 +104,12 @@ def parse_site_config(content_dir: Path) -> SiteConfig:
         logger.warning("Invalid timezone %r in %s, falling back to UTC", raw_timezone, index_path)
         timezone = "UTC"
 
+    _favicon = site_data.get("favicon")
     return SiteConfig(
         title=site_data.get("title", "My Blog"),
         description=site_data.get("description", ""),
         timezone=timezone,
-        favicon=site_data.get("favicon") or None,
+        favicon=_favicon if isinstance(_favicon, str) and _favicon else None,
         pages=pages,
     )
 
