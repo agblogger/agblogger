@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Response, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from backend.api.deps import (
@@ -44,6 +44,8 @@ from backend.services.admin_service import (
     delete_page,
     get_admin_pages,
     get_site_settings,
+    remove_favicon,
+    set_favicon,
     update_page,
     update_page_order,
     update_site_settings,
@@ -121,6 +123,102 @@ async def update_settings(
             password_change_disabled=settings.disable_password_change,
             favicon=cfg.favicon,
         )
+
+
+_ALLOWED_FAVICON_CONTENT_TYPES: dict[str, str] = {
+    "image/png": ".png",
+    "image/x-icon": ".ico",
+    "image/svg+xml": ".svg",
+    "image/webp": ".webp",
+}
+_MAX_FAVICON_SIZE = 2 * 1024 * 1024  # 2 MB
+
+
+@router.post("/favicon", response_model=SiteSettingsResponse)
+async def upload_favicon(
+    file: Annotated[UploadFile, File()],
+    response: Response,
+    content_manager: Annotated[ContentManager, Depends(get_content_manager)],
+    git_service: Annotated[GitService, Depends(get_git_service)],
+    content_write_lock: Annotated[AsyncWriteLock, Depends(get_content_write_lock)],
+    content_size_tracker: Annotated[ContentSizeTracker, Depends(get_content_size_tracker)],
+    _user: Annotated[AdminUser, Depends(require_admin)],
+    settings: Annotated[Settings, Depends(get_settings_dep)],
+) -> SiteSettingsResponse:
+    """Upload or replace the site favicon."""
+    content_type = (file.content_type or "").split(";")[0].strip()
+    extension = _ALLOWED_FAVICON_CONTENT_TYPES.get(content_type)
+    if extension is None:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unsupported file type: {content_type}. Allowed: PNG, ICO, SVG, WebP.",
+        )
+
+    data = await file.read()
+    if len(data) > _MAX_FAVICON_SIZE:
+        raise HTTPException(status_code=413, detail="Favicon file exceeds 2 MB limit.")
+
+    async with content_write_lock:
+        old_favicon = content_manager.site_config.favicon
+        old_size = 0
+        if old_favicon is not None:
+            old_path = content_manager.content_dir / old_favicon
+            old_size = content_size_tracker.file_size(old_path)
+        content_size_tracker.require_quota(len(data) - old_size)
+
+        try:
+            cfg = set_favicon(content_manager, extension=extension, data=data)
+        except OSError as exc:
+            logger.error("Failed to save favicon: %s", exc)
+            raise HTTPException(status_code=500, detail="Failed to save favicon.") from exc
+
+        new_path = content_manager.content_dir / f"assets/favicon{extension}"
+        content_size_tracker.adjust(content_size_tracker.file_size(new_path) - old_size)
+        set_git_warning(response, await git_service.try_commit("Update site favicon"))
+
+    return SiteSettingsResponse(
+        title=cfg.title,
+        description=cfg.description,
+        timezone=cfg.timezone,
+        password_change_disabled=settings.disable_password_change,
+        favicon=cfg.favicon,
+    )
+
+
+@router.delete("/favicon", response_model=SiteSettingsResponse)
+async def delete_favicon(
+    response: Response,
+    content_manager: Annotated[ContentManager, Depends(get_content_manager)],
+    git_service: Annotated[GitService, Depends(get_git_service)],
+    content_write_lock: Annotated[AsyncWriteLock, Depends(get_content_write_lock)],
+    content_size_tracker: Annotated[ContentSizeTracker, Depends(get_content_size_tracker)],
+    _user: Annotated[AdminUser, Depends(require_admin)],
+    settings: Annotated[Settings, Depends(get_settings_dep)],
+) -> SiteSettingsResponse:
+    """Remove the site favicon."""
+    async with content_write_lock:
+        old_favicon = content_manager.site_config.favicon
+        old_size = 0
+        if old_favicon is not None:
+            old_path = content_manager.content_dir / old_favicon
+            old_size = content_size_tracker.file_size(old_path)
+
+        try:
+            cfg = remove_favicon(content_manager)
+        except OSError as exc:
+            logger.error("Failed to remove favicon: %s", exc)
+            raise HTTPException(status_code=500, detail="Failed to remove favicon.") from exc
+
+        content_size_tracker.adjust(-old_size)
+        set_git_warning(response, await git_service.try_commit("Remove site favicon"))
+
+    return SiteSettingsResponse(
+        title=cfg.title,
+        description=cfg.description,
+        timezone=cfg.timezone,
+        password_change_disabled=settings.disable_password_change,
+        favicon=cfg.favicon,
+    )
 
 
 @router.get("/pages", response_model=AdminPagesResponse)
