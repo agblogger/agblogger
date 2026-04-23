@@ -33,6 +33,8 @@ On the initial page load, the backend embeds pre-rendered HTML inside `<div id="
 
 The frontend talks to the backend through a shared HTTP client shaped around the backend’s cookie-based browser session model. Browser authentication stays cookie-first, CSRF protection is attached to unsafe requests, and session renewal is handled through the API boundary rather than by storing durable bearer credentials in app state.
 
+Application boot also installs small compatibility shims needed by runtime dependencies before the router and data layer initialize. Keep these shims in the frontend bootstrap path so public pages do not crash on older-but-still-supported browsers.
+
 ## Editing Architecture
 
 The editor is built around structured post authoring instead of raw filesystem manipulation. Metadata editing, markdown editing, preview, and asset management are presented as one workflow over a canonical post unit. Preview rendering is delegated to the backend so the editor and published site use the same rendering and sanitization pipeline.
@@ -44,6 +46,7 @@ The frontend does not own markdown rendering. It receives rendered HTML from the
 ## Code Entry Points
 
 - `frontend/src/App.tsx` defines the router, shared layout, and application bootstrapping.
+- `frontend/src/bootstrap/` contains startup compatibility shims that must run before app dependencies initialize.
 - `frontend/src/pages/` contains the main public browsing, authentication, editing and administration entry points.
 - `frontend/src/stores/` contains the small set of shared Zustand stores for auth, site config, theme, and UI coordination.
 - `frontend/src/api/` contains the HTTP client and API-facing modules that connect the SPA to the backend.

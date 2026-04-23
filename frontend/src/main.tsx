@@ -1,7 +1,10 @@
+import { installObjectHasOwnCompat } from './bootstrap/objectHasOwn'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App'
 import './index.css'
+
+installObjectHasOwnCompat()
 
 const rootElement = document.getElementById('root')
 
