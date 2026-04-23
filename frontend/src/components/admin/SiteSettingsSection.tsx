@@ -6,6 +6,7 @@ import { HTTPError } from '@/api/client'
 import type { AdminSiteSettings } from '@/api/client'
 import { updateAdminSiteSettings } from '@/api/admin'
 import TimezoneCombobox from './TimezoneCombobox'
+import FaviconSection from './FaviconSection'
 import { refreshSiteConfig } from '@/stores/siteStore'
 
 interface SiteSettingsSectionProps {
@@ -24,6 +25,7 @@ function normalizeSiteSettings(
     description: settings?.description ?? '',
     timezone: settings?.timezone ?? '',
     password_change_disabled: settings?.password_change_disabled ?? false,
+    favicon: settings?.favicon ?? null,
   }
 }
 
@@ -158,6 +160,12 @@ export default function SiteSettingsSection({
           />
         </div>
       </div>
+
+      <FaviconSection
+        initialFavicon={initialSettings.favicon}
+        busy={busy || savingSite}
+        onSavedSettings={onSavedSettings}
+      />
 
       <div className="mt-4">
         <button

@@ -11,6 +11,7 @@ const mockSettings: AdminSiteSettings = {
   description: 'A test blog',
   timezone: 'UTC',
   password_change_disabled: false,
+  favicon: null,
 }
 
 const mockPages: AdminPagesResponse = {
