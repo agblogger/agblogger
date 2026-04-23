@@ -65,8 +65,6 @@ const DEFAULT_DASHBOARD = {
   },
   languages: { category: 'languages', entries: [{ name: 'English', count: 80, percent: 68.0 }] },
   locations: { category: 'locations', entries: [{ name: 'US', count: 100, percent: 45.0 }] },
-  sizes: { category: 'sizes', entries: [{ name: '1920x1080', count: 60, percent: 38.0 }] },
-  campaigns: { category: 'campaigns', entries: [] },
   referrers: { referrers: [] },
 }
 
@@ -433,14 +431,6 @@ describe('AnalyticsPanel', () => {
       expect(screen.getByText('Locations')).toBeInTheDocument()
     })
     expect(screen.getByText('Languages')).toBeInTheDocument()
-  })
-
-  it('renders Screen Sizes and Campaigns breakdown panels', async () => {
-    renderPanel()
-    await waitFor(() => {
-      expect(screen.getByText('Screen Sizes')).toBeInTheDocument()
-    })
-    expect(screen.getByText('Campaigns')).toBeInTheDocument()
   })
 
   it('clicking page row in TopPagesPanel expands inline referrer detail', async () => {

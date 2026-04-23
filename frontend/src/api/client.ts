@@ -315,7 +315,7 @@ export interface BreakdownEntry {
   gc_id?: string | null
 }
 
-export type BreakdownCategory = 'browsers' | 'systems' | 'languages' | 'locations' | 'sizes' | 'campaigns'
+export type BreakdownCategory = 'browsers' | 'systems' | 'languages' | 'locations'
 
 export interface BreakdownResponse {
   category: BreakdownCategory
@@ -361,7 +361,5 @@ export interface DashboardResponse {
   operating_systems: BreakdownResponse
   languages: BreakdownResponse
   locations: BreakdownResponse
-  sizes: BreakdownResponse
-  campaigns: BreakdownResponse
   referrers: SiteReferrersResponse
 }

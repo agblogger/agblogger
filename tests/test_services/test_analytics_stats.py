@@ -364,7 +364,7 @@ async def test_fetch_dashboard_calls_all_goatcounter_endpoints(
     assert len(result.referrers.referrers) == 1
     assert result.referrers.referrers[0].referrer == "hn.algolia.com"
 
-    # All 9 endpoints called exactly once (concurrent — order is not asserted)
+    # All 7 endpoints called exactly once (concurrent — order is not asserted)
     assert sorted(called_endpoints) == sorted(
         [
             "/api/v0/stats/total",
@@ -373,8 +373,6 @@ async def test_fetch_dashboard_calls_all_goatcounter_endpoints(
             "/api/v0/stats/systems",
             "/api/v0/stats/languages",
             "/api/v0/stats/locations",
-            "/api/v0/stats/sizes",
-            "/api/v0/stats/campaigns",
             "/api/v0/stats/toprefs",
         ]
     )

@@ -27,8 +27,6 @@ export interface AnalyticsDashboardData {
   operatingSystems: BreakdownResponse
   languages: BreakdownResponse
   locations: BreakdownResponse
-  sizes: BreakdownResponse
-  campaigns: BreakdownResponse
   viewsOverTime: ViewsOverTimeResponse
   referrers: SiteReferrersResponse
 }
@@ -52,8 +50,6 @@ function getDisabledDashboardStats() {
     operatingSystems: { category: 'systems' as const, entries: [] },
     languages: { category: 'languages' as const, entries: [] },
     locations: { category: 'locations' as const, entries: [] },
-    sizes: { category: 'sizes' as const, entries: [] },
-    campaigns: { category: 'campaigns' as const, entries: [] },
     viewsOverTime: { days: [] },
     referrers: { referrers: [] },
   }
@@ -109,8 +105,6 @@ function dashboardToData(
     operatingSystems: dashboard.operating_systems,
     languages: dashboard.languages,
     locations: dashboard.locations,
-    sizes: dashboard.sizes,
-    campaigns: dashboard.campaigns,
     referrers: dashboard.referrers,
   }
 }

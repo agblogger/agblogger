@@ -865,8 +865,6 @@ class TestDashboardEndpoint:
             operating_systems=BreakdownResponse(category="systems", entries=[]),
             languages=BreakdownResponse(category="languages", entries=[]),
             locations=BreakdownResponse(category="locations", entries=[]),
-            sizes=BreakdownResponse(category="sizes", entries=[]),
-            campaigns=BreakdownResponse(category="campaigns", entries=[]),
             referrers=SiteReferrersResponse(referrers=[]),
         )
 
@@ -889,8 +887,6 @@ class TestDashboardEndpoint:
         assert "operating_systems" in data
         assert "languages" in data
         assert "locations" in data
-        assert "sizes" in data
-        assert "campaigns" in data
         assert "referrers" in data
 
     @pytest.mark.asyncio

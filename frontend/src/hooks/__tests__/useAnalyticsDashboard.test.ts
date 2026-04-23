@@ -57,8 +57,6 @@ const dashboardResponse: DashboardResponse = {
   },
   languages: { category: 'languages', entries: [{ name: 'en', count: 800, percent: 80 }] },
   locations: { category: 'locations', entries: [{ name: 'US', count: 600, percent: 60 }] },
-  sizes: { category: 'sizes', entries: [{ name: 'Desktop', count: 700, percent: 70 }] },
-  campaigns: { category: 'campaigns', entries: [] },
   referrers: { referrers: [{ referrer: 'https://hn.algolia.com', count: 10 }] },
 }
 
@@ -83,8 +81,6 @@ const emptyStats = {
   operatingSystems: { category: 'systems', entries: [] },
   languages: { category: 'languages', entries: [] },
   locations: { category: 'locations', entries: [] },
-  sizes: { category: 'sizes', entries: [] },
-  campaigns: { category: 'campaigns', entries: [] },
   viewsOverTime: { days: [] },
   referrers: { referrers: [] },
 }
@@ -116,8 +112,6 @@ describe('useAnalyticsDashboard', () => {
       operatingSystems: dashboardResponse.operating_systems,
       languages: dashboardResponse.languages,
       locations: dashboardResponse.locations,
-      sizes: dashboardResponse.sizes,
-      campaigns: dashboardResponse.campaigns,
       viewsOverTime: dashboardResponse.views_over_time,
       referrers: dashboardResponse.referrers,
     })

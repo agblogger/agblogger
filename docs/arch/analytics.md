@@ -41,7 +41,6 @@ The UI surfaces analytics in two places:
   - a views-over-time chart with automatic daily/weekly granularity selection
   - top pages with inline per-path referrer drill-down alongside a site-wide referrers panel
   - browser and OS breakdowns with version drill-down, and location and language tables
-  - a screen-sizes chart and campaigns table
   - a custom date range picker with common presets
 - an optional view count in post metadata, controlled by the admin show-views toggle
 

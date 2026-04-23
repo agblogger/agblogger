@@ -568,8 +568,6 @@ async def fetch_dashboard(
         systems_data,
         languages_data,
         locations_data,
-        sizes_data,
-        campaigns_data,
         referrers_data,
     ) = await asyncio.gather(
         _stats_request("/api/v0/stats/total", params),
@@ -578,8 +576,6 @@ async def fetch_dashboard(
         _stats_request("/api/v0/stats/systems", params),
         _stats_request("/api/v0/stats/languages", params),
         _stats_request("/api/v0/stats/locations", params),
-        _stats_request("/api/v0/stats/sizes", params),
-        _stats_request("/api/v0/stats/campaigns", params),
         _stats_request("/api/v0/stats/toprefs", params),
     )
 
@@ -609,8 +605,6 @@ async def fetch_dashboard(
         operating_systems=_bd(systems_data, "systems"),
         languages=_bd(languages_data, "languages"),
         locations=_bd(locations_data, "locations"),
-        sizes=_bd(sizes_data, "sizes"),
-        campaigns=_bd(campaigns_data, "campaigns"),
         referrers=(
             _parse_referrers_data(referrers_data)
             if referrers_data is not None

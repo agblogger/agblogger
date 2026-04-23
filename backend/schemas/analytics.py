@@ -182,7 +182,7 @@ class BreakdownEntry(BaseModel):
         )
 
 
-BreakdownCategory = Literal["browsers", "systems", "languages", "locations", "sizes", "campaigns"]
+BreakdownCategory = Literal["browsers", "systems", "languages", "locations"]
 
 
 class BreakdownResponse(BaseModel):
@@ -256,6 +256,4 @@ class DashboardResponse(BaseModel):
     operating_systems: BreakdownResponse
     languages: BreakdownResponse
     locations: BreakdownResponse
-    sizes: BreakdownResponse
-    campaigns: BreakdownResponse
     referrers: SiteReferrersResponse

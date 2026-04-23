@@ -184,12 +184,6 @@ export default function AnalyticsPanel({ busy, onBusyChange }: AnalyticsPanelPro
             <BreakdownBarChart title="Operating Systems" entries={data?.operatingSystems.entries ?? []} drillDownCategory="systems" />
           </div>
 
-          {/* Screen Sizes + Campaigns */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <BreakdownBarChart title="Screen Sizes" entries={data?.sizes.entries ?? []} />
-            <BreakdownTable title="Campaigns" nameLabel="Campaign" entries={data?.campaigns.entries ?? []} />
-          </div>
-
           {/* Locations + Languages */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <BreakdownTable title="Locations" nameLabel="Country" entries={data?.locations.entries ?? []} />
