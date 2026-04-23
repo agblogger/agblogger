@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import delete as sa_delete
@@ -373,3 +374,57 @@ def update_page_order(cm: ContentManager, pages: list[PageConfig]) -> None:
     updated = cfg.with_pages(pages)
     write_site_config(cm.content_dir, updated)
     cm.reload_config()
+
+
+def set_favicon(cm: ContentManager, *, extension: str, data: bytes) -> SiteConfig:
+    """Save favicon bytes to content/assets/favicon{extension} and update index.toml."""
+    assets_dir = cm.content_dir / "assets"
+    assets_dir.mkdir(exist_ok=True)
+
+    old_favicon = cm.site_config.favicon
+    if old_favicon is not None:
+        old_path = cm.content_dir / old_favicon
+        old_ext = Path(old_favicon).suffix
+        if old_ext != extension:
+            try:
+                old_path.unlink(missing_ok=True)
+            except OSError as exc:
+                logger.warning("Failed to remove old favicon %s: %s", old_path, exc)
+
+    favicon_rel = f"assets/favicon{extension}"
+    favicon_path = cm.content_dir / favicon_rel
+    favicon_path.write_bytes(data)
+
+    cfg = cm.site_config
+    updated = SiteConfig(
+        title=cfg.title,
+        description=cfg.description,
+        timezone=cfg.timezone,
+        favicon=favicon_rel,
+        pages=cfg.pages,
+    )
+    write_site_config(cm.content_dir, updated)
+    cm.reload_config()
+    return cm.site_config
+
+
+def remove_favicon(cm: ContentManager) -> SiteConfig:
+    """Remove the favicon file and clear the favicon field from index.toml."""
+    cfg = cm.site_config
+    if cfg.favicon is not None:
+        favicon_path = cm.content_dir / cfg.favicon
+        try:
+            favicon_path.unlink(missing_ok=True)
+        except OSError as exc:
+            logger.warning("Failed to remove favicon file %s: %s", favicon_path, exc)
+
+    updated = SiteConfig(
+        title=cfg.title,
+        description=cfg.description,
+        timezone=cfg.timezone,
+        favicon=None,
+        pages=cfg.pages,
+    )
+    write_site_config(cm.content_dir, updated)
+    cm.reload_config()
+    return cm.site_config

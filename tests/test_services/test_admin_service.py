@@ -12,13 +12,15 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from backend.exceptions import InternalServerError
 from backend.filesystem.content_manager import ContentManager
-from backend.filesystem.toml_manager import PageConfig, SiteConfig, parse_site_config
+from backend.filesystem.toml_manager import PageConfig, SiteConfig, parse_site_config, write_site_config
 from backend.models.page import PageCache
 from backend.services.admin_service import (
     create_page,
     delete_page,
     get_admin_pages,
     get_site_settings,
+    remove_favicon,
+    set_favicon,
     update_page,
     update_page_order,
     update_site_settings,
@@ -771,3 +773,80 @@ class TestExceptionNarrowingDeletePage:
             pytest.raises(TypeError, match="unexpected type error"),
         ):
             await delete_page(session_factory, cm, page_id="about", delete_file=True)
+
+
+class TestSetFavicon:
+    def test_saves_file_to_assets_and_updates_toml(self, cm: ContentManager) -> None:
+        (cm.content_dir / "assets").mkdir(exist_ok=True)
+        data = b"\x89PNG fake"
+
+        result = set_favicon(cm, extension=".png", data=data)
+
+        favicon_path = cm.content_dir / "assets" / "favicon.png"
+        assert favicon_path.exists()
+        assert favicon_path.read_bytes() == data
+        assert result.favicon == "assets/favicon.png"
+        assert parse_site_config(cm.content_dir).favicon == "assets/favicon.png"
+
+    def test_removes_old_file_on_extension_change(self, cm: ContentManager) -> None:
+        assets = cm.content_dir / "assets"
+        assets.mkdir(exist_ok=True)
+        old_file = assets / "favicon.ico"
+        old_file.write_bytes(b"ICO data")
+
+        # Pre-set favicon to .ico
+        cfg = cm.site_config
+        write_site_config(
+            cm.content_dir,
+            SiteConfig(title=cfg.title, description=cfg.description,
+                       timezone=cfg.timezone, favicon="assets/favicon.ico", pages=cfg.pages),
+        )
+        cm.reload_config()
+
+        set_favicon(cm, extension=".png", data=b"PNG data")
+
+        assert not old_file.exists()
+        assert (assets / "favicon.png").exists()
+
+    def test_creates_assets_dir_if_missing(self, cm: ContentManager) -> None:
+        data = b"SVG content"
+        result = set_favicon(cm, extension=".svg", data=data)
+        assert (cm.content_dir / "assets" / "favicon.svg").exists()
+        assert result.favicon == "assets/favicon.svg"
+
+
+class TestRemoveFavicon:
+    def test_removes_file_and_clears_toml(self, cm: ContentManager) -> None:
+        assets = cm.content_dir / "assets"
+        assets.mkdir(exist_ok=True)
+        (assets / "favicon.png").write_bytes(b"PNG")
+
+        cfg = cm.site_config
+        write_site_config(
+            cm.content_dir,
+            SiteConfig(title=cfg.title, description=cfg.description,
+                       timezone=cfg.timezone, favicon="assets/favicon.png", pages=cfg.pages),
+        )
+        cm.reload_config()
+
+        result = remove_favicon(cm)
+
+        assert not (assets / "favicon.png").exists()
+        assert result.favicon is None
+        assert parse_site_config(cm.content_dir).favicon is None
+
+    def test_remove_when_no_favicon_is_noop(self, cm: ContentManager) -> None:
+        result = remove_favicon(cm)
+        assert result.favicon is None
+
+    def test_remove_tolerates_missing_file(self, cm: ContentManager) -> None:
+        cfg = cm.site_config
+        write_site_config(
+            cm.content_dir,
+            SiteConfig(title=cfg.title, description=cfg.description,
+                       timezone=cfg.timezone, favicon="assets/favicon.png", pages=cfg.pages),
+        )
+        cm.reload_config()
+
+        result = remove_favicon(cm)
+        assert result.favicon is None
