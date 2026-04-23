@@ -157,6 +157,41 @@ class TestSpaShellRoutes:
         assert '<div id="root"></div>' in resp.text
 
 
+class TestMarkdownNegotiation:
+    async def test_homepage_accept_text_markdown_returns_markdown(
+        self, client: AsyncClient
+    ) -> None:
+        resp = await client.get("/", headers={"Accept": "text/markdown"})
+
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith("text/markdown")
+        assert "Accept" in resp.headers["vary"]
+        assert resp.headers["x-markdown-tokens"].isdigit()
+        assert resp.text.startswith("---\n")
+        assert "[Hello World](/post/hello)" in resp.text
+        assert "<html" not in resp.text.lower()
+
+    async def test_page_accept_text_markdown_returns_markdown(self, client: AsyncClient) -> None:
+        resp = await client.get("/page/about", headers={"Accept": "text/markdown"})
+
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith("text/markdown")
+        assert resp.headers["x-markdown-tokens"].isdigit()
+        assert "# About" in resp.text
+        assert "This is the about page content." in resp.text
+        assert '<div id="root">' not in resp.text
+
+    async def test_post_accept_text_markdown_returns_markdown(self, client: AsyncClient) -> None:
+        resp = await client.get("/post/hello", headers={"Accept": "text/markdown"})
+
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith("text/markdown")
+        assert resp.headers["x-markdown-tokens"].isdigit()
+        assert 'title: "Hello World"' in resp.text
+        assert "Hello body content for excerpt." in resp.text
+        assert "<article" not in resp.text
+
+
 class TestHomepageSeo:
     async def test_returns_html(self, client: AsyncClient) -> None:
         resp = await client.get("/")

@@ -7,6 +7,7 @@ import html
 import json
 import logging
 import posixpath
+import re
 import subprocess
 import sys
 from contextlib import asynccontextmanager
@@ -94,6 +95,63 @@ def _set_link_header(response: Response, links: list[str]) -> None:
         response.headers["Link"] = f"{existing}, {', '.join(links)}"
         return
     response.headers["Link"] = ", ".join(links)
+
+
+def _accepts_markdown(request: Request) -> bool:
+    """Return True when the client explicitly asks for markdown."""
+    accept = request.headers.get("accept", "")
+    for part in accept.split(","):
+        media_range = part.split(";", maxsplit=1)[0].strip().lower()
+        if media_range == "text/markdown":
+            return True
+    return False
+
+
+def _append_vary_header(headers: dict[str, str], value: str) -> None:
+    existing = headers.get("Vary")
+    if existing is None:
+        headers["Vary"] = value
+        return
+    existing_values = {part.strip().lower() for part in existing.split(",") if part.strip()}
+    if value.lower() not in existing_values:
+        headers["Vary"] = f"{existing}, {value}"
+
+
+def _estimate_markdown_tokens(markdown: str) -> int:
+    """Estimate token count for markdown responses."""
+    return max(1, len(re.findall(r"\w+|[^\w\s]", markdown, flags=re.UNICODE)))
+
+
+def _markdown_response(
+    markdown: str,
+    *,
+    status_code: int = 200,
+    headers: dict[str, str] | None = None,
+) -> Response:
+    response_headers = dict(headers or {})
+    _append_vary_header(response_headers, "Accept")
+    response_headers["x-markdown-tokens"] = str(_estimate_markdown_tokens(markdown))
+    return Response(
+        content=markdown,
+        status_code=status_code,
+        media_type="text/markdown",
+        headers=response_headers,
+    )
+
+
+def _html_or_markdown_response(
+    request: Request,
+    *,
+    html: str,
+    markdown: str,
+    status_code: int = 200,
+    headers: dict[str, str] | None = None,
+) -> Response:
+    response_headers = dict(headers or {})
+    _append_vary_header(response_headers, "Accept")
+    if _accepts_markdown(request):
+        return _markdown_response(markdown, status_code=status_code, headers=response_headers)
+    return HTMLResponse(html, status_code=status_code, headers=response_headers)
 
 
 def _looks_like_post_asset_path(file_path: str) -> bool:
@@ -960,20 +1018,29 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             user=user,
         )
 
-    async def _serve_spa_shell(request: Request) -> HTMLResponse:
+    async def _serve_spa_shell(request: Request) -> Response:
         """Serve the frontend SPA shell for client-only routes."""
         base_html = await _get_base_html(request)
         if base_html is None:
+            if _accepts_markdown(request):
+                return _markdown_response("# Not found\n", status_code=404)
             return HTMLResponse(_NOT_FOUND_HTML, status_code=404)
-        return HTMLResponse(base_html)
+        route_title = request.url.path.strip("/") or "home"
+        markdown = (
+            f"---\nroute: {json.dumps(request.url.path)}\n---\n\n"
+            f"# Browser route\n\nOpen `{route_title}` in a browser-capable client.\n"
+        )
+        return _html_or_markdown_response(request, html=base_html, markdown=markdown)
 
     # Post route — serves SEO-enriched SPA HTML for post views, and redirects
     # asset requests to the content API.  Must be registered before the
     # StaticFiles catch-all.
     @app.get("/post/{file_path:path}", include_in_schema=False, response_model=None)
-    async def post_route(file_path: str, request: Request) -> HTMLResponse | RedirectResponse:
+    async def post_route(file_path: str, request: Request) -> Response | RedirectResponse:
         if ".." in file_path.split("/"):
             logger.warning("Path traversal attempt in post asset URL: %s", file_path)
+            if _accepts_markdown(request):
+                return _markdown_response("# Not found\n", status_code=404)
             return HTMLResponse(_NOT_FOUND_HTML, status_code=404)
 
         if _should_redirect_post_path_to_content(request.app.state.settings.content_dir, file_path):
@@ -1016,12 +1083,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             SeoContext,
             blogposting_ld,
             render_seo_html,
+            render_seo_markdown,
             strip_html_tags,
         )
         from backend.utils.datetime import format_iso
 
         base_html = await _get_base_html(request)
-        if base_html is None:
+        if base_html is None and not _accepts_markdown(request):
             return HTMLResponse(_NOT_FOUND_HTML, status_code=404)
 
         slug = file_path
@@ -1044,10 +1112,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     label_ids = [pl.label_id for pl in post.labels]
         except SQLAlchemyError:
             logger.exception("DB error looking up post for SEO: %s", slug)
-            return HTMLResponse(base_html)
+            fallback_html = base_html if base_html is not None else _NOT_FOUND_HTML
+            return _html_or_markdown_response(
+                request,
+                html=fallback_html,
+                markdown="# Post unavailable\n",
+            )
 
         if post is None or post.is_draft:
-            return HTMLResponse(base_html)
+            fallback_html = base_html if base_html is not None else _NOT_FOUND_HTML
+            return _html_or_markdown_response(
+                request,
+                html=fallback_html,
+                markdown="# Post not found\n",
+            )
 
         await _fire_frontend_route_hit(request, f"/post/{slug}")
 
@@ -1094,6 +1172,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             author=post.author,
             published_time=published,
             modified_time=modified,
+            markdown_body="",
             json_ld=blogposting_ld(
                 headline=post.title,
                 description=description,
@@ -1107,8 +1186,29 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             preload_data=preload_data,
         )
 
-        enriched = render_seo_html(base_html, ctx)
-        return HTMLResponse(enriched)
+        post_data = content_manager.read_post(post.file_path)
+        if post_data is not None:
+            ctx = SeoContext(
+                title=ctx.title,
+                description=ctx.description,
+                canonical_url=ctx.canonical_url,
+                og_type=ctx.og_type,
+                site_name=ctx.site_name,
+                author=ctx.author,
+                published_time=ctx.published_time,
+                modified_time=ctx.modified_time,
+                json_ld=ctx.json_ld,
+                rendered_body=ctx.rendered_body,
+                markdown_body=post_data.raw_content,
+                preload_data=ctx.preload_data,
+            )
+
+        enriched = render_seo_html(base_html or _NOT_FOUND_HTML, ctx)
+        return _html_or_markdown_response(
+            request,
+            html=enriched,
+            markdown=render_seo_markdown(ctx),
+        )
 
     @app.get("/", include_in_schema=False, response_model=None)
     async def homepage_route(
@@ -1120,20 +1220,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         include_sublabels: bool = Query(False, alias="includeSublabels"),
         from_date: str | None = Query(None, alias="from"),
         to_date: str | None = Query(None, alias="to"),
-    ) -> HTMLResponse:
+    ) -> Response:
         from backend.api.deps import get_current_admin, mark_auth_sensitive_read, security
         from backend.services.post_service import MAX_SAFE_PAGE, list_posts
         from backend.services.seo_service import (
             SeoContext,
             SeoPostItem,
             render_post_list_html,
+            render_post_list_markdown,
             render_seo_html,
+            render_seo_markdown,
             strip_html_tags,
             website_ld,
         )
 
         base_html = await _get_base_html(request)
-        if base_html is None:
+        if base_html is None and not _accepts_markdown(request):
             return HTMLResponse(_NOT_FOUND_HTML, status_code=404)
 
         content_manager: ContentManager = request.app.state.content_manager
@@ -1141,7 +1243,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         site_desc = content_manager.site_config.description
 
         if page > MAX_SAFE_PAGE:
-            return HTMLResponse(base_html)
+            fallback_html = base_html if base_html is not None else _NOT_FOUND_HTML
+            return _html_or_markdown_response(
+                request,
+                html=fallback_html,
+                markdown="# Posts\n",
+            )
 
         posts_data: list[SeoPostItem] = []
         preload_data: dict[str, Any] | None = None
@@ -1168,7 +1275,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 except ValueError:
                     # list_posts raises ValueError on invalid date query parameters
                     logger.warning("Invalid homepage query for SEO preload", exc_info=True)
-                    return HTMLResponse(base_html)
+                    fallback_html = base_html if base_html is not None else _NOT_FOUND_HTML
+                    return _html_or_markdown_response(
+                        request,
+                        html=fallback_html,
+                        markdown="# Posts\n",
+                    )
                 for post in post_list.posts:
                     slug = _public_post_slug(post.file_path)
                     if slug is None:
@@ -1191,7 +1303,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 )
         except SQLAlchemyError:
             logger.exception("DB error loading posts for homepage SEO")
-            return HTMLResponse(base_html, status_code=503, headers={"Retry-After": "60"})
+            fallback_html = base_html if base_html is not None else _NOT_FOUND_HTML
+            return _html_or_markdown_response(
+                request,
+                html=fallback_html,
+                markdown="# Posts unavailable\n",
+                status_code=503,
+                headers={"Retry-After": "60"},
+            )
 
         rendered_body = render_post_list_html(posts_data, heading=site_title)
 
@@ -1204,10 +1323,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             site_name=site_title,
             json_ld=website_ld(name=site_title, description=site_desc, url=canonical_url),
             rendered_body=rendered_body,
+            markdown_body=render_post_list_markdown(posts_data, heading=site_title),
             preload_data=preload_data,
         )
 
-        response = HTMLResponse(render_seo_html(base_html, ctx))
+        response = _html_or_markdown_response(
+            request,
+            html=render_seo_html(base_html or _NOT_FOUND_HTML, ctx),
+            markdown=render_seo_markdown(ctx),
+        )
         mark_auth_sensitive_read(response, is_authenticated=is_authenticated)
         _set_link_header(
             response,
@@ -1247,17 +1371,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return response
 
     @app.get("/page/{page_id}", include_in_schema=False, response_model=None)
-    async def page_route(page_id: str, request: Request) -> HTMLResponse:
+    async def page_route(page_id: str, request: Request) -> Response:
         from backend.services.page_service import get_page
         from backend.services.seo_service import (
             SeoContext,
             render_seo_html,
+            render_seo_markdown,
             strip_html_tags,
             webpage_ld,
         )
 
         base_html = await _get_base_html(request)
-        if base_html is None:
+        if base_html is None and not _accepts_markdown(request):
             return HTMLResponse(_NOT_FOUND_HTML, status_code=404)
 
         content_manager: ContentManager = request.app.state.content_manager
@@ -1270,10 +1395,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             page = await get_page(session_factory, content_manager, page_id)
         except SQLAlchemyError, OSError:
             logger.exception("Error loading page for SEO: %s", page_id)
-            return HTMLResponse(base_html, status_code=503, headers={"Retry-After": "60"})
+            fallback_html = base_html if base_html is not None else _NOT_FOUND_HTML
+            return _html_or_markdown_response(
+                request,
+                html=fallback_html,
+                markdown="# Page unavailable\n",
+                status_code=503,
+                headers={"Retry-After": "60"},
+            )
 
         if page is None:
-            return HTMLResponse(base_html)
+            fallback_html = base_html if base_html is not None else _NOT_FOUND_HTML
+            return _html_or_markdown_response(
+                request,
+                html=fallback_html,
+                markdown="# Page not found\n",
+            )
 
         await _fire_frontend_route_hit(request, f"/page/{page_id}")
 
@@ -1299,17 +1436,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             site_name=site_name,
             json_ld=webpage_ld(name=page.title, description=description, url=canonical),
             rendered_body=rendered_body,
+            markdown_body=content_manager.read_page(page_id),
             preload_data=preload_data,
         )
 
-        return HTMLResponse(render_seo_html(base_html, ctx))
+        return _html_or_markdown_response(
+            request,
+            html=render_seo_html(base_html or _NOT_FOUND_HTML, ctx),
+            markdown=render_seo_markdown(ctx),
+        )
 
     @app.get("/labels", include_in_schema=False, response_model=None)
-    async def labels_index_route(request: Request) -> HTMLResponse:
-        from backend.services.seo_service import SeoContext, render_seo_html
+    async def labels_index_route(request: Request) -> Response:
+        from backend.services.seo_service import SeoContext, render_seo_html, render_seo_markdown
 
         base_html = await _get_base_html(request)
-        if base_html is None:
+        if base_html is None and not _accepts_markdown(request):
             return HTMLResponse(_NOT_FOUND_HTML, status_code=404)
 
         content_manager: ContentManager = request.app.state.content_manager
@@ -1321,33 +1463,40 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             description=f"Labels \u2014 {site_name}",
             canonical_url=f"{base_url}/labels",
             site_name=site_name,
+            markdown_body="# Labels\n",
         )
 
-        return HTMLResponse(render_seo_html(base_html, ctx))
+        return _html_or_markdown_response(
+            request,
+            html=render_seo_html(base_html or _NOT_FOUND_HTML, ctx),
+            markdown=render_seo_markdown(ctx),
+        )
 
     @app.get("/labels/new", include_in_schema=False, response_model=None)
-    async def labels_new_route(request: Request) -> HTMLResponse:
+    async def labels_new_route(request: Request) -> Response:
         return await _serve_spa_shell(request)
 
     @app.get("/labels/{label_id}/settings", include_in_schema=False, response_model=None)
-    async def label_settings_route(label_id: str, request: Request) -> HTMLResponse:
+    async def label_settings_route(label_id: str, request: Request) -> Response:
         return await _serve_spa_shell(request)
 
     @app.get("/labels/{label_id}", include_in_schema=False, response_model=None)
-    async def label_detail_route(label_id: str, request: Request) -> HTMLResponse:
+    async def label_detail_route(label_id: str, request: Request) -> Response:
         from backend.models.label import LabelCache, PostLabelCache
         from backend.models.post import PostCache
         from backend.services.seo_service import (
             SeoContext,
             SeoPostItem,
             render_post_list_html,
+            render_post_list_markdown,
             render_seo_html,
+            render_seo_markdown,
             strip_html_tags,
         )
         from backend.utils.datetime import format_iso
 
         base_html = await _get_base_html(request)
-        if base_html is None:
+        if base_html is None and not _accepts_markdown(request):
             return HTMLResponse(_NOT_FOUND_HTML, status_code=404)
 
         content_manager: ContentManager = request.app.state.content_manager
@@ -1422,10 +1571,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         )
         except SQLAlchemyError:
             logger.exception("DB error loading label for SEO: %s", label_id)
-            return HTMLResponse(base_html, status_code=503, headers={"Retry-After": "60"})
+            fallback_html = base_html if base_html is not None else _NOT_FOUND_HTML
+            return _html_or_markdown_response(
+                request,
+                html=fallback_html,
+                markdown="# Label unavailable\n",
+                status_code=503,
+                headers={"Retry-After": "60"},
+            )
 
         if label_row is None:
-            return HTMLResponse(base_html)
+            fallback_html = base_html if base_html is not None else _NOT_FOUND_HTML
+            return _html_or_markdown_response(
+                request,
+                html=fallback_html,
+                markdown="# Label not found\n",
+            )
 
         label_id_val, label_names_raw, label_is_implicit = label_row
         # Defensive JSON parse: fall back to [label_id] if the DB value is malformed.
@@ -1462,17 +1623,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             canonical_url=f"{base_url}/labels/{label_id}",
             site_name=site_name,
             rendered_body=rendered_body,
+            markdown_body=render_post_list_markdown(posts_data_ld, heading=display_name),
             preload_data=preload_data,
         )
 
-        return HTMLResponse(render_seo_html(base_html, ctx))
+        return _html_or_markdown_response(
+            request,
+            html=render_seo_html(base_html or _NOT_FOUND_HTML, ctx),
+            markdown=render_seo_markdown(ctx),
+        )
 
     @app.get("/search", include_in_schema=False, response_model=None)
-    async def search_route(request: Request) -> HTMLResponse:
-        from backend.services.seo_service import SeoContext, render_seo_html
+    async def search_route(request: Request) -> Response:
+        from backend.services.seo_service import SeoContext, render_seo_html, render_seo_markdown
 
         base_html = await _get_base_html(request)
-        if base_html is None:
+        if base_html is None and not _accepts_markdown(request):
             return HTMLResponse(_NOT_FOUND_HTML, status_code=404)
 
         content_manager: ContentManager = request.app.state.content_manager
@@ -1484,26 +1650,33 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             description=f"Search \u2014 {site_name}",
             canonical_url=f"{base_url}/search",
             site_name=site_name,
+            markdown_body="# Search\n",
         )
 
-        return HTMLResponse(render_seo_html(base_html, ctx))
+        return _html_or_markdown_response(
+            request,
+            html=render_seo_html(base_html or _NOT_FOUND_HTML, ctx),
+            markdown=render_seo_markdown(ctx),
+        )
 
     @app.get("/login", include_in_schema=False, response_model=None)
-    async def login_route(request: Request) -> HTMLResponse:
+    async def login_route(request: Request) -> Response:
         return await _serve_spa_shell(request)
 
     @app.get("/admin", include_in_schema=False, response_model=None)
-    async def admin_route(request: Request) -> HTMLResponse:
+    async def admin_route(request: Request) -> Response:
         return await _serve_spa_shell(request)
 
     @app.get("/editor", include_in_schema=False, response_model=None)
-    async def editor_index_route(request: Request) -> HTMLResponse:
+    async def editor_index_route(request: Request) -> Response:
         return await _serve_spa_shell(request)
 
     @app.get("/editor/{path:path}", include_in_schema=False, response_model=None)
-    async def editor_route(path: str, request: Request) -> HTMLResponse:
+    async def editor_route(path: str, request: Request) -> Response:
         if ".." in path.split("/"):
             logger.warning("Path traversal attempt in editor route: %s", path)
+            if _accepts_markdown(request):
+                return _markdown_response("# Not found\n", status_code=404)
             return HTMLResponse(_NOT_FOUND_HTML, status_code=404)
         return await _serve_spa_shell(request)
 
@@ -1584,6 +1757,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         base_url = _base_url(request)
         body = (
             "User-agent: *\n"
+            "Content-Signal: ai-train=no, search=yes, ai-input=no\n"
             "Allow: /\n"
             "Disallow: /api/\n"
             "Disallow: /admin\n"

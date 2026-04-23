@@ -49,6 +49,7 @@ class SeoContext:
     modified_time: str | None = None
     json_ld: dict[str, Any] | None = None
     rendered_body: str | None = None
+    markdown_body: str | None = None
     preload_data: dict[str, Any] | None = None
 
     def __post_init__(self) -> None:
@@ -130,6 +131,36 @@ def render_seo_html(base_html: str, ctx: SeoContext) -> str:
     return result
 
 
+def _yaml_scalar(value: str) -> str:
+    return json.dumps(value, ensure_ascii=False)
+
+
+def render_seo_markdown(ctx: SeoContext) -> str:
+    """Render agent-friendly markdown for a page response."""
+    frontmatter = [
+        "---",
+        f"title: {_yaml_scalar(ctx.title)}",
+        f"url: {_yaml_scalar(ctx.canonical_url)}",
+        f"description: {_yaml_scalar(ctx.description)}",
+    ]
+    if ctx.site_name is not None:
+        frontmatter.append(f"site_name: {_yaml_scalar(ctx.site_name)}")
+    if ctx.author is not None:
+        frontmatter.append(f"author: {_yaml_scalar(ctx.author)}")
+    if ctx.published_time is not None:
+        frontmatter.append(f"published_time: {_yaml_scalar(ctx.published_time)}")
+    if ctx.modified_time is not None:
+        frontmatter.append(f"modified_time: {_yaml_scalar(ctx.modified_time)}")
+    frontmatter.append("---")
+
+    if ctx.markdown_body is not None and ctx.markdown_body.strip():
+        body = ctx.markdown_body.strip()
+    else:
+        body = f"# {ctx.title}\n\n{ctx.description}".strip()
+
+    return "\n".join(frontmatter) + "\n\n" + body + "\n"
+
+
 def blogposting_ld(
     *,
     headline: str,
@@ -205,3 +236,23 @@ def render_post_list_html(
         f'<h1 class="server-list-heading">{esc_heading}</h1>'
         f'<ul class="server-list">{list_html}</ul>'
     )
+
+
+def render_post_list_markdown(
+    posts: list[SeoPostItem],
+    *,
+    heading: str,
+) -> str:
+    """Render a simple markdown post list for agent responses."""
+    sections = [f"# {heading}"]
+    for post in posts:
+        title = strip_html_tags(post["title"])
+        slug = post["slug"]
+        date = post["date"]
+        excerpt = strip_html_tags(post["excerpt"])
+        sections.append(f"## [{title}](/post/{slug})")
+        sections.append(f"Published: {date}")
+        if excerpt:
+            sections.append("")
+            sections.append(excerpt)
+    return "\n\n".join(sections) + "\n"
