@@ -44,6 +44,7 @@ def update_site_settings(
         title=title,
         description=description,
         timezone=timezone,
+        favicon=cfg.favicon,
         pages=cfg.pages,
     )
     write_site_config(cm.content_dir, updated)

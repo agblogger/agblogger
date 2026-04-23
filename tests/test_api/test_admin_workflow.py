@@ -187,6 +187,7 @@ class TestAdminPageWorkflow:
     async def test_admin_pages_tolerates_unreadable_page_file(
         self, client: AsyncClient, app_settings: Settings
     ) -> None:
+
         token = await _login(client)
         headers = {"Authorization": f"Bearer {token}"}
 
@@ -205,3 +206,41 @@ class TestAdminPageWorkflow:
         pages = pages_resp.json()["pages"]
         broken_entry = next(page for page in pages if page["id"] == "broken")
         assert broken_entry["content"] is None
+
+
+class TestAdminSiteSettingsFavicon:
+    @pytest.mark.asyncio
+    async def test_get_site_settings_includes_favicon_null(self, client: AsyncClient) -> None:
+        token = await _login(client)
+        resp = await client.get(
+            "/api/admin/site",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "favicon" in data
+        assert data["favicon"] is None
+
+    @pytest.mark.asyncio
+    async def test_put_site_settings_preserves_favicon(self, app_settings: Settings) -> None:
+        # Pre-set a favicon in index.toml BEFORE the client/app starts so the
+        # ContentManager loads it during initialization.
+        index_toml = app_settings.content_dir / "index.toml"
+        index_toml.write_text(
+            '[site]\ntitle = "Test Blog"\ntimezone = "UTC"\nfavicon = "assets/favicon.png"\n'
+            '\n[[pages]]\nid = "timeline"\ntitle = "Posts"\n'
+        )
+
+        async with create_test_client(app_settings) as client:
+            token = await _login(client)
+            resp = await client.put(
+                "/api/admin/site",
+                json={"title": "Updated Blog", "description": "", "timezone": "UTC"},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            assert resp.status_code == 200
+            assert resp.json()["favicon"] == "assets/favicon.png"
+
+            # Verify it's still in the file
+            result_toml = index_toml.read_text()
+            assert 'favicon = "assets/favicon.png"' in result_toml

@@ -72,6 +72,7 @@ async def get_settings(
         description=cfg.description,
         timezone=cfg.timezone,
         password_change_disabled=settings.disable_password_change,
+        favicon=cfg.favicon,
     )
 
 
@@ -93,6 +94,7 @@ async def update_settings(
             title=body.title,
             description=body.description,
             timezone=body.timezone,
+            favicon=old_cfg.favicon,
             pages=old_cfg.pages,
         )
         index_path = content_manager.content_dir / "index.toml"
@@ -117,6 +119,7 @@ async def update_settings(
             description=cfg.description,
             timezone=cfg.timezone,
             password_change_disabled=settings.disable_password_change,
+            favicon=cfg.favicon,
         )
 
 
