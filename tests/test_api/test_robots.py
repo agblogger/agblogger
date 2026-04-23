@@ -68,6 +68,10 @@ class TestRobotsTxt:
         resp = await client.get("/robots.txt")
         assert "Disallow: /login" in resp.text
 
+    async def test_includes_content_signal_preferences(self, client: AsyncClient) -> None:
+        resp = await client.get("/robots.txt")
+        assert "Content-Signal: ai-train=no, search=yes, ai-input=no" in resp.text
+
     async def test_includes_sitemap_url(self, client: AsyncClient) -> None:
         resp = await client.get("/robots.txt")
         assert "Sitemap:" in resp.text
