@@ -54,6 +54,7 @@ from backend.services.auth_service import hash_password, revoke_admin_credential
 from backend.services.git_service import GitService
 from backend.services.rate_limit_service import InMemoryRateLimiter
 from backend.services.storage_quota import ContentSizeTracker
+from backend.services.upload_limits import MAX_FAVICON_SIZE
 from backend.utils.datetime import format_iso, now_utc
 
 logger = logging.getLogger(__name__)
@@ -131,7 +132,6 @@ _ALLOWED_FAVICON_CONTENT_TYPES: dict[str, str] = {
     "image/svg+xml": ".svg",
     "image/webp": ".webp",
 }
-_MAX_FAVICON_SIZE = 2 * 1024 * 1024  # 2 MB
 
 
 @router.post("/favicon", response_model=SiteSettingsResponse)
@@ -155,7 +155,7 @@ async def upload_favicon(
         )
 
     data = await file.read()
-    if len(data) > _MAX_FAVICON_SIZE:
+    if len(data) > MAX_FAVICON_SIZE:
         raise HTTPException(status_code=413, detail="Favicon file exceeds 2 MB limit.")
 
     async with content_write_lock:

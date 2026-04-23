@@ -387,13 +387,17 @@ def set_favicon(cm: ContentManager, *, extension: str, data: bytes) -> SiteConfi
 
     old_favicon = cm.site_config.favicon
     if old_favicon is not None:
-        old_path = cm.content_dir / old_favicon
         old_ext = Path(old_favicon).suffix
         if old_ext != extension:
             try:
-                old_path.unlink(missing_ok=True)
-            except OSError as exc:
-                logger.warning("Failed to remove old favicon %s: %s", old_path, exc)
+                old_path = cm._validate_path(old_favicon)
+            except ValueError:
+                logger.warning("Old favicon path is invalid, skipping deletion: %s", old_favicon)
+            else:
+                try:
+                    old_path.unlink(missing_ok=True)
+                except OSError as exc:
+                    logger.warning("Failed to remove old favicon %s: %s", old_path, exc)
 
     favicon_rel = f"assets/favicon{extension}"
     favicon_path = cm.content_dir / favicon_rel
@@ -416,11 +420,15 @@ def remove_favicon(cm: ContentManager) -> SiteConfig:
     """Remove the favicon file and clear the favicon field from index.toml."""
     cfg = cm.site_config
     if cfg.favicon is not None:
-        favicon_path = cm.content_dir / cfg.favicon
         try:
-            favicon_path.unlink(missing_ok=True)
-        except OSError as exc:
-            logger.warning("Failed to remove favicon file %s: %s", favicon_path, exc)
+            favicon_path = cm._validate_path(cfg.favicon)
+        except ValueError:
+            logger.warning("Favicon path is invalid, skipping deletion: %s", cfg.favicon)
+        else:
+            try:
+                favicon_path.unlink(missing_ok=True)
+            except OSError as exc:
+                logger.warning("Failed to remove favicon file %s: %s", favicon_path, exc)
 
     updated = SiteConfig(
         title=cfg.title,
