@@ -265,6 +265,7 @@ export interface AdminSiteSettings {
   description: string
   timezone: string
   password_change_disabled: boolean
+  favicon: string | null
 }
 
 export interface AdminPageConfig {

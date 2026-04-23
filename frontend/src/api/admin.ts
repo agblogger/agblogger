@@ -49,3 +49,12 @@ export async function changeAdminPassword(data: {
   return api.put('admin/password', { json: data }).json<{ status: string; sessions_revoked?: boolean }>()
 }
 
+export async function uploadAdminFavicon(file: File): Promise<AdminSiteSettings> {
+  const body = new FormData()
+  body.append('file', file)
+  return api.post('admin/favicon', { body }).json<AdminSiteSettings>()
+}
+
+export async function removeAdminFavicon(): Promise<AdminSiteSettings> {
+  return api.delete('admin/favicon').json<AdminSiteSettings>()
+}
