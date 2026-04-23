@@ -9,11 +9,18 @@
 #     ports:
 #       - "80:80"
 #       - "443:443"
+#       - "443:443/udp"
 #     volumes:
 #       - ./Caddyfile:/etc/caddy/Caddyfile
 #       - caddy-data:/data
 #     depends_on:
 #       - agblogger
+
+{
+    servers {
+        protocols h1 h2 h3
+    }
+}
 
 myblog.example.com {
     @postUpload path /api/posts/upload

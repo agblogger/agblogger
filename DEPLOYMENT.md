@@ -165,16 +165,16 @@ A dedicated Caddy container runs alongside AgBlogger in the same Docker Compose 
 **What the wizard asks:**
 - Public domain (e.g., `blog.example.com`)
 - Email for TLS certificate notices (optional but recommended)
-- Whether to expose Caddy ports 80/443 publicly (default: yes)
+- Whether to expose Caddy ports 80/443 publicly (default: yes; TCP `443` and UDP `443` are both published so HTTP/3 can negotiate)
 
 **How it works:**
 - The compose stack includes `agblogger`, `caddy`, and `goatcounter` services on a shared bridge network (`172.30.0.0/24`).
-- Caddy listens on ports 80 and 443 and reverse-proxies to `agblogger:8000`.
+- Caddy listens on ports 80 and 443, publishes both TCP and UDP `443`, explicitly enables `h1`/`h2`/`h3`, and reverse-proxies to `agblogger:8000`.
 - The Caddy subnet (`172.30.0.0/24`) is automatically added to `TRUSTED_PROXY_IPS`.
 - If public exposure is disabled, Caddy binds to `127.0.0.1` only (useful when another proxy sits in front).
 
 **Generated files:**
-- `Caddyfile.production` — domain-specific Caddy config with request body limits, HSTS, caching headers, and compression
+- `Caddyfile.production` — domain-specific Caddy config with request body limits, HSTS, explicit `h1`/`h2`/`h3` support, caching headers, and compression
 - `docker-compose.yml` — compose file for local deploys (includes AgBlogger, Caddy, and GoatCounter). For local deploys with public Caddy, `docker-compose.caddy-public.yml` is used as an additional overlay to bind Caddy to `0.0.0.0`.
 - `docker-compose.image.yml` — compose file for remote bundles (Caddy public/private ports are baked in based on the wizard choice, no separate overlay needed)
 
@@ -194,7 +194,7 @@ AgBlogger joins a shared Caddy instance that lives in a separate shared runtime.
 
 **How it works:**
 - A shared Caddy container is bootstrapped automatically if not already running. The deployment helper writes a reference `docker-compose.yml` into the shared Caddy directory, but starts the container directly with Docker so the default home-scoped path works on hosts that use snap-packaged Docker.
-- The shared Caddyfile uses `import /etc/caddy/sites/*.caddy` to load per-service site snippets.
+- The shared Caddyfile uses `import /etc/caddy/sites/*.caddy` to load per-service site snippets and explicitly enables `h1`/`h2`/`h3`.
 - AgBlogger's compose file joins the external `caddy` Docker network instead of running its own Caddy container.
 - The Caddy network subnet is auto-detected at deploy time and written into `TRUSTED_PROXY_IPS`.
 - Configuration changes are applied via `docker exec caddy caddy reload` (no container restart needed).

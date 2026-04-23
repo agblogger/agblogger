@@ -43,8 +43,8 @@ The upgrade workflow is: regenerate the bundle locally, copy all files to the se
 
 The deployment helper supports three Caddy configurations:
 
-- **Bundled** (default): a dedicated Caddy container is deployed alongside AgBlogger in the same compose stack. Suitable for single-service servers.
-- **External**: AgBlogger joins a shared Caddy instance that lives in a separate shared runtime at a configurable host directory (default `~/.local/share/caddy`). Each service drops a site snippet into the shared `sites/` directory. Local deploys resolve the live shared-network subnet into `TRUSTED_PROXY_IPS`, and remote bundles do the same during `setup.sh` using the first configured shared-network subnet before the app starts. Suitable for multi-service servers with distinct subdomains.
+- **Bundled** (default): a dedicated Caddy container is deployed alongside AgBlogger in the same compose stack. Generated Caddy configs explicitly advertise `h1`, `h2`, and `h3`, and the compose topology publishes both TCP and UDP `443` so HTTP/2 and HTTP/3 are available when the edge supports them. Suitable for single-service servers.
+- **External**: AgBlogger joins a shared Caddy instance that lives in a separate shared runtime at a configurable host directory (default `~/.local/share/caddy`). Each service drops a site snippet into the shared `sites/` directory. The shared root Caddyfile also enables `h1`, `h2`, and `h3`, and the bootstrapped Caddy container publishes TCP and UDP `443`. Local deploys resolve the live shared-network subnet into `TRUSTED_PROXY_IPS`, and remote bundles do the same during `setup.sh` using the first configured shared-network subnet before the app starts. Suitable for multi-service servers with distinct subdomains.
 - **None**: no Caddy; AgBlogger is exposed directly. Suitable when another reverse proxy is already in place.
 
 Switching between Caddy modes is handled automatically by `setup.sh`. The deployment helper also derives a GoatCounter site host from the configured public domain when possible, sanitizes direct trusted-host values to a bare domain, and passes that host into both the app container and the sidecar.

@@ -1,6 +1,12 @@
 # AgBlogger production Caddy config.
 # The deployment script overwrites this file with your configured domain.
 
+{
+    servers {
+        protocols h1 h2 h3
+    }
+}
+
 myblog.example.com {
     @postUpload path /api/posts/upload
     request_body @postUpload {

@@ -327,6 +327,7 @@ def test_build_caddyfile_content_includes_domain_and_optional_email() -> None:
     caddy = CaddyConfig(domain="blog.example.com", email="ops@example.com")
     content = build_caddyfile_content(caddy)
     assert "email ops@example.com" in content
+    assert "protocols h1 h2 h3" in content
     assert "blog.example.com {" in content
     assert "reverse_proxy agblogger:8000" in content
 
@@ -429,6 +430,7 @@ def test_build_caddy_public_override_exposes_ports() -> None:
     content = build_caddy_public_compose_override_content()
     assert '"80:80"' in content
     assert '"443:443"' in content
+    assert '"443:443/udp"' in content
 
 
 # ── build_lifecycle_commands ─────────────────────────────────────────
@@ -1706,6 +1708,7 @@ def test_docker_compose_yml_caddy_depends_on_healthy() -> None:
 
     section = _caddy_service_section()
     assert "condition: service_healthy" in section
+    assert '"127.0.0.1:443:443/udp"' in section
     assert "- agblogger" not in section
 
 
@@ -4278,12 +4281,14 @@ def test_build_caddy_site_snippet_includes_hsts() -> None:
 def test_build_shared_caddyfile_with_email() -> None:
     content = build_shared_caddyfile_content(acme_email="ops@example.com")
     assert "email ops@example.com" in content
+    assert "protocols h1 h2 h3" in content
     assert "import /etc/caddy/sites/*.caddy" in content
 
 
 def test_build_shared_caddyfile_without_email() -> None:
     content = build_shared_caddyfile_content(acme_email=None)
     assert "email" not in content
+    assert "protocols h1 h2 h3" in content
     assert "import /etc/caddy/sites/*.caddy" in content
 
 
@@ -4296,6 +4301,7 @@ def test_build_shared_caddy_compose_has_caddy_service() -> None:
     assert "image: caddy:2" in content
     assert '"80:80"' in content
     assert '"443:443"' in content
+    assert '"443:443/udp"' in content
 
 
 def test_build_shared_caddy_compose_has_sites_volume() -> None:
@@ -4876,6 +4882,7 @@ class TestBuildSetupScript:
         # Start shared Caddy without depending on compose file discovery
         assert "docker run -d" in script
         assert f"--name {SHARED_CADDY_CONTAINER_NAME}" in script
+        assert "-p 443:443/udp" in script
         assert "docker compose up -d" not in script
         # Subnet detection
         assert "docker network inspect" in script

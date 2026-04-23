@@ -362,10 +362,18 @@ def _caddy_site_block_body(domain: str) -> str:
     )
 
 
+def _caddy_global_block(email: str | None) -> str:
+    """Build the shared Caddy global options block."""
+    lines = ["{", "    servers {", "        protocols h1 h2 h3", "    }"]
+    if email:
+        lines.append(f"    email {email}")
+    lines.append("}")
+    return "\n".join(lines) + "\n\n"
+
+
 def build_caddyfile_content(config: CaddyConfig) -> str:
     """Build Caddyfile content for HTTPS reverse proxy with request body limits."""
-    global_block = f"{{\n    email {config.email}\n}}\n\n" if config.email else ""
-    return f"{global_block}{_caddy_site_block_body(config.domain)}"
+    return f"{_caddy_global_block(config.email)}{_caddy_site_block_body(config.domain)}"
 
 
 def build_caddy_site_snippet(config: CaddyConfig) -> str:
@@ -375,8 +383,7 @@ def build_caddy_site_snippet(config: CaddyConfig) -> str:
 
 def build_shared_caddyfile_content(acme_email: str | None) -> str:
     """Build the root Caddyfile for a shared Caddy instance."""
-    global_block = f"{{\n    email {acme_email}\n}}\n\n" if acme_email else ""
-    return f"{global_block}import /etc/caddy/sites/*.caddy\n"
+    return f"{_caddy_global_block(acme_email)}import /etc/caddy/sites/*.caddy\n"
 
 
 def build_shared_caddy_compose_content() -> str:
@@ -389,6 +396,7 @@ def build_shared_caddy_compose_content() -> str:
         "    ports:\n"
         '      - "80:80"\n'
         '      - "443:443"\n'
+        '      - "443:443/udp"\n'
         "    volumes:\n"
         "      - ./Caddyfile:/etc/caddy/Caddyfile:ro\n"
         "      - ./sites:/etc/caddy/sites:ro\n"
@@ -678,7 +686,7 @@ def build_setup_script_content(config: DeployConfig) -> str:
                 f"        docker volume create {SHARED_CADDY_DATA_VOLUME} >/dev/null",
                 f"        docker volume create {SHARED_CADDY_CONFIG_VOLUME} >/dev/null",
                 f"        docker run -d --name {container} --restart unless-stopped"
-                " -p 80:80 -p 443:443"
+                " -p 80:80 -p 443:443 -p 443:443/udp"
                 f' -v "$CADDY_DIR/{DEFAULT_SHARED_CADDYFILE}:/etc/caddy/Caddyfile:ro"'
                 f' -v "$CADDY_DIR/sites:/etc/caddy/sites:ro"'
                 f" -v {SHARED_CADDY_DATA_VOLUME}:/data"
@@ -1075,6 +1083,7 @@ def _caddy_service_section(*, caddy_public: bool = False) -> str:
         "    ports:\n"
         f'      - "{port_prefix}80:80"\n'
         f'      - "{port_prefix}443:443"\n'
+        f'      - "{port_prefix}443:443/udp"\n'
         "    volumes:\n"
         "      - ./Caddyfile.production:/etc/caddy/Caddyfile:ro\n"
         "      - caddy-data:/data\n"
@@ -1264,7 +1273,14 @@ def build_image_direct_compose_content(*, deploy_goatcounter: bool = True) -> st
 
 def build_caddy_public_compose_override_content() -> str:
     """Build compose override that exposes Caddy publicly."""
-    return 'services:\n  caddy:\n    ports:\n      - "80:80"\n      - "443:443"\n'
+    return (
+        "services:\n"
+        "  caddy:\n"
+        "    ports:\n"
+        '      - "80:80"\n'
+        '      - "443:443"\n'
+        '      - "443:443/udp"\n'
+    )
 
 
 def _external_caddy_network_block() -> str:
@@ -1472,6 +1488,8 @@ def ensure_shared_caddy(caddy_dir: Path, acme_email: str | None) -> None:
                 "80:80",
                 "-p",
                 "443:443",
+                "-p",
+                "443:443/udp",
                 "-v",
                 f"{effective_caddy_dir / DEFAULT_SHARED_CADDYFILE}:/etc/caddy/Caddyfile:ro",
                 "-v",
