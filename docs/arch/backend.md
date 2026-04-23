@@ -76,7 +76,7 @@ Public read paths are broad for published content, while mutations are concentra
 
 ## SEO and Server-Side Enrichment
 
-Dedicated route handlers registered before the StaticFiles catch-all enrich the SPA shell with meta tags, structured data, server-rendered content, and preloaded API data so crawlers and no-JS browsers see real content without JavaScript. A shared SEO service provides the injection pipeline. The backend also serves a dynamic sitemap, robots.txt, and RSS feed.
+Dedicated route handlers registered before the StaticFiles catch-all enrich the SPA shell with meta tags, structured data, server-rendered content, and preloaded API data so crawlers and no-JS browsers see real content without JavaScript. A shared SEO service provides the injection pipeline. The backend also serves a dynamic sitemap, robots.txt, RSS feed, and a `/.well-known/api-catalog` discovery document; the homepage advertises discovery targets with RFC 8288 `Link` headers.
 
 ## Failure Handling
 

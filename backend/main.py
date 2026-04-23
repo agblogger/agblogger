@@ -67,10 +67,33 @@ _DEFAULT_INDEX_TOML = (
 _DEFAULT_LABELS_TOML = "[labels]\n"
 
 _NOT_FOUND_HTML = "<html><body>Not found</body></html>"
+_API_CATALOG_PROFILE = "https://www.rfc-editor.org/info/rfc9727"
 
 
 def _base_url(request: Request) -> str:
     return str(request.base_url).rstrip("/")
+
+
+def _docs_enabled(settings: Settings) -> bool:
+    return settings.debug or settings.expose_docs
+
+
+def _api_catalog_links(base_url: str, *, docs_enabled: bool) -> list[str]:
+    links = ['</.well-known/api-catalog>; rel="api-catalog"']
+    if docs_enabled:
+        links.append('</openapi.json>; rel="service-desc"; type="application/vnd.oai.openapi+json"')
+        links.append('</docs>; rel="service-doc"')
+    return links
+
+
+def _set_link_header(response: Response, links: list[str]) -> None:
+    if not links:
+        return
+    existing = response.headers.get("Link")
+    if existing:
+        response.headers["Link"] = f"{existing}, {', '.join(links)}"
+        return
+    response.headers["Link"] = ", ".join(links)
 
 
 def _looks_like_post_asset_path(file_path: str) -> bool:
@@ -451,7 +474,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     if settings is None:
         settings = Settings()
 
-    docs_enabled = settings.debug or settings.expose_docs
+    docs_enabled = _docs_enabled(settings)
 
     app = FastAPI(
         title="AgBlogger",
@@ -1161,6 +1184,41 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         response = HTMLResponse(render_seo_html(base_html, ctx))
         mark_auth_sensitive_read(response, is_authenticated=is_authenticated)
+        _set_link_header(
+            response,
+            _api_catalog_links(_base_url(request), docs_enabled=docs_enabled),
+        )
+        return response
+
+    @app.get("/.well-known/api-catalog", include_in_schema=False, response_model=None)
+    async def api_catalog_route(request: Request) -> Response:
+        base_url = _base_url(request)
+        api_root = f"{base_url}/api"
+
+        api_links: dict[str, object] = {
+            "anchor": api_root,
+            "item": [{"href": api_root}],
+        }
+        if docs_enabled:
+            api_links["service-desc"] = [
+                {
+                    "href": f"{base_url}/openapi.json",
+                    "type": "application/vnd.oai.openapi+json",
+                }
+            ]
+            api_links["service-doc"] = [{"href": f"{base_url}/docs"}]
+
+        payload = {
+            "linkset": [api_links],
+        }
+        response = JSONResponse(
+            content=payload,
+            media_type=f'application/linkset+json; profile="{_API_CATALOG_PROFILE}"',
+        )
+        _set_link_header(
+            response,
+            _api_catalog_links(base_url, docs_enabled=docs_enabled),
+        )
         return response
 
     @app.get("/page/{page_id}", include_in_schema=False, response_model=None)

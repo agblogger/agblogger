@@ -163,6 +163,11 @@ class TestHomepageSeo:
         assert resp.status_code == 200
         assert "text/html" in resp.headers["content-type"]
 
+    async def test_includes_api_catalog_link_header(self, client: AsyncClient) -> None:
+        resp = await client.get("/")
+        link_header = resp.headers.get("Link", "")
+        assert '</.well-known/api-catalog>; rel="api-catalog"' in link_header
+
     async def test_title_is_site_name(self, client: AsyncClient) -> None:
         resp = await client.get("/")
         assert "<title>Test Blog</title>" in resp.text
@@ -255,6 +260,38 @@ class TestHomepageSeo:
         assert resp.status_code == 200
         cache_control = resp.headers.get("Cache-Control", "")
         assert cache_control != "private, no-store"
+
+
+class TestApiCatalogDiscovery:
+    async def test_api_catalog_endpoint_returns_linkset_json(self, client: AsyncClient) -> None:
+        resp = await client.get("/.well-known/api-catalog")
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith("application/linkset+json")
+
+    async def test_api_catalog_lists_api_root(self, client: AsyncClient) -> None:
+        resp = await client.get("/.well-known/api-catalog")
+        payload = resp.json()
+
+        linkset = cast("list[dict[str, object]]", payload["linkset"])
+        api_entry = next(entry for entry in linkset if entry["anchor"] == "http://test/api")
+        items = cast("list[dict[str, object]]", api_entry["item"])
+        assert items == [{"href": "http://test/api"}]
+
+    async def test_api_catalog_includes_openapi_when_docs_are_enabled(
+        self, client: AsyncClient
+    ) -> None:
+        resp = await client.get("/.well-known/api-catalog")
+        payload = resp.json()
+
+        linkset = cast("list[dict[str, object]]", payload["linkset"])
+        api_entry = next(entry for entry in linkset if entry["anchor"] == "http://test/api")
+        service_desc = cast("list[dict[str, object]]", api_entry["service-desc"])
+        assert service_desc == [
+            {
+                "href": "http://test/openapi.json",
+                "type": "application/vnd.oai.openapi+json",
+            }
+        ]
 
 
 class TestPageSeo:
