@@ -330,6 +330,14 @@ class TestPageSeo:
         resp = await client.get("/page/about")
         assert "data-content" in resp.text
 
+    async def test_rendered_body_uses_css_classes_instead_of_inline_styles(
+        self, client: AsyncClient
+    ) -> None:
+        resp = await client.get("/page/about")
+        root_html = _extract_root_fragment(resp.text)
+        assert 'class="server-shell"' in root_html
+        assert 'style="' not in root_html
+
     async def test_rendered_body_strips_unsafe_markup(self, client: AsyncClient) -> None:
         resp = await client.get("/page/unsafe")
         assert resp.status_code == 200

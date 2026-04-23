@@ -13,10 +13,6 @@ logger = logging.getLogger(__name__)
 
 _MAX_DESCRIPTION_LENGTH = 200
 
-_PRE_RENDER_STYLE = (
-    "max-width:42rem;margin:0 auto;padding:2rem 1rem;"
-    "font-family:system-ui,sans-serif;line-height:1.7;color:#1a1a1a"
-)
 _PRELOAD_MARKER_ATTR = "data-agblogger-preload"
 
 
@@ -112,7 +108,7 @@ def render_seo_html(base_html: str, ctx: SeoContext) -> str:
     if ctx.rendered_body is not None:
         result = result.replace(
             '<div id="root"></div>',
-            f'<div id="root"><div style="{_PRE_RENDER_STYLE}">{ctx.rendered_body}</div></div>',
+            f'<div id="root"><div class="server-shell">{ctx.rendered_body}</div></div>',
         )
 
     if ctx.preload_data is not None:
@@ -197,16 +193,15 @@ def render_post_list_html(
         esc_date = html.escape(post["date"])
         esc_excerpt = html.escape(strip_html_tags(post["excerpt"]))
         items.append(
-            f'<li data-id="{esc_id}" style="margin-bottom:1.5rem">'
-            f'<a href="/post/{esc_slug}" style="font-size:1.25rem;color:#1a1a1a;'
-            f'text-decoration:none">{esc_title}</a>'
-            f'<p style="color:#666;font-size:0.875rem;margin:0.25rem 0">{esc_date}</p>'
-            f'<div data-excerpt><p style="color:#444;font-size:0.95rem;margin:0">'
+            f'<li class="server-list-item" data-id="{esc_id}">'
+            f'<a class="server-link" href="/post/{esc_slug}">{esc_title}</a>'
+            f'<p class="server-date">{esc_date}</p>'
+            f'<div class="server-excerpt" data-excerpt><p>'
             f"{esc_excerpt}</p></div>"
             f"</li>"
         )
     list_html = "\n".join(items)
     return (
-        f'<h1 style="font-size:2.25rem;line-height:1.2;margin-bottom:1.5rem">{esc_heading}</h1>'
-        f'<ul style="list-style:none;padding:0">{list_html}</ul>'
+        f'<h1 class="server-list-heading">{esc_heading}</h1>'
+        f'<ul class="server-list">{list_html}</ul>'
     )

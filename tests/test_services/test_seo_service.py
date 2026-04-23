@@ -223,12 +223,12 @@ class TestRenderSeoHtmlBody:
     def test_injects_rendered_body_inside_root(self) -> None:
         result = render_seo_html(BASE_HTML, _make_ctx(rendered_body="<h1>Hello</h1><p>World</p>"))
         assert "<h1>Hello</h1><p>World</p>" in result
-        assert '<div id="root"><div style="' in result
+        assert '<div id="root"><div class="server-shell">' in result
 
-    def test_body_has_inline_styles(self) -> None:
+    def test_body_uses_css_classes_instead_of_inline_styles(self) -> None:
         result = render_seo_html(BASE_HTML, _make_ctx(rendered_body="<p>Hi</p>"))
-        assert "max-width:42rem" in result
-        assert "font-family:system-ui" in result
+        assert 'class="server-shell"' in result
+        assert 'style="' not in result
 
     def test_omits_body_when_none(self) -> None:
         result = render_seo_html(BASE_HTML, _make_ctx(rendered_body=None))
@@ -331,9 +331,9 @@ class TestRenderPostListHtml:
             },
         ]
         result = render_post_list_html(posts, heading="My Blog")
-        assert '<a href="/post/first"' in result
+        assert 'href="/post/first"' in result
         assert "First Post" in result
-        assert '<a href="/post/second"' in result
+        assert 'href="/post/second"' in result
         assert "March 28, 2026" in result
 
     def test_renders_heading(self) -> None:
@@ -380,6 +380,19 @@ class TestRenderPostListHtml:
         result = render_post_list_html(posts, heading="Blog")
         assert "data-excerpt" in result
         assert "My excerpt text" in result
+
+    def test_uses_css_classes_instead_of_inline_styles(self) -> None:
+        posts: list[SeoPostItem] = [
+            {"id": "1", "title": "T", "slug": "s", "date": "D", "excerpt": "My excerpt text"}
+        ]
+        result = render_post_list_html(posts, heading="Blog")
+        assert 'class="server-list-heading"' in result
+        assert 'class="server-list"' in result
+        assert 'class="server-list-item"' in result
+        assert 'class="server-link"' in result
+        assert 'class="server-date"' in result
+        assert 'class="server-excerpt"' in result
+        assert 'style="' not in result
 
     def test_accepts_seo_post_item_typed_dicts(self) -> None:
         """render_post_list_html must work with properly typed SeoPostItem dicts."""

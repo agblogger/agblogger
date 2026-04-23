@@ -162,7 +162,7 @@ def _render_trusted_article_html(
     if metadata_text is not None:
         parts.extend(
             [
-                '<p style="color:#666;font-size:0.875rem;margin-bottom:2rem">',
+                '<p class="server-meta">',
                 html.escape(metadata_text),
                 "</p>",
             ]
@@ -982,8 +982,36 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 status_code=301,
             )
 
-        # Post view: /post/<slug> → serve SPA HTML with SEO enrichment
+        from backend.api.posts import _resolve_symlink_redirect
         from backend.models.post import PostCache
+        from backend.utils.slug import resolve_slug_candidates
+
+        route_content_manager: ContentManager = request.app.state.content_manager
+        redirected_post: PostCache | None = None
+        resolved_public_path: str | None = None
+        for candidate in resolve_slug_candidates(file_path):
+            resolved = _resolve_symlink_redirect(candidate, route_content_manager)
+            if resolved is None:
+                continue
+            resolved_public_path = resolved
+            break
+
+        if resolved_public_path is not None:
+            try:
+                session_factory = request.app.state.session_factory
+                async with session_factory() as session:
+                    stmt = select(PostCache).where(PostCache.file_path == resolved_public_path)
+                    result = await session.execute(stmt)
+                    redirected_post = result.scalar_one_or_none()
+            except SQLAlchemyError:
+                logger.exception("DB error resolving public post redirect for %s", file_path)
+            else:
+                if redirected_post is not None and not redirected_post.is_draft:
+                    redirected_slug = _public_post_slug(redirected_post.file_path)
+                    if redirected_slug is not None:
+                        return RedirectResponse(url=f"/post/{redirected_slug}", status_code=301)
+
+        # Post view: /post/<slug> → serve SPA HTML with SEO enrichment
         from backend.services.seo_service import (
             SeoContext,
             blogposting_ld,
@@ -995,9 +1023,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         base_html = await _get_base_html(request)
         if base_html is None:
             return HTMLResponse(_NOT_FOUND_HTML, status_code=404)
-
-        # Look up the post by public slug only.
-        from backend.utils.slug import resolve_slug_candidates
 
         slug = file_path
         post = None
