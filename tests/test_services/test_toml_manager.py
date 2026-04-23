@@ -106,3 +106,41 @@ class TestNonIterableParents:
         result = parse_labels_config(tmp_path)
         assert result["broken"].parents == []
         assert "good" in result
+
+
+def test_site_config_favicon_roundtrip(tmp_path: Path) -> None:
+    config = SiteConfig(
+        title="My Blog",
+        favicon="assets/favicon.png",
+        pages=[PageConfig(id="timeline", title="Posts")],
+    )
+    (tmp_path / "index.toml").write_text("[site]\n")
+
+    write_site_config(tmp_path, config)
+    result = parse_site_config(tmp_path)
+
+    assert result.favicon == "assets/favicon.png"
+
+
+def test_site_config_favicon_omitted_when_none(tmp_path: Path) -> None:
+    config = SiteConfig(title="My Blog", favicon=None)
+    (tmp_path / "index.toml").write_text("[site]\n")
+
+    write_site_config(tmp_path, config)
+    raw = (tmp_path / "index.toml").read_bytes()
+
+    assert b"favicon" not in raw
+    assert parse_site_config(tmp_path).favicon is None
+
+
+def test_site_config_with_pages_preserves_favicon(tmp_path: Path) -> None:
+    config = SiteConfig(title="Blog", favicon="assets/favicon.ico", pages=[])
+    updated = config.with_pages([PageConfig(id="timeline", title="Posts")])
+
+    assert updated.favicon == "assets/favicon.ico"
+
+
+def test_parse_site_config_favicon_missing_returns_none(tmp_path: Path) -> None:
+    (tmp_path / "index.toml").write_text('[site]\ntitle = "Blog"\n')
+    result = parse_site_config(tmp_path)
+    assert result.favicon is None

@@ -23,6 +23,7 @@ class SiteConfig:
     title: str = "My Blog"
     description: str = ""
     timezone: str = "UTC"
+    favicon: str | None = None
     pages: list[PageConfig] = field(default_factory=list)
 
     def with_pages(self, pages: list[PageConfig]) -> SiteConfig:
@@ -31,6 +32,7 @@ class SiteConfig:
             title=self.title,
             description=self.description,
             timezone=self.timezone,
+            favicon=self.favicon,
             pages=pages,
         )
 
@@ -106,6 +108,7 @@ def parse_site_config(content_dir: Path) -> SiteConfig:
         title=site_data.get("title", "My Blog"),
         description=site_data.get("description", ""),
         timezone=timezone,
+        favicon=site_data.get("favicon") or None,
         pages=pages,
     )
 
@@ -198,6 +201,8 @@ def serialize_site_config(config: SiteConfig) -> bytes:
         "description": config.description,
         "timezone": config.timezone,
     }
+    if config.favicon is not None:
+        site_data["favicon"] = config.favicon
 
     pages_data: list[dict[str, Any]] = []
     for page in config.pages:
