@@ -114,4 +114,68 @@ describe('FaviconSection', () => {
       expect(screen.getByText(/failed to remove/i)).toBeInTheDocument()
     })
   })
+
+  it('calls uploadAdminFavicon and onSavedSettings on file selection', async () => {
+    const updatedSettings = { ...baseSettings, favicon: 'assets/favicon.png' }
+    mockUploadAdminFavicon.mockResolvedValue(updatedSettings)
+
+    render(
+      <FaviconSection
+        initialFavicon={null}
+        busy={false}
+        onSavedSettings={onSavedSettings}
+      />
+    )
+
+    const file = new File(['png'], 'favicon.png', { type: 'image/png' })
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement
+    await userEvent.upload(input, file)
+
+    await waitFor(() => {
+      expect(mockUploadAdminFavicon).toHaveBeenCalledWith(file)
+      expect(onSavedSettings).toHaveBeenCalledWith(updatedSettings)
+    })
+  })
+
+  it('shows file too large error on 413 upload response', async () => {
+    const { MockHTTPError } = await import('@/test/MockHTTPError')
+    mockUploadAdminFavicon.mockRejectedValue(new MockHTTPError(413))
+
+    render(
+      <FaviconSection
+        initialFavicon={null}
+        busy={false}
+        onSavedSettings={onSavedSettings}
+      />
+    )
+
+    const file = new File(['png'], 'favicon.png', { type: 'image/png' })
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement
+    await userEvent.upload(input, file)
+
+    await waitFor(() => {
+      expect(screen.getByText(/file too large/i)).toBeInTheDocument()
+    })
+  })
+
+  it('shows unsupported file type error on 422 upload response', async () => {
+    const { MockHTTPError } = await import('@/test/MockHTTPError')
+    mockUploadAdminFavicon.mockRejectedValue(new MockHTTPError(422))
+
+    render(
+      <FaviconSection
+        initialFavicon={null}
+        busy={false}
+        onSavedSettings={onSavedSettings}
+      />
+    )
+
+    const file = new File(['png'], 'favicon.png', { type: 'image/png' })
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement
+    await userEvent.upload(input, file)
+
+    await waitFor(() => {
+      expect(screen.getByText(/unsupported file type/i)).toBeInTheDocument()
+    })
+  })
 })

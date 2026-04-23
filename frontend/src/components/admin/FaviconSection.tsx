@@ -105,7 +105,7 @@ export default function FaviconSection({
             <div className="w-10 h-10 border border-border rounded-lg bg-paper-warm
                             flex items-center justify-center overflow-hidden flex-shrink-0">
               <img
-                src="/favicon.ico"
+                src={`/favicon.ico?v=${encodeURIComponent(favicon)}`}
                 alt="Current favicon"
                 className="w-full h-full object-contain"
               />
