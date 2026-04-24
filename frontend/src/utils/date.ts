@@ -29,14 +29,14 @@ export function formatLocalDate(
   const normalised = normalise(dateStr)
   const date = parseISO(normalised)
   if (!isValid(date)) {
-    console.warn(`Failed to parse date "${dateStr}" (normalised: "${normalised}")`)
-    return dateStr
+    console.error(`Failed to parse date "${dateStr}" (normalised: "${normalised}")`)
+    return '[invalid date]'
   }
   try {
     return new Intl.DateTimeFormat(undefined, options).format(date)
   } catch (err) {
-    console.warn(`Failed to format date "${dateStr}" with options ${JSON.stringify(options)}:`, err)
-    return dateStr
+    console.error(`Failed to format date "${dateStr}" with options ${JSON.stringify(options)}:`, err)
+    return '[invalid date]'
   }
 }
 
@@ -46,15 +46,19 @@ export function formatLocalDate(
  */
 export function formatRelativeDate(dateStr: string): string {
   if (!dateStr) return ''
+  const date = parseISO(normalise(dateStr))
+  if (!isValid(date)) {
+    console.error(`Failed to parse date "${dateStr}" for relative formatting`)
+    return '[invalid date]'
+  }
   try {
-    const date = parseISO(normalise(dateStr))
     if (Math.abs(differenceInDays(new Date(), date)) < 7) {
       return formatDistanceToNow(date, { addSuffix: true })
     }
     return formatLocalDate(dateStr)
   } catch (err) {
-    console.warn(`Failed to parse date "${dateStr}":`, err)
-    return dateStr
+    console.error(`Failed to format relative date "${dateStr}":`, err)
+    return '[invalid date]'
   }
 }
 
@@ -95,7 +99,7 @@ export function utcTimestampToLocalDateInput(dateStr: string): string {
   try {
     return format(parseISO(normalise(dateStr)), 'yyyy-MM-dd')
   } catch (err) {
-    console.warn(`Failed to parse date "${dateStr}":`, err)
-    return dateStr || ''
+    console.error(`Failed to parse date "${dateStr}":`, err)
+    return dateStr
   }
 }

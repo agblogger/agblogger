@@ -1,6 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, it, expect, vi } from 'vitest'
+import { afterEach, describe, it, expect, vi } from 'vitest'
 import DateRangePicker from '../DateRangePicker'
 import type { DateRange } from '@/hooks/useAnalyticsDashboard'
 
@@ -78,4 +78,17 @@ describe('DateRangePicker', () => {
     expect(screen.getByLabelText('Start date')).toHaveValue('2024-02-01')
     expect(screen.getByLabelText('End date')).toHaveValue('2024-02-28')
   })
+
+  it('sets max attribute on date inputs to today in local timezone', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 2, 5, 10, 0, 0))
+    renderPicker('7d')
+    expect(screen.getByLabelText('Start date')).toHaveAttribute('max', '2026-03-05')
+    expect(screen.getByLabelText('End date')).toHaveAttribute('max', '2026-03-05')
+    vi.useRealTimers()
+  })
+})
+
+afterEach(() => {
+  vi.useRealTimers()
 })

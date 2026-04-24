@@ -6,6 +6,7 @@ import {
   localDateToUtcStart,
   localDateToUtcEnd,
   utcTimestampToLocalDateInput,
+  dateToLocalString,
 } from '../date'
 
 describe('formatLocalDate', () => {
@@ -53,18 +54,26 @@ describe('formatLocalDate', () => {
     expect(result).toBe(expected)
   })
 
-  it('falls back to full string on invalid input', () => {
-    vi.spyOn(console, 'warn').mockImplementation(() => {})
-    expect(formatLocalDate('not-a-date')).toBe('not-a-date')
+  it('returns [invalid date] on invalid input', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(formatLocalDate('not-a-date')).toBe('[invalid date]')
   })
 
-  it('falls back to full string on multi-word invalid input', () => {
-    vi.spyOn(console, 'warn').mockImplementation(() => {})
-    expect(formatLocalDate('totally invalid date')).toBe('totally invalid date')
+  it('returns [invalid date] on multi-word invalid input', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(formatLocalDate('totally invalid date')).toBe('[invalid date]')
   })
 
   it('returns empty string for empty input', () => {
     expect(formatLocalDate('')).toBe('')
+  })
+
+  it('handles two-digit negative UTC offset', () => {
+    const result = formatLocalDate('2026-03-01 12:00:00-05')
+    const expected = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(
+      new Date('2026-03-01T12:00:00-05:00'),
+    )
+    expect(result).toBe(expected)
   })
 
   it('handles bare YYYY-MM-DD date strings without a time component', () => {
@@ -114,14 +123,18 @@ describe('formatRelativeDate', () => {
     expect(result).toBe(expected)
   })
 
-  it('falls back to full string on invalid input', () => {
-    vi.spyOn(console, 'warn').mockImplementation(() => {})
-    expect(formatRelativeDate('not-a-date')).toBe('not-a-date')
+  it('returns empty string for empty input', () => {
+    expect(formatRelativeDate('')).toBe('')
   })
 
-  it('falls back to full string on multi-word invalid input', () => {
-    vi.spyOn(console, 'warn').mockImplementation(() => {})
-    expect(formatRelativeDate('totally invalid date')).toBe('totally invalid date')
+  it('returns [invalid date] on invalid input', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(formatRelativeDate('not-a-date')).toBe('[invalid date]')
+  })
+
+  it('returns [invalid date] on multi-word invalid input', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(formatRelativeDate('totally invalid date')).toBe('[invalid date]')
   })
 })
 
@@ -165,7 +178,25 @@ describe('utcTimestampToLocalDateInput', () => {
   })
 
   it('falls back to the original string on invalid input', () => {
-    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.spyOn(console, 'error').mockImplementation(() => {})
     expect(utcTimestampToLocalDateInput('not-a-date')).toBe('not-a-date')
+  })
+})
+
+describe('dateToLocalString', () => {
+  it('formats a Date object as YYYY-MM-DD in local timezone', () => {
+    expect(dateToLocalString(new Date(2026, 2, 5))).toBe('2026-03-05')
+  })
+
+  it('zero-pads single-digit month and day', () => {
+    expect(dateToLocalString(new Date(2026, 0, 7))).toBe('2026-01-07')
+  })
+
+  it('handles December 31 (year-end boundary)', () => {
+    expect(dateToLocalString(new Date(2026, 11, 31))).toBe('2026-12-31')
+  })
+
+  it('handles January 1 (year-start boundary)', () => {
+    expect(dateToLocalString(new Date(2027, 0, 1))).toBe('2027-01-01')
   })
 })

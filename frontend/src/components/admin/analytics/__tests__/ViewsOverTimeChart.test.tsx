@@ -98,6 +98,15 @@ describe('ViewsOverTimeChart', () => {
     const expectedEnd = formatLocalDate('2024-01-09', { month: 'numeric', day: 'numeric' })
     expect(buckets[1]?.label).toContain(expectedEnd)
   })
+
+  it('bucketWeekly with a single-day input produces a single bucket with a range label', () => {
+    const days: DailyViewCount[] = [{ date: '2024-01-01', views: 5 }]
+    const buckets = bucketWeekly(days)
+    expect(buckets).toHaveLength(1)
+    expect(buckets[0]?.views).toBe(5)
+    const expectedDate = formatLocalDate('2024-01-01', { month: 'numeric', day: 'numeric' })
+    expect(buckets[0]?.label).toBe(`${expectedDate}–${expectedDate}`)
+  })
 })
 
 describe('formatShortDate', () => {
@@ -111,5 +120,10 @@ describe('formatShortDate', () => {
 
   it('returns empty string for empty input', () => {
     expect(formatShortDate('')).toBe('')
+  })
+
+  it('returns [invalid date] for an invalid date string', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(formatShortDate('not-a-date')).toBe('[invalid date]')
   })
 })
