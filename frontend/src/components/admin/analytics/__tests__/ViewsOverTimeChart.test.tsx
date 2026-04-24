@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import { describe, it, expect } from 'vitest'
+import { parseISO } from 'date-fns'
 import ViewsOverTimeChart from '../ViewsOverTimeChart'
 import type { DailyViewCount } from '@/api/client'
 
@@ -10,10 +11,14 @@ globalThis.ResizeObserver = class ResizeObserver {
 }
 
 function makeDays(count: number): DailyViewCount[] {
-  return Array.from({ length: count }, (_, i) => ({
-    date: `2024-01-${String(i + 1).padStart(2, '0')}`,
-    views: i + 1,
-  }))
+  const base = new Date(2024, 0, 1) // Jan 1, local time
+  return Array.from({ length: count }, (_, i) => {
+    const d = new Date(base)
+    d.setDate(base.getDate() + i)
+    const month = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    return { date: `2024-${month}-${day}`, views: i + 1 }
+  })
 }
 
 describe('ViewsOverTimeChart', () => {
@@ -65,7 +70,7 @@ describe('ViewsOverTimeChart', () => {
     const expected = new Intl.DateTimeFormat(undefined, {
       month: 'numeric',
       day: 'numeric',
-    }).format(new Date('2024-01-01'))
+    }).format(parseISO('2024-01-01'))
     const labelNodes = screen.queryAllByText(expected)
     expect(labelNodes.length).toBeGreaterThan(0)
   })
