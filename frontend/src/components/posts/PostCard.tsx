@@ -30,7 +30,7 @@ function PostCardInner({ post, index = 0 }: PostCardProps) {
               {post.title}
             </h2>
             {post.is_draft && (
-              <span className="text-[10px] font-mono font-semibold uppercase tracking-widest px-1.5 py-0.5 bg-muted/10 text-muted border border-muted/30 rounded shrink-0">
+              <span className="text-[10px] font-mono font-semibold uppercase tracking-widest px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300 border border-amber-300/50 dark:border-amber-700/50 rounded shrink-0">
                 DRAFT
               </span>
             )}
