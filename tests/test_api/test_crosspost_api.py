@@ -24,7 +24,6 @@ class TestMastodonAuthorize:
             )
             assert resp.status_code == 401
 
-    @pytest.mark.slow
     async def test_mastodon_authorize_rejects_invalid_instance(
         self, test_settings: Settings
     ) -> None:
@@ -45,7 +44,6 @@ class TestMastodonAuthorize:
             assert resp.status_code == 400
             assert resp.json()["detail"] == "Invalid instance URL"
 
-    @pytest.mark.slow
     async def test_mastodon_authorize_returns_503_when_not_configured(
         self, test_settings: Settings
     ) -> None:
@@ -221,7 +219,6 @@ class TestXAuthorize:
             resp = await client.post("/api/crosspost/x/authorize")
             assert resp.status_code == 401
 
-    @pytest.mark.slow
     async def test_x_authorize_returns_503_when_not_configured(
         self, test_settings: Settings
     ) -> None:
@@ -240,7 +237,6 @@ class TestXAuthorize:
             )
             assert resp.status_code == 503
 
-    @pytest.mark.slow
     async def test_x_authorize_returns_authorization_url(self, test_settings: Settings) -> None:
         test_settings.bluesky_client_url = "https://myblog.example.com"
         test_settings.x_client_id = "test_client_id"
@@ -266,7 +262,6 @@ class TestXAuthorize:
             assert "response_type=code" in auth_url
             assert "scope=tweet.read+tweet.write+users.read+offline.access" in auth_url
 
-    @pytest.mark.slow
     async def test_x_authorize_returns_503_when_bluesky_client_url_not_set(
         self, test_settings: Settings
     ) -> None:
@@ -286,7 +281,6 @@ class TestXAuthorize:
             )
             assert resp.status_code == 503
 
-    @pytest.mark.slow
     async def test_x_authorize_rejects_excess_pending_flows_per_user(
         self, test_settings: Settings
     ) -> None:
@@ -410,7 +404,6 @@ class TestFacebookAuthorize:
             resp = await client.post("/api/crosspost/facebook/authorize")
             assert resp.status_code == 401
 
-    @pytest.mark.slow
     async def test_facebook_authorize_returns_503_when_not_configured(
         self, test_settings: Settings
     ) -> None:
@@ -429,7 +422,6 @@ class TestFacebookAuthorize:
             )
             assert resp.status_code == 503
 
-    @pytest.mark.slow
     async def test_facebook_authorize_returns_503_when_bluesky_client_url_not_set(
         self, test_settings: Settings
     ) -> None:
@@ -449,7 +441,6 @@ class TestFacebookAuthorize:
             )
             assert resp.status_code == 503
 
-    @pytest.mark.slow
     async def test_facebook_authorize_returns_authorization_url(
         self, test_settings: Settings
     ) -> None:
@@ -528,7 +519,6 @@ class TestFacebookPages:
             )
             assert resp.status_code == 401
 
-    @pytest.mark.slow
     async def test_facebook_pages_rejects_invalid_state(self, test_settings: Settings) -> None:
         """Issue #1: Invalid state token should return 400."""
         test_settings.bluesky_client_url = "https://myblog.example.com"
@@ -561,7 +551,6 @@ class TestFacebookSelectPage:
             )
             assert resp.status_code == 401
 
-    @pytest.mark.slow
     async def test_facebook_select_page_rejects_invalid_state(
         self, test_settings: Settings
     ) -> None:
@@ -585,7 +574,6 @@ class TestFacebookSelectPage:
 
 
 class TestListSocialAccounts:
-    @pytest.mark.slow
     async def test_accounts_returned_alphabetically(self, test_settings: Settings) -> None:
         test_settings.admin_password = "admin"
         async with create_test_client(test_settings) as client:
@@ -626,7 +614,6 @@ class TestDeleteSocialAccount:
             resp = await client.delete("/api/crosspost/accounts/999")
             assert resp.status_code == 401
 
-    @pytest.mark.slow
     async def test_delete_nonexistent_returns_404(self, test_settings: Settings) -> None:
         test_settings.admin_password = "admin"
         async with create_test_client(test_settings) as client:
@@ -642,7 +629,6 @@ class TestDeleteSocialAccount:
             )
             assert resp.status_code == 404
 
-    @pytest.mark.slow
     async def test_delete_succeeds(self, test_settings: Settings) -> None:
         test_settings.admin_password = "admin"
         async with create_test_client(test_settings) as client:

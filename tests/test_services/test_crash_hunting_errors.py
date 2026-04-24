@@ -441,7 +441,6 @@ class TestUpdateLabelCycleDetectionStaleEdges:
 class TestCreatePostFlushRollback:
     """create_post_endpoint must rollback the session if flush or label ops fail."""
 
-    @pytest.mark.slow
     async def test_label_failure_does_not_crash_server(self, tmp_path: Path) -> None:
         """If _replace_post_labels raises, the server returns an error and stays healthy."""
         from sqlalchemy.exc import OperationalError

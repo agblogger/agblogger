@@ -296,7 +296,6 @@ class TestLoginOriginValidation:
         assert resp.status_code == 403
 
     @pytest.mark.asyncio
-    @pytest.mark.slow
     async def test_login_succeeds_behind_tls_terminating_proxy(
         self, tmp_content_dir: Path, tmp_path: Path
     ) -> None:
@@ -847,7 +846,6 @@ class TestTrustedProxyForwarding:
             trusted_proxy_ips=["127.0.0.1"],
         )
 
-    @pytest.mark.slow
     @pytest.mark.asyncio
     async def test_trusted_proxy_separates_forwarded_ips(
         self, trusted_proxy_settings: Settings
@@ -887,7 +885,6 @@ class TestTrustedProxyForwarding:
         assert first.status_code == 401
         assert second.status_code == 429
 
-    @pytest.mark.slow
     @pytest.mark.asyncio
     async def test_cidr_trusted_proxy_separates_forwarded_ips(
         self, tmp_content_dir: Path, tmp_path: Path

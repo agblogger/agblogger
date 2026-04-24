@@ -161,7 +161,6 @@ class TestSyncPlanProperties:
         assert plan.conflicts == []
         assert set(plan.no_change) == set(current)
 
-    @pytest.mark.slow
     @PROPERTY_SETTINGS
     @given(
         client_hashes=_HASH_MANIFEST,

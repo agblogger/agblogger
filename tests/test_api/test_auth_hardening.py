@@ -237,7 +237,6 @@ class TestPasswordModelValidation:
 
 
 class TestPasswordRateLimiting:
-    @pytest.mark.slow
     @pytest.mark.asyncio
     async def test_password_change_rate_limited_after_failures(self, client: AsyncClient) -> None:
         """Exceeding the failure threshold should trigger 429."""

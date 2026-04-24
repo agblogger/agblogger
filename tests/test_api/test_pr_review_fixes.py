@@ -296,7 +296,6 @@ class TestIssue5KeyErrorLogLevel:
 class TestIssue6LockCleanupLogging:
     """Lock file cleanup failure should be logged, not suppressed."""
 
-    @pytest.mark.slow
     def test_lock_cleanup_failure_logged(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ) -> None:
@@ -432,7 +431,6 @@ class TestIssue10GitCommitExceptionHandling:
 class TestIssue11SymlinkRollbackOnCommitFailure:
     """When commit fails after rename + symlink creation, symlink should be cleaned up."""
 
-    @pytest.mark.slow
     async def test_symlink_removed_during_rollback(self, tmp_path: Path) -> None:
         content_dir = tmp_path / "content"
         content_dir.mkdir()

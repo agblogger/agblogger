@@ -14,14 +14,14 @@ The primary purpose of architecture docs in docs/arch/*.md is to provide agents 
 just start            # Start backend (:8000) + frontend (:5173) in the background (run unsandboxed)
 just stop             # Stop the running dev server
 just health           # Check if dev server is healthy (backend + frontend)
-just check            # Full gate: static checks first, then tests (excludes slow tests)
+just check            # Full gate: static checks first, then all tests with coverage
 just check-static     # Static checks only
-just check-extra      # Extra dependency/security checks + slow backend tests
-just test             # Test-only gate: backend + frontend tests (excludes slow tests)
+just check-extra      # Extra dependency/security checks
+just test             # Test-only gate: backend + frontend tests with coverage
 just check-backend    # Backend static checks + backend tests
-just test-backend     # Backend tests only (excludes slow tests)
+just test-backend     # Backend tests with coverage
 just check-frontend   # Frontend static checks + frontend tests
-just test-frontend    # Frontend tests only
+just test-frontend    # Frontend tests with coverage
 ```
 All `just` commands must be run unsandboxed.
 
@@ -51,7 +51,7 @@ Use unsandboxed `uv run` for ALL Python tooling.
 - **IMPORTANT**: For every bug found, add a regression test that fails because of the bug, then fix the bug and ensure the test passes.
 - Use property-based testing (Hypothesis, fast-check) for deterministic logic. Abstract high-invariant logic into independent pure functions to enable property-based testing.
 - Avoid brittle tests. Test user workflows, not implementation details.
-- Backend tests which take more than 1s to run should be marked @pytest.mark.slow. If a fixture setup takes more than 3s, the entire group of tests using that fixture should be marked @pytest.mark.slow.
+- Single test completion time < 1s.
 - Coverage target 80%, branches 70%.
 
 ## Commit Guidelines

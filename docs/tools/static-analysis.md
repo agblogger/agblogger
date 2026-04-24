@@ -79,12 +79,10 @@ Each target is fail-fast, and the default full gate `just check` runs `check-sta
 
 Tests are intentionally separate from static analysis:
 
-- `just test` runs `test-backend` and `test-frontend`
-- `just test-backend-all` runs the fast and `slow` backend shards with backend/CLI coverage enforced
-- `just test-all` runs `test-backend-all` plus frontend coverage
-- `just test-backend coverage=true` adds backend/CLI coverage reporting
-- `just test-frontend coverage=true` runs Vitest with coverage
-- `just check` runs `just check-static` first, then `just test coverage=true`
+- `just test` runs `test-backend` and `test-frontend`, both with coverage enforced
+- `just test-backend` runs the full backend suite with backend/CLI coverage enforced
+- `just test-frontend` runs Vitest with coverage enforced
+- `just check` runs `just check-static` first, then `just test`
 
 This keeps static analysis available as a fast standalone gate while preserving a single full validation command.
 
@@ -93,7 +91,7 @@ This keeps static analysis available as a fast standalone gate while preserving 
 These checks are intentionally outside `just check-static` and `just check`:
 
 - `just check-extra`
-  - Runs `check-audit-full`, `checkov`, `check-gitleaks`, `check-codeql`, `check-semgrep`, `test-backend-all`, and `check-snyk-deps`.
+  - Runs `check-audit-full`, `checkov`, `check-gitleaks`, `check-codeql`, `check-semgrep`, and `check-snyk-deps`.
 - `just check-audit-full`
   - Runs `npm audit` in `frontend/` without `--omit=dev`, so development dependencies are included.
 - `just checkov`

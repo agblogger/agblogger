@@ -23,8 +23,6 @@ Backend testing emphasizes correctness at the boundaries that matter most for th
 
 Because the filesystem is authoritative, backend tests focus heavily on preserving content correctly even when caches, external tools, or integrations fail.
 
-The backend suite is split into normal and `slow` shards. Tests that take more than 1s, or test groups that inherit more than 3s of fixture setup, are marked `@pytest.mark.slow`.
-
 ## Frontend
 
 Frontend testing focuses on user-visible behavior in the SPA: navigation, editor workflows, authenticated flows, and UI logic layered on top of backend-rendered content.

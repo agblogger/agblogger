@@ -26,11 +26,9 @@ Run `just --list` to see all available commands.
 ## Testing
 
 ```bash
-just check          # Full gate: static checks + tests
-just check-extra    # Additional security/dependency scans + slow tests
-just test           # Tests only (backend + frontend)
-just test-backend-all  # All backend tests with backend coverage
-just test-all       # All backend + frontend tests with coverage
+just check          # Full gate: static checks + all tests with coverage
+just check-extra    # Additional security/dependency scans
+just test           # Tests only (backend + frontend) with coverage
 just clean          # Reset generated artifacts plus local data/ and content/
 ```
 

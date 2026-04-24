@@ -96,7 +96,6 @@ def cm(content_dir: Path) -> ContentManager:
 class TestUploadPostOrphanedAssets:
     """If DB operations fail after assets are written, assets must be cleaned up."""
 
-    @pytest.mark.slow
     async def test_assets_cleaned_up_on_flush_failure(self, tmp_path: Path) -> None:
         """When session.flush() raises after asset files are written, the
         upload endpoint must clean up orphaned asset files."""
@@ -161,7 +160,6 @@ class TestUploadPostOrphanedAssets:
                     asset_files = [f for f in child.iterdir() if f.name != "index.md"]
                     assert not asset_files, f"Orphaned assets found in {child}: {asset_files}"
 
-    @pytest.mark.slow
     async def test_assets_cleaned_up_on_replace_labels_failure(self, tmp_path: Path) -> None:
         """When _replace_post_labels raises after assets are written and flush
         succeeds, the upload endpoint must still clean up orphaned assets."""
@@ -237,7 +235,6 @@ class TestUploadPostOrphanedAssets:
 class TestDeletePostCommitBeforeFileDelete:
     """DB changes must be committed before the post file is deleted from disk."""
 
-    @pytest.mark.slow
     async def test_file_survives_if_commit_fails(self, tmp_path: Path) -> None:
         """If the DB commit fails during delete, the post file must still
         exist on disk because commit happens before file deletion."""

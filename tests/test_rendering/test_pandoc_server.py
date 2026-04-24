@@ -415,7 +415,6 @@ class TestIntegration:
             await server.stop()
         assert not server.is_running
 
-    @pytest.mark.slow
     async def test_ensure_running_recovers(self, pandoc_server_available: bool) -> None:
         if not pandoc_server_available:
             pytest.skip("pandoc server mode not available locally")

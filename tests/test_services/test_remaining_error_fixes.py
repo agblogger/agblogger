@@ -27,7 +27,6 @@ if TYPE_CHECKING:
 class TestPostRenameRollbackOnCommitFailure:
     """If session.commit() fails after directory rename, the rename must be rolled back."""
 
-    @pytest.mark.slow
     async def test_commit_failure_rolls_back_rename(self, tmp_path: Path) -> None:
         from backend.config import Settings
         from tests.conftest import create_test_client
@@ -333,7 +332,6 @@ class TestValidatePathNoInputEcho:
 class TestMastodonRegistrationNoStatusCodeLeak:
     """Mastodon app registration failure must not leak the upstream HTTP status code."""
 
-    @pytest.mark.slow
     async def test_registration_failure_does_not_leak_status_code(self, tmp_path: Path) -> None:
         """Mock Mastodon registration to return non-200 and verify the error detail is generic."""
         import httpx
