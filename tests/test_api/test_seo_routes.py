@@ -191,6 +191,30 @@ class TestMarkdownNegotiation:
         assert "Hello body content for excerpt." in resp.text
         assert "<article" not in resp.text
 
+    async def test_label_detail_accept_text_markdown_returns_markdown(
+        self, client: AsyncClient
+    ) -> None:
+        resp = await client.get("/labels/python", headers={"Accept": "text/markdown"})
+
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith("text/markdown")
+        assert resp.headers["x-markdown-tokens"].isdigit()
+        assert "# Python" in resp.text or "Python" in resp.text
+        assert "[Hello World](/post/hello)" in resp.text
+        assert "<html" not in resp.text.lower()
+
+    async def test_search_accept_text_markdown_returns_markdown(self, client: AsyncClient) -> None:
+        resp = await client.get("/search", headers={"Accept": "text/markdown"})
+
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith("text/markdown")
+        assert "# Search" in resp.text
+        assert "<html" not in resp.text.lower()
+
+    async def test_html_response_includes_vary_accept_header(self, client: AsyncClient) -> None:
+        resp = await client.get("/")
+        assert "Accept" in resp.headers.get("vary", "")
+
 
 class TestHomepageSeo:
     async def test_returns_html(self, client: AsyncClient) -> None:

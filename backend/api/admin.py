@@ -162,13 +162,16 @@ async def upload_favicon(
         old_favicon = content_manager.site_config.favicon
         old_size = 0
         if old_favicon is not None:
-            old_path = content_manager.content_dir / old_favicon
-            old_size = content_size_tracker.file_size(old_path)
+            try:
+                old_path = content_manager.validate_path(old_favicon)
+                old_size = content_size_tracker.file_size(old_path)
+            except ValueError:
+                logger.warning("Invalid old favicon path in quota check: %s", old_favicon)
         content_size_tracker.require_quota(len(data) - old_size)
 
         try:
             cfg = set_favicon(content_manager, extension=extension, data=data)
-        except OSError as exc:
+        except (ValueError, OSError) as exc:
             logger.error("Failed to save favicon: %s", exc)
             raise HTTPException(status_code=500, detail="Failed to save favicon.") from exc
 
@@ -198,10 +201,15 @@ async def delete_favicon(
     """Remove the site favicon."""
     async with content_write_lock:
         old_favicon = content_manager.site_config.favicon
+        if old_favicon is None:
+            logger.debug("DELETE /favicon: no favicon configured, nothing to remove")
         old_size = 0
         if old_favicon is not None:
-            old_path = content_manager.content_dir / old_favicon
-            old_size = content_size_tracker.file_size(old_path)
+            try:
+                old_path = content_manager.validate_path(old_favicon)
+                old_size = content_size_tracker.file_size(old_path)
+            except ValueError:
+                logger.warning("Invalid old favicon path in quota check: %s", old_favicon)
 
         try:
             cfg = remove_favicon(content_manager)
@@ -334,7 +342,7 @@ async def update_page_endpoint(
         page_path = None
         if page_cfg is not None and page_cfg.file is not None:
             try:
-                page_path = content_manager._validate_path(page_cfg.file)
+                page_path = content_manager.validate_path(page_cfg.file)
                 old_content_size = content_size_tracker.file_size(page_path)
             except ValueError, OSError:
                 logger.warning(
@@ -410,7 +418,7 @@ async def delete_page_endpoint(
             page_cfg = next((p for p in cfg.pages if p.id == page_id), None)
             if page_cfg is not None and page_cfg.file is not None:
                 try:
-                    page_path = content_manager._validate_path(page_cfg.file)
+                    page_path = content_manager.validate_path(page_cfg.file)
                     page_size = content_size_tracker.file_size(page_path)
                 except (ValueError, OSError) as exc:
                     logger.warning(

@@ -60,8 +60,14 @@ export default function FaviconSection({
       setFavicon(null)
       onSavedSettings(updated)
       refreshSiteConfig()
-    } catch {
-      setError('Failed to remove favicon. Please try again.')
+    } catch (err) {
+      if (err instanceof HTTPError && err.response.status === 401) {
+        setError('Session expired. Please refresh and log in again.')
+      } else if (err instanceof HTTPError) {
+        setError(`Failed to remove favicon (${err.response.status}). Please try again.`)
+      } else {
+        setError('Failed to remove favicon. Please try again.')
+      }
     } finally {
       setLoading(false)
     }

@@ -79,7 +79,7 @@ def _docs_enabled(settings: Settings) -> bool:
     return settings.debug or settings.expose_docs
 
 
-def _api_catalog_links(base_url: str, *, docs_enabled: bool) -> list[str]:
+def _api_catalog_links(*, docs_enabled: bool) -> list[str]:
     links = ['</.well-known/api-catalog>; rel="api-catalog"']
     if docs_enabled:
         links.append('</openapi.json>; rel="service-desc"; type="application/vnd.oai.openapi+json"')
@@ -140,7 +140,11 @@ def _markdown_response(
 
 
 def _inject_favicon_link(html: str, favicon: str | None) -> str:
-    """Insert <link rel="icon"> before </head> when a favicon is configured."""
+    """Insert <link rel="icon"> before </head> when a favicon is configured.
+
+    The href is always /favicon.ico regardless of actual file format; the
+    favicon route handles content-type negotiation by extension.
+    """
     if favicon is None:
         return html
     link = '<link rel="icon" href="/favicon.ico">'
@@ -723,7 +727,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if favicon is None:
             return Response(status_code=404)
         try:
-            favicon_path = content_manager._validate_path(favicon)
+            favicon_path = content_manager.validate_path(favicon)
         except ValueError:
             logger.warning("Invalid favicon path in site config: %s", favicon)
             return Response(status_code=404)
@@ -740,7 +744,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         try:
             data = await asyncio.to_thread(favicon_path.read_bytes)
         except OSError as exc:
-            logger.warning("Failed to read favicon file %s: %s", favicon_path, exc)
+            logger.error("Failed to read favicon file %s: %s", favicon_path, exc)
             return Response(status_code=404)
         return Response(content=data, media_type=media_type)
 
@@ -1124,8 +1128,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         from backend.services.seo_service import (
             SeoContext,
             blogposting_ld,
+            render_page_markdown,
             render_seo_html,
-            render_seo_markdown,
             strip_html_tags,
         )
         from backend.utils.datetime import format_iso
@@ -1249,7 +1253,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return _html_or_markdown_response(
             request,
             html=enriched,
-            markdown=render_seo_markdown(ctx),
+            markdown=render_page_markdown(ctx),
         )
 
     @app.get("/", include_in_schema=False, response_model=None)
@@ -1268,10 +1272,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         from backend.services.seo_service import (
             SeoContext,
             SeoPostItem,
+            render_page_markdown,
             render_post_list_html,
             render_post_list_markdown,
             render_seo_html,
-            render_seo_markdown,
             strip_html_tags,
             website_ld,
         )
@@ -1372,12 +1376,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         response = _html_or_markdown_response(
             request,
             html=render_seo_html(base_html or _NOT_FOUND_HTML, ctx),
-            markdown=render_seo_markdown(ctx),
+            markdown=render_page_markdown(ctx),
         )
         mark_auth_sensitive_read(response, is_authenticated=is_authenticated)
         _set_link_header(
             response,
-            _api_catalog_links(_base_url(request), docs_enabled=docs_enabled),
+            _api_catalog_links(docs_enabled=docs_enabled),
         )
         return response
 
@@ -1408,7 +1412,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
         _set_link_header(
             response,
-            _api_catalog_links(base_url, docs_enabled=docs_enabled),
+            _api_catalog_links(docs_enabled=docs_enabled),
         )
         return response
 
@@ -1417,8 +1421,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         from backend.services.page_service import get_page
         from backend.services.seo_service import (
             SeoContext,
+            render_page_markdown,
             render_seo_html,
-            render_seo_markdown,
             strip_html_tags,
             webpage_ld,
         )
@@ -1485,12 +1489,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return _html_or_markdown_response(
             request,
             html=render_seo_html(base_html or _NOT_FOUND_HTML, ctx),
-            markdown=render_seo_markdown(ctx),
+            markdown=render_page_markdown(ctx),
         )
 
     @app.get("/labels", include_in_schema=False, response_model=None)
     async def labels_index_route(request: Request) -> Response:
-        from backend.services.seo_service import SeoContext, render_seo_html, render_seo_markdown
+        from backend.services.seo_service import SeoContext, render_page_markdown, render_seo_html
 
         base_html = await _get_base_html(request)
         if base_html is None and not _accepts_markdown(request):
@@ -1511,7 +1515,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return _html_or_markdown_response(
             request,
             html=render_seo_html(base_html or _NOT_FOUND_HTML, ctx),
-            markdown=render_seo_markdown(ctx),
+            markdown=render_page_markdown(ctx),
         )
 
     @app.get("/labels/new", include_in_schema=False, response_model=None)
@@ -1529,10 +1533,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         from backend.services.seo_service import (
             SeoContext,
             SeoPostItem,
+            render_page_markdown,
             render_post_list_html,
             render_post_list_markdown,
             render_seo_html,
-            render_seo_markdown,
             strip_html_tags,
         )
         from backend.utils.datetime import format_iso
@@ -1672,12 +1676,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return _html_or_markdown_response(
             request,
             html=render_seo_html(base_html or _NOT_FOUND_HTML, ctx),
-            markdown=render_seo_markdown(ctx),
+            markdown=render_page_markdown(ctx),
         )
 
     @app.get("/search", include_in_schema=False, response_model=None)
     async def search_route(request: Request) -> Response:
-        from backend.services.seo_service import SeoContext, render_seo_html, render_seo_markdown
+        from backend.services.seo_service import SeoContext, render_page_markdown, render_seo_html
 
         base_html = await _get_base_html(request)
         if base_html is None and not _accepts_markdown(request):
@@ -1698,7 +1702,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return _html_or_markdown_response(
             request,
             html=render_seo_html(base_html or _NOT_FOUND_HTML, ctx),
-            markdown=render_seo_markdown(ctx),
+            markdown=render_page_markdown(ctx),
         )
 
     @app.get("/login", include_in_schema=False, response_model=None)

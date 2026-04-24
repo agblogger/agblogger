@@ -135,8 +135,11 @@ def _yaml_scalar(value: str) -> str:
     return json.dumps(value, ensure_ascii=False)
 
 
-def render_seo_markdown(ctx: SeoContext) -> str:
-    """Render agent-friendly markdown for a page response."""
+def render_page_markdown(ctx: SeoContext) -> str:
+    """Render agent-friendly markdown for a page response.
+
+    When ctx.markdown_body is absent or empty, falls back to a title-and-description summary.
+    """
     frontmatter = [
         "---",
         f"title: {_yaml_scalar(ctx.title)}",

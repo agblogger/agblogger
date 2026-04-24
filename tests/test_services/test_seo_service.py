@@ -11,7 +11,9 @@ from backend.services.seo_service import (
     SeoContext,
     SeoPostItem,
     blogposting_ld,
+    render_page_markdown,
     render_post_list_html,
+    render_post_list_markdown,
     render_seo_html,
     strip_html_tags,
     webpage_ld,
@@ -487,6 +489,153 @@ class TestSeoContextJsonLdValidation:
                 canonical_url="https://example.com/post/x",
                 json_ld={"name": "Test", "url": "https://example.com"},
             )
+
+
+class TestRenderPageMarkdown:
+    def test_renders_yaml_frontmatter(self) -> None:
+        ctx = _make_ctx(title="My Post", canonical_url="https://example.com/post/x")
+        result = render_page_markdown(ctx)
+        assert result.startswith("---\n")
+        assert 'title: "My Post"' in result
+        assert 'url: "https://example.com/post/x"' in result
+
+    def test_includes_description_in_frontmatter(self) -> None:
+        ctx = _make_ctx(description="A description")
+        result = render_page_markdown(ctx)
+        assert 'description: "A description"' in result
+
+    def test_optional_fields_included_when_set(self) -> None:
+        ctx = _make_ctx(
+            site_name="My Blog",
+            author="Jane",
+            published_time="2026-01-01T00:00:00+00:00",
+            modified_time="2026-01-02T00:00:00+00:00",
+        )
+        result = render_page_markdown(ctx)
+        assert 'site_name: "My Blog"' in result
+        assert 'author: "Jane"' in result
+        assert 'published_time: "2026-01-01T00:00:00+00:00"' in result
+        assert 'modified_time: "2026-01-02T00:00:00+00:00"' in result
+
+    def test_optional_fields_omitted_when_none(self) -> None:
+        ctx = _make_ctx()
+        result = render_page_markdown(ctx)
+        assert "site_name" not in result
+        assert "author" not in result
+        assert "published_time" not in result
+        assert "modified_time" not in result
+
+    def test_uses_markdown_body_when_provided(self) -> None:
+        ctx = _make_ctx(markdown_body="# Hello\n\nBody content.")
+        result = render_page_markdown(ctx)
+        assert "# Hello\n\nBody content." in result
+
+    def test_falls_back_to_title_and_description_when_body_is_none(self) -> None:
+        ctx = _make_ctx(title="My Post", description="A description", markdown_body=None)
+        result = render_page_markdown(ctx)
+        assert "# My Post" in result
+        assert "A description" in result
+
+    def test_falls_back_when_body_is_empty_string(self) -> None:
+        ctx = _make_ctx(title="My Post", description="Desc", markdown_body="")
+        result = render_page_markdown(ctx)
+        assert "# My Post" in result
+
+    def test_falls_back_when_body_is_whitespace_only(self) -> None:
+        ctx = _make_ctx(title="My Post", description="Desc", markdown_body="   \n  ")
+        result = render_page_markdown(ctx)
+        assert "# My Post" in result
+
+    def test_yaml_scalar_quotes_special_chars(self) -> None:
+        ctx = _make_ctx(title='Post with "quotes"')
+        result = render_page_markdown(ctx)
+        assert '"Post with \\"quotes\\""' in result
+
+    def test_yaml_scalar_handles_non_ascii(self) -> None:
+        ctx = _make_ctx(title="Ünïcödé title")
+        result = render_page_markdown(ctx)
+        assert "Ünïcödé title" in result
+
+    def test_output_ends_with_newline(self) -> None:
+        ctx = _make_ctx()
+        result = render_page_markdown(ctx)
+        assert result.endswith("\n")
+
+    def test_frontmatter_closed_before_body(self) -> None:
+        ctx = _make_ctx(markdown_body="Body here.")
+        result = render_page_markdown(ctx)
+        front_end = result.index("---\n\n")
+        assert front_end > 0
+
+
+class TestRenderPostListMarkdown:
+    def _make_posts(self) -> list[SeoPostItem]:
+        return [
+            {
+                "id": "1",
+                "title": "First Post",
+                "slug": "first",
+                "date": "March 28, 2026",
+                "excerpt": "Hello",
+            },
+            {
+                "id": "2",
+                "title": "Second Post",
+                "slug": "second",
+                "date": "March 27, 2026",
+                "excerpt": "World",
+            },
+        ]
+
+    def test_renders_heading(self) -> None:
+        result = render_post_list_markdown([], heading="My Blog")
+        assert "# My Blog" in result
+
+    def test_renders_post_links(self) -> None:
+        result = render_post_list_markdown(self._make_posts(), heading="Blog")
+        assert "[First Post](/post/first)" in result
+        assert "[Second Post](/post/second)" in result
+
+    def test_includes_dates(self) -> None:
+        result = render_post_list_markdown(self._make_posts(), heading="Blog")
+        assert "March 28, 2026" in result
+
+    def test_includes_excerpts(self) -> None:
+        result = render_post_list_markdown(self._make_posts(), heading="Blog")
+        assert "Hello" in result
+        assert "World" in result
+
+    def test_empty_list_renders_heading_only(self) -> None:
+        result = render_post_list_markdown([], heading="Blog")
+        assert "# Blog" in result
+        assert "##" not in result
+
+    def test_strips_html_tags_from_title(self) -> None:
+        posts: list[SeoPostItem] = [
+            {"id": "1", "title": "<b>Bold Title</b>", "slug": "x", "date": "D", "excerpt": "E"}
+        ]
+        result = render_post_list_markdown(posts, heading="Blog")
+        assert "<b>" not in result
+        assert "Bold Title" in result
+
+    def test_strips_html_tags_from_excerpt(self) -> None:
+        posts: list[SeoPostItem] = [
+            {"id": "1", "title": "T", "slug": "x", "date": "D", "excerpt": "<p>Clean</p>"}
+        ]
+        result = render_post_list_markdown(posts, heading="Blog")
+        assert "<p>" not in result
+        assert "Clean" in result
+
+    def test_omits_excerpt_section_when_empty(self) -> None:
+        posts: list[SeoPostItem] = [
+            {"id": "1", "title": "T", "slug": "x", "date": "D", "excerpt": ""}
+        ]
+        result = render_post_list_markdown(posts, heading="Blog")
+        assert result.count("\n\n\n") == 0
+
+    def test_output_ends_with_newline(self) -> None:
+        result = render_post_list_markdown(self._make_posts(), heading="Blog")
+        assert result.endswith("\n")
 
 
 class TestRenderSeoHtmlMissingMarkers:

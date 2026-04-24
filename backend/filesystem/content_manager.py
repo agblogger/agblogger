@@ -117,7 +117,7 @@ class ContentManager:
             posts.append(post_data)
         return posts
 
-    def _validate_path(self, rel_path: str) -> Path:
+    def validate_path(self, rel_path: str) -> Path:
         """Validate that a relative path stays within the content directory.
 
         Raises ValueError if the resolved path escapes content_dir.
@@ -145,7 +145,7 @@ class ContentManager:
         if not is_directory_post_path(rel_path):
             logger.warning("Rejected unsupported post path %s", rel_path)
             return None
-        full_path = self._validate_path(rel_path)
+        full_path = self.validate_path(rel_path)
         if not full_path.exists() or not full_path.is_file():
             return None
         try:
@@ -185,7 +185,7 @@ class ContentManager:
 
         if not is_directory_post_path(rel_path):
             raise ValueError(f"Unsupported post path: {rel_path}")
-        full_path = self._validate_path(rel_path)
+        full_path = self.validate_path(rel_path)
         try:
             full_path.parent.mkdir(parents=True, exist_ok=True)
             full_path.write_text(serialize_post(post_data), encoding="utf-8")
@@ -210,14 +210,14 @@ class ContentManager:
             logger.warning("Rejected delete for unsupported post path %s", rel_path)
             return False
 
-        full_path = self._validate_path(rel_path)
+        full_path = self.validate_path(rel_path)
         if not full_path.exists():
             return False
 
         try:
             if delete_assets:
                 # Use the non-resolved path so we can detect if the directory
-                # itself is a symlink (resolve() in _validate_path follows symlinks).
+                # itself is a symlink (resolve() in validate_path follows symlinks).
                 raw_post_dir: Path = (self.content_dir / rel_path).parent
                 parent = raw_post_dir.parent
                 if raw_post_dir.is_symlink():
@@ -249,7 +249,7 @@ class ContentManager:
         for page_cfg in self.site_config.pages:
             if page_cfg.id == page_id and page_cfg.file:
                 try:
-                    page_path = self._validate_path(page_cfg.file)
+                    page_path = self.validate_path(page_cfg.file)
                 except ValueError:
                     logger.warning("Rejected unsafe page file path for page %s", page_id)
                     return None

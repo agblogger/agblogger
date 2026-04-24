@@ -75,6 +75,7 @@ Example:
 title = "Example Blog"
 description = "Notes on software and systems"
 timezone = "UTC"
+# favicon = "assets/favicon.png"  # optional; set via admin panel
 
 [[pages]]
 id = "timeline"

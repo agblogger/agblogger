@@ -189,6 +189,42 @@ class TestPublicFaviconRoute:
         assert resp.status_code == 200
         assert resp.headers["content-type"] == "image/svg+xml"
 
+    @pytest.mark.asyncio
+    async def test_returns_ico_with_correct_content_type(
+        self, client: AsyncClient, app_settings: Settings
+    ) -> None:
+        token = await _login(client)
+        ico_data = b"\x00\x00\x01\x00" + b"\x00" * 10
+        await client.post(
+            "/api/admin/favicon",
+            files={"file": ("favicon.ico", ico_data, "image/x-icon")},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        resp = await client.get("/favicon.ico")
+
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == "image/x-icon"
+        assert resp.content == ico_data
+
+    @pytest.mark.asyncio
+    async def test_returns_webp_with_correct_content_type(
+        self, client: AsyncClient, app_settings: Settings
+    ) -> None:
+        token = await _login(client)
+        webp_data = b"RIFF\x00\x00\x00\x00WEBP" + b"\x00" * 10
+        await client.post(
+            "/api/admin/favicon",
+            files={"file": ("favicon.webp", webp_data, "image/webp")},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        resp = await client.get("/favicon.ico")
+
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == "image/webp"
+        assert resp.content == webp_data
+
 
 class TestFaviconHtmlInjection:
     @pytest.mark.asyncio
@@ -224,3 +260,42 @@ class TestFaviconHtmlInjection:
         resp = await client.get("/")
         assert resp.status_code == 200
         assert '<link rel="icon" href="/favicon.ico">' in resp.text
+
+
+class TestFaviconQuota:
+    @pytest.fixture
+    def quota_settings(self, tmp_content_dir: Path, tmp_path: Path) -> Settings:
+        db_path = tmp_path / "test.db"
+        return Settings(
+            secret_key="test-secret-key-with-at-least-32-characters",
+            debug=True,
+            database_url=f"sqlite+aiosqlite:///{db_path}",
+            content_dir=tmp_content_dir,
+            frontend_dir=tmp_path / "frontend",
+            admin_username="admin",
+            admin_password="admin123",
+            max_content_size=100,
+        )
+
+    @pytest.fixture
+    async def quota_client(self, quota_settings: Settings) -> AsyncGenerator[AsyncClient]:
+        async with create_test_client(quota_settings) as ac:
+            yield ac
+
+    @pytest.mark.asyncio
+    async def test_upload_exceeding_quota_returns_413(self, quota_client: AsyncClient) -> None:
+        token_resp = await quota_client.post(
+            "/api/auth/token-login",
+            json={"username": "admin", "password": "admin123"},
+        )
+        token = token_resp.json()["access_token"]
+
+        large_data = b"x" * 200
+
+        resp = await quota_client.post(
+            "/api/admin/favicon",
+            files={"file": ("favicon.png", large_data, "image/png")},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert resp.status_code == 413

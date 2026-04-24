@@ -291,11 +291,11 @@ class TestSyncPruneBoundaries:
         assert not (real_content_dir / "posts").exists()
 
 
-# ── Issue 10: _validate_path does not echo user input ──
+# ── Issue 10: validate_path does not echo user input ──
 
 
 class TestValidatePathNoInputEcho:
-    """_validate_path ValueError must not include the user-supplied path."""
+    """validate_path ValueError must not include the user-supplied path."""
 
     def test_path_traversal_error_does_not_echo_input(self, tmp_path: Path) -> None:
         from backend.filesystem.content_manager import ContentManager
@@ -307,7 +307,7 @@ class TestValidatePathNoInputEcho:
 
         malicious_path = "../../etc/passwd"
         with pytest.raises(ValueError) as exc_info:
-            cm._validate_path(malicious_path)
+            cm.validate_path(malicious_path)
 
         error_msg = str(exc_info.value)
         assert "../../etc/passwd" not in error_msg

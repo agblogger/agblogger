@@ -45,7 +45,8 @@ The frontend does not own markdown rendering. It receives rendered HTML from the
 
 ## Code Entry Points
 
-- `frontend/src/App.tsx` defines the router, shared layout, and application bootstrapping.
+- `frontend/src/main.tsx` is the application entry point; it installs compatibility shims and mounts the React tree.
+- `frontend/src/App.tsx` defines the router and shared layout.
 - `frontend/src/bootstrap/` contains startup compatibility shims that must run before app dependencies initialize.
 - `frontend/src/pages/` contains the main public browsing, authentication, editing and administration entry points.
 - `frontend/src/stores/` contains the small set of shared Zustand stores for auth, site config, theme, and UI coordination.
