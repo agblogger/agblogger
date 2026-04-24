@@ -78,8 +78,6 @@ Public read paths are broad for published content, while mutations are concentra
 
 Dedicated route handlers registered before the StaticFiles catch-all enrich the SPA shell with meta tags, structured data, server-rendered content, and preloaded API data so crawlers and no-JS browsers see real content without JavaScript. The same public routes also support agent-oriented content negotiation: requests that explicitly send `Accept: text/markdown` receive markdown instead of HTML. Post and markdown-backed page routes return canonical source markdown from the content tree; list and shell routes return backend-generated markdown summaries. A shared SEO service provides the HTML and markdown response builders. Public post routes also normalize renamed published posts to their canonical `/post/<slug>` URL before serving HTML so readers and crawlers avoid extra client-side redirect hops, while draft aliases remain non-public. The backend also serves a dynamic sitemap, robots.txt, RSS feed, and a `/.well-known/api-catalog` discovery document; the homepage advertises discovery targets with RFC 8288 `Link` headers.
 
-`SiteConfig` carries an optional `favicon` field (relative path within `content/`) written to `index.toml`. The backend serves the file at `GET /favicon.ico` and injects `<link rel="icon" href="/favicon.ico">` into every HTML response when set. Admin endpoints `POST /api/admin/favicon` and `DELETE /api/admin/favicon` handle upload and removal.
-
 ## Failure Handling
 
 The backend is designed around graceful degradation:
