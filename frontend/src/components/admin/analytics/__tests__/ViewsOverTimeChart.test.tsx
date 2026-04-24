@@ -3,7 +3,6 @@ import { describe, it, expect } from 'vitest'
 import ViewsOverTimeChart from '../ViewsOverTimeChart'
 import type { DailyViewCount } from '@/api/client'
 
-// Recharts uses ResizeObserver — provide a stub in jsdom
 globalThis.ResizeObserver = class ResizeObserver {
   observe() {}
   unobserve() {}
@@ -28,18 +27,46 @@ describe('ViewsOverTimeChart', () => {
     expect(screen.getByText('No data for selected range.')).toBeInTheDocument()
   })
 
-  it('renders chart when days has data (≤30 days)', () => {
-    const days = makeDays(7)
-    render(<ViewsOverTimeChart days={days} />)
+  it('renders "Views over time" heading for ≤30 days', () => {
+    render(<ViewsOverTimeChart days={makeDays(7)} />)
+    expect(screen.getByText('Views over time')).toBeInTheDocument()
+    expect(screen.queryByText('Views per week')).not.toBeInTheDocument()
+  })
+
+  it('renders chart without empty state for ≤30 days', () => {
+    render(<ViewsOverTimeChart days={makeDays(30)} />)
     expect(screen.queryByText('No data for selected range.')).not.toBeInTheDocument()
-    // The chart container should be present
     expect(screen.getByText('Views over time')).toBeInTheDocument()
   })
 
-  it('renders chart when days > 30 (weekly bucketing)', () => {
-    const days = makeDays(90)
-    render(<ViewsOverTimeChart days={days} />)
+  it('renders "Views per week" heading for >30 days', () => {
+    render(<ViewsOverTimeChart days={makeDays(90)} />)
+    expect(screen.getByText('Views per week')).toBeInTheDocument()
+    expect(screen.queryByText('Views over time')).not.toBeInTheDocument()
+  })
+
+  it('renders chart without empty state for >30 days', () => {
+    render(<ViewsOverTimeChart days={makeDays(90)} />)
     expect(screen.queryByText('No data for selected range.')).not.toBeInTheDocument()
-    expect(screen.getByText('Views over time')).toBeInTheDocument()
+  })
+
+  it('weekly labels contain an en dash range separator', () => {
+    render(<ViewsOverTimeChart days={makeDays(90)} />)
+    // Recharts renders XAxis ticks as SVG <text> nodes; at least one should
+    // contain the en dash (–) that separates the start and end of each week.
+    const enDashLabels = screen.queryAllByText(/–/)
+    expect(enDashLabels.length).toBeGreaterThan(0)
+  })
+
+  it('daily labels use locale-aware short date format', () => {
+    render(<ViewsOverTimeChart days={makeDays(7)} />)
+    // The first day is 2024-01-01. Its locale label must match what
+    // Intl.DateTimeFormat produces — not the hardcoded "01-01" pattern.
+    const expected = new Intl.DateTimeFormat(undefined, {
+      month: 'numeric',
+      day: 'numeric',
+    }).format(new Date('2024-01-01'))
+    const labelNodes = screen.queryAllByText(expected)
+    expect(labelNodes.length).toBeGreaterThan(0)
   })
 })
