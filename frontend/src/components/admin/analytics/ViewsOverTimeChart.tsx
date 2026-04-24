@@ -18,11 +18,10 @@ export default function ViewsOverTimeChart({ days }: ViewsOverTimeChartProps) {
   const isWeekly = days.length > 30
   const chartData = useMemo<ChartPoint[]>(() => {
     if (days.length === 0) return []
-    if (days.length <= 30) {
-      return days.map((d) => ({ label: formatShortDate(d.date), views: d.views }))
-    }
-    return bucketWeekly(days)
-  }, [days])
+    return isWeekly
+      ? bucketWeekly(days)
+      : days.map((d) => ({ label: formatShortDate(d.date), views: d.views }))
+  }, [days, isWeekly])
 
   return (
     <div className="bg-surface border border-border rounded-lg p-5">

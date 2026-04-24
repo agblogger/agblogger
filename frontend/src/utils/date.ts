@@ -10,8 +10,6 @@ import { format, formatDistanceToNow, parseISO, isValid, differenceInDays } from
  */
 function normalise(dateStr: string): string {
   const withT = dateStr.replace(' ', 'T')
-  // Only fix a bare two-digit UTC offset when a time component is present
-  // (i.e. the string contains 'T' after the date-time delimiter replacement).
   if (!withT.includes('T')) return withT
   return withT.replace(/([+-])(\d{2})$/, '$1$2:00')
 }
@@ -28,9 +26,10 @@ export function formatLocalDate(
   options: Intl.DateTimeFormatOptions = { dateStyle: 'medium' },
 ): string {
   if (!dateStr) return ''
-  const date = parseISO(normalise(dateStr))
+  const normalised = normalise(dateStr)
+  const date = parseISO(normalised)
   if (!isValid(date)) {
-    console.warn(`Failed to parse date "${dateStr}" (normalised: "${normalise(dateStr)}")`)
+    console.warn(`Failed to parse date "${dateStr}" (normalised: "${normalised}")`)
     return dateStr
   }
   try {
