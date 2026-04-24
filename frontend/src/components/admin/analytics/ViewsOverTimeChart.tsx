@@ -8,6 +8,7 @@ import {
   ResponsiveContainer,
 } from 'recharts'
 import type { DailyViewCount } from '@/api/client'
+import { formatLocalDate } from '@/utils/date'
 
 interface ViewsOverTimeChartProps {
   days: DailyViewCount[]
@@ -19,22 +20,9 @@ interface ChartPoint {
 }
 
 function formatShortDate(date: string): string {
-  // date is YYYY-MM-DD; parse it as UTC and format with locale-aware short date format
-  const parts = date.split('-')
-  if (
-    parts.length !== 3 ||
-    parts[0] == null ||
-    parts[1] == null ||
-    parts[2] == null
-  ) {
-    return date
-  }
-  // Create a date from these components (interpreted as UTC)
-  const d = new Date(`${parts[0]}-${parts[1]}-${parts[2]}T00:00:00Z`)
-  return new Intl.DateTimeFormat(undefined, {
-    month: 'numeric',
-    day: 'numeric',
-  }).format(d)
+  // Convert YYYY-MM-DD to backend timestamp format: YYYY-MM-DDTHH:MM:SS+00:00
+  const timestamp = `${date}T00:00:00+00:00`
+  return formatLocalDate(timestamp, { month: 'numeric', day: 'numeric' })
 }
 
 function bucketWeekly(days: DailyViewCount[]): ChartPoint[] {
