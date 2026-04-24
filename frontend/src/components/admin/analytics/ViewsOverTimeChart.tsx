@@ -8,15 +8,10 @@ import {
   ResponsiveContainer,
 } from 'recharts'
 import type { DailyViewCount } from '@/api/client'
-import { formatLocalDate } from '@/utils/date'
-import { bucketWeekly, type ChartPoint } from './chartData'
+import { bucketWeekly, formatShortDate, type ChartPoint } from './chartData'
 
 interface ViewsOverTimeChartProps {
   days: DailyViewCount[]
-}
-
-function formatShortDate(date: string): string {
-  return formatLocalDate(date, { month: 'numeric', day: 'numeric' })
 }
 
 export default function ViewsOverTimeChart({ days }: ViewsOverTimeChartProps) {

@@ -6,7 +6,7 @@ export interface ChartPoint {
   views: number
 }
 
-function formatShortDate(date: string): string {
+export function formatShortDate(date: string): string {
   return formatLocalDate(date, { month: 'numeric', day: 'numeric' })
 }
 
