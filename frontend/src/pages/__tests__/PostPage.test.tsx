@@ -421,6 +421,7 @@ describe('PostPage', () => {
       expect(screen.getByText('My Draft')).toBeInTheDocument()
     })
     expect(screen.getByText('Draft')).toBeInTheDocument()
+    expect(screen.getByText('This post is not publicly visible yet')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /publish/i })).toBeInTheDocument()
     const shareButtons = screen.getAllByRole('button', { name: 'Share this post' })
     expect(shareButtons.length).toBeGreaterThanOrEqual(2)
