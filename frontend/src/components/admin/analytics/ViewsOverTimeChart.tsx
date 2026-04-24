@@ -20,9 +20,7 @@ interface ChartPoint {
 }
 
 function formatShortDate(date: string): string {
-  // Convert YYYY-MM-DD to backend timestamp format: YYYY-MM-DDTHH:MM:SS+00:00
-  const timestamp = `${date}T00:00:00+00:00`
-  return formatLocalDate(timestamp, { month: 'numeric', day: 'numeric' })
+  return formatLocalDate(date, { month: 'numeric', day: 'numeric' })
 }
 
 function bucketWeekly(days: DailyViewCount[]): ChartPoint[] {
