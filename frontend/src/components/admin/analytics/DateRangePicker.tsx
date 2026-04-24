@@ -1,4 +1,5 @@
 import type { DateRange, CustomDateRange } from '@/hooks/useAnalyticsDashboard'
+import { dateToLocalString } from '@/utils/date'
 
 interface DateRangePickerProps {
   value: DateRange
@@ -7,14 +8,6 @@ interface DateRangePickerProps {
 }
 
 const PRESETS = ['7d', '30d', '90d'] as const
-
-function todayLocalDate(): string {
-  const now = new Date()
-  const year = String(now.getFullYear())
-  const month = String(now.getMonth() + 1).padStart(2, '0')
-  const day = String(now.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
 
 function activePreset(value: DateRange): string | null {
   if (typeof value === 'string') return value
@@ -27,7 +20,7 @@ function currentCustomRange(value: DateRange): CustomDateRange | null {
 }
 
 export default function DateRangePicker({ value, onChange, disabled }: DateRangePickerProps) {
-  const today = todayLocalDate()
+  const today = dateToLocalString(new Date())
   const custom = currentCustomRange(value)
   const preset = activePreset(value)
 

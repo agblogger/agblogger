@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Save, ArrowLeft, Eye } from 'lucide-react'
-import { format, parseISO } from 'date-fns'
 import { useSWRConfig } from 'swr'
 import { formatLocalDate } from '@/utils/date'
 
@@ -368,7 +367,7 @@ export default function EditorPage() {
         <div className="mb-4 flex items-center justify-between text-sm bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800/40 rounded-lg px-4 py-3">
           <span className="text-sky-800 dark:text-sky-300">
             You have unsaved changes from{' '}
-            {format(parseISO(draftSavedAt), 'MMM d, h:mm a')}
+            {formatLocalDate(draftSavedAt, { dateStyle: 'medium', timeStyle: 'short' })}
           </span>
           <span className="flex gap-2">
             <button

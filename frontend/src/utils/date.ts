@@ -40,16 +40,6 @@ export function formatLocalDate(
   }
 }
 
-export function formatDate(dateStr: string, pattern = 'MMM d, yyyy'): string {
-  if (!dateStr) return ''
-  try {
-    return format(parseISO(normalise(dateStr)), pattern)
-  } catch (err) {
-    console.warn(`Failed to parse date "${dateStr}":`, err)
-    return dateStr
-  }
-}
-
 /**
  * Format a date string as relative ("3 days ago") when recent (< 7 days),
  * otherwise fall back to "MMM d, yyyy".
@@ -61,11 +51,19 @@ export function formatRelativeDate(dateStr: string): string {
     if (Math.abs(differenceInDays(new Date(), date)) < 7) {
       return formatDistanceToNow(date, { addSuffix: true })
     }
-    return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(date)
+    return formatLocalDate(dateStr)
   } catch (err) {
     console.warn(`Failed to parse date "${dateStr}":`, err)
     return dateStr
   }
+}
+
+/** Format a Date object as YYYY-MM-DD in the browser's local timezone (not UTC). */
+export function dateToLocalString(date: Date): string {
+  const year = String(date.getFullYear())
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 /**
