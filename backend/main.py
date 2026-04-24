@@ -750,10 +750,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except OSError as exc:
             logger.error("Failed to read favicon file %s: %s", favicon_path, exc)
             return Response(status_code=404)
+        headers: dict[str, str] = {"Cache-Control": "public, max-age=3600"}
+        if media_type == "image/svg+xml":
+            headers["Content-Disposition"] = "attachment; filename=favicon.svg"
+            headers["Content-Security-Policy"] = "default-src 'none'; sandbox"
         return Response(
             content=data,
             media_type=media_type,
-            headers={"Cache-Control": "public, max-age=3600"},
+            headers=headers,
         )
 
     # Global exception handlers — safety net for unhandled exceptions

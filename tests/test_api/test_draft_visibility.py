@@ -427,6 +427,19 @@ class TestDraftAccessSingleAdmin:
         assert resp.status_code == 200
 
 
+class TestDraftMarkdownNegotiation:
+    """Draft posts must not be exposed via Accept: text/markdown content negotiation."""
+
+    @pytest.mark.asyncio
+    async def test_draft_post_markdown_returns_not_found(self, client: AsyncClient) -> None:
+        """Requesting a draft post with Accept: text/markdown must not leak the draft body."""
+        resp = await client.get("/post/admin-draft", headers={"Accept": "text/markdown"})
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith("text/markdown")
+        assert "Draft content" not in resp.text
+        assert resp.text.strip() == "# Post not found"
+
+
 class TestDraftLabelPostsVisibility:
     """Draft posts should respect visibility rules in label_posts endpoint."""
 

@@ -174,6 +174,8 @@ async def upload_favicon(
 
     async with content_write_lock:
         old_size = _get_old_favicon_size(content_manager, content_size_tracker)
+        index_path = content_manager.content_dir / "index.toml"
+        old_index_size = content_size_tracker.file_size(index_path)
         content_size_tracker.require_quota(len(data) - old_size)
 
         try:
@@ -183,7 +185,10 @@ async def upload_favicon(
             raise HTTPException(status_code=500, detail="Failed to save favicon.") from exc
 
         new_path = content_manager.content_dir / f"assets/favicon{extension}"
-        content_size_tracker.adjust(content_size_tracker.file_size(new_path) - old_size)
+        content_size_tracker.adjust(
+            (content_size_tracker.file_size(new_path) - old_size)
+            + (content_size_tracker.file_size(index_path) - old_index_size)
+        )
         set_git_warning(response, await git_service.try_commit("Update site favicon"))
 
     return SiteSettingsResponse(
@@ -208,6 +213,8 @@ async def delete_favicon(
     """Remove the site favicon."""
     async with content_write_lock:
         old_size = _get_old_favicon_size(content_manager, content_size_tracker)
+        index_path = content_manager.content_dir / "index.toml"
+        old_index_size = content_size_tracker.file_size(index_path)
 
         try:
             cfg = remove_favicon(content_manager)
@@ -215,7 +222,9 @@ async def delete_favicon(
             logger.error("Failed to remove favicon: %s", exc)
             raise HTTPException(status_code=500, detail="Failed to remove favicon.") from exc
 
-        content_size_tracker.adjust(-old_size)
+        content_size_tracker.adjust(
+            -old_size + (content_size_tracker.file_size(index_path) - old_index_size)
+        )
         set_git_warning(response, await git_service.try_commit("Remove site favicon"))
 
     return SiteSettingsResponse(

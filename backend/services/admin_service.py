@@ -425,17 +425,25 @@ def set_favicon(cm: ContentManager, *, extension: str, data: bytes) -> SiteConfi
 def remove_favicon(cm: ContentManager) -> SiteConfig:
     """Remove the favicon file and clear the favicon field from index.toml."""
     cfg = cm.site_config
+
+    # Resolve path before updating config so we still know which file to delete.
+    favicon_path: Path | None = None
     if cfg.favicon is not None:
         try:
             favicon_path = cm.validate_path(cfg.favicon)
         except ValueError:
             logger.warning("Favicon path is invalid, skipping deletion: %s", cfg.favicon)
-        else:
-            try:
-                favicon_path.unlink(missing_ok=True)
-            except OSError as exc:
-                logger.warning("Failed to remove favicon file %s: %s", favicon_path, exc)
 
+    # Update config first so that a write failure leaves state consistent (file
+    # still exists and config still references it, recoverable by re-uploading).
     write_site_config(cm.content_dir, dc_replace(cm.site_config, favicon=None))
     cm.reload_config()
+
+    # Delete file after config update; an orphaned file is harmless.
+    if favicon_path is not None:
+        try:
+            favicon_path.unlink(missing_ok=True)
+        except OSError as exc:
+            logger.warning("Failed to remove favicon file %s: %s", favicon_path, exc)
+
     return cm.site_config
