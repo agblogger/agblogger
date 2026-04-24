@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { Save, ArrowLeft, Eye } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { useSWRConfig } from 'swr'
-import { formatDate } from '@/utils/date'
+import { formatLocalDate } from '@/utils/date'
 
 import { fetchPostForEdit, createPost, updatePost } from '@/api/posts'
 import AlertBanner from '@/components/AlertBanner'
@@ -453,8 +453,8 @@ export default function EditorPage() {
 
           {!isNew && (createdAt !== null || modifiedAt !== null) && (
             <div className="flex items-center gap-4 text-xs text-muted">
-              {createdAt !== null && <span>Created {formatDate(createdAt, 'MMM d, yyyy, HH:mm:ss')}</span>}
-              {modifiedAt !== null && <span>Modified {formatDate(modifiedAt, 'MMM d, yyyy, HH:mm:ss')}</span>}
+              {createdAt !== null && <span>Created {formatLocalDate(createdAt, { dateStyle: 'medium', timeStyle: 'medium' })}</span>}
+              {modifiedAt !== null && <span>Modified {formatLocalDate(modifiedAt, { dateStyle: 'medium', timeStyle: 'medium' })}</span>}
             </div>
           )}
         </div>

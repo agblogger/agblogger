@@ -53,8 +53,10 @@ describe('CrossPostHistory', () => {
   it('shows formatted timestamp for posted items', () => {
     render(<CrossPostHistory items={[postedItem]} loading={false} />)
 
-    // Time is formatted in local timezone, so match date portion only
-    expect(screen.getByText(/Feb 20, 2026/)).toBeInTheDocument()
+    const expectedDate = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(
+      new Date('2026-02-20T14:30:00Z'),
+    )
+    expect(screen.getByText(new RegExp(expectedDate))).toBeInTheDocument()
   })
 
   it('does not show error message for successful items', () => {

@@ -9,7 +9,7 @@ import { fetchPost, fetchPostForEdit, createPost, updatePost, uploadAssets, fetc
 import { fetchSocialAccounts } from '@/api/crosspost'
 import type { UserResponse, PostEditResponse, PostDetail } from '@/api/client'
 import { DRAFT_SCHEMA_VERSION } from '@/hooks/useEditorAutoSave'
-import { formatDate } from '@/utils/date'
+import { formatLocalDate } from '@/utils/date'
 
 // Mock localStorage since jsdom doesn't always provide full implementation
 const storage = new Map<string, string>()
@@ -857,13 +857,13 @@ describe('EditorPage', () => {
     renderEditor('/editor/posts/existing/index.md')
 
     await waitFor(() => {
-      expect(screen.getByText(`Modified ${formatDate(initialModifiedAt, 'MMM d, yyyy, HH:mm:ss')}`)).toBeInTheDocument()
+      expect(screen.getByText(`Modified ${formatLocalDate(initialModifiedAt, { dateStyle: 'medium', timeStyle: 'medium' })}`)).toBeInTheDocument()
     })
 
     await user.click(screen.getByRole('button', { name: /save/i }))
 
     await waitFor(() => {
-      expect(screen.getByText(`Modified ${formatDate(updatedModifiedAt, 'MMM d, yyyy, HH:mm:ss')}`)).toBeInTheDocument()
+      expect(screen.getByText(`Modified ${formatLocalDate(updatedModifiedAt, { dateStyle: 'medium', timeStyle: 'medium' })}`)).toBeInTheDocument()
     })
   })
 

@@ -1,4 +1,4 @@
-import { format, formatDistanceToNow, parseISO, differenceInDays } from 'date-fns'
+import { format, formatDistanceToNow, parseISO, isValid, differenceInDays } from 'date-fns'
 
 /**
  * Normalise a backend ISO timestamp (space-separated, two-digit offset)
@@ -15,6 +15,24 @@ function normalise(dateStr: string): string {
  * use a bare two-digit UTC offset (e.g. "+00" instead of "+00:00").
  * This helper normalises both quirks before parsing.
  */
+export function formatLocalDate(
+  dateStr: string,
+  options: Intl.DateTimeFormatOptions = { dateStyle: 'medium' },
+): string {
+  if (!dateStr) return ''
+  try {
+    const date = parseISO(normalise(dateStr))
+    if (!isValid(date)) {
+      console.warn(`Failed to parse date "${dateStr}"`)
+      return dateStr
+    }
+    return new Intl.DateTimeFormat(undefined, options).format(date)
+  } catch (err) {
+    console.warn(`Failed to parse date "${dateStr}":`, err)
+    return dateStr
+  }
+}
+
 export function formatDate(dateStr: string, pattern = 'MMM d, yyyy'): string {
   try {
     return format(parseISO(normalise(dateStr)), pattern)
@@ -34,7 +52,7 @@ export function formatRelativeDate(dateStr: string): string {
     if (Math.abs(differenceInDays(new Date(), date)) < 7) {
       return formatDistanceToNow(date, { addSuffix: true })
     }
-    return format(date, 'MMM d, yyyy')
+    return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(date)
   } catch (err) {
     console.warn(`Failed to parse date "${dateStr}":`, err)
     return dateStr || ''

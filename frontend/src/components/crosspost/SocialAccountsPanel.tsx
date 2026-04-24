@@ -13,7 +13,7 @@ import {
 import type { SocialAccount, FacebookPage } from '@/api/crosspost'
 import { extractErrorDetail } from '@/api/parseError'
 import PlatformIcon from '@/components/crosspost/PlatformIcon'
-import { formatDate } from '@/utils/date'
+import { formatLocalDate } from '@/utils/date'
 import { useSocialAccounts } from '@/hooks/useSocialAccounts'
 
 interface SocialAccountsPanelProps {
@@ -248,7 +248,7 @@ export default function SocialAccountsPanel({ busy, onBusyChange }: SocialAccoun
                       {account.account_name ?? account.platform}
                     </p>
                     <p className="text-xs text-muted">
-                      Connected {formatDate(account.created_at)}
+                      Connected {formatLocalDate(account.created_at)}
                     </p>
                   </div>
                   {deleteConfirmId === account.id ? (

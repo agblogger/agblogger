@@ -1,6 +1,6 @@
 import type { CrossPostResult } from '@/api/crosspost'
 import PlatformIcon from '@/components/crosspost/PlatformIcon'
-import { formatDate } from '@/utils/date'
+import { formatLocalDate } from '@/utils/date'
 
 interface CrossPostHistoryProps {
   items: CrossPostResult[]
@@ -37,7 +37,7 @@ export default function CrossPostHistory({ items, loading }: CrossPostHistoryPro
           )}
           {item.posted_at !== null && (
             <span className="text-muted text-xs">
-              {formatDate(item.posted_at, 'MMM d, yyyy h:mm a')}
+              {formatLocalDate(item.posted_at, { dateStyle: 'medium', timeStyle: 'short' })}
             </span>
           )}
           {item.status === 'failed' && item.error !== null && (

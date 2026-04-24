@@ -17,7 +17,7 @@ import { useRenderedHtml } from '@/hooks/useKatex'
 import { useCodeBlockEnhance } from '@/hooks/useCodeBlockEnhance'
 import TableOfContents from '@/components/posts/TableOfContents'
 import { usePost, useViewCount } from '@/hooks/usePost'
-import { formatDate } from '@/utils/date'
+import { formatLocalDate } from '@/utils/date'
 import { filePathToSlug } from '@/utils/postUrl'
 export default function PostPage() {
   const { '*': slug } = useParams()
@@ -134,7 +134,7 @@ export default function PostPage() {
     )
   }
 
-  const dateStr = formatDate(post.created_at, 'MMMM d, yyyy')
+  const dateStr = formatLocalDate(post.created_at, { dateStyle: 'long' })
   const canonicalPostSlug = filePathToSlug(post.file_path)
   const canonicalPostUrl = `${window.location.origin}/post/${canonicalPostSlug}`
 

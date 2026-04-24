@@ -41,9 +41,12 @@ describe('PostCard', () => {
     expect(screen.getByText('Test Post')).toBeInTheDocument()
   })
 
-  it('renders formatted date', () => {
+  it('renders formatted date using browser locale', () => {
     renderCard(makePost())
-    expect(screen.getByText('Feb 1, 2026')).toBeInTheDocument()
+    const expected = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(
+      new Date('2026-02-01T12:00:00+00:00'),
+    )
+    expect(screen.getByText(expected)).toBeInTheDocument()
   })
 
   it('renders author', () => {

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   formatDate,
+  formatLocalDate,
   formatRelativeDate,
   localDateToUtcStart,
   localDateToUtcEnd,
@@ -49,6 +50,66 @@ describe('formatDate', () => {
   })
 })
 
+describe('formatLocalDate', () => {
+  it('formats a valid ISO timestamp using browser locale', () => {
+    const result = formatLocalDate('2026-03-01T12:00:00+00:00')
+    const expected = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(
+      new Date('2026-03-01T12:00:00+00:00'),
+    )
+    expect(result).toBe(expected)
+  })
+
+  it('handles backend space-separated timestamps', () => {
+    const result = formatLocalDate('2026-03-01 12:00:00+00:00')
+    const expected = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(
+      new Date('2026-03-01T12:00:00+00:00'),
+    )
+    expect(result).toBe(expected)
+  })
+
+  it('handles two-digit UTC offset', () => {
+    const result = formatLocalDate('2026-03-01T12:00:00+00')
+    const expected = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(
+      new Date('2026-03-01T12:00:00+00:00'),
+    )
+    expect(result).toBe(expected)
+  })
+
+  it('supports Intl.DateTimeFormatOptions', () => {
+    const result = formatLocalDate('2026-03-01T12:00:00+00:00', { dateStyle: 'long' })
+    const expected = new Intl.DateTimeFormat(undefined, { dateStyle: 'long' }).format(
+      new Date('2026-03-01T12:00:00+00:00'),
+    )
+    expect(result).toBe(expected)
+  })
+
+  it('includes time when timeStyle is provided', () => {
+    const result = formatLocalDate('2026-03-01T12:00:00+00:00', {
+      dateStyle: 'medium',
+      timeStyle: 'medium',
+    })
+    const expected = new Intl.DateTimeFormat(undefined, {
+      dateStyle: 'medium',
+      timeStyle: 'medium',
+    }).format(new Date('2026-03-01T12:00:00+00:00'))
+    expect(result).toBe(expected)
+  })
+
+  it('falls back to full string on invalid input', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    expect(formatLocalDate('not-a-date')).toBe('not-a-date')
+  })
+
+  it('falls back to full string on multi-word invalid input', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    expect(formatLocalDate('totally invalid date')).toBe('totally invalid date')
+  })
+
+  it('returns empty string for empty input', () => {
+    expect(formatLocalDate('')).toBe('')
+  })
+})
+
 describe('formatRelativeDate', () => {
   beforeEach(() => {
     vi.useFakeTimers()
@@ -66,7 +127,10 @@ describe('formatRelativeDate', () => {
 
   it('returns absolute date for dates 7+ days ago', () => {
     const result = formatRelativeDate('2026-03-01T12:00:00+00:00')
-    expect(result).toBe('Mar 1, 2026')
+    const expected = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(
+      new Date('2026-03-01T12:00:00+00:00'),
+    )
+    expect(result).toBe(expected)
   })
 
   it('handles backend space-separated timestamps', () => {
@@ -76,7 +140,10 @@ describe('formatRelativeDate', () => {
 
   it('handles two-digit offset', () => {
     const result = formatRelativeDate('2026-03-01 12:00:00+00')
-    expect(result).toBe('Mar 1, 2026')
+    const expected = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(
+      new Date('2026-03-01T12:00:00+00:00'),
+    )
+    expect(result).toBe(expected)
   })
 
   it('falls back to full string on invalid input', () => {
