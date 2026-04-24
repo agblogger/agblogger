@@ -28,25 +28,26 @@ export function formatLocalDate(
   options: Intl.DateTimeFormatOptions = { dateStyle: 'medium' },
 ): string {
   if (!dateStr) return ''
+  const date = parseISO(normalise(dateStr))
+  if (!isValid(date)) {
+    console.warn(`Failed to parse date "${dateStr}" (normalised: "${normalise(dateStr)}")`)
+    return dateStr
+  }
   try {
-    const date = parseISO(normalise(dateStr))
-    if (!isValid(date)) {
-      console.warn(`Failed to parse date "${dateStr}"`)
-      return dateStr
-    }
     return new Intl.DateTimeFormat(undefined, options).format(date)
   } catch (err) {
-    console.warn(`Failed to parse date "${dateStr}":`, err)
+    console.warn(`Failed to format date "${dateStr}" with options ${JSON.stringify(options)}:`, err)
     return dateStr
   }
 }
 
 export function formatDate(dateStr: string, pattern = 'MMM d, yyyy'): string {
+  if (!dateStr) return ''
   try {
     return format(parseISO(normalise(dateStr)), pattern)
   } catch (err) {
     console.warn(`Failed to parse date "${dateStr}":`, err)
-    return dateStr || ''
+    return dateStr
   }
 }
 
@@ -55,6 +56,7 @@ export function formatDate(dateStr: string, pattern = 'MMM d, yyyy'): string {
  * otherwise fall back to "MMM d, yyyy".
  */
 export function formatRelativeDate(dateStr: string): string {
+  if (!dateStr) return ''
   try {
     const date = parseISO(normalise(dateStr))
     if (Math.abs(differenceInDays(new Date(), date)) < 7) {
@@ -63,7 +65,7 @@ export function formatRelativeDate(dateStr: string): string {
     return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(date)
   } catch (err) {
     console.warn(`Failed to parse date "${dateStr}":`, err)
-    return dateStr || ''
+    return dateStr
   }
 }
 

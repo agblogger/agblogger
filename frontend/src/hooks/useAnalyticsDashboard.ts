@@ -56,7 +56,7 @@ function getDisabledDashboardStats() {
 }
 
 /** Format a Date as YYYY-MM-DD in the browser's local timezone (not UTC). */
-function formatLocalDate(date: Date): string {
+function dateToLocalString(date: Date): string {
   const year = String(date.getFullYear())
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
@@ -80,8 +80,8 @@ function getDateRange(range: DateRange): { start: string; end: string } {
   const start = new Date()
   start.setDate(start.getDate() - RANGE_DAYS[range])
   return {
-    start: localDateToUtcStart(formatLocalDate(start)),
-    end: localDateToUtcEnd(formatLocalDate(end)),
+    start: localDateToUtcStart(dateToLocalString(start)),
+    end: localDateToUtcEnd(dateToLocalString(end)),
   }
 }
 

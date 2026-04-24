@@ -44,8 +44,7 @@ describe('formatDate', () => {
     expect(formatDate('2026-03-01T12:00:00+00:00', 'yyyy-MM-dd')).toBe('2026-03-01')
   })
 
-  it('returns empty string for completely empty input fallback', () => {
-    vi.spyOn(console, 'warn').mockImplementation(() => {})
+  it('returns empty string for empty input', () => {
     expect(formatDate('')).toBe('')
   })
 })
@@ -113,9 +112,10 @@ describe('formatLocalDate', () => {
     // Regression: normalise() used to corrupt bare dates like "2024-01-01" by
     // matching the day part "-01" as a bare UTC offset and producing "2024-01-01:00".
     const result = formatLocalDate('2024-01-01', { month: 'numeric', day: 'numeric' })
-    // Result must be a non-empty string that does not equal the raw input
-    expect(result).toBeTruthy()
-    expect(result).not.toBe('2024-01-01')
+    const expected = new Intl.DateTimeFormat(undefined, { month: 'numeric', day: 'numeric' }).format(
+      new Date(2024, 0, 1), // local midnight January 1, 2024 — same as parseISO('2024-01-01')
+    )
+    expect(result).toBe(expected)
   })
 })
 

@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 vi.mock('@/hooks/useKatex', () => ({
   useRenderedHtml: (html: string | null) => html ?? '',
@@ -34,6 +34,17 @@ function renderCard(post: PostSummary) {
 }
 
 describe('PostCard', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    // Pin system time so the fixture date (2026-02-01) is always ≥7 days in the
+    // past, ensuring formatRelativeDate falls back to absolute-date format.
+    vi.setSystemTime(new Date('2026-04-01T12:00:00Z'))
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it('renders title as link', () => {
     renderCard(makePost())
     const link = screen.getByRole('link')

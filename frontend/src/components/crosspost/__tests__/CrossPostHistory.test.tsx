@@ -53,10 +53,11 @@ describe('CrossPostHistory', () => {
   it('shows formatted timestamp for posted items', () => {
     render(<CrossPostHistory items={[postedItem]} loading={false} />)
 
-    const expectedDate = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(
-      new Date('2026-02-20T14:30:00Z'),
-    )
-    expect(screen.getByText(new RegExp(expectedDate))).toBeInTheDocument()
+    const expectedDate = new Intl.DateTimeFormat(undefined, {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    }).format(new Date('2026-02-20T14:30:00Z'))
+    expect(screen.getByText(expectedDate)).toBeInTheDocument()
   })
 
   it('does not show error message for successful items', () => {

@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import { describe, it, expect } from 'vitest'
 import ViewsOverTimeChart from '../ViewsOverTimeChart'
-import { bucketWeekly } from '../chartData'
+import { bucketWeekly, formatShortDate } from '../chartData'
 import type { DailyViewCount } from '@/api/client'
 import { formatLocalDate } from '@/utils/date'
 
@@ -56,6 +56,12 @@ describe('ViewsOverTimeChart', () => {
     expect(screen.queryByText('No data for selected range.')).not.toBeInTheDocument()
   })
 
+  it('renders "Views per week" heading for exactly 31 days (boundary)', () => {
+    render(<ViewsOverTimeChart days={makeDays(31)} />)
+    expect(screen.getByText('Views per week')).toBeInTheDocument()
+    expect(screen.queryByText('Views over time')).not.toBeInTheDocument()
+  })
+
   it('weekly labels contain an en dash range separator', () => {
     const days = makeDays(14) // two full weeks
     const buckets = bucketWeekly(days)
@@ -71,5 +77,39 @@ describe('ViewsOverTimeChart', () => {
     expect(buckets[0]?.label).toMatch(
       new RegExp(`^${expectedStart.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`)
     )
+  })
+
+  it('bucketWeekly sums views correctly within each bucket', () => {
+    const days = makeDays(14) // views: 1..14
+    const buckets = bucketWeekly(days)
+    // First 7 days: 1+2+3+4+5+6+7 = 28
+    expect(buckets[0]?.views).toBe(28)
+    // Second 7 days: 8+9+10+11+12+13+14 = 77
+    expect(buckets[1]?.views).toBe(77)
+  })
+
+  it('bucketWeekly handles a partial last week correctly', () => {
+    const days = makeDays(9) // 7 + 2
+    const buckets = bucketWeekly(days)
+    expect(buckets).toHaveLength(2)
+    // Second bucket: days 8 and 9 (views 8+9 = 17)
+    expect(buckets[1]?.views).toBe(17)
+    // End date of partial bucket is Jan 9
+    const expectedEnd = formatLocalDate('2024-01-09', { month: 'numeric', day: 'numeric' })
+    expect(buckets[1]?.label).toContain(expectedEnd)
+  })
+})
+
+describe('formatShortDate', () => {
+  it('formats a YYYY-MM-DD date as locale-aware month/day', () => {
+    const result = formatShortDate('2024-03-15')
+    const expected = new Intl.DateTimeFormat(undefined, { month: 'numeric', day: 'numeric' }).format(
+      new Date(2024, 2, 15),
+    )
+    expect(result).toBe(expected)
+  })
+
+  it('returns empty string for empty input', () => {
+    expect(formatShortDate('')).toBe('')
   })
 })
