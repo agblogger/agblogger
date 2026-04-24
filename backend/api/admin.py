@@ -134,6 +134,20 @@ _ALLOWED_FAVICON_CONTENT_TYPES: dict[str, str] = {
 }
 
 
+def _get_old_favicon_size(
+    content_manager: ContentManager, content_size_tracker: ContentSizeTracker
+) -> int:
+    old_favicon = content_manager.site_config.favicon
+    if old_favicon is None:
+        return 0
+    try:
+        old_path = content_manager.validate_path(old_favicon)
+        return content_size_tracker.file_size(old_path)
+    except ValueError:
+        logger.warning("Invalid old favicon path in quota check: %s", old_favicon)
+        return 0
+
+
 @router.post("/favicon", response_model=SiteSettingsResponse)
 async def upload_favicon(
     file: Annotated[UploadFile, File()],
@@ -159,14 +173,7 @@ async def upload_favicon(
         raise HTTPException(status_code=413, detail="Favicon file exceeds 2 MB limit.")
 
     async with content_write_lock:
-        old_favicon = content_manager.site_config.favicon
-        old_size = 0
-        if old_favicon is not None:
-            try:
-                old_path = content_manager.validate_path(old_favicon)
-                old_size = content_size_tracker.file_size(old_path)
-            except ValueError:
-                logger.warning("Invalid old favicon path in quota check: %s", old_favicon)
+        old_size = _get_old_favicon_size(content_manager, content_size_tracker)
         content_size_tracker.require_quota(len(data) - old_size)
 
         try:
@@ -200,16 +207,7 @@ async def delete_favicon(
 ) -> SiteSettingsResponse:
     """Remove the site favicon."""
     async with content_write_lock:
-        old_favicon = content_manager.site_config.favicon
-        if old_favicon is None:
-            logger.debug("DELETE /favicon: no favicon configured, nothing to remove")
-        old_size = 0
-        if old_favicon is not None:
-            try:
-                old_path = content_manager.validate_path(old_favicon)
-                old_size = content_size_tracker.file_size(old_path)
-            except ValueError:
-                logger.warning("Invalid old favicon path in quota check: %s", old_favicon)
+        old_size = _get_old_favicon_size(content_manager, content_size_tracker)
 
         try:
             cfg = remove_favicon(content_manager)

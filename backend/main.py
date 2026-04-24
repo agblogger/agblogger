@@ -69,6 +69,16 @@ _DEFAULT_LABELS_TOML = "[labels]\n"
 
 _NOT_FOUND_HTML = "<html><body>Not found</body></html>"
 _API_CATALOG_PROFILE = "https://www.rfc-editor.org/info/rfc9727"
+_FAVICON_EXTENSION_CONTENT_TYPES: dict[str, str] = {
+    ".png": "image/png",
+    ".ico": "image/x-icon",
+    ".svg": "image/svg+xml",
+    ".webp": "image/webp",
+}
+
+
+def _fallback_html(base_html: str | None) -> str:
+    return base_html if base_html is not None else _NOT_FOUND_HTML
 
 
 def _base_url(request: Request) -> str:
@@ -734,19 +744,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if not favicon_path.exists():
             return Response(status_code=404)
         ext = favicon_path.suffix.lower()
-        content_types = {
-            ".png": "image/png",
-            ".ico": "image/x-icon",
-            ".svg": "image/svg+xml",
-            ".webp": "image/webp",
-        }
-        media_type = content_types.get(ext, "application/octet-stream")
+        media_type = _FAVICON_EXTENSION_CONTENT_TYPES.get(ext, "application/octet-stream")
         try:
             data = await asyncio.to_thread(favicon_path.read_bytes)
         except OSError as exc:
             logger.error("Failed to read favicon file %s: %s", favicon_path, exc)
             return Response(status_code=404)
-        return Response(content=data, media_type=media_type)
+        return Response(
+            content=data,
+            media_type=media_type,
+            headers={"Cache-Control": "public, max-age=3600"},
+        )
 
     # Global exception handlers — safety net for unhandled exceptions
 
@@ -1158,18 +1166,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     label_ids = [pl.label_id for pl in post.labels]
         except SQLAlchemyError:
             logger.exception("DB error looking up post for SEO: %s", slug)
-            fallback_html = base_html if base_html is not None else _NOT_FOUND_HTML
             return _html_or_markdown_response(
                 request,
-                html=fallback_html,
+                html=_fallback_html(base_html),
                 markdown="# Post unavailable\n",
             )
 
         if post is None or post.is_draft:
-            fallback_html = base_html if base_html is not None else _NOT_FOUND_HTML
             return _html_or_markdown_response(
                 request,
-                html=fallback_html,
+                html=_fallback_html(base_html),
                 markdown="# Post not found\n",
             )
 
@@ -1209,6 +1215,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "warnings": [],
         }
 
+        post_data = content_manager.read_post(post.file_path)
         ctx = SeoContext(
             title=post.title,
             description=description,
@@ -1218,7 +1225,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             author=post.author,
             published_time=published,
             modified_time=modified,
-            markdown_body="",
+            markdown_body=post_data.raw_content if post_data is not None else "",
             json_ld=blogposting_ld(
                 headline=post.title,
                 description=description,
@@ -1232,24 +1239,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             preload_data=preload_data,
         )
 
-        post_data = content_manager.read_post(post.file_path)
-        if post_data is not None:
-            ctx = SeoContext(
-                title=ctx.title,
-                description=ctx.description,
-                canonical_url=ctx.canonical_url,
-                og_type=ctx.og_type,
-                site_name=ctx.site_name,
-                author=ctx.author,
-                published_time=ctx.published_time,
-                modified_time=ctx.modified_time,
-                json_ld=ctx.json_ld,
-                rendered_body=ctx.rendered_body,
-                markdown_body=post_data.raw_content,
-                preload_data=ctx.preload_data,
-            )
-
-        enriched = render_seo_html(base_html or _NOT_FOUND_HTML, ctx)
+        enriched = render_seo_html(_fallback_html(base_html), ctx)
         return _html_or_markdown_response(
             request,
             html=enriched,
@@ -1289,10 +1279,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         site_desc = content_manager.site_config.description
 
         if page > MAX_SAFE_PAGE:
-            fallback_html = base_html if base_html is not None else _NOT_FOUND_HTML
             return _html_or_markdown_response(
                 request,
-                html=fallback_html,
+                html=_fallback_html(base_html),
                 markdown="# Posts\n",
             )
 
@@ -1321,10 +1310,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 except ValueError:
                     # list_posts raises ValueError on invalid date query parameters
                     logger.warning("Invalid homepage query for SEO preload", exc_info=True)
-                    fallback_html = base_html if base_html is not None else _NOT_FOUND_HTML
                     return _html_or_markdown_response(
                         request,
-                        html=fallback_html,
+                        html=_fallback_html(base_html),
                         markdown="# Posts\n",
                     )
                 for post in post_list.posts:
@@ -1349,10 +1337,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 )
         except SQLAlchemyError:
             logger.exception("DB error loading posts for homepage SEO")
-            fallback_html = base_html if base_html is not None else _NOT_FOUND_HTML
             return _html_or_markdown_response(
                 request,
-                html=fallback_html,
+                html=_fallback_html(base_html),
                 markdown="# Posts unavailable\n",
                 status_code=503,
                 headers={"Retry-After": "60"},
@@ -1375,7 +1362,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         response = _html_or_markdown_response(
             request,
-            html=render_seo_html(base_html or _NOT_FOUND_HTML, ctx),
+            html=render_seo_html(_fallback_html(base_html), ctx),
             markdown=render_page_markdown(ctx),
         )
         mark_auth_sensitive_read(response, is_authenticated=is_authenticated)
@@ -1441,20 +1428,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             page = await get_page(session_factory, content_manager, page_id)
         except SQLAlchemyError, OSError:
             logger.exception("Error loading page for SEO: %s", page_id)
-            fallback_html = base_html if base_html is not None else _NOT_FOUND_HTML
             return _html_or_markdown_response(
                 request,
-                html=fallback_html,
+                html=_fallback_html(base_html),
                 markdown="# Page unavailable\n",
                 status_code=503,
                 headers={"Retry-After": "60"},
             )
 
         if page is None:
-            fallback_html = base_html if base_html is not None else _NOT_FOUND_HTML
             return _html_or_markdown_response(
                 request,
-                html=fallback_html,
+                html=_fallback_html(base_html),
                 markdown="# Page not found\n",
             )
 
@@ -1488,7 +1473,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         return _html_or_markdown_response(
             request,
-            html=render_seo_html(base_html or _NOT_FOUND_HTML, ctx),
+            html=render_seo_html(_fallback_html(base_html), ctx),
             markdown=render_page_markdown(ctx),
         )
 
@@ -1514,7 +1499,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         return _html_or_markdown_response(
             request,
-            html=render_seo_html(base_html or _NOT_FOUND_HTML, ctx),
+            html=render_seo_html(_fallback_html(base_html), ctx),
             markdown=render_page_markdown(ctx),
         )
 
@@ -1617,20 +1602,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         )
         except SQLAlchemyError:
             logger.exception("DB error loading label for SEO: %s", label_id)
-            fallback_html = base_html if base_html is not None else _NOT_FOUND_HTML
             return _html_or_markdown_response(
                 request,
-                html=fallback_html,
+                html=_fallback_html(base_html),
                 markdown="# Label unavailable\n",
                 status_code=503,
                 headers={"Retry-After": "60"},
             )
 
         if label_row is None:
-            fallback_html = base_html if base_html is not None else _NOT_FOUND_HTML
             return _html_or_markdown_response(
                 request,
-                html=fallback_html,
+                html=_fallback_html(base_html),
                 markdown="# Label not found\n",
             )
 
@@ -1675,7 +1658,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         return _html_or_markdown_response(
             request,
-            html=render_seo_html(base_html or _NOT_FOUND_HTML, ctx),
+            html=render_seo_html(_fallback_html(base_html), ctx),
             markdown=render_page_markdown(ctx),
         )
 
@@ -1701,7 +1684,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         return _html_or_markdown_response(
             request,
-            html=render_seo_html(base_html or _NOT_FOUND_HTML, ctx),
+            html=render_seo_html(_fallback_html(base_html), ctx),
             markdown=render_page_markdown(ctx),
         )
 

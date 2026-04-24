@@ -5,7 +5,6 @@ from __future__ import annotations
 import string
 from dataclasses import asdict
 
-import pytest
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 

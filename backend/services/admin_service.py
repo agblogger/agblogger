@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
+from dataclasses import replace as dc_replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -399,14 +400,7 @@ def set_favicon(cm: ContentManager, *, extension: str, data: bytes) -> SiteConfi
     favicon_path = cm.content_dir / favicon_rel
     favicon_path.write_bytes(data)
 
-    cfg = cm.site_config
-    updated = SiteConfig(
-        title=cfg.title,
-        description=cfg.description,
-        timezone=cfg.timezone,
-        favicon=favicon_rel,
-        pages=cfg.pages,
-    )
+    updated = dc_replace(cm.site_config, favicon=favicon_rel)
     try:
         write_site_config(cm.content_dir, updated)
         cm.reload_config()
@@ -442,13 +436,6 @@ def remove_favicon(cm: ContentManager) -> SiteConfig:
             except OSError as exc:
                 logger.warning("Failed to remove favicon file %s: %s", favicon_path, exc)
 
-    updated = SiteConfig(
-        title=cfg.title,
-        description=cfg.description,
-        timezone=cfg.timezone,
-        favicon=None,
-        pages=cfg.pages,
-    )
-    write_site_config(cm.content_dir, updated)
+    write_site_config(cm.content_dir, dc_replace(cm.site_config, favicon=None))
     cm.reload_config()
     return cm.site_config

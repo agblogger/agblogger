@@ -5,8 +5,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, patch
 
-import pytest
-
 from backend.crosspost.bluesky_oauth_state import OAuthStateStore
 from tests.conftest import create_test_client
 
