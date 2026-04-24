@@ -108,6 +108,15 @@ describe('formatLocalDate', () => {
   it('returns empty string for empty input', () => {
     expect(formatLocalDate('')).toBe('')
   })
+
+  it('handles bare YYYY-MM-DD date strings without a time component', () => {
+    // Regression: normalise() used to corrupt bare dates like "2024-01-01" by
+    // matching the day part "-01" as a bare UTC offset and producing "2024-01-01:00".
+    const result = formatLocalDate('2024-01-01', { month: 'numeric', day: 'numeric' })
+    // Result must be a non-empty string that does not equal the raw input
+    expect(result).toBeTruthy()
+    expect(result).not.toBe('2024-01-01')
+  })
 })
 
 describe('formatRelativeDate', () => {

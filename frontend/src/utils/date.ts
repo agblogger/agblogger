@@ -3,9 +3,17 @@ import { format, formatDistanceToNow, parseISO, isValid, differenceInDays } from
 /**
  * Normalise a backend ISO timestamp (space-separated, two-digit offset)
  * into a standard ISO string suitable for `parseISO`.
+ *
+ * The offset fix (`+00` → `+00:00`) must only apply when a time component is
+ * present. Without this guard the regex matches the day part of a bare
+ * `YYYY-MM-DD` string (e.g. `-01`) and corrupts it into `2024-01-01:00`.
  */
 function normalise(dateStr: string): string {
-  return dateStr.replace(' ', 'T').replace(/([+-])(\d{2})$/, '$1$2:00')
+  const withT = dateStr.replace(' ', 'T')
+  // Only fix a bare two-digit UTC offset when a time component is present
+  // (i.e. the string contains 'T' after the date-time delimiter replacement).
+  if (!withT.includes('T')) return withT
+  return withT.replace(/([+-])(\d{2})$/, '$1$2:00')
 }
 
 /**

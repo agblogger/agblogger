@@ -396,8 +396,6 @@ describe('AnalyticsPanel', () => {
   })
 
   it('renders views over time chart section', async () => {
-    // ViewsOverTimeChart calls formatShortDate which may warn about date parsing in jsdom
-    vi.spyOn(console, 'warn').mockImplementation(() => {})
     mockFetchDashboard.mockResolvedValue({
       ...DEFAULT_DASHBOARD,
       views_over_time: {
