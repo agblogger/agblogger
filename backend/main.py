@@ -51,6 +51,7 @@ from backend.services.upload_limits import (
     SITE_IMAGE_FORMATS,
     get_multipart_body_limit,
 )
+from backend.utils.image_probe import probe_image_file
 from backend.utils.slug import file_path_to_slug
 from backend.version import get_version
 
@@ -88,11 +89,57 @@ def _base_url(request: Request) -> str:
 _UNSAFE_URL_SCHEMES = ("data:", "javascript:", "vbscript:")
 
 
-def _make_seo_image(url: str | None, alt: str | None) -> SeoImage | None:
-    """Build an SeoImage when ``url`` is set; return None otherwise."""
+def _resolve_local_image_path(
+    url: str,
+    request: Request,
+    content_manager: ContentManager,
+) -> Path | None:
+    """Map an absolute og:image URL to a file under ``content_dir``, or None.
+
+    Recognizes the two URL families AgBlogger emits as og:image:
+    ``/post/<slug>/<file>`` (post asset) and ``/image.<ext>`` (site image).
+    Used by ``_make_seo_image`` to read width/height from the file headers.
+    """
+    base = _base_url(request)
+    if not url.startswith(base):
+        return None
+    path = url[len(base) :].split("?", 1)[0]
+    if path.startswith("/post/") and len(path) > len("/post/"):
+        return content_manager.content_dir / "posts" / path[len("/post/") :]
+    if path.startswith("/image."):
+        site_image = content_manager.site_config.image
+        if site_image is not None:
+            return content_manager.content_dir / site_image
+    return None
+
+
+def _make_seo_image(
+    url: str | None,
+    alt: str | None,
+    request: Request | None = None,
+    content_manager: ContentManager | None = None,
+) -> SeoImage | None:
+    """Build an SeoImage when ``url`` is set; return None otherwise.
+
+    When ``request`` and ``content_manager`` are provided and the image URL
+    points to a local asset, also probes the file headers to populate
+    ``width``, ``height``, and ``mime_type``. These let scrapers (notably
+    Facebook) skip downloading the full image just to validate it.
+    """
     if url is None:
         return None
-    return SeoImage(url=url, alt=alt)
+    width: int | None = None
+    height: int | None = None
+    mime_type: str | None = None
+    if request is not None and content_manager is not None:
+        local_path = _resolve_local_image_path(url, request, content_manager)
+        if local_path is not None:
+            info = probe_image_file(local_path)
+            if info is not None:
+                width = info.width
+                height = info.height
+                mime_type = info.mime_type
+    return SeoImage(url=url, alt=alt, width=width, height=height, mime_type=mime_type)
 
 
 def _site_image_url(request: Request, content_manager: ContentManager) -> str | None:
@@ -1532,7 +1579,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             author=post.author,
             published_time=published,
             modified_time=modified,
-            image=_make_seo_image(image_url, image_alt or post.title),
+            image=_make_seo_image(image_url, image_alt or post.title, request, content_manager),
             markdown_body=post_data.raw_content if post_data is not None else "",
             json_ld=blogposting_ld(
                 headline=post.title,
@@ -1662,7 +1709,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             description=site_desc,
             canonical_url=canonical_url,
             site_name=site_title,
-            image=_make_seo_image(_site_image_url(request, content_manager), site_title),
+            image=_make_seo_image(
+                _site_image_url(request, content_manager), site_title, request, content_manager
+            ),
             json_ld=website_ld(name=site_title, description=site_desc, url=canonical_url),
             rendered_body=rendered_body,
             markdown_body=render_post_list_markdown(posts_data, heading=site_title),
@@ -1774,7 +1823,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             description=description,
             canonical_url=canonical,
             site_name=site_name,
-            image=_make_seo_image(_site_image_url(request, content_manager), page.title),
+            image=_make_seo_image(
+                _site_image_url(request, content_manager), page.title, request, content_manager
+            ),
             json_ld=webpage_ld(name=page.title, description=description, url=canonical),
             rendered_body=rendered_body,
             markdown_body=content_manager.read_page(page_id),
@@ -1804,7 +1855,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             description=f"Labels \u2014 {site_name}",
             canonical_url=f"{base_url}/labels",
             site_name=site_name,
-            image=_make_seo_image(_site_image_url(request, content_manager), site_name),
+            image=_make_seo_image(
+                _site_image_url(request, content_manager), site_name, request, content_manager
+            ),
             markdown_body="# Labels\n",
         )
 
@@ -1962,7 +2015,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             description=f"Posts labeled {display_name} \u2014 {site_name}",
             canonical_url=f"{base_url}/labels/{label_id}",
             site_name=site_name,
-            image=_make_seo_image(_site_image_url(request, content_manager), display_name),
+            image=_make_seo_image(
+                _site_image_url(request, content_manager), display_name, request, content_manager
+            ),
             rendered_body=rendered_body,
             markdown_body=render_post_list_markdown(posts_data_ld, heading=display_name),
             preload_data=preload_data,
@@ -1991,7 +2046,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             description=f"Search \u2014 {site_name}",
             canonical_url=f"{base_url}/search",
             site_name=site_name,
-            image=_make_seo_image(_site_image_url(request, content_manager), site_name),
+            image=_make_seo_image(
+                _site_image_url(request, content_manager), site_name, request, content_manager
+            ),
             markdown_body="# Search\n",
         )
 

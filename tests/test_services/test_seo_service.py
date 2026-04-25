@@ -228,6 +228,48 @@ class TestRenderSeoHtml:
         )
 
 
+class TestRenderSeoHtmlImageDimensions:
+    def test_emits_og_image_width_and_height_when_provided(self) -> None:
+        ctx = _make_ctx(
+            image=SeoImage(
+                url="https://example.com/img.png",
+                alt="alt",
+                width=1200,
+                height=630,
+                mime_type="image/png",
+            )
+        )
+        result = render_seo_html(BASE_HTML, ctx)
+        assert '<meta property="og:image:width" content="1200">' in result
+        assert '<meta property="og:image:height" content="630">' in result
+        assert '<meta property="og:image:type" content="image/png">' in result
+
+    def test_omits_dimension_tags_when_dimensions_missing(self) -> None:
+        ctx = _make_ctx(image=SeoImage(url="https://example.com/img.png", alt="alt"))
+        result = render_seo_html(BASE_HTML, ctx)
+        assert "og:image:width" not in result
+        assert "og:image:height" not in result
+        assert "og:image:type" not in result
+
+    def test_emits_mime_type_alone_when_no_dimensions(self) -> None:
+        ctx = _make_ctx(
+            image=SeoImage(url="https://example.com/img.png", alt="alt", mime_type="image/png")
+        )
+        result = render_seo_html(BASE_HTML, ctx)
+        assert "og:image:width" not in result
+        assert '<meta property="og:image:type" content="image/png">' in result
+
+
+class TestSeoImageInvariants:
+    def test_rejects_width_without_height(self) -> None:
+        with pytest.raises(ValueError, match="both be set or both be None"):
+            SeoImage(url="https://example.com/x.png", width=100)
+
+    def test_rejects_height_without_width(self) -> None:
+        with pytest.raises(ValueError, match="both be set or both be None"):
+            SeoImage(url="https://example.com/x.png", height=100)
+
+
 class TestRenderSeoHtmlJsonLd:
     def test_injects_json_ld_script(self) -> None:
         ld = {"@context": "https://schema.org", "@type": "WebSite", "name": "Test"}

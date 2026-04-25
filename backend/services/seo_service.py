@@ -37,20 +37,29 @@ class SeoPostItem(TypedDict):
 
 @dataclass(frozen=True)
 class SeoImage:
-    """Open Graph image with optional alt text.
+    """Open Graph image with optional alt text and dimension hints.
 
     ``url`` must be an absolute URL (http:// or https://) so social platforms
-    can fetch the thumbnail without resolving against the page URL. Grouping
-    ``url`` and ``alt`` makes the (image, image_alt) coupling structural rather
-    than convention.
+    can fetch the thumbnail without resolving against the page URL.
+
+    ``width``, ``height``, and ``mime_type`` are optional but strongly
+    recommended: without them, Facebook (and similar scrapers) must download
+    and process the full image just to discover its dimensions, which can
+    cause large or off-aspect images to be silently dropped from the preview.
     """
 
     url: str
     alt: str | None = None
+    width: int | None = None
+    height: int | None = None
+    mime_type: str | None = None
 
     def __post_init__(self) -> None:
         if not self.url.startswith(("http://", "https://")):
             msg = f"SeoImage.url must be an absolute http(s) URL, got: {self.url!r}"
+            raise ValueError(msg)
+        if (self.width is None) != (self.height is None):
+            msg = "SeoImage.width and SeoImage.height must both be set or both be None"
             raise ValueError(msg)
 
 
@@ -141,6 +150,17 @@ def render_seo_html(base_html: str, ctx: SeoContext) -> str:
             esc_image_alt = html.escape(ctx.image.alt)
             head_tags.append(f'<meta property="og:image:alt" content="{esc_image_alt}">')
             head_tags.append(f'<meta name="twitter:image:alt" content="{esc_image_alt}">')
+        if ctx.image.width is not None and ctx.image.height is not None:
+            # Dimension hints let scrapers (notably Facebook) skip downloading
+            # the full image just to validate size. Off-aspect or large images
+            # are sometimes silently dropped from the preview when these are
+            # missing.
+            head_tags.append(f'<meta property="og:image:width" content="{ctx.image.width}">')
+            head_tags.append(f'<meta property="og:image:height" content="{ctx.image.height}">')
+        if ctx.image.mime_type is not None:
+            head_tags.append(
+                f'<meta property="og:image:type" content="{html.escape(ctx.image.mime_type)}">'
+            )
 
     if ctx.site_name:
         head_tags.append(f'<meta property="og:site_name" content="{html.escape(ctx.site_name)}">')
