@@ -1976,13 +1976,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def robots_route(request: Request) -> Response:
         base_url = _base_url(request)
         body = (
+            # Social-preview crawlers get their own group BEFORE the wildcard
+            # so longest-match parsers (Google, Facebook, Twitter/X, LinkedIn)
+            # never see the `Content-Signal` AI opt-out below. Without this
+            # block the Facebook Sharing Debugger refuses to fetch link
+            # previews and surfaces a synthetic 403 with the canned hint
+            # "Please allowlist facebookexternalhit on your robots.txt config"
+            # — the request never leaves Facebook's servers, which is why the
+            # origin still returns 200 to a curl with the same User-Agent.
+            "User-agent: facebookexternalhit\n"
+            "User-agent: facebookcatalog\n"
+            "User-agent: Twitterbot\n"
+            "User-agent: LinkedInBot\n"
+            "Allow: /\n"
+            "\n"
             "User-agent: *\n"
             "Content-Signal: ai-train=no, search=yes, ai-input=no\n"
             "Allow: /\n"
             # Public post and page assets are served from /api/content/. The
             # /post/<slug>/<asset> URL 301-redirects there, so blocking the
-            # whole /api/ tree would prevent crawlers (including Facebook's
-            # og:image scraper) from following those redirects.
+            # whole /api/ tree would prevent crawlers from following those
+            # redirects.
             "Allow: /api/content/\n"
             "Disallow: /api/\n"
             "Disallow: /admin\n"

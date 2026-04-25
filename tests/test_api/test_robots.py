@@ -85,3 +85,36 @@ class TestRobotsTxt:
         resp = await client.get("/robots.txt")
         assert "Sitemap:" in resp.text
         assert "/sitemap.xml" in resp.text
+
+    async def test_explicit_social_preview_crawler_allowlist(self, client: AsyncClient) -> None:
+        # Social-preview crawlers (Facebook, Twitter/X, LinkedIn) get their own
+        # User-agent groups so their robots.txt parsers do not interpret the
+        # `Content-Signal` AI-preference directive in the `*` group as opting
+        # them out. Without this, Facebook's Sharing Debugger refuses to
+        # fetch link previews and surfaces a synthetic 403 with the canned
+        # "Please allowlist facebookexternalhit" hint.
+        resp = await client.get("/robots.txt")
+        body = resp.text
+        for ua in ("facebookexternalhit", "facebookcatalog", "Twitterbot", "LinkedInBot"):
+            assert f"User-agent: {ua}" in body, f"missing explicit allowlist for {ua}"
+
+    async def test_social_preview_group_is_separate_from_wildcard(
+        self, client: AsyncClient
+    ) -> None:
+        # The social-preview group must precede the wildcard group AND must not
+        # contain the Content-Signal directive — otherwise the longest-match
+        # robots.txt parsers used by Facebook/Twitter/LinkedIn would still see
+        # the AI opt-out signal and refuse to scrape.
+        resp = await client.get("/robots.txt")
+        body = resp.text
+        fb_idx = body.index("User-agent: facebookexternalhit")
+        wildcard_idx = body.index("User-agent: *")
+        assert fb_idx < wildcard_idx, "social-preview group must come before wildcard group"
+
+        # The FB block ends at the next blank line.
+        fb_block_end = body.index("\n\n", fb_idx)
+        fb_block = body[fb_idx:fb_block_end]
+        assert "Content-Signal" not in fb_block, (
+            "Content-Signal must not appear in the social-preview group"
+        )
+        assert "Allow: /" in fb_block
