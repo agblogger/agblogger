@@ -1,0 +1,4 @@
+# CVE-2026-3219: pip improper archive handling (MEDIUM)
+# pip is a transitive dev-only dependency (pip-audit -> pip-api -> pip).
+# It is not present in the production runtime. No fixed version is available upstream.
+CVE-2026-3219
