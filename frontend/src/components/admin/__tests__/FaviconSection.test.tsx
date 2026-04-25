@@ -178,4 +178,30 @@ describe('FaviconSection', () => {
       expect(screen.getByText(/unsupported file type/i)).toBeInTheDocument()
     })
   })
+
+  it('refreshes preview URL after replacing favicon with same extension', async () => {
+    const updatedSettings = { ...baseSettings, favicon: 'assets/favicon.png' }
+    mockUploadAdminFavicon.mockResolvedValue(updatedSettings)
+
+    render(
+      <FaviconSection
+        initialFavicon="assets/favicon.png"
+        busy={false}
+        onSavedSettings={onSavedSettings}
+      />
+    )
+
+    const initialSrc = screen.getByAltText<HTMLImageElement>('Current blog icon').src
+
+    const file = new File(['new-png-bytes'], 'favicon.png', { type: 'image/png' })
+    const replaceInput = document.querySelector('input[type="file"]') as HTMLInputElement
+    await userEvent.upload(replaceInput, file)
+
+    await waitFor(() => {
+      expect(mockUploadAdminFavicon).toHaveBeenCalledWith(file)
+    })
+
+    const newSrc = screen.getByAltText<HTMLImageElement>('Current blog icon').src
+    expect(newSrc).not.toBe(initialSrc)
+  })
 })

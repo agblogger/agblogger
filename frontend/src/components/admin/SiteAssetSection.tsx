@@ -60,6 +60,11 @@ export default function SiteAssetSection({
   const [asset, setAsset] = useState<string | null>(initialAsset)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Bumped after every successful upload so the preview <img> URL changes even
+  // when the asset path stays identical (same-extension replacement). Without
+  // this, the browser keeps serving the cached image because /favicon.ico and
+  // /image.* responses set Cache-Control: public, max-age=3600.
+  const [cacheBuster, setCacheBuster] = useState<number>(() => Date.now())
 
   useEffect(() => {
     setAsset(initialAsset)
@@ -76,6 +81,7 @@ export default function SiteAssetSection({
     try {
       const updated = await upload(file)
       setAsset(selectAsset(updated))
+      setCacheBuster(Date.now())
       onSavedSettings(updated)
       refreshSiteConfig()
     } catch (err) {
@@ -123,9 +129,7 @@ export default function SiteAssetSection({
   const filename = asset !== null ? (asset.split('/').pop() ?? asset) : null
   const publicPath = asset !== null ? previewUrl(asset) : null
   const previewSrc =
-    asset !== null && publicPath !== null
-      ? `${publicPath}?v=${encodeURIComponent(asset)}`
-      : null
+    asset !== null && publicPath !== null ? `${publicPath}?v=${cacheBuster.toString()}` : null
 
   return (
     <div className="mt-5 border-t border-border pt-5">

@@ -203,4 +203,30 @@ describe('ImageSection', () => {
       expect(screen.getByText(/unsupported file type/i)).toBeInTheDocument()
     })
   })
+
+  it('refreshes preview URL after replacing image with same extension', async () => {
+    const updatedSettings = { ...baseSettings, image: 'assets/image.png' }
+    mockUploadAdminImage.mockResolvedValue(updatedSettings)
+
+    render(
+      <ImageSection
+        initialImage="assets/image.png"
+        busy={false}
+        onSavedSettings={onSavedSettings}
+      />
+    )
+
+    const initialSrc = screen.getByAltText<HTMLImageElement>('Current website image').src
+
+    const file = new File(['new-png-bytes'], 'image.png', { type: 'image/png' })
+    const replaceInput = document.querySelector('input[type="file"]') as HTMLInputElement
+    await userEvent.upload(replaceInput, file)
+
+    await waitFor(() => {
+      expect(mockUploadAdminImage).toHaveBeenCalledWith(file)
+    })
+
+    const newSrc = screen.getByAltText<HTMLImageElement>('Current website image').src
+    expect(newSrc).not.toBe(initialSrc)
+  })
 })
