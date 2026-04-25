@@ -164,8 +164,21 @@ def render_seo_html(base_html: str, ctx: SeoContext) -> str:
 
     # Use a lambda so the replacement string is never interpreted for backreferences.
     title_tag = f"<title>{esc_title}</title>"
-    result = re.sub(r"<title>[^<]*</title>", lambda _: title_tag, base_html)
-    result = result.replace("</head>", f"{head_block}\n</head>")
+
+    # Inject SEO tags right after <title> rather than before </head>. Several
+    # OG parsers — Facebook's Sharing Debugger most notably — stop scanning
+    # <head> at the first <script> tag and report "the document returned no
+    # data" when og: tags follow it. The SPA base HTML loads its bundle from
+    # a <script type="module"> early in <head>, so og: tags MUST come before
+    # that script.
+    title_with_seo = f"{title_tag}\n{head_block}"
+    result, replaced = re.subn(
+        r"<title>[^<]*</title>", lambda _: title_with_seo, base_html, count=1
+    )
+    if not replaced:
+        # Base HTML lacks <title> (unusual). Fall back to inserting before
+        # </head> so og: tags remain at least somewhere in <head>.
+        result = base_html.replace("</head>", f"{title_tag}\n{head_block}\n</head>")
 
     if ctx.rendered_body is not None:
         result = result.replace(

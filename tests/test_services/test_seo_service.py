@@ -199,6 +199,34 @@ class TestRenderSeoHtml:
         result = render_seo_html(BASE_HTML, _make_ctx(title=r"Sale \0 today"))
         assert r"<title>Sale \0 today</title>" in result
 
+    def test_og_tags_appear_before_any_script_tag_in_head(self) -> None:
+        # Several Open Graph parsers (Facebook's Sharing Debugger in particular)
+        # stop scanning the <head> at the first <script> tag and report
+        # "the document returned no data" when the og: tags follow it. The SPA
+        # base HTML loads the bundle from a <script type="module"> early in
+        # <head>, so SEO injection MUST place og: tags before that script.
+        spa_head = (
+            "<!DOCTYPE html>\n"
+            "<html>\n"
+            "<head>\n"
+            '<meta charset="utf-8">\n'
+            "<title>Blog</title>\n"
+            '<script type="module" src="/bundle.js"></script>\n'
+            '<link rel="stylesheet" href="/bundle.css">\n'
+            "</head>\n"
+            '<body><div id="root"></div></body>\n'
+            "</html>"
+        )
+        result = render_seo_html(spa_head, _make_ctx())
+        head_section = result[result.index("<head>") : result.index("</head>")]
+        assert 'property="og:title"' in head_section
+        og_idx = head_section.index('property="og:title"')
+        script_idx = head_section.index("<script")
+        assert og_idx < script_idx, (
+            "og:title must appear before any <script> in <head> — "
+            "OG parsers that stop at <script> would otherwise see no metadata"
+        )
+
 
 class TestRenderSeoHtmlJsonLd:
     def test_injects_json_ld_script(self) -> None:
