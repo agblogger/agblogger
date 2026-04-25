@@ -192,7 +192,7 @@ export default function Header() {
             <button
               type="button"
               onClick={handleTitleClick}
-              className="font-display text-2xl tracking-tight text-ink hover:text-accent transition-colors text-left self-start"
+              className="font-display text-2xl tracking-tight text-ink hover:text-accent transition-colors text-left self-start cursor-pointer"
               aria-label={`${siteTitle} — scroll to top`}
             >
               {siteTitle}
@@ -202,7 +202,7 @@ export default function Header() {
                 type="button"
                 onClick={handleTitleClick}
                 data-testid="header-post-title"
-                className="block truncate max-w-[14rem] sm:max-w-xs md:max-w-md lg:max-w-lg font-body text-sm text-muted hover:text-accent transition-colors italic mt-0.5 leading-tight text-left self-start"
+                className="block truncate max-w-[14rem] sm:max-w-xs md:max-w-md lg:max-w-lg font-display text-base tracking-tight text-muted hover:text-accent transition-colors mt-0.5 leading-tight text-left self-start cursor-pointer"
                 aria-label={`${postTitle} — scroll to top`}
               >
                 {postTitle}
