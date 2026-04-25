@@ -442,3 +442,16 @@ async def test_fetch_dashboard_partial_goatcounter_failure_uses_empty_defaults(
     assert result.views_over_time.days == []
     assert result.browsers.entries == []
     assert result.referrers.referrers == []
+
+
+async def test_fetch_dashboard_returns_none_when_all_goatcounter_requests_fail(
+    session: AsyncSession,
+) -> None:
+    """fetch_dashboard returns None when GoatCounter is fully unreachable (total outage)."""
+    with patch(
+        "backend.services.analytics_service._stats_request",
+        new=AsyncMock(return_value=None),
+    ):
+        result = await fetch_dashboard(session)
+
+    assert result is None

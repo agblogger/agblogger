@@ -579,6 +579,18 @@ async def fetch_dashboard(
         _stats_request("/api/v0/stats/toprefs", params),
     )
 
+    all_responses = (
+        total_data,
+        hits_data,
+        browsers_data,
+        systems_data,
+        languages_data,
+        locations_data,
+        referrers_data,
+    )
+    if all(r is None for r in all_responses):
+        return None
+
     stats = (
         TotalStatsResponse.from_goatcounter(total_data)
         if total_data is not None
