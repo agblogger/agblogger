@@ -22,11 +22,14 @@ from backend.services.cache_service import upsert_page_cache
 from backend.services.page_service import BUILTIN_PAGE_IDS
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
     from backend.filesystem.content_manager import ContentManager
 
 logger = logging.getLogger(__name__)
+_ASSET_EXTENSION_RE = re.compile(r"\.[a-zA-Z0-9]+")
 
 
 def get_site_settings(cm: ContentManager) -> SiteConfig:
@@ -378,38 +381,42 @@ def update_page_order(cm: ContentManager, pages: list[PageConfig]) -> None:
     cm.reload_config()
 
 
-def set_favicon(cm: ContentManager, *, extension: str, data: bytes) -> SiteConfig:
-    """Save favicon bytes to content/assets/favicon{extension} and update index.toml."""
-    if not re.fullmatch(r"\.[a-zA-Z0-9]+", extension):
-        msg = f"Invalid favicon extension: {extension!r}"
+def _set_site_asset(
+    cm: ContentManager,
+    *,
+    current_rel: str | None,
+    with_field: Callable[[SiteConfig, str | None], SiteConfig],
+    basename: str,
+    extension: str,
+    data: bytes,
+    log_label: str,
+) -> SiteConfig:
+    if not _ASSET_EXTENSION_RE.fullmatch(extension):
+        msg = f"Invalid {log_label} extension: {extension!r}"
         raise ValueError(msg)
     assets_dir = cm.content_dir / "assets"
     assets_dir.mkdir(exist_ok=True)
 
-    old_favicon = cm.site_config.favicon
     old_path_to_delete: Path | None = None
-    if old_favicon is not None:
-        old_ext = Path(old_favicon).suffix
-        if old_ext != extension:
-            try:
-                old_path_to_delete = cm.validate_path(old_favicon)
-            except ValueError:
-                logger.warning("Old favicon path is invalid, skipping deletion: %s", old_favicon)
+    if current_rel is not None and Path(current_rel).suffix != extension:
+        try:
+            old_path_to_delete = cm.validate_path(current_rel)
+        except ValueError:
+            logger.warning("Old %s path is invalid, skipping deletion: %s", log_label, current_rel)
 
-    favicon_rel = f"assets/favicon{extension}"
-    favicon_path = cm.content_dir / favicon_rel
-    favicon_path.write_bytes(data)
+    new_rel = f"assets/{basename}{extension}"
+    new_path = cm.content_dir / new_rel
+    new_path.write_bytes(data)
 
-    updated = dc_replace(cm.site_config, favicon=favicon_rel)
     try:
-        write_site_config(cm.content_dir, updated)
+        write_site_config(cm.content_dir, with_field(cm.site_config, new_rel))
         cm.reload_config()
     except OSError:
         try:
-            favicon_path.unlink(missing_ok=True)
+            new_path.unlink(missing_ok=True)
         except OSError as cleanup_exc:
             logger.warning(
-                "Failed to clean up orphaned favicon file %s: %s", favicon_path, cleanup_exc
+                "Failed to clean up orphaned %s file %s: %s", log_label, new_path, cleanup_exc
             )
         raise
 
@@ -417,36 +424,70 @@ def set_favicon(cm: ContentManager, *, extension: str, data: bytes) -> SiteConfi
         try:
             old_path_to_delete.unlink(missing_ok=True)
         except OSError as exc:
-            logger.warning("Failed to remove old favicon %s: %s", old_path_to_delete, exc)
+            logger.warning("Failed to remove old %s %s: %s", log_label, old_path_to_delete, exc)
 
     return cm.site_config
+
+
+def _remove_site_asset(
+    cm: ContentManager,
+    *,
+    current_rel: str | None,
+    with_field: Callable[[SiteConfig, str | None], SiteConfig],
+    log_label: str,
+) -> SiteConfig:
+    # Resolve path before updating config so we still know which file to delete.
+    asset_path: Path | None = None
+    if current_rel is not None:
+        try:
+            asset_path = cm.validate_path(current_rel)
+        except ValueError:
+            logger.warning("%s path is invalid, skipping deletion: %s", log_label, current_rel)
+
+    # Update config first so that a write failure leaves state consistent (file
+    # still exists and config still references it, recoverable by re-uploading).
+    write_site_config(cm.content_dir, with_field(cm.site_config, None))
+    cm.reload_config()
+
+    # Delete file after config update; an orphaned file is harmless.
+    if asset_path is not None:
+        try:
+            asset_path.unlink(missing_ok=True)
+        except OSError as exc:
+            logger.warning("Failed to remove %s file %s: %s", log_label, asset_path, exc)
+
+    return cm.site_config
+
+
+def _with_favicon(cfg: SiteConfig, value: str | None) -> SiteConfig:
+    return dc_replace(cfg, favicon=value)
+
+
+def _with_image(cfg: SiteConfig, value: str | None) -> SiteConfig:
+    return dc_replace(cfg, image=value)
+
+
+def set_favicon(cm: ContentManager, *, extension: str, data: bytes) -> SiteConfig:
+    """Save favicon bytes to content/assets/favicon{extension} and update index.toml."""
+    return _set_site_asset(
+        cm,
+        current_rel=cm.site_config.favicon,
+        with_field=_with_favicon,
+        basename="favicon",
+        extension=extension,
+        data=data,
+        log_label="favicon",
+    )
 
 
 def remove_favicon(cm: ContentManager) -> SiteConfig:
     """Remove the favicon file and clear the favicon field from index.toml."""
-    cfg = cm.site_config
-
-    # Resolve path before updating config so we still know which file to delete.
-    favicon_path: Path | None = None
-    if cfg.favicon is not None:
-        try:
-            favicon_path = cm.validate_path(cfg.favicon)
-        except ValueError:
-            logger.warning("Favicon path is invalid, skipping deletion: %s", cfg.favicon)
-
-    # Update config first so that a write failure leaves state consistent (file
-    # still exists and config still references it, recoverable by re-uploading).
-    write_site_config(cm.content_dir, dc_replace(cm.site_config, favicon=None))
-    cm.reload_config()
-
-    # Delete file after config update; an orphaned file is harmless.
-    if favicon_path is not None:
-        try:
-            favicon_path.unlink(missing_ok=True)
-        except OSError as exc:
-            logger.warning("Failed to remove favicon file %s: %s", favicon_path, exc)
-
-    return cm.site_config
+    return _remove_site_asset(
+        cm,
+        current_rel=cm.site_config.favicon,
+        with_field=_with_favicon,
+        log_label="favicon",
+    )
 
 
 def set_image(cm: ContentManager, *, extension: str, data: bytes) -> SiteConfig:
@@ -455,64 +496,22 @@ def set_image(cm: ContentManager, *, extension: str, data: bytes) -> SiteConfig:
     The site image is used as the og:image / twitter:image fallback for social
     previews when a post does not provide one inline.
     """
-    if not re.fullmatch(r"\.[a-zA-Z0-9]+", extension):
-        msg = f"Invalid image extension: {extension!r}"
-        raise ValueError(msg)
-    assets_dir = cm.content_dir / "assets"
-    assets_dir.mkdir(exist_ok=True)
-
-    old_image = cm.site_config.image
-    old_path_to_delete: Path | None = None
-    if old_image is not None:
-        old_ext = Path(old_image).suffix
-        if old_ext != extension:
-            try:
-                old_path_to_delete = cm.validate_path(old_image)
-            except ValueError:
-                logger.warning("Old image path is invalid, skipping deletion: %s", old_image)
-
-    image_rel = f"assets/image{extension}"
-    image_path = cm.content_dir / image_rel
-    image_path.write_bytes(data)
-
-    updated = dc_replace(cm.site_config, image=image_rel)
-    try:
-        write_site_config(cm.content_dir, updated)
-        cm.reload_config()
-    except OSError:
-        try:
-            image_path.unlink(missing_ok=True)
-        except OSError as cleanup_exc:
-            logger.warning("Failed to clean up orphaned image file %s: %s", image_path, cleanup_exc)
-        raise
-
-    if old_path_to_delete is not None:
-        try:
-            old_path_to_delete.unlink(missing_ok=True)
-        except OSError as exc:
-            logger.warning("Failed to remove old image %s: %s", old_path_to_delete, exc)
-
-    return cm.site_config
+    return _set_site_asset(
+        cm,
+        current_rel=cm.site_config.image,
+        with_field=_with_image,
+        basename="image",
+        extension=extension,
+        data=data,
+        log_label="site image",
+    )
 
 
 def remove_image(cm: ContentManager) -> SiteConfig:
     """Remove the site image file and clear the image field from index.toml."""
-    cfg = cm.site_config
-
-    image_path: Path | None = None
-    if cfg.image is not None:
-        try:
-            image_path = cm.validate_path(cfg.image)
-        except ValueError:
-            logger.warning("image path is invalid, skipping deletion: %s", cfg.image)
-
-    write_site_config(cm.content_dir, dc_replace(cm.site_config, image=None))
-    cm.reload_config()
-
-    if image_path is not None:
-        try:
-            image_path.unlink(missing_ok=True)
-        except OSError as exc:
-            logger.warning("Failed to remove image file %s: %s", image_path, exc)
-
-    return cm.site_config
+    return _remove_site_asset(
+        cm,
+        current_rel=cm.site_config.image,
+        with_field=_with_image,
+        log_label="site image",
+    )

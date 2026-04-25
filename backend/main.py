@@ -44,6 +44,7 @@ from backend.models.base import CacheBase, cache_non_virtual_tables
 from backend.models.post import FTS_CREATE_SQL
 from backend.services.csrf_service import validate_csrf_token
 from backend.services.rate_limit_service import InMemoryRateLimiter
+from backend.services.seo_service import extract_first_image
 from backend.services.upload_limits import get_multipart_body_limit
 from backend.utils.slug import file_path_to_slug
 from backend.version import get_version
@@ -132,8 +133,6 @@ def _post_image_url(
     to the configured site image. Returns ``(None, None)`` if no image can be
     derived.
     """
-    from backend.services.seo_service import extract_first_image
-
     if rendered_html:
         first = extract_first_image(rendered_html)
         if first is not None:
@@ -793,32 +792,59 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(sync_router)
     app.include_router(crosspost_router)
 
-    async def _serve_favicon(request: Request, required_ext: str | None = None) -> Response:
+    async def _serve_site_asset(
+        request: Request,
+        *,
+        current_rel: Callable[[ContentManager], str | None],
+        content_type_by_ext: dict[str, str],
+        log_label: str,
+        required_ext: str | None,
+        sandbox_svg_filename: str | None = None,
+    ) -> Response:
         content_manager: ContentManager = request.app.state.content_manager
-        favicon = content_manager.site_config.favicon
-        if favicon is None:
+        rel = current_rel(content_manager)
+        if rel is None:
             return Response(status_code=404)
         try:
-            favicon_path = content_manager.validate_path(favicon)
+            asset_path = content_manager.validate_path(rel)
         except ValueError:
-            logger.warning("Invalid favicon path in site config: %s", favicon)
+            logger.warning("Invalid %s path in site config: %s", log_label, rel)
             return Response(status_code=404)
-        if not favicon_path.exists():
-            return Response(status_code=404)
-        ext = favicon_path.suffix.lower()
+        ext = asset_path.suffix.lower()
         if required_ext is not None and ext != required_ext:
             return Response(status_code=404)
-        media_type = _FAVICON_EXTENSION_CONTENT_TYPES.get(ext, "application/octet-stream")
+        media_type = content_type_by_ext.get(ext, "application/octet-stream")
         try:
-            data = await asyncio.to_thread(favicon_path.read_bytes)
+            data = await asyncio.to_thread(asset_path.read_bytes)
+        except FileNotFoundError:
+            return Response(status_code=404)
         except OSError as exc:
-            logger.error("Failed to read favicon file %s: %s", favicon_path, exc)
+            logger.error("Failed to read %s file %s: %s", log_label, asset_path, exc)
             return Response(status_code=404)
         headers: dict[str, str] = {"Cache-Control": "public, max-age=3600"}
-        if media_type == "image/svg+xml":
-            headers["Content-Disposition"] = "attachment; filename=favicon.svg"
+        if sandbox_svg_filename is not None and media_type == "image/svg+xml":
+            headers["Content-Disposition"] = f"attachment; filename={sandbox_svg_filename}"
             headers["Content-Security-Policy"] = "default-src 'none'; sandbox"
         return Response(content=data, media_type=media_type, headers=headers)
+
+    async def _serve_favicon(request: Request, required_ext: str | None = None) -> Response:
+        return await _serve_site_asset(
+            request,
+            current_rel=lambda cm: cm.site_config.favicon,
+            content_type_by_ext=_FAVICON_EXTENSION_CONTENT_TYPES,
+            log_label="favicon",
+            required_ext=required_ext,
+            sandbox_svg_filename="favicon.svg",
+        )
+
+    async def _serve_site_image(request: Request, required_ext: str) -> Response:
+        return await _serve_site_asset(
+            request,
+            current_rel=lambda cm: cm.site_config.image,
+            content_type_by_ext=_SITE_IMAGE_EXTENSION_CONTENT_TYPES,
+            log_label="site image",
+            required_ext=required_ext,
+        )
 
     @app.get("/favicon.ico", include_in_schema=False, response_model=None)
     async def favicon_route(request: Request) -> Response:
@@ -835,30 +861,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/favicon.webp", include_in_schema=False, response_model=None)
     async def favicon_webp_route(request: Request) -> Response:
         return await _serve_favicon(request, required_ext=".webp")
-
-    async def _serve_site_image(request: Request, required_ext: str) -> Response:
-        content_manager: ContentManager = request.app.state.content_manager
-        image_rel = content_manager.site_config.image
-        if image_rel is None:
-            return Response(status_code=404)
-        try:
-            image_path = content_manager.validate_path(image_rel)
-        except ValueError:
-            logger.warning("Invalid site image path in site config: %s", image_rel)
-            return Response(status_code=404)
-        if not image_path.exists():
-            return Response(status_code=404)
-        ext = image_path.suffix.lower()
-        if ext != required_ext:
-            return Response(status_code=404)
-        media_type = _SITE_IMAGE_EXTENSION_CONTENT_TYPES.get(ext, "application/octet-stream")
-        try:
-            data = await asyncio.to_thread(image_path.read_bytes)
-        except OSError as exc:
-            logger.error("Failed to read site image file %s: %s", image_path, exc)
-            return Response(status_code=404)
-        headers = {"Cache-Control": "public, max-age=3600"}
-        return Response(content=data, media_type=media_type, headers=headers)
 
     @app.get("/image.png", include_in_schema=False, response_model=None)
     async def site_image_png_route(request: Request) -> Response:

@@ -34,6 +34,10 @@ vi.mock('@/api/admin', () => ({
   updateAdminPageOrder: (...args: unknown[]) => mockUpdateAdminPageOrder(...args) as unknown,
   deleteAdminPage: (...args: unknown[]) => mockDeleteAdminPage(...args) as unknown,
   changeAdminPassword: (...args: unknown[]) => mockChangeAdminPassword(...args) as unknown,
+  uploadAdminFavicon: vi.fn(),
+  removeAdminFavicon: vi.fn(),
+  uploadAdminImage: vi.fn(),
+  removeAdminImage: vi.fn(),
 }))
 
 vi.mock('@/hooks/useKatex', () => ({

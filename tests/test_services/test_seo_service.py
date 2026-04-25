@@ -691,33 +691,45 @@ class TestExtractFirstImage:
         assert extract_first_image("") is None
 
     def test_extracts_src_with_double_quotes(self) -> None:
-        src, alt = extract_first_image('<img src="/foo.png" alt="Foo">')  # type: ignore[misc]
+        result = extract_first_image('<img src="/foo.png" alt="Foo">')
+        assert result is not None
+        src, alt = result
         assert src == "/foo.png"
         assert alt == "Foo"
 
     def test_extracts_src_with_single_quotes(self) -> None:
-        src, alt = extract_first_image("<img src='/foo.png' alt='Foo'>")  # type: ignore[misc]
+        result = extract_first_image("<img src='/foo.png' alt='Foo'>")
+        assert result is not None
+        src, alt = result
         assert src == "/foo.png"
         assert alt == "Foo"
 
     def test_returns_alt_none_when_no_alt(self) -> None:
-        src, alt = extract_first_image('<img src="/foo.png">')  # type: ignore[misc]
+        result = extract_first_image('<img src="/foo.png">')
+        assert result is not None
+        src, alt = result
         assert src == "/foo.png"
         assert alt is None
 
     def test_picks_first_image_when_multiple(self) -> None:
         html = '<img src="/a.png" alt="A"> text <img src="/b.png" alt="B">'
-        src, alt = extract_first_image(html)  # type: ignore[misc]
+        result = extract_first_image(html)
+        assert result is not None
+        src, alt = result
         assert src == "/a.png"
         assert alt == "A"
 
     def test_handles_self_closing_img(self) -> None:
-        src, alt = extract_first_image('<img src="/foo.png" alt="Foo" />')  # type: ignore[misc]
+        result = extract_first_image('<img src="/foo.png" alt="Foo" />')
+        assert result is not None
+        src, alt = result
         assert src == "/foo.png"
         assert alt == "Foo"
 
     def test_handles_attribute_order_alt_first(self) -> None:
-        src, alt = extract_first_image('<img alt="Foo" src="/foo.png">')  # type: ignore[misc]
+        result = extract_first_image('<img alt="Foo" src="/foo.png">')
+        assert result is not None
+        src, alt = result
         assert src == "/foo.png"
         assert alt == "Foo"
 
