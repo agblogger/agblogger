@@ -259,7 +259,7 @@ class TestFaviconHtmlInjection:
 
         resp = await client.get("/")
         assert resp.status_code == 200
-        assert '<link rel="icon" type="image/png" href="/favicon.ico">' in resp.text
+        assert '<link rel="icon" type="image/png" href="/favicon.png">' in resp.text
 
     @pytest.mark.asyncio
     async def test_index_html_favicon_link_includes_type_for_ico(
@@ -299,7 +299,102 @@ class TestFaviconHtmlInjection:
 
         resp = await client.get("/")
         assert resp.status_code == 200
-        assert '<link rel="icon" type="image/svg+xml" href="/favicon.ico">' in resp.text
+        assert '<link rel="icon" type="image/svg+xml" href="/favicon.svg">' in resp.text
+
+    @pytest.mark.asyncio
+    async def test_index_html_favicon_link_uses_webp_url(
+        self, client: AsyncClient, app_settings: Settings
+    ) -> None:
+        frontend_dir = app_settings.frontend_dir
+        frontend_dir.mkdir(parents=True, exist_ok=True)
+        (frontend_dir / "index.html").write_text(
+            '<!doctype html><html><head></head><body><div id="root"></div></body></html>'
+        )
+        token = await _login(client)
+        await client.post(
+            "/api/admin/favicon",
+            files={"file": ("favicon.webp", b"RIFF\x00\x00\x00\x00WEBP", "image/webp")},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        resp = await client.get("/")
+        assert resp.status_code == 200
+        assert '<link rel="icon" type="image/webp" href="/favicon.webp">' in resp.text
+
+
+class TestFormatSpecificFaviconRoutes:
+    @pytest.mark.asyncio
+    async def test_favicon_png_route_serves_png(
+        self, client: AsyncClient, app_settings: Settings
+    ) -> None:
+        token = await _login(client)
+        png_data = b"\x89PNG\r\n\x1a\n" + b"\x00" * 20
+        await client.post(
+            "/api/admin/favicon",
+            files={"file": ("favicon.png", png_data, "image/png")},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        resp = await client.get("/favicon.png")
+
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == "image/png"
+        assert resp.content == png_data
+
+    @pytest.mark.asyncio
+    async def test_favicon_svg_route_serves_svg(
+        self, client: AsyncClient, app_settings: Settings
+    ) -> None:
+        token = await _login(client)
+        svg_data = b"<svg xmlns='http://www.w3.org/2000/svg'></svg>"
+        await client.post(
+            "/api/admin/favicon",
+            files={"file": ("icon.svg", svg_data, "image/svg+xml")},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        resp = await client.get("/favicon.svg")
+
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == "image/svg+xml"
+
+    @pytest.mark.asyncio
+    async def test_favicon_webp_route_serves_webp(
+        self, client: AsyncClient, app_settings: Settings
+    ) -> None:
+        token = await _login(client)
+        webp_data = b"RIFF\x00\x00\x00\x00WEBP" + b"\x00" * 10
+        await client.post(
+            "/api/admin/favicon",
+            files={"file": ("favicon.webp", webp_data, "image/webp")},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        resp = await client.get("/favicon.webp")
+
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == "image/webp"
+        assert resp.content == webp_data
+
+    @pytest.mark.asyncio
+    async def test_favicon_png_route_returns_404_when_no_favicon(self, client: AsyncClient) -> None:
+        resp = await client.get("/favicon.png")
+        assert resp.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_favicon_png_route_returns_404_when_favicon_is_different_format(
+        self, client: AsyncClient, app_settings: Settings
+    ) -> None:
+        token = await _login(client)
+        await client.post(
+            "/api/admin/favicon",
+            files={"file": ("icon.svg", b"<svg/>", "image/svg+xml")},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        resp = await client.get("/favicon.png")
+
+        assert resp.status_code == 404
 
 
 class TestFaviconQuota:

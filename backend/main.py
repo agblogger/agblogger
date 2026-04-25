@@ -152,15 +152,16 @@ def _markdown_response(
 def _inject_favicon_link(html: str, favicon: str | None) -> str:
     """Insert <link rel="icon"> before </head> when a favicon is configured.
 
-    The href is always /favicon.ico regardless of actual file format; the
-    favicon route handles content-type negotiation by extension.
+    Uses the format-appropriate URL so Safari can use the file extension to
+    identify the format (e.g. /favicon.png for PNG, /favicon.ico for ICO).
     """
     if favicon is None:
         return html
     ext = posixpath.splitext(favicon)[1].lower()
     media_type = _FAVICON_EXTENSION_CONTENT_TYPES.get(ext)
     type_attr = f' type="{media_type}"' if media_type else ""
-    link = f'<link rel="icon"{type_attr} href="/favicon.ico">'
+    href = "/favicon.ico" if ext in ("", ".ico") else f"/favicon{ext}"
+    link = f'<link rel="icon"{type_attr} href="{href}">'
     return html.replace("</head>", f"{link}</head>", 1)
 
 
@@ -733,8 +734,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(sync_router)
     app.include_router(crosspost_router)
 
-    @app.get("/favicon.ico", include_in_schema=False, response_model=None)
-    async def favicon_route(request: Request) -> Response:
+    async def _serve_favicon(request: Request, required_ext: str | None = None) -> Response:
         content_manager: ContentManager = request.app.state.content_manager
         favicon = content_manager.site_config.favicon
         if favicon is None:
@@ -747,6 +747,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if not favicon_path.exists():
             return Response(status_code=404)
         ext = favicon_path.suffix.lower()
+        if required_ext is not None and ext != required_ext:
+            return Response(status_code=404)
         media_type = _FAVICON_EXTENSION_CONTENT_TYPES.get(ext, "application/octet-stream")
         try:
             data = await asyncio.to_thread(favicon_path.read_bytes)
@@ -757,11 +759,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if media_type == "image/svg+xml":
             headers["Content-Disposition"] = "attachment; filename=favicon.svg"
             headers["Content-Security-Policy"] = "default-src 'none'; sandbox"
-        return Response(
-            content=data,
-            media_type=media_type,
-            headers=headers,
-        )
+        return Response(content=data, media_type=media_type, headers=headers)
+
+    @app.get("/favicon.ico", include_in_schema=False, response_model=None)
+    async def favicon_route(request: Request) -> Response:
+        return await _serve_favicon(request)
+
+    @app.get("/favicon.png", include_in_schema=False, response_model=None)
+    async def favicon_png_route(request: Request) -> Response:
+        return await _serve_favicon(request, required_ext=".png")
+
+    @app.get("/favicon.svg", include_in_schema=False, response_model=None)
+    async def favicon_svg_route(request: Request) -> Response:
+        return await _serve_favicon(request, required_ext=".svg")
+
+    @app.get("/favicon.webp", include_in_schema=False, response_model=None)
+    async def favicon_webp_route(request: Request) -> Response:
+        return await _serve_favicon(request, required_ext=".webp")
 
     # Global exception handlers — safety net for unhandled exceptions
 

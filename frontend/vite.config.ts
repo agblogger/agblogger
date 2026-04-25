@@ -27,6 +27,18 @@ export default defineConfig({
         target: `http://localhost:${backendProxyPort}`,
         changeOrigin: true,
       },
+      '/favicon.png': {
+        target: `http://localhost:${backendProxyPort}`,
+        changeOrigin: true,
+      },
+      '/favicon.svg': {
+        target: `http://localhost:${backendProxyPort}`,
+        changeOrigin: true,
+      },
+      '/favicon.webp': {
+        target: `http://localhost:${backendProxyPort}`,
+        changeOrigin: true,
+      },
       '/post/': {
         target: `http://localhost:${backendProxyPort}`,
         changeOrigin: true,
