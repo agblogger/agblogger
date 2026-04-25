@@ -5041,6 +5041,43 @@ class TestBuildSetupScript:
         assert "Caddy container" in script
         assert "Caddy logs" in script
 
+    def test_external_caddy_uses_managed_block_helper_for_shared_files(self) -> None:
+        """Shared root files refresh on every deploy via the managed-block helper.
+
+        The previous behavior wrote them only on first install (``if [ ! -f ]``),
+        so template fixes (e.g., enabling HTTP/3) never reached existing
+        deployments. The helper replaces only the marker-delimited region, so
+        operator customizations outside the markers survive across deploys.
+        """
+        from cli.deploy_production import (
+            SHARED_MANAGED_BEGIN_MARKER,
+            SHARED_MANAGED_END_MARKER,
+        )
+
+        config = _make_config(
+            deployment_mode=DEPLOY_MODE_TARBALL,
+            image_ref="ghcr.io/example/agblogger:v1.0",
+            caddy_config=CaddyConfig(domain="blog.example.com", email="admin@example.com"),
+            caddy_mode=CADDY_MODE_EXTERNAL,
+            shared_caddy_config=SharedCaddyConfig(
+                caddy_dir=Path("/opt/caddy"),
+                acme_email="admin@example.com",
+            ),
+        )
+        script = build_setup_script_content(config)
+
+        # Helper function defined exactly once and the markers are present.
+        assert script.count("write_managed_block() {") == 1
+        assert SHARED_MANAGED_BEGIN_MARKER in script
+        assert SHARED_MANAGED_END_MARKER in script
+
+        # Both shared files are written through the helper rather than via the
+        # old ``if [ ! -f ... ]`` guard.
+        assert 'write_managed_block "$CADDY_DIR/Caddyfile"' in script
+        assert 'write_managed_block "$CADDY_DIR/docker-compose.yml"' in script
+        assert 'if [ ! -f "$CADDY_DIR/Caddyfile" ]' not in script
+        assert 'if [ ! -f "$CADDY_DIR/docker-compose.yml" ]' not in script
+
 
 class TestSetupScriptFilePlacement:
     """File placement logic: .generated files moved into final positions."""

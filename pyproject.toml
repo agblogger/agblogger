@@ -106,6 +106,7 @@ select = [
 "backend/pandoc/**" = ["S607"]     # pandoc is invoked by name
 "backend/services/git_service.py" = ["S603", "S607"]  # git CLI invoked via subprocess
 "tests/**" = ["S101", "S105", "S106"]  # test code intentionally uses asserts and fixed credentials
+"tests/test_cli/test_managed_block.py" = ["S603", "S607"]  # exercises a bash helper; subprocess args are Python-controlled constants
 "backend/migrations/env.py" = ["F401"]  # Alembic env imports models for metadata side-effect registration
 
 [tool.ruff.lint.isort]

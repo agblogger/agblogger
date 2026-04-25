@@ -72,6 +72,17 @@ SHARED_CADDY_DATA_VOLUME = "caddy-data"
 SHARED_CADDY_CONFIG_VOLUME = "caddy-config"
 DEFAULT_SHARED_CADDY_COMPOSE_FILE = "docker-compose.yml"
 DEFAULT_SHARED_CADDYFILE = "Caddyfile"
+# Markers wrap the deploy-script-managed region of shared Caddy files. Anything
+# outside the markers is preserved across deploys; the region between them is
+# rewritten on every run. ``#`` is a valid comment in both Caddyfile and YAML
+# so the same markers work for both file formats.
+SHARED_MANAGED_BEGIN_MARKER: Final[str] = (
+    "# >>> agblogger-managed (do not edit between markers - overwritten on deploy) >>>"
+)
+SHARED_MANAGED_END_MARKER: Final[str] = "# <<< agblogger-managed <<<"
+SHARED_MANAGED_FOOTER_HINT: Final[str] = (
+    "# Add custom configuration below this line; it is preserved across deploys."
+)
 CADDY_NETWORK_SUBNET_PLACEHOLDER = "__CADDY_NETWORK_SUBNET__"
 EXTERNAL_CADDY_SUBNET_INSPECT_FORMAT = "{{with index .IPAM.Config 0}}{{.Subnet}}{{end}}"
 REMOTE_ENV_MERGE_KEYS: Final[tuple[str, ...]] = (
@@ -426,6 +437,86 @@ def _bash_quote(value: str) -> str:
     return "'" + value.replace("'", "'\\''") + "'"
 
 
+def build_write_managed_block_function() -> str:
+    """Return the bash helper that merges deploy-managed content into a file.
+
+    The helper reads new managed-block content from stdin, then either:
+    - creates the file with markers when it does not exist,
+    - replaces only the region between markers in an existing file (preserving
+      anything outside),
+    - or backs up a legacy file (no markers) before rewriting it with markers.
+
+    Defined once near the top of ``setup.sh`` and reused for the shared
+    Caddyfile and the shared Caddy ``docker-compose.yml`` so future deploys can
+    push template changes without clobbering operator customizations.
+    """
+    begin = SHARED_MANAGED_BEGIN_MARKER
+    end = SHARED_MANAGED_END_MARKER
+    footer = SHARED_MANAGED_FOOTER_HINT
+    return "\n".join(
+        [
+            "write_managed_block() {",
+            "    # write_managed_block <file>",
+            "    # Reads the new managed-block content (without markers) from stdin and",
+            "    # rewrites the managed region of <file>, preserving content outside it.",
+            '    local _file="$1"',
+            f"    local _begin={_bash_quote(begin)}",
+            f"    local _end={_bash_quote(end)}",
+            f"    local _footer={_bash_quote(footer)}",
+            "    local _new_content",
+            "    _new_content=$(cat)",
+            "",
+            '    if [ ! -f "$_file" ]; then',
+            "        {",
+            "            printf '%s\\n' \"$_begin\"",
+            "            printf '%s\\n' \"$_new_content\"",
+            "            printf '%s\\n' \"$_end\"",
+            "            printf '\\n%s\\n' \"$_footer\"",
+            '        } > "$_file"',
+            "        return 0",
+            "    fi",
+            "",
+            '    if grep -qxF "$_begin" "$_file" && grep -qxF "$_end" "$_file"; then',
+            "        local _block_file _tmp",
+            "        _block_file=$(mktemp)",
+            "        _tmp=$(mktemp)",
+            "        {",
+            "            printf '%s\\n' \"$_begin\"",
+            "            printf '%s\\n' \"$_new_content\"",
+            "            printf '%s\\n' \"$_end\"",
+            '        } > "$_block_file"',
+            '        awk -v begin="$_begin" -v end="$_end" -v block="$_block_file" \'',
+            '            BEGIN { mode = "before" }',
+            '            mode == "before" && $0 == begin {',
+            "                while ((getline line < block) > 0) print line",
+            "                close(block)",
+            '                mode = "inside"',
+            "                next",
+            "            }",
+            '            mode == "inside" && $0 == end { mode = "after"; next }',
+            '            mode == "inside" { next }',
+            "            { print }",
+            '        \' "$_file" > "$_tmp"',
+            '        mv "$_tmp" "$_file"',
+            '        rm -f "$_block_file"',
+            "        return 0",
+            "    fi",
+            "",
+            '    local _backup="${_file}.bak.$(date +%s)"',
+            '    cp "$_file" "$_backup"',
+            "    {",
+            "        printf '%s\\n' \"$_begin\"",
+            "        printf '%s\\n' \"$_new_content\"",
+            "        printf '%s\\n' \"$_end\"",
+            "        printf '\\n%s\\n' \"$_footer\"",
+            '    } > "$_file"',
+            '    echo "Note: existing $_file backed up to $_backup;'
+            ' re-apply customizations after the markers." >&2',
+            "}",
+        ]
+    )
+
+
 def build_setup_script_content(config: DeployConfig) -> str:
     """Build an idempotent setup script for remote deployment bundles."""
     compose_flags = _compose_filenames(
@@ -638,26 +729,30 @@ def build_setup_script_content(config: DeployConfig) -> str:
             ]
         )
 
-        # Write shared Caddyfile if not exists
+        # Define the shared-file merge helper once; reused for the shared
+        # Caddyfile and the shared docker-compose.yml so subsequent deploys
+        # can refresh the managed region without clobbering operator edits
+        # outside the markers.
+        lines.append(build_write_managed_block_function())
+        lines.append("")
+
+        # Write/refresh shared Caddyfile (managed region only).
         lines.extend(
             [
-                f'if [ ! -f "$CADDY_DIR/{DEFAULT_SHARED_CADDYFILE}" ]; then',
-                f"    cat > \"$CADDY_DIR/{DEFAULT_SHARED_CADDYFILE}\" <<'CADDYFILE_EOF'",
+                f"write_managed_block \"$CADDY_DIR/{DEFAULT_SHARED_CADDYFILE}\" <<'CADDYFILE_EOF'",
                 caddyfile_content.rstrip("\n"),
                 "CADDYFILE_EOF",
-                "fi",
                 "",
             ]
         )
 
-        # Write shared docker-compose.yml if not exists
+        # Write/refresh shared docker-compose.yml (managed region only).
         lines.extend(
             [
-                f'if [ ! -f "$CADDY_DIR/{DEFAULT_SHARED_CADDY_COMPOSE_FILE}" ]; then',
-                f"    cat > \"$CADDY_DIR/{DEFAULT_SHARED_CADDY_COMPOSE_FILE}\" <<'COMPOSE_EOF'",
+                f'write_managed_block "$CADDY_DIR/{DEFAULT_SHARED_CADDY_COMPOSE_FILE}"'
+                " <<'COMPOSE_EOF'",
                 caddy_compose_content.rstrip("\n"),
                 "COMPOSE_EOF",
-                "fi",
                 "",
             ]
         )
