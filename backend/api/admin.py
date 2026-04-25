@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
@@ -58,7 +59,12 @@ from backend.services.auth_service import hash_password, revoke_admin_credential
 from backend.services.git_service import GitService
 from backend.services.rate_limit_service import InMemoryRateLimiter
 from backend.services.storage_quota import ContentSizeTracker
-from backend.services.upload_limits import MAX_FAVICON_SIZE, MAX_IMAGE_SIZE
+from backend.services.upload_limits import (
+    FAVICON_CONTENT_TYPE_TO_EXT,
+    MAX_FAVICON_SIZE,
+    MAX_IMAGE_SIZE,
+    SITE_IMAGE_CONTENT_TYPE_TO_EXT,
+)
 from backend.utils.datetime import format_iso, now_utc
 
 logger = logging.getLogger(__name__)
@@ -145,25 +151,10 @@ async def update_settings(
         return _settings_response(cfg, settings)
 
 
-_ALLOWED_FAVICON_CONTENT_TYPES: dict[str, str] = {
-    "image/png": ".png",
-    "image/x-icon": ".ico",
-    "image/svg+xml": ".svg",
-    "image/webp": ".webp",
-}
-
-_ALLOWED_IMAGE_CONTENT_TYPES: dict[str, str] = {
-    "image/png": ".png",
-    "image/jpeg": ".jpg",
-    "image/webp": ".webp",
-    "image/gif": ".gif",
-}
-
-
 async def _read_validated_upload(
     file: UploadFile,
     *,
-    allowed_content_types: dict[str, str],
+    allowed_content_types: Mapping[str, str],
     max_size: int,
     allowed_label: str,
     too_large_msg: str,
@@ -175,13 +166,43 @@ async def _read_validated_upload(
             status_code=422,
             detail=f"Unsupported file type: {content_type}. Allowed: {allowed_label}.",
         )
-    data = await file.read()
+    try:
+        data = await file.read()
+    except OSError as exc:
+        logger.error("Failed to read uploaded file: %s", exc)
+        raise HTTPException(status_code=500, detail="Failed to read uploaded file.") from exc
     if len(data) > max_size:
         raise HTTPException(status_code=413, detail=too_large_msg)
     return extension, data
 
 
+@dataclass(frozen=True)
+class SiteAssetSpec:
+    """Per-asset configuration shared by upload and delete handlers.
+
+    Bundling these fields keeps the favicon and site-image upload paths
+    structurally consistent: every callback that knows about one asset kind
+    travels with the spec for that kind, so a stray favicon-saving callback
+    cannot be paired with an image rel-getter.
+    """
+
+    log_label: str
+    allowed_content_types: Mapping[str, str]
+    max_size: int
+    allowed_label: str
+    too_large_msg: str
+    save_fn: Callable[[ContentManager, str, bytes], SiteConfig]
+    remove_fn: Callable[[ContentManager], SiteConfig]
+    asset_path_for_extension: Callable[[Path, str], Path]
+    current_rel: Callable[[ContentManager], str | None]
+    save_error_msg: str
+    delete_error_msg: str
+    upload_commit_msg: str
+    delete_commit_msg: str
+
+
 async def _upload_site_asset(
+    spec: SiteAssetSpec,
     *,
     file: UploadFile,
     response: Response,
@@ -190,53 +211,44 @@ async def _upload_site_asset(
     content_write_lock: AsyncWriteLock,
     content_size_tracker: ContentSizeTracker,
     settings: Settings,
-    allowed_content_types: dict[str, str],
-    max_size: int,
-    allowed_label: str,
-    too_large_msg: str,
-    save: Callable[[ContentManager, str, bytes], SiteConfig],
-    asset_path_for_extension: Callable[[Path, str], Path],
-    current_rel_getter: Callable[[ContentManager], str | None],
-    log_label: str,
-    save_error_msg: str,
-    commit_msg: str,
 ) -> SiteSettingsResponse:
     extension, data = await _read_validated_upload(
         file,
-        allowed_content_types=allowed_content_types,
-        max_size=max_size,
-        allowed_label=allowed_label,
-        too_large_msg=too_large_msg,
+        allowed_content_types=spec.allowed_content_types,
+        max_size=spec.max_size,
+        allowed_label=spec.allowed_label,
+        too_large_msg=spec.too_large_msg,
     )
 
     async with content_write_lock:
         old_size = _get_old_asset_size(
             content_manager,
             content_size_tracker,
-            current_rel_getter(content_manager),
-            log_label=log_label,
+            spec.current_rel(content_manager),
+            log_label=spec.log_label,
         )
         index_path = content_manager.content_dir / "index.toml"
         old_index_size = content_size_tracker.file_size(index_path)
         content_size_tracker.require_quota(len(data) - old_size)
 
         try:
-            cfg = save(content_manager, extension, data)
+            cfg = spec.save_fn(content_manager, extension, data)
         except (ValueError, OSError) as exc:
-            logger.error("Failed to save %s: %s", log_label, exc)
-            raise HTTPException(status_code=500, detail=save_error_msg) from exc
+            logger.error("Failed to save %s: %s", spec.log_label, exc)
+            raise HTTPException(status_code=500, detail=spec.save_error_msg) from exc
 
-        new_path = asset_path_for_extension(content_manager.content_dir, extension)
+        new_path = spec.asset_path_for_extension(content_manager.content_dir, extension)
         content_size_tracker.adjust(
             (content_size_tracker.file_size(new_path) - old_size)
             + (content_size_tracker.file_size(index_path) - old_index_size)
         )
-        set_git_warning(response, await git_service.try_commit(commit_msg))
+        set_git_warning(response, await git_service.try_commit(spec.upload_commit_msg))
 
     return _settings_response(cfg, settings)
 
 
 async def _delete_site_asset(
+    spec: SiteAssetSpec,
     *,
     response: Response,
     content_manager: ContentManager,
@@ -244,32 +256,27 @@ async def _delete_site_asset(
     content_write_lock: AsyncWriteLock,
     content_size_tracker: ContentSizeTracker,
     settings: Settings,
-    remove: Callable[[ContentManager], SiteConfig],
-    current_rel_getter: Callable[[ContentManager], str | None],
-    log_label: str,
-    delete_error_msg: str,
-    commit_msg: str,
 ) -> SiteSettingsResponse:
     async with content_write_lock:
         old_size = _get_old_asset_size(
             content_manager,
             content_size_tracker,
-            current_rel_getter(content_manager),
-            log_label=log_label,
+            spec.current_rel(content_manager),
+            log_label=spec.log_label,
         )
         index_path = content_manager.content_dir / "index.toml"
         old_index_size = content_size_tracker.file_size(index_path)
 
         try:
-            cfg = remove(content_manager)
+            cfg = spec.remove_fn(content_manager)
         except OSError as exc:
-            logger.error("Failed to remove %s: %s", log_label, exc)
-            raise HTTPException(status_code=500, detail=delete_error_msg) from exc
+            logger.error("Failed to remove %s: %s", spec.log_label, exc)
+            raise HTTPException(status_code=500, detail=spec.delete_error_msg) from exc
 
         content_size_tracker.adjust(
             -old_size + (content_size_tracker.file_size(index_path) - old_index_size)
         )
-        set_git_warning(response, await git_service.try_commit(commit_msg))
+        set_git_warning(response, await git_service.try_commit(spec.delete_commit_msg))
 
     return _settings_response(cfg, settings)
 
@@ -282,12 +289,37 @@ def _image_path(content_dir: Path, extension: str) -> Path:
     return content_dir / f"assets/image{extension}"
 
 
-def _favicon_rel(cm: ContentManager) -> str | None:
-    return cm.site_config.favicon
+_FAVICON_ASSET = SiteAssetSpec(
+    log_label="favicon",
+    allowed_content_types=FAVICON_CONTENT_TYPE_TO_EXT,
+    max_size=MAX_FAVICON_SIZE,
+    allowed_label="PNG, ICO, SVG, WebP",
+    too_large_msg="Favicon file exceeds 2 MB limit.",
+    save_fn=lambda cm, ext, data: set_favicon(cm, extension=ext, data=data),
+    remove_fn=remove_favicon,
+    asset_path_for_extension=_favicon_path,
+    current_rel=lambda cm: cm.site_config.favicon,
+    save_error_msg="Failed to save favicon.",
+    delete_error_msg="Failed to remove favicon.",
+    upload_commit_msg="Update site favicon",
+    delete_commit_msg="Remove site favicon",
+)
 
-
-def _image_rel(cm: ContentManager) -> str | None:
-    return cm.site_config.image
+_SITE_IMAGE_ASSET = SiteAssetSpec(
+    log_label="site image",
+    allowed_content_types=SITE_IMAGE_CONTENT_TYPE_TO_EXT,
+    max_size=MAX_IMAGE_SIZE,
+    allowed_label="PNG, JPEG, WebP, GIF",
+    too_large_msg="Website image exceeds 5 MB limit.",
+    save_fn=lambda cm, ext, data: set_image(cm, extension=ext, data=data),
+    remove_fn=remove_image,
+    asset_path_for_extension=_image_path,
+    current_rel=lambda cm: cm.site_config.image,
+    save_error_msg="Failed to save website image.",
+    delete_error_msg="Failed to remove website image.",
+    upload_commit_msg="Update site image",
+    delete_commit_msg="Remove site image",
+)
 
 
 @router.post("/favicon", response_model=SiteSettingsResponse)
@@ -303,6 +335,7 @@ async def upload_favicon(
 ) -> SiteSettingsResponse:
     """Upload or replace the site favicon."""
     return await _upload_site_asset(
+        _FAVICON_ASSET,
         file=file,
         response=response,
         content_manager=content_manager,
@@ -310,16 +343,6 @@ async def upload_favicon(
         content_write_lock=content_write_lock,
         content_size_tracker=content_size_tracker,
         settings=settings,
-        allowed_content_types=_ALLOWED_FAVICON_CONTENT_TYPES,
-        max_size=MAX_FAVICON_SIZE,
-        allowed_label="PNG, ICO, SVG, WebP",
-        too_large_msg="Favicon file exceeds 2 MB limit.",
-        save=lambda cm, ext, data: set_favicon(cm, extension=ext, data=data),
-        asset_path_for_extension=_favicon_path,
-        current_rel_getter=_favicon_rel,
-        log_label="favicon",
-        save_error_msg="Failed to save favicon.",
-        commit_msg="Update site favicon",
     )
 
 
@@ -335,17 +358,13 @@ async def delete_favicon(
 ) -> SiteSettingsResponse:
     """Remove the site favicon."""
     return await _delete_site_asset(
+        _FAVICON_ASSET,
         response=response,
         content_manager=content_manager,
         git_service=git_service,
         content_write_lock=content_write_lock,
         content_size_tracker=content_size_tracker,
         settings=settings,
-        remove=remove_favicon,
-        current_rel_getter=_favicon_rel,
-        log_label="favicon",
-        delete_error_msg="Failed to remove favicon.",
-        commit_msg="Remove site favicon",
     )
 
 
@@ -362,6 +381,7 @@ async def upload_image(
 ) -> SiteSettingsResponse:
     """Upload or replace the site image used for social-share previews (og:image)."""
     return await _upload_site_asset(
+        _SITE_IMAGE_ASSET,
         file=file,
         response=response,
         content_manager=content_manager,
@@ -369,16 +389,6 @@ async def upload_image(
         content_write_lock=content_write_lock,
         content_size_tracker=content_size_tracker,
         settings=settings,
-        allowed_content_types=_ALLOWED_IMAGE_CONTENT_TYPES,
-        max_size=MAX_IMAGE_SIZE,
-        allowed_label="PNG, JPEG, WebP, GIF",
-        too_large_msg="Website image exceeds 5 MB limit.",
-        save=lambda cm, ext, data: set_image(cm, extension=ext, data=data),
-        asset_path_for_extension=_image_path,
-        current_rel_getter=_image_rel,
-        log_label="site image",
-        save_error_msg="Failed to save website image.",
-        commit_msg="Update site image",
     )
 
 
@@ -394,17 +404,13 @@ async def delete_image(
 ) -> SiteSettingsResponse:
     """Remove the site image."""
     return await _delete_site_asset(
+        _SITE_IMAGE_ASSET,
         response=response,
         content_manager=content_manager,
         git_service=git_service,
         content_write_lock=content_write_lock,
         content_size_tracker=content_size_tracker,
         settings=settings,
-        remove=remove_image,
-        current_rel_getter=_image_rel,
-        log_label="site image",
-        delete_error_msg="Failed to remove website image.",
-        commit_msg="Remove site image",
     )
 
 

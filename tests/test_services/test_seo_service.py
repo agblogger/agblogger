@@ -9,6 +9,7 @@ import pytest
 
 from backend.services.seo_service import (
     SeoContext,
+    SeoImage,
     SeoPostItem,
     blogposting_ld,
     extract_first_image,
@@ -75,6 +76,12 @@ def _make_ctx(**overrides: Any) -> SeoContext:
         "canonical_url": "https://example.com/post/my-post",
     }
     defaults.update(overrides)
+    image = defaults.pop("image", None)
+    image_alt = defaults.pop("image_alt", None)
+    if image is not None and not isinstance(image, SeoImage):
+        defaults["image"] = SeoImage(url=image, alt=image_alt)
+    elif image is not None:
+        defaults["image"] = image
     return SeoContext(**defaults)
 
 
@@ -743,6 +750,26 @@ class TestExtractFirstImage:
         src, alt = result
         assert src == "/real.png"
         assert alt == "Real"
+
+
+class TestSeoImage:
+    """SeoImage enforces the absolute-URL invariant at construction."""
+
+    def test_accepts_https_url(self) -> None:
+        img = SeoImage(url="https://example.com/a.png", alt="Alt")
+        assert img.url == "https://example.com/a.png"
+        assert img.alt == "Alt"
+
+    def test_accepts_http_url(self) -> None:
+        assert SeoImage(url="http://example.com/a.png").alt is None
+
+    @pytest.mark.parametrize(
+        "url",
+        ["", "/relative.png", "//cdn/x.png", "data:image/png;base64,abc", "javascript:0"],
+    )
+    def test_rejects_non_absolute_url(self, url: str) -> None:
+        with pytest.raises(ValueError, match="absolute http"):
+            SeoImage(url=url)
 
 
 class TestRenderSeoHtmlOgImage:

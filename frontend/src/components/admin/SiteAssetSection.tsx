@@ -1,10 +1,23 @@
+import { ImageOff, Upload, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { Upload, Trash2 } from 'lucide-react'
 
 import AlertBanner from '@/components/AlertBanner'
 import { HTTPError } from '@/api/client'
 import type { AdminSiteSettings } from '@/api/client'
 import { refreshSiteConfig } from '@/stores/siteStore'
+
+/**
+ * Coherent set of callbacks for one site-asset kind (favicon or site image).
+ * Bundling them prevents call sites from accidentally pairing, e.g., a favicon
+ * `upload` with an image `selectAsset` — TypeScript would accept the structural
+ * mismatch otherwise.
+ */
+export interface SiteAssetAdapter {
+  upload: (file: File) => Promise<AdminSiteSettings>
+  remove: () => Promise<AdminSiteSettings>
+  selectAsset: (settings: AdminSiteSettings) => string | null
+  previewUrl: (asset: string) => string | null
+}
 
 export interface SiteAssetSectionProps {
   heading: string
@@ -21,10 +34,7 @@ export interface SiteAssetSectionProps {
   uploadFailureLabel: string
   initialAsset: string | null
   busy: boolean
-  selectAsset: (settings: AdminSiteSettings) => string | null
-  upload: (file: File) => Promise<AdminSiteSettings>
-  remove: () => Promise<AdminSiteSettings>
-  previewUrl: (asset: string) => string | null
+  adapter: SiteAssetAdapter
   onSavedSettings: (settings: AdminSiteSettings) => void
 }
 
@@ -43,12 +53,10 @@ export default function SiteAssetSection({
   uploadFailureLabel,
   initialAsset,
   busy,
-  selectAsset,
-  upload,
-  remove,
-  previewUrl,
+  adapter,
   onSavedSettings,
 }: SiteAssetSectionProps) {
+  const { upload, remove, selectAsset, previewUrl } = adapter
   const [asset, setAsset] = useState<string | null>(initialAsset)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -75,7 +83,13 @@ export default function SiteAssetSection({
         setError(fileTooLargeMsg)
       } else if (err instanceof HTTPError && err.response.status === 422) {
         setError(unsupportedTypeMsg)
+      } else if (err instanceof HTTPError) {
+        console.error(`Upload failed (${uploadFailureLabel}):`, err.response.status, err)
+        setError(
+          `Failed to upload ${uploadFailureLabel} (${err.response.status.toString()}). Please try again.`,
+        )
       } else {
+        console.error(`Upload failed (${uploadFailureLabel}):`, err)
         setError(`Failed to upload ${uploadFailureLabel}. Please try again.`)
       }
     } finally {
@@ -148,11 +162,17 @@ export default function SiteAssetSection({
               className={`${previewBoxClassName} border border-border rounded-lg bg-paper-warm
                           flex items-center justify-center overflow-hidden flex-shrink-0`}
             >
-              {previewSrc !== null && (
+              {previewSrc !== null ? (
                 <img
                   src={previewSrc}
                   alt={previewAlt}
                   className={`w-full h-full ${previewImgClassName}`}
+                />
+              ) : (
+                <ImageOff
+                  size={16}
+                  className="text-muted"
+                  aria-label="Preview unavailable"
                 />
               )}
             </div>

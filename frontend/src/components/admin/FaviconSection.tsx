@@ -1,12 +1,19 @@
 import type { AdminSiteSettings } from '@/api/client'
 import { removeAdminFavicon, uploadAdminFavicon } from '@/api/admin'
 
-import SiteAssetSection from './SiteAssetSection'
+import SiteAssetSection, { type SiteAssetAdapter } from './SiteAssetSection'
 
 interface FaviconSectionProps {
   initialFavicon: string | null
   busy: boolean
   onSavedSettings: (settings: AdminSiteSettings) => void
+}
+
+const FAVICON_ADAPTER: SiteAssetAdapter = {
+  upload: uploadAdminFavicon,
+  remove: removeAdminFavicon,
+  selectAsset: (s) => s.favicon,
+  previewUrl: () => '/favicon.ico',
 }
 
 export default function FaviconSection({
@@ -30,10 +37,7 @@ export default function FaviconSection({
       uploadFailureLabel="favicon"
       initialAsset={initialFavicon}
       busy={busy}
-      selectAsset={(s) => s.favicon}
-      upload={uploadAdminFavicon}
-      remove={removeAdminFavicon}
-      previewUrl={() => '/favicon.ico'}
+      adapter={FAVICON_ADAPTER}
       onSavedSettings={onSavedSettings}
     />
   )

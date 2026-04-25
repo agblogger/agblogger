@@ -98,6 +98,30 @@ describe('ImageSection', () => {
     expect(screen.getByRole('button', { name: /remove/i })).toBeDisabled()
   })
 
+  it('disables file upload input while busy when no image is set', () => {
+    render(
+      <ImageSection
+        initialImage={null}
+        busy={true}
+        onSavedSettings={onSavedSettings}
+      />
+    )
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement
+    expect(input).toBeDisabled()
+  })
+
+  it('disables replace input while busy when an image is set', () => {
+    render(
+      <ImageSection
+        initialImage="assets/image.png"
+        busy={true}
+        onSavedSettings={onSavedSettings}
+      />
+    )
+    const inputs = document.querySelectorAll<HTMLInputElement>('input[type="file"]')
+    inputs.forEach((input) => expect(input).toBeDisabled())
+  })
+
   it('shows error message on remove failure', async () => {
     mockRemoveAdminImage.mockRejectedValue(new Error('Server error'))
 

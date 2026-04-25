@@ -51,6 +51,7 @@ def update_site_settings(
         description=description,
         timezone=timezone,
         favicon=cfg.favicon,
+        image=cfg.image,
         pages=cfg.pages,
     )
     write_site_config(cm.content_dir, updated)
@@ -394,8 +395,6 @@ def _set_site_asset(
     if not _ASSET_EXTENSION_RE.fullmatch(extension):
         msg = f"Invalid {log_label} extension: {extension!r}"
         raise ValueError(msg)
-    assets_dir = cm.content_dir / "assets"
-    assets_dir.mkdir(exist_ok=True)
 
     old_path_to_delete: Path | None = None
     if current_rel is not None and Path(current_rel).suffix != extension:
@@ -404,11 +403,13 @@ def _set_site_asset(
         except ValueError:
             logger.warning("Old %s path is invalid, skipping deletion: %s", log_label, current_rel)
 
+    assets_dir = cm.content_dir / "assets"
     new_rel = f"assets/{basename}{extension}"
     new_path = cm.content_dir / new_rel
-    new_path.write_bytes(data)
 
     try:
+        assets_dir.mkdir(exist_ok=True)
+        new_path.write_bytes(data)
         write_site_config(cm.content_dir, with_field(cm.site_config, new_rel))
         cm.reload_config()
     except OSError:
@@ -444,8 +445,9 @@ def _remove_site_asset(
         except ValueError:
             logger.warning("%s path is invalid, skipping deletion: %s", log_label, current_rel)
 
-    # Update config first so that a write failure leaves state consistent (file
-    # still exists and config still references it, recoverable by re-uploading).
+    # Update config first so a TOML write failure leaves state consistent: the
+    # file still exists and the config still references it. Retry the remove
+    # to recover.
     write_site_config(cm.content_dir, with_field(cm.site_config, None))
     cm.reload_config()
 

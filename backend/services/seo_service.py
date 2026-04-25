@@ -36,6 +36,25 @@ class SeoPostItem(TypedDict):
 
 
 @dataclass(frozen=True)
+class SeoImage:
+    """Open Graph image with optional alt text.
+
+    ``url`` must be an absolute URL (http:// or https://) so social platforms
+    can fetch the thumbnail without resolving against the page URL. Grouping
+    ``url`` and ``alt`` makes the (image, image_alt) coupling structural rather
+    than convention.
+    """
+
+    url: str
+    alt: str | None = None
+
+    def __post_init__(self) -> None:
+        if not self.url.startswith(("http://", "https://")):
+            msg = f"SeoImage.url must be an absolute http(s) URL, got: {self.url!r}"
+            raise ValueError(msg)
+
+
+@dataclass(frozen=True)
 class SeoContext:
     """All SEO metadata for a single page response."""
 
@@ -47,8 +66,7 @@ class SeoContext:
     author: str | None = None
     published_time: str | None = None
     modified_time: str | None = None
-    image: str | None = None
-    image_alt: str | None = None
+    image: SeoImage | None = None
     json_ld: dict[str, Any] | None = None
     rendered_body: str | None = None
     markdown_body: str | None = None
@@ -70,8 +88,9 @@ _ATTR_RE = re.compile(
 def extract_first_image(html_text: str) -> tuple[str, str | None] | None:
     """Return (src, alt) for the first <img> with a non-empty src, or None.
 
-    Used to derive an og:image fallback from rendered post HTML when no
-    explicit cover image is configured.
+    Callers use the result to pick an og:image URL from rendered post HTML.
+    The caller falls back to the configured site image when no inline image
+    is found or when its src cannot be made into a safe absolute URL.
     """
     for match in _IMG_TAG_RE.finditer(html_text):
         attrs: dict[str, str] = {}
@@ -100,7 +119,7 @@ def render_seo_html(base_html: str, ctx: SeoContext) -> str:
     esc_desc = html.escape(description)
     esc_url = html.escape(ctx.canonical_url)
 
-    twitter_card = "summary_large_image" if ctx.image else "summary"
+    twitter_card = "summary_large_image" if ctx.image is not None else "summary"
 
     head_tags = [
         f'<meta name="description" content="{esc_desc}">',
@@ -114,12 +133,12 @@ def render_seo_html(base_html: str, ctx: SeoContext) -> str:
         f'<meta name="twitter:description" content="{esc_desc}">',
     ]
 
-    if ctx.image:
-        esc_image = html.escape(ctx.image)
+    if ctx.image is not None:
+        esc_image = html.escape(ctx.image.url)
         head_tags.append(f'<meta property="og:image" content="{esc_image}">')
         head_tags.append(f'<meta name="twitter:image" content="{esc_image}">')
-        if ctx.image_alt:
-            esc_image_alt = html.escape(ctx.image_alt)
+        if ctx.image.alt:
+            esc_image_alt = html.escape(ctx.image.alt)
             head_tags.append(f'<meta property="og:image:alt" content="{esc_image_alt}">')
             head_tags.append(f'<meta name="twitter:image:alt" content="{esc_image_alt}">')
 

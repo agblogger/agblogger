@@ -1,7 +1,7 @@
 import type { AdminSiteSettings } from '@/api/client'
 import { removeAdminImage, uploadAdminImage } from '@/api/admin'
 
-import SiteAssetSection from './SiteAssetSection'
+import SiteAssetSection, { type SiteAssetAdapter } from './SiteAssetSection'
 
 interface ImageSectionProps {
   initialImage: string | null
@@ -9,6 +9,9 @@ interface ImageSectionProps {
   onSavedSettings: (settings: AdminSiteSettings) => void
 }
 
+// Keep these in sync with backend/services/upload_limits.py SITE_IMAGE_FORMATS.
+// `.jpeg` collapses to /image.jpg because the backend canonicalizes JPEG to .jpg
+// on disk; both extensions resolve to the same public route.
 const PUBLIC_PATHS_BY_EXT: Record<string, string> = {
   png: '/image.png',
   jpg: '/image.jpg',
@@ -21,6 +24,13 @@ function imagePublicUrl(image: string): string | null {
   const ext = image.split('.').pop()?.toLowerCase()
   if (ext === undefined) return null
   return PUBLIC_PATHS_BY_EXT[ext] ?? null
+}
+
+const IMAGE_ADAPTER: SiteAssetAdapter = {
+  upload: uploadAdminImage,
+  remove: removeAdminImage,
+  selectAsset: (s) => s.image,
+  previewUrl: imagePublicUrl,
 }
 
 export default function ImageSection({
@@ -44,10 +54,7 @@ export default function ImageSection({
       uploadFailureLabel="image"
       initialAsset={initialImage}
       busy={busy}
-      selectAsset={(s) => s.image}
-      upload={uploadAdminImage}
-      remove={removeAdminImage}
-      previewUrl={imagePublicUrl}
+      adapter={IMAGE_ADAPTER}
       onSavedSettings={onSavedSettings}
     />
   )

@@ -198,3 +198,39 @@ def test_parse_site_config_non_string_image_returns_none(tmp_path: Path) -> None
     (tmp_path / "index.toml").write_text('[site]\ntitle = "Blog"\nimage = 42\n')
     result = parse_site_config(tmp_path)
     assert result.image is None
+
+
+class TestParseSiteConfigAssetPathSafety:
+    """parse_site_config must reject traversal-style favicon/image paths."""
+
+    def test_rejects_absolute_image_path(self, tmp_path: Path) -> None:
+        (tmp_path / "index.toml").write_text('[site]\ntitle = "Blog"\nimage = "/etc/passwd"\n')
+        result = parse_site_config(tmp_path)
+        assert result.image is None
+
+    def test_rejects_dotdot_image_path(self, tmp_path: Path) -> None:
+        (tmp_path / "index.toml").write_text(
+            '[site]\ntitle = "Blog"\nimage = "../../../etc/passwd"\n'
+        )
+        result = parse_site_config(tmp_path)
+        assert result.image is None
+
+    def test_rejects_absolute_favicon_path(self, tmp_path: Path) -> None:
+        (tmp_path / "index.toml").write_text('[site]\ntitle = "Blog"\nfavicon = "/etc/shadow"\n')
+        result = parse_site_config(tmp_path)
+        assert result.favicon is None
+
+    def test_rejects_dotdot_favicon_path(self, tmp_path: Path) -> None:
+        (tmp_path / "index.toml").write_text(
+            '[site]\ntitle = "Blog"\nfavicon = "assets/../../escape.png"\n'
+        )
+        result = parse_site_config(tmp_path)
+        assert result.favicon is None
+
+    def test_accepts_legitimate_relative_path(self, tmp_path: Path) -> None:
+        (tmp_path / "index.toml").write_text(
+            '[site]\ntitle = "Blog"\nimage = "assets/image.png"\nfavicon = "assets/favicon.ico"\n'
+        )
+        result = parse_site_config(tmp_path)
+        assert result.image == "assets/image.png"
+        assert result.favicon == "assets/favicon.ico"

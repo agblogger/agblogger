@@ -991,3 +991,64 @@ class TestSiteImageInOgTags:
 
         assert resp.status_code == 200
         assert 'og:image" content="http://test/image.png"' in resp.text
+
+    async def test_page_uses_site_image_when_configured(self, seo_settings: Settings) -> None:
+        assets = seo_settings.content_dir / "assets"
+        assets.mkdir(exist_ok=True)
+        (assets / "image.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+        index_toml = seo_settings.content_dir / "index.toml"
+        index_toml.write_text(
+            '[site]\ntitle = "Test Blog"\ndescription = "A test blog"\n'
+            'image = "assets/image.png"\n'
+            '[[pages]]\nid = "timeline"\ntitle = "Posts"\n'
+            '[[pages]]\nid = "about"\ntitle = "About"\nfile = "about.md"\n'
+            '[[pages]]\nid = "unsafe"\ntitle = "Unsafe"\nfile = "unsafe.md"\n'
+            '[[pages]]\nid = "labels"\ntitle = "Labels"\n'
+        )
+        async with create_test_client(seo_settings) as fresh_client:
+            resp = await fresh_client.get("/page/about")
+
+        assert resp.status_code == 200
+        assert 'og:image" content="http://test/image.png"' in resp.text
+
+    async def test_labels_index_uses_site_image_when_configured(
+        self, seo_settings: Settings
+    ) -> None:
+        assets = seo_settings.content_dir / "assets"
+        assets.mkdir(exist_ok=True)
+        (assets / "image.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+        index_toml = seo_settings.content_dir / "index.toml"
+        index_toml.write_text(
+            '[site]\ntitle = "Test Blog"\ndescription = "A test blog"\n'
+            'image = "assets/image.png"\n'
+            '[[pages]]\nid = "timeline"\ntitle = "Posts"\n'
+            '[[pages]]\nid = "about"\ntitle = "About"\nfile = "about.md"\n'
+            '[[pages]]\nid = "unsafe"\ntitle = "Unsafe"\nfile = "unsafe.md"\n'
+            '[[pages]]\nid = "labels"\ntitle = "Labels"\n'
+        )
+        async with create_test_client(seo_settings) as fresh_client:
+            resp = await fresh_client.get("/labels")
+
+        assert resp.status_code == 200
+        assert 'og:image" content="http://test/image.png"' in resp.text
+
+    async def test_label_detail_uses_site_image_when_configured(
+        self, seo_settings: Settings
+    ) -> None:
+        assets = seo_settings.content_dir / "assets"
+        assets.mkdir(exist_ok=True)
+        (assets / "image.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+        index_toml = seo_settings.content_dir / "index.toml"
+        index_toml.write_text(
+            '[site]\ntitle = "Test Blog"\ndescription = "A test blog"\n'
+            'image = "assets/image.png"\n'
+            '[[pages]]\nid = "timeline"\ntitle = "Posts"\n'
+            '[[pages]]\nid = "about"\ntitle = "About"\nfile = "about.md"\n'
+            '[[pages]]\nid = "unsafe"\ntitle = "Unsafe"\nfile = "unsafe.md"\n'
+            '[[pages]]\nid = "labels"\ntitle = "Labels"\n'
+        )
+        async with create_test_client(seo_settings) as fresh_client:
+            resp = await fresh_client.get("/labels/python")
+
+        assert resp.status_code == 200
+        assert 'og:image" content="http://test/image.png"' in resp.text

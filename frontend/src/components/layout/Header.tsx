@@ -1,4 +1,4 @@
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useMatch, useNavigate } from 'react-router-dom'
 import { Search, LogIn, LogOut, PenLine, Settings, Menu, X, Sun, Moon, Filter } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSiteStore } from '@/stores/siteStore'
@@ -161,8 +161,9 @@ export default function Header() {
   const siteTitle = config?.title ?? 'AgBlogger'
   const ThemeIcon = theme === 'dark' ? Moon : Sun
   const isTimeline = location.pathname === '/'
-  const isPost = location.pathname.startsWith('/post/')
-  const postSlug = isPost ? location.pathname.slice('/post/'.length) : null
+  const postMatch = useMatch('/post/*')
+  const postSlug = postMatch?.params['*'] ?? null
+  const isPost = postSlug !== null
   const { data: currentPost } = usePost(postSlug !== null && postSlug !== '' ? postSlug : null)
   const postTitle = isPost ? currentPost?.title ?? null : null
 

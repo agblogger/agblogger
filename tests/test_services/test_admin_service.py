@@ -100,6 +100,44 @@ class TestUpdateSiteSettings:
         reloaded = parse_site_config(cm.content_dir)
         assert len(reloaded.pages) == 3
 
+    def test_preserves_image_on_settings_update(self, cm: ContentManager) -> None:
+        cfg = cm.site_config
+        write_site_config(
+            cm.content_dir,
+            SiteConfig(
+                title=cfg.title,
+                description=cfg.description,
+                timezone=cfg.timezone,
+                image="assets/image.png",
+                pages=cfg.pages,
+            ),
+        )
+        cm.reload_config()
+
+        update_site_settings(cm, title="Changed", description="", timezone="UTC")
+
+        reloaded = parse_site_config(cm.content_dir)
+        assert reloaded.image == "assets/image.png"
+
+    def test_preserves_favicon_on_settings_update(self, cm: ContentManager) -> None:
+        cfg = cm.site_config
+        write_site_config(
+            cm.content_dir,
+            SiteConfig(
+                title=cfg.title,
+                description=cfg.description,
+                timezone=cfg.timezone,
+                favicon="assets/favicon.png",
+                pages=cfg.pages,
+            ),
+        )
+        cm.reload_config()
+
+        update_site_settings(cm, title="Changed", description="", timezone="UTC")
+
+        reloaded = parse_site_config(cm.content_dir)
+        assert reloaded.favicon == "assets/favicon.png"
+
 
 class TestGetAdminPages:
     def test_returns_pages_with_content(self, cm: ContentManager) -> None:
@@ -935,6 +973,60 @@ class TestSetImage:
 
         assert result.favicon == "assets/favicon.png"
         assert result.image == "assets/image.png"
+
+
+class TestSetSiteAssetWriteFailure:
+    """A failed asset write must not leave a partial file or update the TOML."""
+
+    def test_set_image_cleans_up_partial_file_on_write_bytes_failure(
+        self, cm: ContentManager
+    ) -> None:
+        assets = cm.content_dir / "assets"
+        assets.mkdir(exist_ok=True)
+        target = assets / "image.png"
+        original_write_bytes = type(target).write_bytes
+
+        def partial_then_raise(self_path: object, _data: bytes, /) -> int:
+            from pathlib import Path
+
+            assert isinstance(self_path, Path)
+            original_write_bytes(self_path, b"partial")
+            raise OSError("disk full")
+
+        with (
+            patch.object(type(target), "write_bytes", partial_then_raise),
+            pytest.raises(OSError, match="disk full"),
+        ):
+            set_image(cm, extension=".png", data=b"PNG content")
+
+        assert not target.exists()
+        assert parse_site_config(cm.content_dir).image is None
+
+    def test_set_image_propagates_mkdir_oserror(self, cm: ContentManager) -> None:
+        assets = cm.content_dir / "assets"
+        with (
+            patch.object(type(assets), "mkdir", side_effect=OSError("read-only filesystem")),
+            pytest.raises(OSError, match="read-only filesystem"),
+        ):
+            set_image(cm, extension=".png", data=b"PNG content")
+
+        assert parse_site_config(cm.content_dir).image is None
+
+    def test_set_image_rolls_back_when_toml_write_fails(self, cm: ContentManager) -> None:
+        assets = cm.content_dir / "assets"
+        assets.mkdir(exist_ok=True)
+
+        with (
+            patch(
+                "backend.services.admin_service.write_site_config",
+                side_effect=OSError("toml write failed"),
+            ),
+            pytest.raises(OSError, match="toml write failed"),
+        ):
+            set_image(cm, extension=".png", data=b"PNG content")
+
+        assert not (assets / "image.png").exists()
+        assert parse_site_config(cm.content_dir).image is None
 
 
 class TestRemoveImage:

@@ -106,16 +106,32 @@ def parse_site_config(content_dir: Path) -> SiteConfig:
         logger.warning("Invalid timezone %r in %s, falling back to UTC", raw_timezone, index_path)
         timezone = "UTC"
 
-    _favicon = site_data.get("favicon")
-    _image = site_data.get("image")
     return SiteConfig(
         title=site_data.get("title", "My Blog"),
         description=site_data.get("description", ""),
         timezone=timezone,
-        favicon=_favicon if isinstance(_favicon, str) and _favicon else None,
-        image=_image if isinstance(_image, str) and _image else None,
+        favicon=_safe_asset_rel(site_data.get("favicon"), index_path, "favicon"),
+        image=_safe_asset_rel(site_data.get("image"), index_path, "image"),
         pages=pages,
     )
+
+
+def _safe_asset_rel(value: object, index_path: Path, field: str) -> str | None:
+    """Return a content-relative asset path or None.
+
+    Rejects non-strings, empty strings, absolute paths, and any path containing
+    ``..`` components so a hand-edited ``index.toml`` cannot smuggle a traversal
+    string into the in-memory config. The serving layer applies its own
+    ``validate_path`` check, but enforcing the invariant at parse time keeps the
+    domain type correct rather than relying on every consumer to re-check.
+    """
+    if not isinstance(value, str) or not value:
+        return None
+    parts = value.replace("\\", "/").split("/")
+    if value.startswith("/") or ".." in parts:
+        logger.warning("Rejecting unsafe %s path %r in %s; ignoring", field, value, index_path)
+        return None
+    return value
 
 
 def parse_labels_config(content_dir: Path) -> dict[str, LabelDef]:

@@ -202,6 +202,23 @@ describe('Header', () => {
     expect(screen.queryByTestId('header-post-title')).not.toBeInTheDocument()
   })
 
+  it('shows post title for a nested post slug like /post/2026/recap', () => {
+    mockPostData = {
+      file_path: 'posts/2026/recap/index.md',
+      title: '2026 Recap',
+      subtitle: null,
+      labels: [],
+      created_at: '2026-03-27 18:00:00+00:00',
+      updated_at: '2026-03-27 18:00:00+00:00',
+      author: 'admin',
+      rendered_html: '',
+      is_draft: false,
+      body: '',
+    } as unknown as PostDetail
+    renderHeader('/post/2026/recap')
+    expect(screen.getByTestId('header-post-title')).toHaveTextContent('2026 Recap')
+  })
+
   it('Labels active at /labels', () => {
     renderHeader('/labels')
     const labelsLink = screen.getByRole('link', { name: 'Labels' })

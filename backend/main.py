@@ -44,13 +44,17 @@ from backend.models.base import CacheBase, cache_non_virtual_tables
 from backend.models.post import FTS_CREATE_SQL
 from backend.services.csrf_service import validate_csrf_token
 from backend.services.rate_limit_service import InMemoryRateLimiter
-from backend.services.seo_service import extract_first_image
-from backend.services.upload_limits import get_multipart_body_limit
+from backend.services.seo_service import SeoImage, extract_first_image
+from backend.services.upload_limits import (
+    FAVICON_FORMATS,
+    SITE_IMAGE_FORMATS,
+    get_multipart_body_limit,
+)
 from backend.utils.slug import file_path_to_slug
 from backend.version import get_version
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator, Awaitable, Callable
+    from collections.abc import AsyncGenerator, Awaitable, Callable, Mapping
     from datetime import datetime
     from pathlib import Path
 
@@ -70,18 +74,6 @@ _DEFAULT_LABELS_TOML = "[labels]\n"
 
 _NOT_FOUND_HTML = "<html><body>Not found</body></html>"
 _API_CATALOG_PROFILE = "https://www.rfc-editor.org/info/rfc9727"
-_FAVICON_EXTENSION_CONTENT_TYPES: dict[str, str] = {
-    ".png": "image/png",
-    ".ico": "image/x-icon",
-    ".svg": "image/svg+xml",
-    ".webp": "image/webp",
-}
-_SITE_IMAGE_EXTENSION_CONTENT_TYPES: dict[str, str] = {
-    ".png": "image/png",
-    ".jpg": "image/jpeg",
-    ".webp": "image/webp",
-    ".gif": "image/gif",
-}
 
 
 def _fallback_html(base_html: str | None) -> str:
@@ -92,13 +84,28 @@ def _base_url(request: Request) -> str:
     return str(request.base_url).rstrip("/")
 
 
+_UNSAFE_URL_SCHEMES = ("data:", "javascript:", "vbscript:")
+
+
+def _make_seo_image(url: str | None, alt: str | None) -> SeoImage | None:
+    """Build an SeoImage when ``url`` is set; return None otherwise."""
+    if url is None:
+        return None
+    return SeoImage(url=url, alt=alt)
+
+
 def _site_image_url(request: Request, content_manager: ContentManager) -> str | None:
     """Return absolute public URL for the configured site image, or None."""
     image_rel = content_manager.site_config.image
     if image_rel is None:
         return None
     ext = posixpath.splitext(image_rel)[1].lower()
-    if ext not in _SITE_IMAGE_EXTENSION_CONTENT_TYPES:
+    if ext not in SITE_IMAGE_FORMATS:
+        logger.warning(
+            "Site image %r has unrecognized extension %r; og:image suppressed",
+            image_rel,
+            ext,
+        )
         return None
     return f"{_base_url(request)}/image{ext}"
 
@@ -106,11 +113,15 @@ def _site_image_url(request: Request, content_manager: ContentManager) -> str | 
 def _absolutize_url(request: Request, src: str) -> str | None:
     """Resolve a possibly-relative URL against the request base URL.
 
-    Returns None for unsupported scheme-relative input that can't be made absolute.
-    Open Graph requires absolute URLs.
+    Returns None for empty input or for unsafe schemes (``data:``, ``javascript:``,
+    ``vbscript:``) which cannot serve as Open Graph images. Open Graph requires
+    absolute URLs.
     """
     src = src.strip()
     if not src:
+        return None
+    lowered = src.lower()
+    if lowered.startswith(_UNSAFE_URL_SCHEMES):
         return None
     if src.startswith(("http://", "https://")):
         return src
@@ -139,6 +150,7 @@ def _post_image_url(
             src, alt = first
             absolute = _absolutize_url(request, src)
             if absolute is not None:
+                logger.debug("og:image derived from inline post image: %s", absolute)
                 return absolute, alt
     return _site_image_url(request, content_manager), None
 
@@ -216,7 +228,7 @@ def _inject_favicon_link(html: str, favicon: str | None) -> str:
     if favicon is None:
         return html
     ext = posixpath.splitext(favicon)[1].lower()
-    media_type = _FAVICON_EXTENSION_CONTENT_TYPES.get(ext)
+    media_type = FAVICON_FORMATS.get(ext)
     type_attr = f' type="{media_type}"' if media_type else ""
     href = "/favicon.ico" if ext in ("", ".ico") else f"/favicon{ext}"
     link = f'<link rel="icon"{type_attr} href="{href}">'
@@ -796,7 +808,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         request: Request,
         *,
         current_rel: Callable[[ContentManager], str | None],
-        content_type_by_ext: dict[str, str],
+        content_type_by_ext: Mapping[str, str],
         log_label: str,
         required_ext: str | None,
         sandbox_svg_filename: str | None = None,
@@ -831,7 +843,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return await _serve_site_asset(
             request,
             current_rel=lambda cm: cm.site_config.favicon,
-            content_type_by_ext=_FAVICON_EXTENSION_CONTENT_TYPES,
+            content_type_by_ext=FAVICON_FORMATS,
             log_label="favicon",
             required_ext=required_ext,
             sandbox_svg_filename="favicon.svg",
@@ -841,7 +853,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return await _serve_site_asset(
             request,
             current_rel=lambda cm: cm.site_config.image,
-            content_type_by_ext=_SITE_IMAGE_EXTENSION_CONTENT_TYPES,
+            content_type_by_ext=SITE_IMAGE_FORMATS,
             log_label="site image",
             required_ext=required_ext,
         )
@@ -1348,8 +1360,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             author=post.author,
             published_time=published,
             modified_time=modified,
-            image=image_url,
-            image_alt=image_alt,
+            image=_make_seo_image(image_url, image_alt or post.title),
             markdown_body=post_data.raw_content if post_data is not None else "",
             json_ld=blogposting_ld(
                 headline=post.title,
@@ -1479,7 +1490,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             description=site_desc,
             canonical_url=canonical_url,
             site_name=site_title,
-            image=_site_image_url(request, content_manager),
+            image=_make_seo_image(_site_image_url(request, content_manager), site_title),
             json_ld=website_ld(name=site_title, description=site_desc, url=canonical_url),
             rendered_body=rendered_body,
             markdown_body=render_post_list_markdown(posts_data, heading=site_title),
@@ -1591,7 +1602,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             description=description,
             canonical_url=canonical,
             site_name=site_name,
-            image=_site_image_url(request, content_manager),
+            image=_make_seo_image(_site_image_url(request, content_manager), page.title),
             json_ld=webpage_ld(name=page.title, description=description, url=canonical),
             rendered_body=rendered_body,
             markdown_body=content_manager.read_page(page_id),
@@ -1621,7 +1632,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             description=f"Labels \u2014 {site_name}",
             canonical_url=f"{base_url}/labels",
             site_name=site_name,
-            image=_site_image_url(request, content_manager),
+            image=_make_seo_image(_site_image_url(request, content_manager), site_name),
             markdown_body="# Labels\n",
         )
 
@@ -1779,7 +1790,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             description=f"Posts labeled {display_name} \u2014 {site_name}",
             canonical_url=f"{base_url}/labels/{label_id}",
             site_name=site_name,
-            image=_site_image_url(request, content_manager),
+            image=_make_seo_image(_site_image_url(request, content_manager), display_name),
             rendered_body=rendered_body,
             markdown_body=render_post_list_markdown(posts_data_ld, heading=display_name),
             preload_data=preload_data,
@@ -1808,7 +1819,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             description=f"Search \u2014 {site_name}",
             canonical_url=f"{base_url}/search",
             site_name=site_name,
-            image=_site_image_url(request, content_manager),
+            image=_make_seo_image(_site_image_url(request, content_manager), site_name),
             markdown_body="# Search\n",
         )
 

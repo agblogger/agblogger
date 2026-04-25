@@ -126,6 +126,34 @@ class TestUploadOgImage:
 
         assert resp.status_code == 413
 
+    @pytest.mark.asyncio
+    async def test_upload_gif_accepted(self, client: AsyncClient, app_settings: Settings) -> None:
+        token = await _login(client)
+        gif_data = b"GIF89a" + b"\x00" * 20
+
+        resp = await client.post(
+            "/api/admin/image",
+            files={"file": ("og.gif", gif_data, "image/gif")},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert resp.status_code == 200
+        assert resp.json()["image"] == "assets/image.gif"
+        assert (app_settings.content_dir / "assets" / "image.gif").exists()
+
+    @pytest.mark.asyncio
+    async def test_upload_without_content_type_rejected(self, client: AsyncClient) -> None:
+        """A multipart file part with no Content-Type must return 422, not 500."""
+        token = await _login(client)
+
+        resp = await client.post(
+            "/api/admin/image",
+            files={"file": ("og.png", b"\x89PNG", "")},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert resp.status_code == 422
+
 
 class TestRemoveOgImage:
     @pytest.mark.asyncio
@@ -183,6 +211,22 @@ class TestPublicOgImageRoutes:
         assert resp.status_code == 200
         assert resp.headers["content-type"] == "image/png"
         assert resp.content == png_data
+
+    @pytest.mark.asyncio
+    async def test_serves_gif(self, client: AsyncClient, app_settings: Settings) -> None:
+        token = await _login(client)
+        gif_data = b"GIF89a" + b"\x00" * 20
+        await client.post(
+            "/api/admin/image",
+            files={"file": ("og.gif", gif_data, "image/gif")},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        resp = await client.get("/image.gif")
+
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == "image/gif"
+        assert resp.content == gif_data
 
     @pytest.mark.asyncio
     async def test_serves_jpg(self, client: AsyncClient, app_settings: Settings) -> None:
