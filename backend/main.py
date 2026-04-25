@@ -8,6 +8,7 @@ import json
 import logging
 import posixpath
 import re
+import secrets
 import subprocess
 import sys
 from contextlib import asynccontextmanager
@@ -604,6 +605,121 @@ class _HeadToGetMiddleware:
         await self.app(get_scope, receive, send)
 
 
+_SCRAPER_UA_MARKERS: tuple[bytes, ...] = (
+    b"facebookexternalhit",
+    b"facebookcatalog",
+    b"meta-externalagent",
+    b"twitterbot",
+    b"linkedinbot",
+)
+_SENSITIVE_REQUEST_HEADERS: frozenset[str] = frozenset({"cookie", "authorization", "x-csrf-token"})
+_SENSITIVE_RESPONSE_HEADERS: frozenset[str] = frozenset({"set-cookie"})
+
+
+def _redact_headers(
+    headers: list[tuple[bytes, bytes]],
+    sensitive: frozenset[str],
+) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for name, value in headers:
+        decoded_name = name.decode("latin-1")
+        decoded_value = value.decode("latin-1")
+        if decoded_name.lower() in sensitive:
+            out[decoded_name] = f"[redacted len={len(decoded_value)}]"
+        else:
+            out[decoded_name] = decoded_value
+    return out
+
+
+class _ScraperLogMiddleware:
+    """Diagnostic middleware that logs requests from social-media scrapers.
+
+    Logs request method, URL, headers, and client IP plus response status,
+    body size, and response headers for every request whose User-Agent
+    matches a known social-preview scraper (facebookexternalhit,
+    facebookcatalog, meta-externalagent, Twitterbot, LinkedInBot).
+
+    Sensitive headers (Cookie, Authorization, Set-Cookie) are redacted to
+    length only. Non-scraper requests pass through unchanged with no
+    overhead beyond a single bytes-search of the User-Agent header.
+
+    Added because Facebook's Sharing Debugger reports failures (notably
+    "the document returned no data") for URLs the origin demonstrably
+    serves correctly to manual test requests with the same User-Agent.
+    The on-the-wire request/response captured here is the only way to
+    tell whether FB actually reaches the origin and what it sees back.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope.get("type") != "http":
+            await self.app(scope, receive, send)
+            return
+
+        ua: bytes = b""
+        for name, value in scope.get("headers", []):
+            if name == b"user-agent":
+                ua = value.lower()
+                break
+
+        if not any(marker in ua for marker in _SCRAPER_UA_MARKERS):
+            await self.app(scope, receive, send)
+            return
+
+        request_id = secrets.token_hex(4)
+        client = scope.get("client") or (None,)
+        request_headers = _redact_headers(scope.get("headers", []), _SENSITIVE_REQUEST_HEADERS)
+
+        logger.info(
+            "scraper-request id=%s method=%s path=%s query=%r client=%s headers=%s",
+            request_id,
+            scope.get("method"),
+            scope.get("path"),
+            scope.get("query_string", b"").decode("latin-1"),
+            client[0] or "unknown",
+            json.dumps(request_headers, sort_keys=True),
+        )
+
+        captured_status: int | None = None
+        captured_response_headers: list[tuple[bytes, bytes]] = []
+        body_size = 0
+        logged_response = False
+
+        async def logging_send(message: Message) -> None:
+            nonlocal captured_status, captured_response_headers, body_size, logged_response
+            if message["type"] == "http.response.start":
+                captured_status = message.get("status")
+                captured_response_headers = list(message.get("headers", []))
+            elif message["type"] == "http.response.body":
+                body = message.get("body", b"")
+                if isinstance(body, bytes):
+                    body_size += len(body)
+                if not message.get("more_body", False) and not logged_response:
+                    logged_response = True
+                    logger.info(
+                        "scraper-response id=%s status=%s body_size=%d headers=%s",
+                        request_id,
+                        captured_status,
+                        body_size,
+                        json.dumps(
+                            _redact_headers(
+                                captured_response_headers,
+                                _SENSITIVE_RESPONSE_HEADERS,
+                            ),
+                            sort_keys=True,
+                        ),
+                    )
+            await send(message)
+
+        try:
+            await self.app(scope, receive, logging_send)
+        except BaseException:
+            logger.exception("scraper-exception id=%s", request_id)
+            raise
+
+
 class _ProxyHeadersMiddleware:
     """Trust ``X-Forwarded-Proto`` and ``X-Forwarded-For`` from known proxies.
 
@@ -708,8 +824,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.add_middleware(_ProxyHeadersMiddleware, trusted_ips=settings.trusted_proxy_ips)
 
     # HEAD-to-GET conversion runs before any application middleware so all
-    # downstream layers see GET. Added last so it becomes the outermost layer.
+    # downstream layers see GET.
     app.add_middleware(_HeadToGetMiddleware)
+
+    # Scraper logging is outermost so it observes the request as the client
+    # sent it (including HEAD) and the response as the client receives it
+    # (after gzip, security headers, etc.). Diagnostic-only — no behavior
+    # change for either scraper or non-scraper requests.
+    app.add_middleware(_ScraperLogMiddleware)
 
     @app.middleware("http")
     async def multipart_request_limits(
