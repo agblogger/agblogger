@@ -23,6 +23,10 @@ export default defineConfig({
         target: `http://localhost:${backendProxyPort}`,
         changeOrigin: true,
       },
+      '/favicon.ico': {
+        target: `http://localhost:${backendProxyPort}`,
+        changeOrigin: true,
+      },
       '/post/': {
         target: `http://localhost:${backendProxyPort}`,
         changeOrigin: true,

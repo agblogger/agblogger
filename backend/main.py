@@ -157,7 +157,10 @@ def _inject_favicon_link(html: str, favicon: str | None) -> str:
     """
     if favicon is None:
         return html
-    link = '<link rel="icon" href="/favicon.ico">'
+    ext = posixpath.splitext(favicon)[1].lower()
+    media_type = _FAVICON_EXTENSION_CONTENT_TYPES.get(ext)
+    type_attr = f' type="{media_type}"' if media_type else ""
+    link = f'<link rel="icon"{type_attr} href="/favicon.ico">'
     return html.replace("</head>", f"{link}</head>", 1)
 
 

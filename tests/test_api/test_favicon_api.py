@@ -259,7 +259,47 @@ class TestFaviconHtmlInjection:
 
         resp = await client.get("/")
         assert resp.status_code == 200
-        assert '<link rel="icon" href="/favicon.ico">' in resp.text
+        assert '<link rel="icon" type="image/png" href="/favicon.ico">' in resp.text
+
+    @pytest.mark.asyncio
+    async def test_index_html_favicon_link_includes_type_for_ico(
+        self, client: AsyncClient, app_settings: Settings
+    ) -> None:
+        frontend_dir = app_settings.frontend_dir
+        frontend_dir.mkdir(parents=True, exist_ok=True)
+        (frontend_dir / "index.html").write_text(
+            '<!doctype html><html><head></head><body><div id="root"></div></body></html>'
+        )
+        token = await _login(client)
+        await client.post(
+            "/api/admin/favicon",
+            files={"file": ("favicon.ico", b"\x00\x00\x01\x00" + b"\x00" * 10, "image/x-icon")},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        resp = await client.get("/")
+        assert resp.status_code == 200
+        assert '<link rel="icon" type="image/x-icon" href="/favicon.ico">' in resp.text
+
+    @pytest.mark.asyncio
+    async def test_index_html_favicon_link_includes_type_for_svg(
+        self, client: AsyncClient, app_settings: Settings
+    ) -> None:
+        frontend_dir = app_settings.frontend_dir
+        frontend_dir.mkdir(parents=True, exist_ok=True)
+        (frontend_dir / "index.html").write_text(
+            '<!doctype html><html><head></head><body><div id="root"></div></body></html>'
+        )
+        token = await _login(client)
+        await client.post(
+            "/api/admin/favicon",
+            files={"file": ("icon.svg", b"<svg/>", "image/svg+xml")},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        resp = await client.get("/")
+        assert resp.status_code == 200
+        assert '<link rel="icon" type="image/svg+xml" href="/favicon.ico">' in resp.text
 
 
 class TestFaviconQuota:

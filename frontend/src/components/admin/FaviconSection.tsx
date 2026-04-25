@@ -76,8 +76,8 @@ export default function FaviconSection({
   const filename = favicon !== null ? (favicon.split('/').pop() ?? favicon) : null
 
   return (
-    <div className="border-t border-border pt-5">
-      <div className="text-xs font-medium text-muted mb-3 uppercase tracking-wide">Favicon</div>
+    <div className="mt-5 border-t border-border pt-5">
+      <div className="text-xs font-medium text-muted mb-3 uppercase tracking-wide">Blog icon</div>
 
       {error !== null && (
         <AlertBanner variant="error" className="mb-3">{error}</AlertBanner>
@@ -86,7 +86,7 @@ export default function FaviconSection({
       {favicon === null ? (
         <div>
           <p className="text-xs text-muted italic mb-3">
-            No favicon set — browsers will show a blank tab icon.
+            No icon set — browsers will show a blank tab icon.
           </p>
           <label
             className={`inline-flex items-center gap-2 px-3 py-2 border border-dashed border-border
@@ -112,7 +112,7 @@ export default function FaviconSection({
                             flex items-center justify-center overflow-hidden flex-shrink-0">
               <img
                 src={`/favicon.ico?v=${encodeURIComponent(favicon)}`}
-                alt="Current favicon"
+                alt="Current blog icon"
                 className="w-full h-full object-contain"
               />
             </div>
