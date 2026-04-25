@@ -579,6 +579,31 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         logger.info("AgBlogger stopped")
 
 
+class _HeadToGetMiddleware:
+    """Route HEAD requests through the matching GET handler.
+
+    FastAPI's ``@app.get`` only registers GET, so a HEAD request would otherwise
+    fall through to the static-files mount and return 404 — which trips up
+    well-behaved crawlers (e.g. Facebook's scraper) that probe a URL with HEAD
+    before issuing GET.
+
+    The inner app sees the request as GET (so router and handlers match), while
+    the outer ASGI server still sees the original HEAD scope and strips the
+    response body per HTTP semantics. Passing a shallow scope copy keeps those
+    two views independent.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope.get("type") != "http" or scope.get("method") != "HEAD":
+            await self.app(scope, receive, send)
+            return
+        get_scope = {**scope, "method": "GET"}
+        await self.app(get_scope, receive, send)
+
+
 class _ProxyHeadersMiddleware:
     """Trust ``X-Forwarded-Proto`` and ``X-Forwarded-For`` from known proxies.
 
@@ -681,6 +706,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # other middleware) inspects them.
     if settings.trusted_proxy_ips:
         app.add_middleware(_ProxyHeadersMiddleware, trusted_ips=settings.trusted_proxy_ips)
+
+    # HEAD-to-GET conversion runs before any application middleware so all
+    # downstream layers see GET. Added last so it becomes the outermost layer.
+    app.add_middleware(_HeadToGetMiddleware)
 
     @app.middleware("http")
     async def multipart_request_limits(
@@ -1929,6 +1958,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "User-agent: *\n"
             "Content-Signal: ai-train=no, search=yes, ai-input=no\n"
             "Allow: /\n"
+            # Public post and page assets are served from /api/content/. The
+            # /post/<slug>/<asset> URL 301-redirects there, so blocking the
+            # whole /api/ tree would prevent crawlers (including Facebook's
+            # og:image scraper) from following those redirects.
+            "Allow: /api/content/\n"
             "Disallow: /api/\n"
             "Disallow: /admin\n"
             "Disallow: /editor/\n"

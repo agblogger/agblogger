@@ -56,6 +56,15 @@ class TestRobotsTxt:
         resp = await client.get("/robots.txt")
         assert "Disallow: /api/" in resp.text
 
+    async def test_allows_api_content(self, client: AsyncClient) -> None:
+        # Public post and page assets are served from /api/content/. They must
+        # be crawlable so that <img>, og:image, twitter:image, and search-engine
+        # image indexing work — Facebook's scraper otherwise refuses to follow
+        # the /post/<slug>/<asset> -> /api/content/posts/... redirect because
+        # the redirect target falls under the broader /api/ Disallow.
+        resp = await client.get("/robots.txt")
+        assert "Allow: /api/content/" in resp.text
+
     async def test_disallows_admin(self, client: AsyncClient) -> None:
         resp = await client.get("/robots.txt")
         assert "Disallow: /admin" in resp.text
