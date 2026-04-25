@@ -2097,23 +2097,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/robots.txt", include_in_schema=False, response_model=None)
     async def robots_route(request: Request) -> Response:
         base_url = _base_url(request)
+        # All scrapers welcome — search, AI, social previews. Disallows are
+        # for non-content URLs (admin/editor/login UI, settings forms) only.
+        # The previous `Content-Signal: ai-train=no, ai-input=no` directive
+        # caused Facebook's preview scraper to refuse to fetch any URL on
+        # this site (confirmed via on-wire logging: FB fetched /robots.txt
+        # then made no follow-up requests).
         body = (
-            # Social-preview crawlers get their own group BEFORE the wildcard
-            # so longest-match parsers (Google, Facebook, Twitter/X, LinkedIn)
-            # never see the `Content-Signal` AI opt-out below. Without this
-            # block the Facebook Sharing Debugger refuses to fetch link
-            # previews and surfaces a synthetic 403 with the canned hint
-            # "Please allowlist facebookexternalhit on your robots.txt config"
-            # — the request never leaves Facebook's servers, which is why the
-            # origin still returns 200 to a curl with the same User-Agent.
-            "User-agent: facebookexternalhit\n"
-            "User-agent: facebookcatalog\n"
-            "User-agent: Twitterbot\n"
-            "User-agent: LinkedInBot\n"
-            "Allow: /\n"
-            "\n"
             "User-agent: *\n"
-            "Content-Signal: ai-train=no, search=yes, ai-input=no\n"
             "Allow: /\n"
             # Public post and page assets are served from /api/content/. The
             # /post/<slug>/<asset> URL 301-redirects there, so blocking the
