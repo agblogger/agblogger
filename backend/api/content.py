@@ -119,21 +119,24 @@ async def _check_draft_access(
         )
 
 
-@router.get("/{file_path:path}")
-async def serve_content_file(
+async def serve_content_response(
     file_path: str,
-    settings: Annotated[Settings, Depends(get_settings)],
-    session: Annotated[AsyncSession, Depends(get_session)],
-    user: Annotated[AdminUser | None, Depends(get_current_admin)],
+    content_dir: Path,
+    session: AsyncSession,
+    user: AdminUser | None,
 ) -> FileResponse:
-    """Serve a file from the content directory.
+    """Serve a file from the content directory with full validation.
 
-    Files under posts/ directories belonging to draft posts are restricted
-    to authenticated users (i.e., the admin). All other content is publicly
-    accessible.
+    Reusable helper so route handlers other than ``/api/content/`` (e.g. the
+    public ``/post/<slug>/<asset>`` route) can serve canonical content bytes
+    directly instead of issuing a 301 — redirects are unfriendly to crawlers
+    that fetch og:image and similar metadata.
+
+    Files under draft post directories are restricted to authenticated users.
+    Raises ``HTTPException`` on validation failure or missing file.
     """
-    resolved = _validate_path(file_path, settings.content_dir)
-    resolved_relative_path = resolved.relative_to(settings.content_dir.resolve()).as_posix()
+    resolved = _validate_path(file_path, content_dir)
+    resolved_relative_path = resolved.relative_to(content_dir.resolve()).as_posix()
 
     if (
         resolved_relative_path.startswith("posts/")
@@ -151,10 +154,8 @@ async def serve_content_file(
             detail="File not found",
         )
 
-    # Check draft access for files under posts/ directories
     await _check_draft_access(resolved_relative_path, session, user)
 
-    # Determine content type
     content_type, _ = mimetypes.guess_type(str(resolved))
     if content_type is None:
         content_type = "application/octet-stream"
@@ -168,3 +169,19 @@ async def serve_content_file(
         headers["Content-Security-Policy"] = "default-src 'none'; sandbox"
 
     return FileResponse(path=resolved, media_type=content_type, headers=headers)
+
+
+@router.get("/{file_path:path}")
+async def serve_content_file(
+    file_path: str,
+    settings: Annotated[Settings, Depends(get_settings)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    user: Annotated[AdminUser | None, Depends(get_current_admin)],
+) -> FileResponse:
+    """Serve a file from the content directory.
+
+    Files under posts/ directories belonging to draft posts are restricted
+    to authenticated users (i.e., the admin). All other content is publicly
+    accessible.
+    """
+    return await serve_content_response(file_path, settings.content_dir, session, user)

@@ -36,13 +36,20 @@ def app_settings(tmp_content_dir: Path, tmp_path: Path) -> Settings:
         "---\ncreated_at: 2026-02-03 10:00:00+00\n"
         "labels: []\n---\n# No Author Post\n\nPost without author field.\n"
     )
-    # Add a directory-backed post
+    # Add a directory-backed post with co-located image assets so the public
+    # /post/<slug>/<asset> route can serve them directly (no redirect).
     dir_post = posts_dir / "dir-post"
     dir_post.mkdir()
     (dir_post / "index.md").write_text(
         "---\ntitle: Directory Post\ncreated_at: 2026-02-04 10:00:00+00\n"
         "author: admin\nlabels: []\n---\n# Dir Post\n\nDirectory-backed content.\n"
     )
+    png_bytes = (
+        b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00"
+    )
+    (dir_post / "photo.png").write_bytes(png_bytes)
+    (dir_post / "img").mkdir()
+    (dir_post / "img" / "photo.png").write_bytes(png_bytes)
     # Add labels
     (tmp_content_dir / "labels.toml").write_text(
         "[labels]\n[labels.swe]\nnames = ['software engineering']\n"
@@ -2645,18 +2652,30 @@ class TestSlugResolution:
         assert resp.status_code == 404
 
 
-class TestPostAssetRedirect:
-    """Asset requests under /post/<slug>/<file> redirect to content API."""
+class TestPostAssetServedDirectly:
+    """Asset requests under /post/<slug>/<file> serve the file in place.
 
-    async def test_asset_redirects_to_content_api(self, client: AsyncClient) -> None:
+    The route used to 301-redirect into /api/content/posts/<...>; the redirect
+    bounced crawlers (Facebook's og:image scraper in particular) into the
+    /api/-disallowed prefix in robots.txt. Serving directly removes the hop.
+    """
+
+    async def test_asset_served_directly_no_redirect(self, client: AsyncClient) -> None:
         resp = await client.get("/post/dir-post/photo.png", follow_redirects=False)
-        assert resp.status_code == 301
-        assert resp.headers["location"] == "/api/content/posts/dir-post/photo.png"
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith("image/")
+        assert "location" not in resp.headers
 
-    async def test_nested_asset_redirects(self, client: AsyncClient) -> None:
+    async def test_nested_asset_served_directly(self, client: AsyncClient) -> None:
         resp = await client.get("/post/dir-post/img/photo.png", follow_redirects=False)
-        assert resp.status_code == 301
-        assert resp.headers["location"] == "/api/content/posts/dir-post/img/photo.png"
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith("image/")
+
+    async def test_canonical_api_content_path_still_works(self, client: AsyncClient) -> None:
+        """Backward compatibility: the /api/content/posts/... URL keeps working."""
+        resp = await client.get("/api/content/posts/dir-post/photo.png")
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith("image/")
 
 
 class TestDottedNestedPostRoute:

@@ -14,7 +14,7 @@ from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any, Literal
 
 import yaml
-from fastapi import FastAPI, Query, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -1261,10 +1261,31 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return HTMLResponse(_NOT_FOUND_HTML, status_code=404)
 
         if _should_redirect_post_path_to_content(request.app.state.settings.content_dir, file_path):
-            return RedirectResponse(
-                url=f"/api/content/posts/{file_path}",
-                status_code=301,
-            )
+            # Serve the asset bytes in place rather than 301-redirecting to
+            # /api/content/posts/. The redirect was bouncing crawlers (notably
+            # Facebook's og:image scraper) into the /api/-disallowed prefix in
+            # robots.txt; serving directly removes that hop entirely. Keeping
+            # /api/content/posts/<path> as a parallel canonical URL preserves
+            # backward compatibility with any existing references.
+            from backend.api.content import serve_content_response
+            from backend.api.deps import get_current_admin, security
+
+            session_factory = request.app.state.session_factory
+            async with session_factory() as session:
+                credentials = await security(request)
+                user = await get_current_admin(request, credentials=credentials, session=session)
+                try:
+                    return await serve_content_response(
+                        f"posts/{file_path}",
+                        request.app.state.settings.content_dir,
+                        session,
+                        user,
+                    )
+                except HTTPException as exc:
+                    return JSONResponse(
+                        status_code=exc.status_code,
+                        content={"detail": exc.detail},
+                    )
 
         from backend.api.posts import _resolve_symlink_redirect
         from backend.models.post import PostCache
