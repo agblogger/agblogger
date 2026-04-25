@@ -913,3 +913,81 @@ class TestPostSeo:
         preload = _extract_initial_data(resp.text)
         assert preload["title"] == "Hello World"
         assert "file_path" in preload
+
+
+class TestPostOgImage:
+    """Post page should expose og:image for social previews (FB / WhatsApp / etc)."""
+
+    async def test_falls_back_when_no_inline_image_and_no_site_image(
+        self, client: AsyncClient
+    ) -> None:
+        """When neither post nor site has an image, og:image must be omitted."""
+        resp = await client.get("/post/hello")
+        assert resp.status_code == 200
+        assert "og:image" not in resp.text
+
+    async def test_uses_inline_image_when_post_has_one(self, seo_settings: Settings) -> None:
+        """The first <img> in the post body becomes og:image as an absolute URL."""
+        post_dir = seo_settings.content_dir / "posts" / "with-image"
+        post_dir.mkdir()
+        (post_dir / "cover.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+        (post_dir / "index.md").write_text(
+            "---\ntitle: With Image\ncreated_at: 2026-03-28 12:00:00+00\n"
+            "author: admin\nlabels: []\n---\n"
+            "Body. ![Cover description](/post/with-image/cover.png)\n"
+        )
+        # Recreate client picks up the new post via cache rebuild on app startup;
+        # in tests the client fixture creates a fresh app, so re-issue with new client.
+        async with create_test_client(seo_settings) as fresh_client:
+            resp = await fresh_client.get("/post/with-image")
+
+        assert resp.status_code == 200
+        assert 'og:image" content="http://test/post/with-image/cover.png"' in resp.text
+        assert 'og:image:alt" content="Cover description"' in resp.text
+        assert 'twitter:card" content="summary_large_image"' in resp.text
+
+
+class TestSiteImageInOgTags:
+    """Site image should appear as og:image fallback when posts have no inline images."""
+
+    async def test_homepage_uses_site_image_when_configured(self, seo_settings: Settings) -> None:
+        assets = seo_settings.content_dir / "assets"
+        assets.mkdir(exist_ok=True)
+        (assets / "image.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+        index_toml = seo_settings.content_dir / "index.toml"
+        index_toml.write_text(
+            '[site]\ntitle = "Test Blog"\ndescription = "A test blog"\n'
+            'image = "assets/image.png"\n'
+            '[[pages]]\nid = "timeline"\ntitle = "Posts"\n'
+            '[[pages]]\nid = "about"\ntitle = "About"\nfile = "about.md"\n'
+            '[[pages]]\nid = "unsafe"\ntitle = "Unsafe"\nfile = "unsafe.md"\n'
+            '[[pages]]\nid = "labels"\ntitle = "Labels"\n'
+        )
+        async with create_test_client(seo_settings) as fresh_client:
+            resp = await fresh_client.get("/")
+
+        assert resp.status_code == 200
+        assert 'og:image" content="http://test/image.png"' in resp.text
+        assert 'twitter:card" content="summary_large_image"' in resp.text
+
+    async def test_post_falls_back_to_site_image_when_no_inline_img(
+        self, seo_settings: Settings
+    ) -> None:
+        assets = seo_settings.content_dir / "assets"
+        assets.mkdir(exist_ok=True)
+        (assets / "image.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+        index_toml = seo_settings.content_dir / "index.toml"
+        index_toml.write_text(
+            '[site]\ntitle = "Test Blog"\ndescription = "A test blog"\n'
+            'image = "assets/image.png"\n'
+            '[[pages]]\nid = "timeline"\ntitle = "Posts"\n'
+            '[[pages]]\nid = "about"\ntitle = "About"\nfile = "about.md"\n'
+            '[[pages]]\nid = "unsafe"\ntitle = "Unsafe"\nfile = "unsafe.md"\n'
+            '[[pages]]\nid = "labels"\ntitle = "Labels"\n'
+        )
+        async with create_test_client(seo_settings) as fresh_client:
+            # Post 'hello' has no inline images.
+            resp = await fresh_client.get("/post/hello")
+
+        assert resp.status_code == 200
+        assert 'og:image" content="http://test/image.png"' in resp.text

@@ -75,6 +75,12 @@ _FAVICON_EXTENSION_CONTENT_TYPES: dict[str, str] = {
     ".svg": "image/svg+xml",
     ".webp": "image/webp",
 }
+_SITE_IMAGE_EXTENSION_CONTENT_TYPES: dict[str, str] = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".webp": "image/webp",
+    ".gif": "image/gif",
+}
 
 
 def _fallback_html(base_html: str | None) -> str:
@@ -83,6 +89,59 @@ def _fallback_html(base_html: str | None) -> str:
 
 def _base_url(request: Request) -> str:
     return str(request.base_url).rstrip("/")
+
+
+def _site_image_url(request: Request, content_manager: ContentManager) -> str | None:
+    """Return absolute public URL for the configured site image, or None."""
+    image_rel = content_manager.site_config.image
+    if image_rel is None:
+        return None
+    ext = posixpath.splitext(image_rel)[1].lower()
+    if ext not in _SITE_IMAGE_EXTENSION_CONTENT_TYPES:
+        return None
+    return f"{_base_url(request)}/image{ext}"
+
+
+def _absolutize_url(request: Request, src: str) -> str | None:
+    """Resolve a possibly-relative URL against the request base URL.
+
+    Returns None for unsupported scheme-relative input that can't be made absolute.
+    Open Graph requires absolute URLs.
+    """
+    src = src.strip()
+    if not src:
+        return None
+    if src.startswith(("http://", "https://")):
+        return src
+    if src.startswith("//"):
+        return f"https:{src}"
+    base = _base_url(request)
+    if src.startswith("/"):
+        return f"{base}{src}"
+    return f"{base}/{src}"
+
+
+def _post_image_url(
+    request: Request,
+    rendered_html: str | None,
+    content_manager: ContentManager,
+) -> tuple[str | None, str | None]:
+    """Return (absolute og:image URL, alt) for a post.
+
+    Tries the first inline ``<img>`` from the rendered HTML, then falls back
+    to the configured site image. Returns ``(None, None)`` if no image can be
+    derived.
+    """
+    from backend.services.seo_service import extract_first_image
+
+    if rendered_html:
+        first = extract_first_image(rendered_html)
+        if first is not None:
+            src, alt = first
+            absolute = _absolutize_url(request, src)
+            if absolute is not None:
+                return absolute, alt
+    return _site_image_url(request, content_manager), None
 
 
 def _docs_enabled(settings: Settings) -> bool:
@@ -777,6 +836,46 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def favicon_webp_route(request: Request) -> Response:
         return await _serve_favicon(request, required_ext=".webp")
 
+    async def _serve_site_image(request: Request, required_ext: str) -> Response:
+        content_manager: ContentManager = request.app.state.content_manager
+        image_rel = content_manager.site_config.image
+        if image_rel is None:
+            return Response(status_code=404)
+        try:
+            image_path = content_manager.validate_path(image_rel)
+        except ValueError:
+            logger.warning("Invalid site image path in site config: %s", image_rel)
+            return Response(status_code=404)
+        if not image_path.exists():
+            return Response(status_code=404)
+        ext = image_path.suffix.lower()
+        if ext != required_ext:
+            return Response(status_code=404)
+        media_type = _SITE_IMAGE_EXTENSION_CONTENT_TYPES.get(ext, "application/octet-stream")
+        try:
+            data = await asyncio.to_thread(image_path.read_bytes)
+        except OSError as exc:
+            logger.error("Failed to read site image file %s: %s", image_path, exc)
+            return Response(status_code=404)
+        headers = {"Cache-Control": "public, max-age=3600"}
+        return Response(content=data, media_type=media_type, headers=headers)
+
+    @app.get("/image.png", include_in_schema=False, response_model=None)
+    async def site_image_png_route(request: Request) -> Response:
+        return await _serve_site_image(request, required_ext=".png")
+
+    @app.get("/image.jpg", include_in_schema=False, response_model=None)
+    async def site_image_jpg_route(request: Request) -> Response:
+        return await _serve_site_image(request, required_ext=".jpg")
+
+    @app.get("/image.webp", include_in_schema=False, response_model=None)
+    async def site_image_webp_route(request: Request) -> Response:
+        return await _serve_site_image(request, required_ext=".webp")
+
+    @app.get("/image.gif", include_in_schema=False, response_model=None)
+    async def site_image_gif_route(request: Request) -> Response:
+        return await _serve_site_image(request, required_ext=".gif")
+
     # Global exception handlers — safety net for unhandled exceptions
 
     @app.exception_handler(RequestValidationError)
@@ -1237,6 +1336,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         }
 
         post_data = content_manager.read_post(post.file_path)
+        image_url, image_alt = _post_image_url(request, post.rendered_html, content_manager)
         ctx = SeoContext(
             title=post.title,
             description=description,
@@ -1246,6 +1346,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             author=post.author,
             published_time=published,
             modified_time=modified,
+            image=image_url,
+            image_alt=image_alt,
             markdown_body=post_data.raw_content if post_data is not None else "",
             json_ld=blogposting_ld(
                 headline=post.title,
@@ -1375,6 +1477,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             description=site_desc,
             canonical_url=canonical_url,
             site_name=site_title,
+            image=_site_image_url(request, content_manager),
             json_ld=website_ld(name=site_title, description=site_desc, url=canonical_url),
             rendered_body=rendered_body,
             markdown_body=render_post_list_markdown(posts_data, heading=site_title),
@@ -1486,6 +1589,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             description=description,
             canonical_url=canonical,
             site_name=site_name,
+            image=_site_image_url(request, content_manager),
             json_ld=webpage_ld(name=page.title, description=description, url=canonical),
             rendered_body=rendered_body,
             markdown_body=content_manager.read_page(page_id),
@@ -1515,6 +1619,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             description=f"Labels \u2014 {site_name}",
             canonical_url=f"{base_url}/labels",
             site_name=site_name,
+            image=_site_image_url(request, content_manager),
             markdown_body="# Labels\n",
         )
 
@@ -1672,6 +1777,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             description=f"Posts labeled {display_name} \u2014 {site_name}",
             canonical_url=f"{base_url}/labels/{label_id}",
             site_name=site_name,
+            image=_site_image_url(request, content_manager),
             rendered_body=rendered_body,
             markdown_body=render_post_list_markdown(posts_data_ld, heading=display_name),
             preload_data=preload_data,
@@ -1700,6 +1806,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             description=f"Search \u2014 {site_name}",
             canonical_url=f"{base_url}/search",
             site_name=site_name,
+            image=_site_image_url(request, content_manager),
             markdown_body="# Search\n",
         )
 

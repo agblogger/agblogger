@@ -27,7 +27,7 @@ const ADMIN_TABS = [
 type AdminTabKey = (typeof ADMIN_TABS)[number]['key']
 const VALID_TAB_KEYS: Set<AdminTabKey> = new Set(ADMIN_TABS.map((t) => t.key))
 
-const EMPTY_SITE_SETTINGS: AdminSiteSettings = { title: '', description: '', timezone: '', password_change_disabled: false, favicon: null }
+const EMPTY_SITE_SETTINGS: AdminSiteSettings = { title: '', description: '', timezone: '', password_change_disabled: false, favicon: null, image: null }
 
 export default function AdminPage() {
   const location = useLocation()

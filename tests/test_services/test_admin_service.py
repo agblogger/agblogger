@@ -25,7 +25,9 @@ from backend.services.admin_service import (
     get_admin_pages,
     get_site_settings,
     remove_favicon,
+    remove_image,
     set_favicon,
+    set_image,
     update_page,
     update_page_order,
     update_site_settings,
@@ -870,3 +872,132 @@ class TestRemoveFavicon:
 
         result = remove_favicon(cm)
         assert result.favicon is None
+
+
+class TestSetImage:
+    def test_saves_file_to_assets_and_updates_toml(self, cm: ContentManager) -> None:
+        (cm.content_dir / "assets").mkdir(exist_ok=True)
+        data = b"\x89PNG fake site image"
+
+        result = set_image(cm, extension=".png", data=data)
+
+        image_path = cm.content_dir / "assets" / "image.png"
+        assert image_path.exists()
+        assert image_path.read_bytes() == data
+        assert result.image == "assets/image.png"
+        assert parse_site_config(cm.content_dir).image == "assets/image.png"
+
+    def test_removes_old_file_on_extension_change(self, cm: ContentManager) -> None:
+        assets = cm.content_dir / "assets"
+        assets.mkdir(exist_ok=True)
+        old_file = assets / "image.jpg"
+        old_file.write_bytes(b"JPG data")
+
+        cfg = cm.site_config
+        write_site_config(
+            cm.content_dir,
+            SiteConfig(
+                title=cfg.title,
+                description=cfg.description,
+                timezone=cfg.timezone,
+                image="assets/image.jpg",
+                pages=cfg.pages,
+            ),
+        )
+        cm.reload_config()
+
+        set_image(cm, extension=".png", data=b"PNG data")
+
+        assert not old_file.exists()
+        assert (assets / "image.png").exists()
+
+    def test_creates_assets_dir_if_missing(self, cm: ContentManager) -> None:
+        data = b"WebP content"
+        result = set_image(cm, extension=".webp", data=data)
+        assert (cm.content_dir / "assets" / "image.webp").exists()
+        assert result.image == "assets/image.webp"
+
+    def test_does_not_clobber_favicon_when_setting_image(self, cm: ContentManager) -> None:
+        cfg = cm.site_config
+        write_site_config(
+            cm.content_dir,
+            SiteConfig(
+                title=cfg.title,
+                description=cfg.description,
+                timezone=cfg.timezone,
+                favicon="assets/favicon.png",
+                pages=cfg.pages,
+            ),
+        )
+        cm.reload_config()
+
+        result = set_image(cm, extension=".png", data=b"image data")
+
+        assert result.favicon == "assets/favicon.png"
+        assert result.image == "assets/image.png"
+
+
+class TestRemoveImage:
+    def test_removes_file_and_clears_toml(self, cm: ContentManager) -> None:
+        assets = cm.content_dir / "assets"
+        assets.mkdir(exist_ok=True)
+        (assets / "image.png").write_bytes(b"PNG")
+
+        cfg = cm.site_config
+        write_site_config(
+            cm.content_dir,
+            SiteConfig(
+                title=cfg.title,
+                description=cfg.description,
+                timezone=cfg.timezone,
+                image="assets/image.png",
+                pages=cfg.pages,
+            ),
+        )
+        cm.reload_config()
+
+        result = remove_image(cm)
+
+        assert not (assets / "image.png").exists()
+        assert result.image is None
+        assert parse_site_config(cm.content_dir).image is None
+
+    def test_remove_when_no_image_is_noop(self, cm: ContentManager) -> None:
+        result = remove_image(cm)
+        assert result.image is None
+
+    def test_remove_tolerates_missing_file(self, cm: ContentManager) -> None:
+        cfg = cm.site_config
+        write_site_config(
+            cm.content_dir,
+            SiteConfig(
+                title=cfg.title,
+                description=cfg.description,
+                timezone=cfg.timezone,
+                image="assets/image.png",
+                pages=cfg.pages,
+            ),
+        )
+        cm.reload_config()
+
+        result = remove_image(cm)
+        assert result.image is None
+
+    def test_remove_does_not_clear_favicon(self, cm: ContentManager) -> None:
+        cfg = cm.site_config
+        write_site_config(
+            cm.content_dir,
+            SiteConfig(
+                title=cfg.title,
+                description=cfg.description,
+                timezone=cfg.timezone,
+                favicon="assets/favicon.png",
+                image="assets/image.png",
+                pages=cfg.pages,
+            ),
+        )
+        cm.reload_config()
+
+        result = remove_image(cm)
+        assert result.favicon == "assets/favicon.png"
+        assert result.image is None

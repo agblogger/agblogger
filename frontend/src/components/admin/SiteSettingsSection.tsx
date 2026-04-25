@@ -7,6 +7,7 @@ import type { AdminSiteSettings } from '@/api/client'
 import { updateAdminSiteSettings } from '@/api/admin'
 import TimezoneCombobox from './TimezoneCombobox'
 import FaviconSection from './FaviconSection'
+import ImageSection from './ImageSection'
 import { refreshSiteConfig } from '@/stores/siteStore'
 
 interface SiteSettingsSectionProps {
@@ -26,6 +27,7 @@ function normalizeSiteSettings(
     timezone: settings?.timezone ?? '',
     password_change_disabled: settings?.password_change_disabled ?? false,
     favicon: settings?.favicon ?? null,
+    image: settings?.image ?? null,
   }
 }
 
@@ -163,6 +165,12 @@ export default function SiteSettingsSection({
 
       <FaviconSection
         initialFavicon={initialSettings.favicon}
+        busy={busy || savingSite}
+        onSavedSettings={onSavedSettings}
+      />
+
+      <ImageSection
+        initialImage={initialSettings.image}
         busy={busy || savingSite}
         onSavedSettings={onSavedSettings}
       />

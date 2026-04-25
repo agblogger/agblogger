@@ -58,3 +58,13 @@ export async function uploadAdminFavicon(file: File): Promise<AdminSiteSettings>
 export async function removeAdminFavicon(): Promise<AdminSiteSettings> {
   return api.delete('admin/favicon').json<AdminSiteSettings>()
 }
+
+export async function uploadAdminImage(file: File): Promise<AdminSiteSettings> {
+  const body = new FormData()
+  body.append('file', file)
+  return api.post('admin/image', { body }).json<AdminSiteSettings>()
+}
+
+export async function removeAdminImage(): Promise<AdminSiteSettings> {
+  return api.delete('admin/image').json<AdminSiteSettings>()
+}

@@ -47,6 +47,8 @@ class SeoContext:
     author: str | None = None
     published_time: str | None = None
     modified_time: str | None = None
+    image: str | None = None
+    image_alt: str | None = None
     json_ld: dict[str, Any] | None = None
     rendered_body: str | None = None
     markdown_body: str | None = None
@@ -59,6 +61,35 @@ class SeoContext:
             raise ValueError("json_ld must contain @context and @type keys")
 
 
+_IMG_TAG_RE = re.compile(r"<img\b[^>]*>", re.IGNORECASE)
+_ATTR_RE = re.compile(
+    r"""(?P<name>[a-zA-Z_:][-a-zA-Z0-9_:.]*)\s*=\s*(?:"(?P<dq>[^"]*)"|'(?P<sq>[^']*)')"""
+)
+
+
+def extract_first_image(html_text: str) -> tuple[str, str | None] | None:
+    """Return (src, alt) for the first <img> with a non-empty src, or None.
+
+    Used to derive an og:image fallback from rendered post HTML when no
+    explicit cover image is configured.
+    """
+    for match in _IMG_TAG_RE.finditer(html_text):
+        attrs: dict[str, str] = {}
+        for attr_match in _ATTR_RE.finditer(match.group(0)):
+            name = attr_match.group("name").lower()
+            value = attr_match.group("dq")
+            if value is None:
+                value = attr_match.group("sq") or ""
+            attrs[name] = value
+        src = attrs.get("src", "").strip()
+        if not src:
+            continue
+        alt_raw = attrs.get("alt")
+        alt = alt_raw.strip() if alt_raw is not None and alt_raw.strip() else None
+        return src, alt
+    return None
+
+
 def render_seo_html(base_html: str, ctx: SeoContext) -> str:
     """Inject SEO meta tags, structured data, and pre-rendered content into base HTML."""
     description = ctx.description
@@ -69,6 +100,8 @@ def render_seo_html(base_html: str, ctx: SeoContext) -> str:
     esc_desc = html.escape(description)
     esc_url = html.escape(ctx.canonical_url)
 
+    twitter_card = "summary_large_image" if ctx.image else "summary"
+
     head_tags = [
         f'<meta name="description" content="{esc_desc}">',
         f'<link rel="canonical" href="{esc_url}">',
@@ -76,10 +109,19 @@ def render_seo_html(base_html: str, ctx: SeoContext) -> str:
         f'<meta property="og:description" content="{esc_desc}">',
         f'<meta property="og:url" content="{esc_url}">',
         f'<meta property="og:type" content="{html.escape(ctx.og_type)}">',
-        '<meta name="twitter:card" content="summary">',
+        f'<meta name="twitter:card" content="{twitter_card}">',
         f'<meta name="twitter:title" content="{esc_title}">',
         f'<meta name="twitter:description" content="{esc_desc}">',
     ]
+
+    if ctx.image:
+        esc_image = html.escape(ctx.image)
+        head_tags.append(f'<meta property="og:image" content="{esc_image}">')
+        head_tags.append(f'<meta name="twitter:image" content="{esc_image}">')
+        if ctx.image_alt:
+            esc_image_alt = html.escape(ctx.image_alt)
+            head_tags.append(f'<meta property="og:image:alt" content="{esc_image_alt}">')
+            head_tags.append(f'<meta name="twitter:image:alt" content="{esc_image_alt}">')
 
     if ctx.site_name:
         head_tags.append(f'<meta property="og:site_name" content="{html.escape(ctx.site_name)}">')

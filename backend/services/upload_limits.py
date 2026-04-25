@@ -5,6 +5,7 @@ from __future__ import annotations
 MAX_MULTIPART_BODY_SIZE = 55 * 1024 * 1024
 MAX_SYNC_MULTIPART_BODY_SIZE = 100 * 1024 * 1024
 MAX_FAVICON_SIZE = 2 * 1024 * 1024
+MAX_IMAGE_SIZE = 5 * 1024 * 1024
 
 
 def get_multipart_body_limit(path: str) -> int | None:
@@ -15,4 +16,6 @@ def get_multipart_body_limit(path: str) -> int | None:
         return MAX_SYNC_MULTIPART_BODY_SIZE
     if path == "/api/admin/favicon":
         return MAX_FAVICON_SIZE
+    if path == "/api/admin/image":
+        return MAX_IMAGE_SIZE
     return None

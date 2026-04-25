@@ -150,3 +150,51 @@ def test_parse_site_config_non_string_favicon_returns_none(tmp_path: Path) -> No
     (tmp_path / "index.toml").write_text('[site]\ntitle = "Blog"\nfavicon = 42\n')
     result = parse_site_config(tmp_path)
     assert result.favicon is None
+
+
+def test_site_config_image_roundtrip(tmp_path: Path) -> None:
+    config = SiteConfig(
+        title="My Blog",
+        image="assets/image.png",
+        pages=[PageConfig(id="timeline", title="Posts")],
+    )
+    (tmp_path / "index.toml").write_text("[site]\n")
+
+    write_site_config(tmp_path, config)
+    raw = (tmp_path / "index.toml").read_text()
+    result = parse_site_config(tmp_path)
+
+    assert result.image == "assets/image.png"
+    # TOML key must be 'image', not 'og_image'.
+    assert "image = " in raw
+    assert "og_image" not in raw
+
+
+def test_site_config_image_omitted_when_none(tmp_path: Path) -> None:
+    config = SiteConfig(title="My Blog", image=None)
+    (tmp_path / "index.toml").write_text("[site]\n")
+
+    write_site_config(tmp_path, config)
+    raw = (tmp_path / "index.toml").read_text()
+
+    assert "image = " not in raw
+    assert parse_site_config(tmp_path).image is None
+
+
+def test_site_config_with_pages_preserves_image(tmp_path: Path) -> None:
+    config = SiteConfig(title="Blog", image="assets/image.jpg", pages=[])
+    updated = config.with_pages([PageConfig(id="timeline", title="Posts")])
+
+    assert updated.image == "assets/image.jpg"
+
+
+def test_parse_site_config_image_missing_returns_none(tmp_path: Path) -> None:
+    (tmp_path / "index.toml").write_text('[site]\ntitle = "Blog"\n')
+    result = parse_site_config(tmp_path)
+    assert result.image is None
+
+
+def test_parse_site_config_non_string_image_returns_none(tmp_path: Path) -> None:
+    (tmp_path / "index.toml").write_text('[site]\ntitle = "Blog"\nimage = 42\n')
+    result = parse_site_config(tmp_path)
+    assert result.image is None

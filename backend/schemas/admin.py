@@ -39,6 +39,7 @@ class SiteSettingsResponse(BaseModel):
     timezone: str
     password_change_disabled: bool
     favicon: str | None = None
+    image: str | None = None
 
 
 class AdminPageConfig(BaseModel):

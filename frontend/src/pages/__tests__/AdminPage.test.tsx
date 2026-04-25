@@ -88,6 +88,7 @@ const defaultSettings: AdminSiteSettings = {
   timezone: 'UTC',
   password_change_disabled: false,
   favicon: null,
+  image: null,
 }
 
 const defaultPages: AdminPageConfig[] = [

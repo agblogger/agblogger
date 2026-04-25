@@ -447,3 +447,72 @@ def remove_favicon(cm: ContentManager) -> SiteConfig:
             logger.warning("Failed to remove favicon file %s: %s", favicon_path, exc)
 
     return cm.site_config
+
+
+def set_image(cm: ContentManager, *, extension: str, data: bytes) -> SiteConfig:
+    """Save site image bytes to content/assets/image{extension} and update index.toml.
+
+    The site image is used as the og:image / twitter:image fallback for social
+    previews when a post does not provide one inline.
+    """
+    if not re.fullmatch(r"\.[a-zA-Z0-9]+", extension):
+        msg = f"Invalid image extension: {extension!r}"
+        raise ValueError(msg)
+    assets_dir = cm.content_dir / "assets"
+    assets_dir.mkdir(exist_ok=True)
+
+    old_image = cm.site_config.image
+    old_path_to_delete: Path | None = None
+    if old_image is not None:
+        old_ext = Path(old_image).suffix
+        if old_ext != extension:
+            try:
+                old_path_to_delete = cm.validate_path(old_image)
+            except ValueError:
+                logger.warning("Old image path is invalid, skipping deletion: %s", old_image)
+
+    image_rel = f"assets/image{extension}"
+    image_path = cm.content_dir / image_rel
+    image_path.write_bytes(data)
+
+    updated = dc_replace(cm.site_config, image=image_rel)
+    try:
+        write_site_config(cm.content_dir, updated)
+        cm.reload_config()
+    except OSError:
+        try:
+            image_path.unlink(missing_ok=True)
+        except OSError as cleanup_exc:
+            logger.warning("Failed to clean up orphaned image file %s: %s", image_path, cleanup_exc)
+        raise
+
+    if old_path_to_delete is not None:
+        try:
+            old_path_to_delete.unlink(missing_ok=True)
+        except OSError as exc:
+            logger.warning("Failed to remove old image %s: %s", old_path_to_delete, exc)
+
+    return cm.site_config
+
+
+def remove_image(cm: ContentManager) -> SiteConfig:
+    """Remove the site image file and clear the image field from index.toml."""
+    cfg = cm.site_config
+
+    image_path: Path | None = None
+    if cfg.image is not None:
+        try:
+            image_path = cm.validate_path(cfg.image)
+        except ValueError:
+            logger.warning("image path is invalid, skipping deletion: %s", cfg.image)
+
+    write_site_config(cm.content_dir, dc_replace(cm.site_config, image=None))
+    cm.reload_config()
+
+    if image_path is not None:
+        try:
+            image_path.unlink(missing_ok=True)
+        except OSError as exc:
+            logger.warning("Failed to remove image file %s: %s", image_path, exc)
+
+    return cm.site_config

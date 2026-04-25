@@ -76,6 +76,7 @@ title = "Example Blog"
 description = "Notes on software and systems"
 timezone = "UTC"
 # favicon = "assets/favicon.png"  # optional; set via admin panel
+# image = "assets/image.png"  # optional social-share image; set via admin panel
 
 [[pages]]
 id = "timeline"
@@ -98,6 +99,7 @@ Field meanings:
 - `site.description`: short site summary used where the application needs a top-level description
 - `site.timezone`: canonical site timezone for content- and display-related decisions
 - `site.favicon`: optional relative path within `content/` for the site favicon image
+- `site.image`: optional relative path within `content/` for the site social-share image (used as the og:image / twitter:image fallback when a post has no inline image)
 - `[[pages]]`: top-level page definitions used for navigation and presentation structure
 - `pages.id`: stable page identifier referenced by the application
 - `pages.title`: human-readable page label shown in navigation or page chrome

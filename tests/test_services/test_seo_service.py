@@ -11,6 +11,7 @@ from backend.services.seo_service import (
     SeoContext,
     SeoPostItem,
     blogposting_ld,
+    extract_first_image,
     render_page_markdown,
     render_post_list_html,
     render_post_list_markdown,
@@ -678,3 +679,106 @@ class TestRenderSeoHtmlMissingMarkers:
         with caplog.at_level(logging.WARNING, logger="backend.services.seo_service"):
             render_seo_html(html_no_body_close, _make_ctx(preload_data=None))
         assert not any("</body>" in r.message for r in caplog.records)
+
+
+class TestExtractFirstImage:
+    """extract_first_image returns the (src, alt) of the first <img> tag, or None."""
+
+    def test_returns_none_when_no_images(self) -> None:
+        assert extract_first_image("<p>Just text</p>") is None
+
+    def test_returns_none_for_empty_string(self) -> None:
+        assert extract_first_image("") is None
+
+    def test_extracts_src_with_double_quotes(self) -> None:
+        src, alt = extract_first_image('<img src="/foo.png" alt="Foo">')  # type: ignore[misc]
+        assert src == "/foo.png"
+        assert alt == "Foo"
+
+    def test_extracts_src_with_single_quotes(self) -> None:
+        src, alt = extract_first_image("<img src='/foo.png' alt='Foo'>")  # type: ignore[misc]
+        assert src == "/foo.png"
+        assert alt == "Foo"
+
+    def test_returns_alt_none_when_no_alt(self) -> None:
+        src, alt = extract_first_image('<img src="/foo.png">')  # type: ignore[misc]
+        assert src == "/foo.png"
+        assert alt is None
+
+    def test_picks_first_image_when_multiple(self) -> None:
+        html = '<img src="/a.png" alt="A"> text <img src="/b.png" alt="B">'
+        src, alt = extract_first_image(html)  # type: ignore[misc]
+        assert src == "/a.png"
+        assert alt == "A"
+
+    def test_handles_self_closing_img(self) -> None:
+        src, alt = extract_first_image('<img src="/foo.png" alt="Foo" />')  # type: ignore[misc]
+        assert src == "/foo.png"
+        assert alt == "Foo"
+
+    def test_handles_attribute_order_alt_first(self) -> None:
+        src, alt = extract_first_image('<img alt="Foo" src="/foo.png">')  # type: ignore[misc]
+        assert src == "/foo.png"
+        assert alt == "Foo"
+
+    def test_returns_none_for_empty_src(self) -> None:
+        assert extract_first_image('<img src="" alt="x">') is None
+
+    def test_skips_image_with_no_src_attribute(self) -> None:
+        html = '<img alt="No src"><img src="/real.png" alt="Real">'
+        result = extract_first_image(html)
+        assert result is not None
+        src, alt = result
+        assert src == "/real.png"
+        assert alt == "Real"
+
+
+class TestRenderSeoHtmlOgImage:
+    """render_seo_html emits og:image and twitter:image when og_image is set."""
+
+    def test_emits_og_image_when_set(self) -> None:
+        result = render_seo_html(BASE_HTML, _make_ctx(image="https://ex.com/a.png"))
+        assert '<meta property="og:image" content="https://ex.com/a.png">' in result
+
+    def test_emits_twitter_image_when_set(self) -> None:
+        result = render_seo_html(BASE_HTML, _make_ctx(image="https://ex.com/a.png"))
+        assert '<meta name="twitter:image" content="https://ex.com/a.png">' in result
+
+    def test_upgrades_twitter_card_to_large_image_when_og_image_set(self) -> None:
+        result = render_seo_html(BASE_HTML, _make_ctx(image="https://ex.com/a.png"))
+        assert '<meta name="twitter:card" content="summary_large_image">' in result
+        assert '<meta name="twitter:card" content="summary">' not in result
+
+    def test_keeps_summary_card_when_no_og_image(self) -> None:
+        result = render_seo_html(BASE_HTML, _make_ctx(image=None))
+        assert '<meta name="twitter:card" content="summary">' in result
+
+    def test_omits_og_image_when_none(self) -> None:
+        result = render_seo_html(BASE_HTML, _make_ctx(image=None))
+        assert "og:image" not in result
+        assert "twitter:image" not in result
+
+    def test_emits_og_image_alt_when_set(self) -> None:
+        result = render_seo_html(
+            BASE_HTML, _make_ctx(image="https://ex.com/a.png", image_alt="A diagram")
+        )
+        assert '<meta property="og:image:alt" content="A diagram">' in result
+        assert '<meta name="twitter:image:alt" content="A diagram">' in result
+
+    def test_omits_og_image_alt_when_none(self) -> None:
+        result = render_seo_html(BASE_HTML, _make_ctx(image="https://ex.com/a.png", image_alt=None))
+        assert "og:image:alt" not in result
+        assert "twitter:image:alt" not in result
+
+    def test_escapes_og_image_url(self) -> None:
+        result = render_seo_html(
+            BASE_HTML, _make_ctx(image='https://ex.com/a.png?q="><script>x</script>')
+        )
+        assert "<script>" not in result
+
+    def test_escapes_og_image_alt(self) -> None:
+        result = render_seo_html(
+            BASE_HTML,
+            _make_ctx(image="https://ex.com/a.png", image_alt='"><script>x</script>'),
+        )
+        assert "<script>" not in result

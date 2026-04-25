@@ -45,7 +45,9 @@ from backend.services.admin_service import (
     get_admin_pages,
     get_site_settings,
     remove_favicon,
+    remove_image,
     set_favicon,
+    set_image,
     update_page,
     update_page_order,
     update_site_settings,
@@ -54,7 +56,7 @@ from backend.services.auth_service import hash_password, revoke_admin_credential
 from backend.services.git_service import GitService
 from backend.services.rate_limit_service import InMemoryRateLimiter
 from backend.services.storage_quota import ContentSizeTracker
-from backend.services.upload_limits import MAX_FAVICON_SIZE
+from backend.services.upload_limits import MAX_FAVICON_SIZE, MAX_IMAGE_SIZE
 from backend.utils.datetime import format_iso, now_utc
 
 logger = logging.getLogger(__name__)
@@ -76,6 +78,7 @@ async def get_settings(
         timezone=cfg.timezone,
         password_change_disabled=settings.disable_password_change,
         favicon=cfg.favicon,
+        image=cfg.image,
     )
 
 
@@ -98,6 +101,7 @@ async def update_settings(
             description=body.description,
             timezone=body.timezone,
             favicon=old_cfg.favicon,
+            image=old_cfg.image,
             pages=old_cfg.pages,
         )
         index_path = content_manager.content_dir / "index.toml"
@@ -197,6 +201,7 @@ async def upload_favicon(
         timezone=cfg.timezone,
         password_change_disabled=settings.disable_password_change,
         favicon=cfg.favicon,
+        image=cfg.image,
     )
 
 
@@ -233,6 +238,119 @@ async def delete_favicon(
         timezone=cfg.timezone,
         password_change_disabled=settings.disable_password_change,
         favicon=cfg.favicon,
+        image=cfg.image,
+    )
+
+
+_ALLOWED_IMAGE_CONTENT_TYPES: dict[str, str] = {
+    "image/png": ".png",
+    "image/jpeg": ".jpg",
+    "image/webp": ".webp",
+    "image/gif": ".gif",
+}
+
+
+def _get_old_image_size(
+    content_manager: ContentManager, content_size_tracker: ContentSizeTracker
+) -> int:
+    old_image = content_manager.site_config.image
+    if old_image is None:
+        return 0
+    try:
+        old_path = content_manager.validate_path(old_image)
+        return content_size_tracker.file_size(old_path)
+    except ValueError:
+        logger.warning("Invalid old site image path in quota check: %s", old_image)
+        return 0
+
+
+@router.post("/image", response_model=SiteSettingsResponse)
+async def upload_image(
+    file: Annotated[UploadFile, File()],
+    response: Response,
+    content_manager: Annotated[ContentManager, Depends(get_content_manager)],
+    git_service: Annotated[GitService, Depends(get_git_service)],
+    content_write_lock: Annotated[AsyncWriteLock, Depends(get_content_write_lock)],
+    content_size_tracker: Annotated[ContentSizeTracker, Depends(get_content_size_tracker)],
+    _user: Annotated[AdminUser, Depends(require_admin)],
+    settings: Annotated[Settings, Depends(get_settings_dep)],
+) -> SiteSettingsResponse:
+    """Upload or replace the site image used for social-share previews (og:image)."""
+    content_type = (file.content_type or "").split(";")[0].strip()
+    extension = _ALLOWED_IMAGE_CONTENT_TYPES.get(content_type)
+    if extension is None:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unsupported file type: {content_type}. Allowed: PNG, JPEG, WebP, GIF.",
+        )
+
+    data = await file.read()
+    if len(data) > MAX_IMAGE_SIZE:
+        raise HTTPException(status_code=413, detail="Website image exceeds 5 MB limit.")
+
+    async with content_write_lock:
+        old_size = _get_old_image_size(content_manager, content_size_tracker)
+        index_path = content_manager.content_dir / "index.toml"
+        old_index_size = content_size_tracker.file_size(index_path)
+        content_size_tracker.require_quota(len(data) - old_size)
+
+        try:
+            cfg = set_image(content_manager, extension=extension, data=data)
+        except (ValueError, OSError) as exc:
+            logger.error("Failed to save site image: %s", exc)
+            raise HTTPException(status_code=500, detail="Failed to save website image.") from exc
+
+        new_path = content_manager.content_dir / f"assets/image{extension}"
+        content_size_tracker.adjust(
+            (content_size_tracker.file_size(new_path) - old_size)
+            + (content_size_tracker.file_size(index_path) - old_index_size)
+        )
+        set_git_warning(response, await git_service.try_commit("Update site image"))
+
+    return SiteSettingsResponse(
+        title=cfg.title,
+        description=cfg.description,
+        timezone=cfg.timezone,
+        password_change_disabled=settings.disable_password_change,
+        favicon=cfg.favicon,
+        image=cfg.image,
+    )
+
+
+@router.delete("/image", response_model=SiteSettingsResponse)
+async def delete_image(
+    response: Response,
+    content_manager: Annotated[ContentManager, Depends(get_content_manager)],
+    git_service: Annotated[GitService, Depends(get_git_service)],
+    content_write_lock: Annotated[AsyncWriteLock, Depends(get_content_write_lock)],
+    content_size_tracker: Annotated[ContentSizeTracker, Depends(get_content_size_tracker)],
+    _user: Annotated[AdminUser, Depends(require_admin)],
+    settings: Annotated[Settings, Depends(get_settings_dep)],
+) -> SiteSettingsResponse:
+    """Remove the site image."""
+    async with content_write_lock:
+        old_size = _get_old_image_size(content_manager, content_size_tracker)
+        index_path = content_manager.content_dir / "index.toml"
+        old_index_size = content_size_tracker.file_size(index_path)
+
+        try:
+            cfg = remove_image(content_manager)
+        except OSError as exc:
+            logger.error("Failed to remove site image: %s", exc)
+            raise HTTPException(status_code=500, detail="Failed to remove website image.") from exc
+
+        content_size_tracker.adjust(
+            -old_size + (content_size_tracker.file_size(index_path) - old_index_size)
+        )
+        set_git_warning(response, await git_service.try_commit("Remove site image"))
+
+    return SiteSettingsResponse(
+        title=cfg.title,
+        description=cfg.description,
+        timezone=cfg.timezone,
+        password_change_disabled=settings.disable_password_change,
+        favicon=cfg.favicon,
+        image=cfg.image,
     )
 
 
