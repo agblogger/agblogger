@@ -3,12 +3,23 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, useLocation } from 'react-router-dom'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-import type { UserResponse, SiteConfigResponse, SearchResult } from '@/api/client'
+import type { PostDetail, UserResponse, SiteConfigResponse, SearchResult } from '@/api/client'
 
 const mockSearchPosts = vi.fn<(q: string, limit?: number, signal?: AbortSignal) => Promise<SearchResult[]>>()
 
 vi.mock('@/api/posts', () => ({
   searchPosts: (...args: [string, number?, AbortSignal?]) => mockSearchPosts(...args),
+}))
+
+let mockPostData: PostDetail | undefined = undefined
+vi.mock('@/hooks/usePost', () => ({
+  usePost: (slug: string | null) => ({
+    data: slug !== null ? mockPostData : undefined,
+    error: undefined,
+    isLoading: false,
+    mutate: vi.fn(),
+  }),
+  useViewCount: () => ({ data: undefined, error: undefined, isLoading: false }),
 }))
 
 const siteConfig: SiteConfigResponse = {
@@ -105,6 +116,7 @@ describe('Header', () => {
     mockTheme = 'light'
     mockPanelState = 'closed'
     mockActiveFilterCount = 0
+    mockPostData = undefined
     vi.clearAllMocks()
     mockSearchPosts.mockReset()
   })
@@ -116,6 +128,78 @@ describe('Header', () => {
   it('renders site title', () => {
     renderHeader()
     expect(screen.getByText('My Blog')).toBeInTheDocument()
+  })
+
+  it('site title is a button (not a link) and scrolls to top on click', async () => {
+    const scrollSpy = vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+    renderHeader('/post/foo/bar')
+    const titleBtn = screen.getByRole('button', { name: /My Blog/ })
+    expect(titleBtn.tagName).toBe('BUTTON')
+    await userEvent.click(titleBtn)
+    expect(scrollSpy).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' })
+    scrollSpy.mockRestore()
+  })
+
+  it('shows post title below site title on a post page', () => {
+    mockPostData = {
+      file_path: 'posts/hello/index.md',
+      title: 'Hello, World',
+      subtitle: null,
+      labels: [],
+      created_at: '2026-02-01 12:00:00+00:00',
+      updated_at: '2026-02-01 12:00:00+00:00',
+      author: 'admin',
+      rendered_html: '',
+      is_draft: false,
+      body: '',
+    } as unknown as PostDetail
+    renderHeader('/post/hello')
+    expect(screen.getByTestId('header-post-title')).toHaveTextContent('Hello, World')
+  })
+
+  it('clicking post title also scrolls to top', async () => {
+    mockPostData = {
+      file_path: 'posts/hello/index.md',
+      title: 'Hello, World',
+      subtitle: null,
+      labels: [],
+      created_at: '2026-02-01 12:00:00+00:00',
+      updated_at: '2026-02-01 12:00:00+00:00',
+      author: 'admin',
+      rendered_html: '',
+      is_draft: false,
+      body: '',
+    } as unknown as PostDetail
+    const scrollSpy = vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+    renderHeader('/post/hello')
+    const postTitleBtn = screen.getByTestId('header-post-title')
+    expect(postTitleBtn.tagName).toBe('BUTTON')
+    await userEvent.click(postTitleBtn)
+    expect(scrollSpy).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' })
+    scrollSpy.mockRestore()
+  })
+
+  it('does not show post title on non-post pages', () => {
+    mockPostData = {
+      file_path: 'posts/hello/index.md',
+      title: 'Hello, World',
+      subtitle: null,
+      labels: [],
+      created_at: '2026-02-01 12:00:00+00:00',
+      updated_at: '2026-02-01 12:00:00+00:00',
+      author: 'admin',
+      rendered_html: '',
+      is_draft: false,
+      body: '',
+    } as unknown as PostDetail
+    renderHeader('/')
+    expect(screen.queryByTestId('header-post-title')).not.toBeInTheDocument()
+  })
+
+  it('does not show post title on a post page when post has not loaded yet', () => {
+    mockPostData = undefined
+    renderHeader('/post/hello')
+    expect(screen.queryByTestId('header-post-title')).not.toBeInTheDocument()
   })
 
   it('Labels active at /labels', () => {

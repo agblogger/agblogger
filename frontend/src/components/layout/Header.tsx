@@ -9,6 +9,7 @@ import { searchPosts } from '@/api/posts'
 import type { SearchResult } from '@/api/client'
 import SearchDropdown from '@/components/search/SearchDropdown'
 import { postUrl } from '@/utils/postUrl'
+import { usePost } from '@/hooks/usePost'
 
 const PENDING_AUTH_SCOPE_KEY = '__pending_auth__'
 
@@ -160,6 +161,14 @@ export default function Header() {
   const siteTitle = config?.title ?? 'AgBlogger'
   const ThemeIcon = theme === 'dark' ? Moon : Sun
   const isTimeline = location.pathname === '/'
+  const isPost = location.pathname.startsWith('/post/')
+  const postSlug = isPost ? location.pathname.slice('/post/'.length) : null
+  const { data: currentPost } = usePost(postSlug !== null && postSlug !== '' ? postSlug : null)
+  const postTitle = isPost ? currentPost?.title ?? null : null
+
+  function handleTitleClick() {
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
 
   function handleSearch(e: React.FormEvent) {
     e.preventDefault()
@@ -178,13 +187,28 @@ export default function Header() {
     <header className="border-b border-border bg-paper/80 backdrop-blur-sm sticky top-0 z-50">
       {/* Top bar */}
       <div className="max-w-5xl mx-auto px-6">
-        <div className="flex items-center justify-between h-16">
-          <Link
-            to="/"
-            className={`font-display text-2xl tracking-tight text-ink hover:text-accent transition-colors ${searchOpen ? 'hidden sm:block' : ''}`}
-          >
-            {siteTitle}
-          </Link>
+        <div className="flex items-center justify-between min-h-16 py-2 gap-4">
+          <div className={`flex flex-col min-w-0 ${searchOpen ? 'hidden sm:flex' : 'flex'}`}>
+            <button
+              type="button"
+              onClick={handleTitleClick}
+              className="font-display text-2xl tracking-tight text-ink hover:text-accent transition-colors text-left self-start"
+              aria-label={`${siteTitle} — scroll to top`}
+            >
+              {siteTitle}
+            </button>
+            {postTitle !== null && (
+              <button
+                type="button"
+                onClick={handleTitleClick}
+                data-testid="header-post-title"
+                className="block truncate max-w-[14rem] sm:max-w-xs md:max-w-md lg:max-w-lg font-body text-sm text-muted hover:text-accent transition-colors italic mt-0.5 leading-tight text-left self-start"
+                aria-label={`${postTitle} — scroll to top`}
+              >
+                {postTitle}
+              </button>
+            )}
+          </div>
 
           <div className={`flex items-center gap-3 ${searchOpen ? 'flex-1 sm:flex-initial' : ''}`}>
             {searchOpen ? (
