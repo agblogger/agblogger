@@ -80,6 +80,7 @@ class SeoContext:
     rendered_body: str | None = None
     markdown_body: str | None = None
     preload_data: dict[str, Any] | None = None
+    fb_app_id: str | None = None
 
     def __post_init__(self) -> None:
         if self.json_ld is not None and (
@@ -164,6 +165,11 @@ def render_seo_html(base_html: str, ctx: SeoContext) -> str:
 
     if ctx.site_name:
         head_tags.append(f'<meta property="og:site_name" content="{html.escape(ctx.site_name)}">')
+    if ctx.fb_app_id:
+        # Optional but recommended by Facebook — required to silence the
+        # "Missing Properties: fb:app_id" warning in the Sharing Debugger
+        # and to attribute share events to your app in Insights.
+        head_tags.append(f'<meta property="fb:app_id" content="{html.escape(ctx.fb_app_id)}">')
     if ctx.author is not None:
         head_tags.append(f'<meta property="article:author" content="{html.escape(ctx.author)}">')
     if ctx.published_time is not None:

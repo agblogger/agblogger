@@ -1580,6 +1580,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             published_time=published,
             modified_time=modified,
             image=_make_seo_image(image_url, image_alt or post.title, request, content_manager),
+            fb_app_id=request.app.state.settings.facebook_app_id or None,
             markdown_body=post_data.raw_content if post_data is not None else "",
             json_ld=blogposting_ld(
                 headline=post.title,
@@ -1712,6 +1713,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             image=_make_seo_image(
                 _site_image_url(request, content_manager), site_title, request, content_manager
             ),
+            fb_app_id=request.app.state.settings.facebook_app_id or None,
             json_ld=website_ld(name=site_title, description=site_desc, url=canonical_url),
             rendered_body=rendered_body,
             markdown_body=render_post_list_markdown(posts_data, heading=site_title),
@@ -1826,6 +1828,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             image=_make_seo_image(
                 _site_image_url(request, content_manager), page.title, request, content_manager
             ),
+            fb_app_id=request.app.state.settings.facebook_app_id or None,
             json_ld=webpage_ld(name=page.title, description=description, url=canonical),
             rendered_body=rendered_body,
             markdown_body=content_manager.read_page(page_id),
@@ -1858,6 +1861,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             image=_make_seo_image(
                 _site_image_url(request, content_manager), site_name, request, content_manager
             ),
+            fb_app_id=request.app.state.settings.facebook_app_id or None,
             markdown_body="# Labels\n",
         )
 
@@ -2018,6 +2022,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             image=_make_seo_image(
                 _site_image_url(request, content_manager), display_name, request, content_manager
             ),
+            fb_app_id=request.app.state.settings.facebook_app_id or None,
             rendered_body=rendered_body,
             markdown_body=render_post_list_markdown(posts_data_ld, heading=display_name),
             preload_data=preload_data,
@@ -2049,6 +2054,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             image=_make_seo_image(
                 _site_image_url(request, content_manager), site_name, request, content_manager
             ),
+            fb_app_id=request.app.state.settings.facebook_app_id or None,
             markdown_body="# Search\n",
         )
 

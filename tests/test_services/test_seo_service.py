@@ -260,6 +260,22 @@ class TestRenderSeoHtmlImageDimensions:
         assert '<meta property="og:image:type" content="image/png">' in result
 
 
+class TestRenderSeoHtmlFbAppId:
+    def test_emits_fb_app_id_when_set(self) -> None:
+        result = render_seo_html(BASE_HTML, _make_ctx(fb_app_id="1234567890"))
+        assert '<meta property="fb:app_id" content="1234567890">' in result
+
+    def test_omits_fb_app_id_when_none(self) -> None:
+        result = render_seo_html(BASE_HTML, _make_ctx(fb_app_id=None))
+        assert "fb:app_id" not in result
+
+    def test_omits_fb_app_id_when_empty_string(self) -> None:
+        # Defensive: callers map empty config string to None, but if an empty
+        # string slips through, don't render an empty content attribute.
+        result = render_seo_html(BASE_HTML, _make_ctx(fb_app_id=""))
+        assert "fb:app_id" not in result
+
+
 class TestSeoImageInvariants:
     def test_rejects_width_without_height(self) -> None:
         with pytest.raises(ValueError, match="both be set or both be None"):
