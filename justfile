@@ -85,7 +85,7 @@ check-static: check-backend-static check-frontend-static check-vulture check-tri
     @echo "✓ Static checks passed"
 
 # Run all test suites with coverage.
-test: (test-backend) (test-frontend)
+test: test-backend test-frontend
     @{{ if v == "" { "true" } else { "echo" } }}
     @echo "✓ Tests passed"
 
