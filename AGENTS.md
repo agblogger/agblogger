@@ -11,7 +11,7 @@ The primary purpose of architecture docs in docs/arch/*.md is to provide agents 
 ## Build, Test, and Development Commands
 
 ```bash
-just start            # Start backend (:8000) + frontend (:5173) in the background (run unsandboxed)
+just start            # Start backend (:8000) + frontend (:5173) in the background
 just stop             # Stop the running dev server
 just health           # Check if dev server is healthy (backend + frontend)
 just check            # Full gate: static checks first, then all tests with coverage
@@ -23,11 +23,10 @@ just test-backend     # Backend tests with coverage
 just check-frontend   # Frontend static checks + frontend tests
 just test-frontend    # Frontend tests with coverage
 ```
-All `just` commands must be run unsandboxed.
 
-Always start a dev server with `just start` (unsandboxed). Remember to stop a running dev server with `just stop` when finished.
+Always start a dev server with `just start`. Remember to stop a running dev server with `just stop` when finished.
 
-Use unsandboxed `uv run` for ALL Python tooling.
+Use `uv run` for ALL Python tooling.
 
 ## Coding Style & Naming Conventions
 

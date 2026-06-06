@@ -466,11 +466,10 @@ build-cli: stamp-build
         --add-data "{{ justfile_directory() }}/BUILD:." \
         cli/sync_client.py
 
-# Install the CLI client to prefix/bin (default: ~/.local/bin)
-install prefix="$HOME/.local": build-cli
-    mkdir -p "{{ prefix }}/bin"
-    cp dist/cli/agblogger "{{ prefix }}/bin/agblogger"
-    @echo "✓ Installed agblogger to {{ prefix }}/bin/"
+# Install the CLI client via uv tool install
+install:
+    uv tool install --reinstall .
+    @echo "✓ Installed agblogger CLI"
 
 # ── Deployment ──────────────────────────────────────────────
 
