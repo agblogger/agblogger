@@ -467,8 +467,8 @@ build-cli: stamp-build
         agblogger_cli/agblogger_cli/sync_client.py
 
 # Install the CLI client via uv tool install (minimal deps: httpx only)
-install:
-    uv tool install --reinstall agblogger_cli/
+install prefix="$HOME/.local":
+    UV_TOOL_BIN_DIR="{{prefix}}/bin" uv tool install --reinstall agblogger_cli/
     @echo "✓ Installed agblogger CLI"
 
 # Install the CLI client via PyInstaller binary (standalone, no Python runtime needed)
