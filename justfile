@@ -473,7 +473,7 @@ install:
 
 # Install the CLI client via PyInstaller binary (standalone, no Python runtime needed)
 pyinstall: build-cli
-    install -m 755 dist/cli/agblogger /usr/local/bin/agblogger
+    install -m 755 dist/cli/agblogger "$HOME/.local/bin/agblogger"
     @echo "✓ Installed agblogger CLI (PyInstaller binary)"
 
 # ── Deployment ──────────────────────────────────────────────
