@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 
-from cli.sync_client import SyncClient, validate_server_url
+from agblogger_cli.sync_client import SyncClient, validate_server_url
 
 
 class TestValidateServerUrl:
@@ -73,8 +73,8 @@ class TestSyncDeleteCounting:
             patch.object(SyncClient, "status", return_value=status_response),
             patch.object(SyncClient, "_get_last_sync_commit", return_value=None),
             patch.object(SyncClient, "_save_commit_hash"),
-            patch("cli.sync_client.scan_local_files", return_value={}),
-            patch("cli.sync_client.save_manifest"),
+            patch("agblogger_cli.sync_client.scan_local_files", return_value={}),
+            patch("agblogger_cli.sync_client.save_manifest"),
         ):
             client = SyncClient.__new__(SyncClient)
             client.content_dir = content_dir
@@ -140,8 +140,8 @@ class TestSyncCountsUniqueFiles:
             patch.object(SyncClient, "_get_last_sync_commit", return_value=None),
             patch.object(SyncClient, "_save_commit_hash"),
             patch.object(SyncClient, "_download_file", return_value=True),
-            patch("cli.sync_client.scan_local_files", return_value={}),
-            patch("cli.sync_client.save_manifest"),
+            patch("agblogger_cli.sync_client.scan_local_files", return_value={}),
+            patch("agblogger_cli.sync_client.save_manifest"),
         ):
             client = SyncClient.__new__(SyncClient)
             client.content_dir = content_dir
@@ -275,8 +275,8 @@ class TestSyncDeletePrunesEmptyDirectories:
             patch.object(SyncClient, "status", return_value=plan),
             patch.object(SyncClient, "_get_last_sync_commit", return_value=None),
             patch.object(SyncClient, "_save_commit_hash"),
-            patch("cli.sync_client.scan_local_files", return_value={}),
-            patch("cli.sync_client.save_manifest"),
+            patch("agblogger_cli.sync_client.scan_local_files", return_value={}),
+            patch("agblogger_cli.sync_client.save_manifest"),
         ):
             client = SyncClient.__new__(SyncClient)
             client.content_dir = content_dir
@@ -417,7 +417,7 @@ class TestSyncCommitServerErrorDetail:
         with (
             patch.object(SyncClient, "_get_last_sync_commit", return_value=None),
             patch.object(SyncClient, "_request", return_value=mock_request),
-            patch("cli.sync_client.scan_local_files", return_value={}),
+            patch("agblogger_cli.sync_client.scan_local_files", return_value={}),
         ):
             client = SyncClient.__new__(SyncClient)
             client.content_dir = content_dir
@@ -471,8 +471,8 @@ class TestSyncLocalDeleteOSError:
         with (
             patch.object(SyncClient, "_get_last_sync_commit", return_value=None),
             patch.object(SyncClient, "_save_commit_hash"),
-            patch("cli.sync_client.scan_local_files", return_value={}),
-            patch("cli.sync_client.save_manifest"),
+            patch("agblogger_cli.sync_client.scan_local_files", return_value={}),
+            patch("agblogger_cli.sync_client.save_manifest"),
             patch.object(Path, "unlink", selective_unlink),
         ):
             client = SyncClient.__new__(SyncClient)
@@ -566,8 +566,8 @@ class TestUploadFileReadBytesOSError:
         with (
             patch.object(SyncClient, "_get_last_sync_commit", return_value=None),
             patch.object(SyncClient, "_save_commit_hash"),
-            patch("cli.sync_client.scan_local_files", return_value={}),
-            patch("cli.sync_client.save_manifest"),
+            patch("agblogger_cli.sync_client.scan_local_files", return_value={}),
+            patch("agblogger_cli.sync_client.save_manifest"),
             patch.object(Path, "read_bytes", selective_read_bytes),
         ):
             client = SyncClient.__new__(SyncClient)
@@ -600,7 +600,7 @@ class TestBackupCleanupOSErrorWarning:
         # so cleanup is triggered. We make shutil.rmtree raise OSError.
         conflicts = [{"file_path": "posts/missing/index.md"}]
 
-        with patch("cli.sync_client.shutil.rmtree", side_effect=OSError("busy")):
+        with patch("agblogger_cli.sync_client.shutil.rmtree", side_effect=OSError("busy")):
             client = SyncClient.__new__(SyncClient)
             client.content_dir = content_dir
             client.server_url = "http://localhost:8000"

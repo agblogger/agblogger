@@ -181,6 +181,7 @@ def update_version_files(project_dir: Path, current_version: str, new_version: s
     regex_files: list[tuple[Path, re.Pattern[str]]] = [
         (Path("pyproject.toml"), PROJECT_VERSION_RE),
         (Path("packaging/server/pyproject.toml"), PROJECT_VERSION_RE),
+        (Path("agblogger_cli/pyproject.toml"), PROJECT_VERSION_RE),
     ]
     for rel_path, pattern in regex_files:
         _replace_with_regex(project_dir / rel_path, pattern, current_version, new_version)

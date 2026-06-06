@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from cli.sync_client import SyncClient
+from agblogger_cli.sync_client import SyncClient
 from tests.test_sync.test_sync_client import _DummyResponse, _RecordingHttpClient
 
 

@@ -5,7 +5,7 @@ import sys
 from typing import TYPE_CHECKING
 from unittest.mock import patch
 
-from cli.version import get_cli_version
+from agblogger_cli.version import get_cli_version
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 def test_cli_version_with_build_file(tmp_path: Path, monkeypatch) -> None:
     (tmp_path / "VERSION").write_text("2.0.0\n")
     (tmp_path / "BUILD").write_text("def5678\n")
-    monkeypatch.setattr("cli.version._base_dir", lambda: tmp_path)
+    monkeypatch.setattr("agblogger_cli.version._base_dir", lambda: tmp_path)
     # Clear the lru_cache so the monkeypatch takes effect
     get_cli_version.cache_clear()
     assert get_cli_version() == "2.0.0+def5678"
@@ -23,7 +23,7 @@ def test_cli_version_with_build_file(tmp_path: Path, monkeypatch) -> None:
 
 def test_cli_version_without_build_file(tmp_path: Path, monkeypatch) -> None:
     (tmp_path / "VERSION").write_text("2.0.0\n")
-    monkeypatch.setattr("cli.version._base_dir", lambda: tmp_path)
+    monkeypatch.setattr("agblogger_cli.version._base_dir", lambda: tmp_path)
     get_cli_version.cache_clear()
     assert get_cli_version() == "2.0.0"
     get_cli_version.cache_clear()
@@ -32,23 +32,23 @@ def test_cli_version_without_build_file(tmp_path: Path, monkeypatch) -> None:
 def test_cli_version_empty_build_file(tmp_path: Path, monkeypatch) -> None:
     (tmp_path / "VERSION").write_text("2.0.0\n")
     (tmp_path / "BUILD").write_text("\n")
-    monkeypatch.setattr("cli.version._base_dir", lambda: tmp_path)
+    monkeypatch.setattr("agblogger_cli.version._base_dir", lambda: tmp_path)
     get_cli_version.cache_clear()
     assert get_cli_version() == "2.0.0"
     get_cli_version.cache_clear()
 
 
 def test_cli_version_no_version_file(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setattr("cli.version._base_dir", lambda: tmp_path)
-    monkeypatch.setattr("cli.version.package_version", lambda name: "1.2.3")
+    monkeypatch.setattr("agblogger_cli.version._base_dir", lambda: tmp_path)
+    monkeypatch.setattr("agblogger_cli.version.package_version", lambda name: "1.2.3")
     get_cli_version.cache_clear()
     assert get_cli_version() == "1.2.3"
     get_cli_version.cache_clear()
 
 
 def test_cli_version_falls_back_to_installed_package_metadata(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setattr("cli.version._base_dir", lambda: tmp_path)
-    monkeypatch.setattr("cli.version.package_version", lambda name: "4.5.6")
+    monkeypatch.setattr("agblogger_cli.version._base_dir", lambda: tmp_path)
+    monkeypatch.setattr("agblogger_cli.version.package_version", lambda name: "4.5.6")
     get_cli_version.cache_clear()
     assert get_cli_version() == "4.5.6"
     get_cli_version.cache_clear()
@@ -62,8 +62,8 @@ def test_cli_version_returns_unknown_when_metadata_package_is_missing(
     def missing_package(name: str) -> str:
         raise PackageNotFoundError(name)
 
-    monkeypatch.setattr("cli.version._base_dir", lambda: tmp_path)
-    monkeypatch.setattr("cli.version.package_version", missing_package)
+    monkeypatch.setattr("agblogger_cli.version._base_dir", lambda: tmp_path)
+    monkeypatch.setattr("agblogger_cli.version.package_version", missing_package)
     get_cli_version.cache_clear()
     assert get_cli_version() == "unknown"
     get_cli_version.cache_clear()
@@ -72,8 +72,8 @@ def test_cli_version_returns_unknown_when_metadata_package_is_missing(
 def test_cli_version_unreadable_version_file(tmp_path: Path, monkeypatch) -> None:
     """Unreadable VERSION file should fall back to package metadata."""
     (tmp_path / "VERSION").write_text("2.0.0\n")
-    monkeypatch.setattr("cli.version._base_dir", lambda: tmp_path)
-    monkeypatch.setattr("cli.version.package_version", lambda name: "9.9.9")
+    monkeypatch.setattr("agblogger_cli.version._base_dir", lambda: tmp_path)
+    monkeypatch.setattr("agblogger_cli.version.package_version", lambda name: "9.9.9")
     get_cli_version.cache_clear()
     with patch.object(
         type(tmp_path / "VERSION"),
@@ -89,7 +89,7 @@ def test_cli_version_unreadable_build_file(tmp_path: Path, monkeypatch) -> None:
     (tmp_path / "VERSION").write_text("2.0.0\n")
     build = tmp_path / "BUILD"
     build.write_text("def5678\n")
-    monkeypatch.setattr("cli.version._base_dir", lambda: tmp_path)
+    monkeypatch.setattr("agblogger_cli.version._base_dir", lambda: tmp_path)
     get_cli_version.cache_clear()
     original = type(build).read_text
 
@@ -106,10 +106,10 @@ def test_cli_version_unreadable_build_file(tmp_path: Path, monkeypatch) -> None:
 def test_cli_version_flag_prints_version(capsys, tmp_path: Path, monkeypatch) -> None:
     (tmp_path / "VERSION").write_text("3.0.0\n")
     (tmp_path / "BUILD").write_text("cafe123\n")
-    monkeypatch.setattr("cli.version._base_dir", lambda: tmp_path)
+    monkeypatch.setattr("agblogger_cli.version._base_dir", lambda: tmp_path)
     get_cli_version.cache_clear()
 
-    from cli.sync_client import main
+    from agblogger_cli.sync_client import main
 
     monkeypatch.setattr(sys, "argv", ["agblogger", "--version"])
     with contextlib.suppress(SystemExit):
@@ -122,11 +122,11 @@ def test_cli_version_flag_prints_version(capsys, tmp_path: Path, monkeypatch) ->
 def test_cli_version_flag_prints_installed_package_metadata(
     capsys, tmp_path: Path, monkeypatch
 ) -> None:
-    monkeypatch.setattr("cli.version._base_dir", lambda: tmp_path)
-    monkeypatch.setattr("cli.version.package_version", lambda name: "7.8.9")
+    monkeypatch.setattr("agblogger_cli.version._base_dir", lambda: tmp_path)
+    monkeypatch.setattr("agblogger_cli.version.package_version", lambda name: "7.8.9")
     get_cli_version.cache_clear()
 
-    from cli.sync_client import main
+    from agblogger_cli.sync_client import main
 
     monkeypatch.setattr(sys, "argv", ["agblogger", "--version"])
     with contextlib.suppress(SystemExit):

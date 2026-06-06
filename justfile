@@ -224,12 +224,12 @@ check-backend-static:
             fi
         fi
     }
-    run_step "── Backend: type checking ──" uv run mypy backend/ cli/ tests/
-    run_step $'\n── Backend: pyright type checking ──' uv run basedpyright backend/ cli/
+    run_step "── Backend: type checking ──" uv run mypy backend/ cli/ agblogger_cli/agblogger_cli/ tests/
+    run_step $'\n── Backend: pyright type checking ──' uv run basedpyright backend/ cli/ agblogger_cli/agblogger_cli/
     run_step $'\n── Backend: dependency hygiene ──' uv run deptry .
     run_step $'\n── Backend: import contracts ──' uv run lint-imports
-    run_step $'\n── Backend: linting ──' uv run ruff check backend/ cli/ tests/
-    run_step $'\n── Backend: format check ──' uv run ruff format --check backend/ cli/ tests/
+    run_step $'\n── Backend: linting ──' uv run ruff check backend/ cli/ agblogger_cli/ tests/
+    run_step $'\n── Backend: format check ──' uv run ruff format --check backend/ cli/ agblogger_cli/ tests/
     requirements_file="$(mktemp)"
     trap 'rm -f "$_out" "$requirements_file"' EXIT
     uv export --format requirements.txt --no-dev --no-emit-project --frozen -o "$requirements_file" > /dev/null
@@ -322,10 +322,10 @@ check-vulture:
     trap 'rm -f "$_out"' EXIT
     if [ -n "{{ v }}" ]; then
         echo "── Runtime dead-code analysis (Vulture) ──"
-        uv run vulture backend cli --exclude "backend/migrations" --min-confidence 80 --ignore-names "readline"
+        uv run vulture backend cli agblogger_cli/agblogger_cli --exclude "backend/migrations" --min-confidence 80 --ignore-names "readline"
     else
         rc=0
-        uv run vulture backend cli --exclude "backend/migrations" --min-confidence 80 --ignore-names "readline" > "$_out" 2>&1 || rc=$?
+        uv run vulture backend cli agblogger_cli/agblogger_cli --exclude "backend/migrations" --min-confidence 80 --ignore-names "readline" > "$_out" 2>&1 || rc=$?
         if [ $rc -ne 0 ]; then
             echo "── Runtime dead-code analysis (Vulture) ──"
             cat "$_out"
@@ -464,12 +464,17 @@ build-cli: stamp-build
         --exclude-module sqlite3 \
         --add-data "{{ justfile_directory() }}/VERSION:." \
         --add-data "{{ justfile_directory() }}/BUILD:." \
-        cli/sync_client.py
+        agblogger_cli/agblogger_cli/sync_client.py
 
-# Install the CLI client via uv tool install
+# Install the CLI client via uv tool install (minimal deps: httpx only)
 install:
-    uv tool install --reinstall .
+    uv tool install --reinstall agblogger_cli/
     @echo "✓ Installed agblogger CLI"
+
+# Install the CLI client via PyInstaller binary (standalone, no Python runtime needed)
+pyinstall: build-cli
+    install -m 755 dist/cli/agblogger /usr/local/bin/agblogger
+    @echo "✓ Installed agblogger CLI (PyInstaller binary)"
 
 # ── Deployment ──────────────────────────────────────────────
 

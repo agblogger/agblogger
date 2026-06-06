@@ -26,6 +26,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 def _write_release_fixture(root: Path) -> None:
     (root / "packaging" / "server").mkdir(parents=True)
+    (root / "agblogger_cli").mkdir()
     (root / "frontend").mkdir()
     (root / "backend").mkdir()
 
@@ -37,6 +38,10 @@ def _write_release_fixture(root: Path) -> None:
     )
     (root / "packaging" / "server" / "pyproject.toml").write_text(
         '[project]\nname = "agblogger-server"\nversion = "0.1.0"\n',
+        encoding="utf-8",
+    )
+    (root / "agblogger_cli" / "pyproject.toml").write_text(
+        '[project]\nname = "agblogger-cli"\nversion = "0.1.0"\n',
         encoding="utf-8",
     )
     (root / "uv.lock").write_text(
@@ -85,6 +90,7 @@ def test_update_version_files_updates_all_release_surfaces(tmp_path: Path) -> No
 
     assert sorted(path.as_posix() for path in updated_paths) == [
         "VERSION",
+        "agblogger_cli/pyproject.toml",
         "frontend/package-lock.json",
         "frontend/package.json",
         "packaging/server/pyproject.toml",
@@ -157,6 +163,7 @@ def test_run_release_updates_versions_and_invokes_git_and_github(
                 "VERSION",
                 "pyproject.toml",
                 "packaging/server/pyproject.toml",
+                "agblogger_cli/pyproject.toml",
                 "frontend/package.json",
                 "frontend/package-lock.json",
                 "uv.lock",

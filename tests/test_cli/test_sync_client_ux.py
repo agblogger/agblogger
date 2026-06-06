@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 
-from cli.sync_client import (
+from agblogger_cli.sync_client import (
     CONFIG_FILE,
     confirm_sync,
     format_conflict_details,
@@ -215,10 +215,10 @@ class TestSyncConfirmationIntegration:
     ) -> None:
         mock_client = self._setup(tmp_path, monkeypatch, _plan(to_upload=["a.md"]), yes_flag=True)
         with (
-            patch("cli.sync_client.SyncClient", return_value=mock_client),
-            patch("cli.sync_client.login_interactive", return_value="token"),
+            patch("agblogger_cli.sync_client.SyncClient", return_value=mock_client),
+            patch("agblogger_cli.sync_client.login_interactive", return_value="token"),
         ):
-            from cli.sync_client import main
+            from agblogger_cli.sync_client import main
 
             main()
         mock_client.sync.assert_called_once()
@@ -228,11 +228,11 @@ class TestSyncConfirmationIntegration:
     ) -> None:
         mock_client = self._setup(tmp_path, monkeypatch, _plan(to_upload=["a.md"]))
         with (
-            patch("cli.sync_client.SyncClient", return_value=mock_client),
-            patch("cli.sync_client.login_interactive", return_value="token"),
-            patch("cli.sync_client.confirm_sync", return_value=True) as mock_confirm,
+            patch("agblogger_cli.sync_client.SyncClient", return_value=mock_client),
+            patch("agblogger_cli.sync_client.login_interactive", return_value="token"),
+            patch("agblogger_cli.sync_client.confirm_sync", return_value=True) as mock_confirm,
         ):
-            from cli.sync_client import main
+            from agblogger_cli.sync_client import main
 
             main()
         mock_confirm.assert_called_once()
@@ -243,11 +243,11 @@ class TestSyncConfirmationIntegration:
     ) -> None:
         mock_client = self._setup(tmp_path, monkeypatch, _plan())
         with (
-            patch("cli.sync_client.SyncClient", return_value=mock_client),
-            patch("cli.sync_client.login_interactive", return_value="token"),
-            patch("cli.sync_client.confirm_sync") as mock_confirm,
+            patch("agblogger_cli.sync_client.SyncClient", return_value=mock_client),
+            patch("agblogger_cli.sync_client.login_interactive", return_value="token"),
+            patch("agblogger_cli.sync_client.confirm_sync") as mock_confirm,
         ):
-            from cli.sync_client import main
+            from agblogger_cli.sync_client import main
 
             main()
         mock_confirm.assert_not_called()
@@ -261,12 +261,12 @@ class TestSyncConfirmationIntegration:
     ) -> None:
         mock_client = self._setup(tmp_path, monkeypatch, _plan(to_delete_local=["a.md"]))
         with (
-            patch("cli.sync_client.SyncClient", return_value=mock_client),
-            patch("cli.sync_client.login_interactive", return_value="token"),
-            patch("cli.sync_client.confirm_sync", return_value=False),
+            patch("agblogger_cli.sync_client.SyncClient", return_value=mock_client),
+            patch("agblogger_cli.sync_client.login_interactive", return_value="token"),
+            patch("agblogger_cli.sync_client.confirm_sync", return_value=False),
             pytest.raises(SystemExit),
         ):
-            from cli.sync_client import main
+            from agblogger_cli.sync_client import main
 
             main()
         mock_client.sync.assert_not_called()
@@ -288,11 +288,11 @@ class TestSyncConfirmationIntegration:
             ),
         )
         with (
-            patch("cli.sync_client.SyncClient", return_value=mock_client),
-            patch("cli.sync_client.login_interactive", return_value="token"),
-            patch("cli.sync_client.confirm_sync", return_value=True),
+            patch("agblogger_cli.sync_client.SyncClient", return_value=mock_client),
+            patch("agblogger_cli.sync_client.login_interactive", return_value="token"),
+            patch("agblogger_cli.sync_client.confirm_sync", return_value=True),
         ):
-            from cli.sync_client import main
+            from agblogger_cli.sync_client import main
 
             main()
         captured = capsys.readouterr()
@@ -317,10 +317,10 @@ class TestStatusWarnings:
         )
 
         with (
-            patch("cli.sync_client.SyncClient", return_value=mock_client),
-            patch("cli.sync_client.login_interactive", return_value="token"),
+            patch("agblogger_cli.sync_client.SyncClient", return_value=mock_client),
+            patch("agblogger_cli.sync_client.login_interactive", return_value="token"),
         ):
-            from cli.sync_client import main
+            from agblogger_cli.sync_client import main
 
             main()
 
@@ -502,11 +502,11 @@ class TestMainHttpErrorHandling:
             "Forbidden", request=request, response=response
         )
         with (
-            patch("cli.sync_client.SyncClient", return_value=mock_client),
-            patch("cli.sync_client.login_interactive", return_value="token"),
+            patch("agblogger_cli.sync_client.SyncClient", return_value=mock_client),
+            patch("agblogger_cli.sync_client.login_interactive", return_value="token"),
             pytest.raises(SystemExit) as exc_info,
         ):
-            from cli.sync_client import main
+            from agblogger_cli.sync_client import main
 
             main()
         assert exc_info.value.code == 1
@@ -527,11 +527,11 @@ class TestMainHttpErrorHandling:
             "Server Error", request=request, response=response
         )
         with (
-            patch("cli.sync_client.SyncClient", return_value=mock_client),
-            patch("cli.sync_client.login_interactive", return_value="token"),
+            patch("agblogger_cli.sync_client.SyncClient", return_value=mock_client),
+            patch("agblogger_cli.sync_client.login_interactive", return_value="token"),
             pytest.raises(SystemExit) as exc_info,
         ):
-            from cli.sync_client import main
+            from agblogger_cli.sync_client import main
 
             main()
         assert exc_info.value.code == 1
@@ -551,14 +551,20 @@ class TestMainHelpBehavior:
         monkeypatch.setattr("sys.argv", ["agblogger"])
 
         with (
-            patch("cli.sync_client.load_config", side_effect=AssertionError("load_config called")),
             patch(
-                "cli.sync_client.login_interactive",
+                "agblogger_cli.sync_client.load_config",
+                side_effect=AssertionError("load_config called"),
+            ),
+            patch(
+                "agblogger_cli.sync_client.login_interactive",
                 side_effect=AssertionError("login_interactive called"),
             ),
-            patch("cli.sync_client.SyncClient", side_effect=AssertionError("SyncClient called")),
+            patch(
+                "agblogger_cli.sync_client.SyncClient",
+                side_effect=AssertionError("SyncClient called"),
+            ),
         ):
-            from cli.sync_client import main
+            from agblogger_cli.sync_client import main
 
             main()
 
@@ -591,10 +597,10 @@ class TestPATEnvIgnored:
         mock_client.status.return_value = _plan()
 
         with (
-            patch("cli.sync_client.SyncClient", return_value=mock_client),
-            patch("cli.sync_client.login_interactive", return_value="token"),
+            patch("agblogger_cli.sync_client.SyncClient", return_value=mock_client),
+            patch("agblogger_cli.sync_client.login_interactive", return_value="token"),
         ):
-            from cli.sync_client import main
+            from agblogger_cli.sync_client import main
 
             main()
 
@@ -668,10 +674,10 @@ class TestStatusFormattingRegression:
         mock_client.status.return_value = _plan(to_delete_remote=["posts/gone/index.md"])
 
         with (
-            patch("cli.sync_client.SyncClient", return_value=mock_client),
-            patch("cli.sync_client.login_interactive", return_value="token"),
+            patch("agblogger_cli.sync_client.SyncClient", return_value=mock_client),
+            patch("agblogger_cli.sync_client.login_interactive", return_value="token"),
         ):
-            from cli.sync_client import main
+            from agblogger_cli.sync_client import main
 
             main()
 

@@ -13,18 +13,18 @@ def _base_dir() -> Path:
     """Return the directory containing VERSION and BUILD files.
 
     In a PyInstaller bundle, data files are extracted to ``sys._MEIPASS``.
-    Otherwise, resolve relative to this file (cli/ -> repo root).
+    Otherwise, resolve relative to this file (agblogger_cli/agblogger_cli/ -> repo root).
     """
     meipass = getattr(sys, "_MEIPASS", None)
     if meipass is not None:
         return Path(meipass)
-    return Path(__file__).resolve().parents[1]
+    return Path(__file__).resolve().parents[2]
 
 
 def _installed_package_version() -> str | None:
-    """Return the installed agblogger package version, if available."""
+    """Return the installed agblogger-cli package version, if available."""
     try:
-        return package_version("agblogger")
+        return package_version("agblogger-cli")
     except PackageNotFoundError:
         return None
 

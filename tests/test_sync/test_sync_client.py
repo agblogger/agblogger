@@ -8,8 +8,8 @@ from typing import TYPE_CHECKING, Any
 
 import httpx
 
-from cli import sync_client
-from cli.sync_client import SyncClient
+from agblogger_cli import sync_client
+from agblogger_cli.sync_client import SyncClient
 
 if TYPE_CHECKING:
     from pathlib import Path

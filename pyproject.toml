@@ -41,6 +41,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+    "agblogger-cli",
     "pytest>=9.0.3",
     "pytest-asyncio>=0.25",
     "pytest-cov>=6.0",
@@ -61,7 +62,6 @@ dev = [
 ]
 
 [project.scripts]
-agblogger = "cli.sync_client:main"
 agblogger-deploy = "cli.deploy_production:main"
 agblogger-release = "cli.release:main"
 
@@ -75,12 +75,18 @@ constraint-dependencies = [
     "python-dotenv>=1.2.2",
 ]
 
+[tool.uv.workspace]
+members = ["agblogger_cli"]
+
+[tool.uv.sources]
+agblogger-cli = { workspace = true }
+
 # ── Tool configuration ──────────────────────────────────────────────
 
 [tool.ruff]
 target-version = "py314"
 line-length = 100
-src = ["backend", "cli", "tests"]
+src = ["backend", "cli", "agblogger_cli/agblogger_cli", "tests"]
 
 [tool.ruff.lint]
 select = [
@@ -99,6 +105,7 @@ select = [
 ]
 [tool.ruff.lint.per-file-ignores]
 "cli/**" = ["T201"]                # CLI tools need print statements
+"agblogger_cli/**" = ["T201"]     # CLI tools need print statements
 "cli/release.py" = ["S603", "S607"]  # release automation shells out to vetted git/gh commands
 "cli/deploy_production.py" = ["F401", "S603", "S607"]  # F401: readline side-effect import; S603/S607: shells out to docker/trivy
 "backend/api/**" = ["TC", "B008"]  # FastAPI needs runtime type imports and Depends() defaults
@@ -110,7 +117,7 @@ select = [
 "backend/migrations/env.py" = ["F401"]  # Alembic env imports models for metadata side-effect registration
 
 [tool.ruff.lint.isort]
-known-first-party = ["backend", "cli"]
+known-first-party = ["backend", "cli", "agblogger_cli"]
 
 [tool.mypy]
 python_version = "3.14"
@@ -131,11 +138,12 @@ init_forbid_extra = true
 warn_required_dynamic_aliases = true
 
 [tool.deptry]
-known_first_party = ["backend", "cli", "tests"]
+known_first_party = ["backend", "cli", "agblogger_cli", "tests"]
 ignore_notebooks = true
 
 [tool.deptry.per_rule_ignores]
 DEP002 = [
+    "agblogger-cli",
     "aiosqlite",
     "python-multipart",
     "types-PyYAML",
@@ -171,7 +179,7 @@ reportUnknownParameterType = false
 reportUnknownVariableType = false
 
 [tool.vulture]
-paths = ["backend", "cli"]
+paths = ["backend", "cli", "agblogger_cli/agblogger_cli"]
 exclude = ["backend/migrations"]
 min_confidence = 80
 
@@ -203,7 +211,7 @@ asyncio_mode = "auto"
 filterwarnings = ["error"]
 
 [tool.coverage.run]
-source = ["backend", "cli"]
+source = ["backend", "cli", "agblogger_cli"]
 omit = ["*/migrations/*", "*/tests/*"]
 branch = true
 

@@ -1,0 +1,19 @@
+[project]
+name = "agblogger-cli"
+version = "0.1.3"
+description = "AgBlogger CLI sync client"
+requires-python = ">=3.14"
+license = "MIT"
+authors = [{ name = "Lukasz Czajka" }]
+
+dependencies = [
+    "httpx>=0.28",
+    "httpcore>=1.0,<2",
+]
+
+[project.scripts]
+agblogger = "agblogger_cli.sync_client:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

@@ -11,10 +11,10 @@ from fastapi import HTTPException
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
+from agblogger_cli.sync_client import _is_safe_local_path
 from backend.api.content import _validate_path
 from backend.api.sync import _resolve_safe_path
 from backend.pandoc.renderer import rewrite_relative_urls
-from cli.sync_client import _is_safe_local_path
 
 if TYPE_CHECKING:
     from pathlib import Path

@@ -16,8 +16,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from backend.sync_paths import is_sync_managed_path
-from cli.version import get_cli_version
+from agblogger_cli.sync_paths import is_sync_managed_path
+from agblogger_cli.version import get_cli_version
 
 try:
     import httpx

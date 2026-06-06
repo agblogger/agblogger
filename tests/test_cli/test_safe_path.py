@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from cli.sync_client import _is_safe_local_path
+from agblogger_cli.sync_client import _is_safe_local_path
 
 if TYPE_CHECKING:
     from pathlib import Path
