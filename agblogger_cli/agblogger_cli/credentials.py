@@ -31,7 +31,7 @@ def _load_all() -> dict[str, StoredCredentials]:
         return {}
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, UnicodeDecodeError, OSError):
+    except json.JSONDecodeError, UnicodeDecodeError, OSError:
         return {}
     if not isinstance(raw, dict):
         return {}
@@ -49,16 +49,23 @@ def _load_all() -> dict[str, StoredCredentials]:
 
 def _save_all(data: dict[str, StoredCredentials]) -> None:
     path = _credentials_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(dir=path.parent)
+    fd: int | None = None
+    tmp: str | None = None
     try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=path.parent)
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(json.dumps(data, indent=2))
+        fd = None
         os.chmod(tmp, 0o600)
         os.replace(tmp, path)
     except OSError as exc:
-        with contextlib.suppress(OSError):
-            os.unlink(tmp)
+        if fd is not None:
+            with contextlib.suppress(OSError):
+                os.close(fd)
+        if tmp is not None:
+            with contextlib.suppress(OSError):
+                os.unlink(tmp)
         print(f"Warning: failed to save credentials: {exc}", file=sys.stderr)
 
 

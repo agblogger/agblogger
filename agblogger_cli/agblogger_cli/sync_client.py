@@ -231,7 +231,7 @@ def confirm_sync(plan: dict[str, Any]) -> bool:
         print(summary)
     try:
         response = input("Proceed with sync? [y/N]: ")
-    except (KeyboardInterrupt, EOFError):
+    except KeyboardInterrupt, EOFError:
         print()
         return False
     return response.strip().lower() in {"y", "yes"}
@@ -286,6 +286,7 @@ def _authenticate(
         rotated = client.client.cookies.get("refresh_token")
         if rotated:
             save_credentials(server_url, creds["username"], rotated)
+        client._credential_username = creds["username"]
         return
 
     # Stored token missing or expired — fall back to interactive login
@@ -298,6 +299,7 @@ def _authenticate(
     refresh_token = client.client.cookies.get("refresh_token")
     if refresh_token:
         save_credentials(server_url, used_username, refresh_token)
+    client._credential_username = used_username
 
 
 # ── Sync client ──────────────────────────────────────────────────────
@@ -314,6 +316,7 @@ class SyncClient:
             timeout=60.0,
         )
         self._csrf_token: str | None = None
+        self._credential_username: str | None = None
 
     def close(self) -> None:
         """Close the HTTP client."""
@@ -382,6 +385,11 @@ class SyncClient:
             return False
 
         self._csrf_token = csrf_token
+        credential_username = getattr(self, "_credential_username", None)
+        if credential_username is not None:
+            rotated_refresh_token = self.client.cookies.get("refresh_token")
+            if rotated_refresh_token:
+                save_credentials(self.server_url, credential_username, rotated_refresh_token)
         return True
 
     def _request(
@@ -430,25 +438,24 @@ class SyncClient:
 
         Sends refresh_token in the request body. On success, sets self._csrf_token
         and the server's rotated refresh token is readable via
-        self.client.cookies.get("refresh_token"). Returns False on failure.
+        self.client.cookies.get("refresh_token"). Returns False only when the
+        server rejects the stored token; operational failures are raised.
         """
-        try:
-            resp = self._call(
-                "POST",
-                "/api/auth/refresh",
-                json={"refresh_token": refresh_token},
-            )
-        except httpx.TransportError:
+        resp = self._call(
+            "POST",
+            "/api/auth/refresh",
+            json={"refresh_token": refresh_token},
+        )
+        if resp.status_code == 401:
             return False
-        if resp.status_code != 200:
-            return False
+        resp.raise_for_status()
         try:
             data = resp.json()
-        except ValueError:
-            return False
+        except ValueError as exc:
+            raise ValueError("Server returned invalid response") from exc
         csrf_token = data.get("csrf_token")
         if not isinstance(csrf_token, str) or not csrf_token:
-            return False
+            raise ValueError("Server response missing csrf token")
         self._csrf_token = csrf_token
         return True
 
@@ -735,8 +742,10 @@ def main() -> None:
     sync_parser = subparsers.add_parser("sync", help="Bidirectional sync")
     sync_parser.add_argument("--yes", "-y", action="store_true", help="Skip confirmation prompt")
     login_parser = subparsers.add_parser("login", help="Save credentials for this server")
+    login_parser.add_argument("--server", "-s", default=argparse.SUPPRESS, help="Server URL")
     login_parser.add_argument("--username", "-u", help="Username for authentication")
-    subparsers.add_parser("logout", help="Revoke and delete stored credentials")
+    logout_parser = subparsers.add_parser("logout", help="Revoke and delete stored credentials")
+    logout_parser.add_argument("--server", "-s", default=argparse.SUPPRESS, help="Server URL")
 
     args = parser.parse_args()
     content_dir = Path(args.dir).resolve()
@@ -857,6 +866,18 @@ def main() -> None:
                 client.sync(plan, emit_plan_warnings=False)
     except httpx.HTTPStatusError as exc:
         print(f"Error: Server returned HTTP {exc.response.status_code}")
+        sys.exit(1)
+    except httpx.ConnectError:
+        print(f"Error: Could not connect to server at {server_url}")
+        sys.exit(1)
+    except httpx.TimeoutException:
+        print(f"Error: Connection to {server_url} timed out")
+        sys.exit(1)
+    except httpx.TransportError as exc:
+        print(f"Error: Connection to {server_url} failed: {exc}")
+        sys.exit(1)
+    except ValueError as exc:
+        print(f"Error: {exc}")
         sys.exit(1)
 
 

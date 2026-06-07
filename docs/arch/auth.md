@@ -8,6 +8,8 @@ AgBlogger uses cookie-based sessions for the web UI and for the interactive sync
 
 Passwords are stored as bcrypt hashes. Session-based clients use short-lived JWT access tokens with server-managed refresh token rotation and a CSRF token derived from the current access token. The token-login endpoint issues short-lived bearer tokens for non-browser automation clients that manage their own reauthentication.
 
+The sync CLI stores the latest rotated refresh token for each server after session restoration and after refreshes during long-running operations. It falls back to interactive login only when the server rejects a stored refresh token; connectivity and server failures remain operational errors.
+
 ## Authorization Model
 
 Authorization is enforced at the API boundary with a simple two-level model:

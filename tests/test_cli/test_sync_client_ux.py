@@ -541,6 +541,32 @@ class TestMainHttpErrorHandling:
         captured = capsys.readouterr()
         assert "500" in captured.out
 
+    def test_restore_transport_error_exits_without_interactive_login(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        mock_client = self._setup_main(tmp_path, monkeypatch, "status")
+        with (
+            patch(
+                "agblogger_cli.sync_client._authenticate",
+                side_effect=httpx.ConnectError("connection failed"),
+            ),
+            patch(
+                "agblogger_cli.sync_client.login_interactive",
+                side_effect=AssertionError("interactive login called"),
+            ),
+            patch("agblogger_cli.sync_client.SyncClient", return_value=mock_client),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            from agblogger_cli.sync_client import main
+
+            main()
+
+        assert exc_info.value.code == 1
+        assert "Could not connect" in capsys.readouterr().out
+
 
 # ── Bare invocation help path ───────────────────────────────────────
 
@@ -755,6 +781,38 @@ class TestLoginCommand:
 
         assert exc_info.value.code == 1
 
+    def test_login_accepts_server_after_subcommand(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        mock_client_instance = MagicMock()
+        mock_client_instance.__enter__ = MagicMock(return_value=mock_client_instance)
+        mock_client_instance.__exit__ = MagicMock(return_value=False)
+        mock_client_instance.client.cookies.get.return_value = "new-refresh-token"
+
+        monkeypatch.setattr(
+            "sys.argv",
+            [
+                "agblogger",
+                "--dir",
+                str(tmp_path),
+                "login",
+                "--server",
+                "https://blog.example.com",
+                "--username",
+                "admin",
+            ],
+        )
+        with (
+            patch("agblogger_cli.sync_client.SyncClient", return_value=mock_client_instance),
+            patch("agblogger_cli.sync_client.getpass.getpass", return_value="secret"),
+            patch("agblogger_cli.sync_client.save_credentials") as mock_save,
+        ):
+            from agblogger_cli.sync_client import main
+
+            main()
+
+        mock_save.assert_called_once_with("https://blog.example.com", "admin", "new-refresh-token")
+
 
 class TestAuthenticate:
     def test_uses_stored_credentials_when_restore_succeeds(self, tmp_path: Path) -> None:
@@ -772,6 +830,7 @@ class TestAuthenticate:
 
         mock_client.restore_session.assert_called_once_with("stored-token")
         mock_save.assert_called_once_with("https://blog.example.com", "admin", "rotated-token")
+        assert mock_client._credential_username == "admin"
         mock_login.assert_not_called()
 
     def test_falls_back_to_login_when_restore_fails(self, tmp_path: Path) -> None:
@@ -791,6 +850,23 @@ class TestAuthenticate:
 
         mock_login.assert_called_once_with(mock_client, cli_username="admin", config_username=None)
         mock_save.assert_called_once_with("https://blog.example.com", "admin", "new-refresh-token")
+        assert mock_client._credential_username == "admin"
+
+    def test_does_not_fall_back_to_login_when_restore_has_operational_failure(
+        self, tmp_path: Path
+    ) -> None:
+        stored: StoredCredentials = {"username": "admin", "refresh_token": "stored-token"}
+        mock_client = MagicMock()
+        mock_client.restore_session.side_effect = httpx.ConnectError("connection failed")
+
+        with (
+            patch("agblogger_cli.sync_client.load_credentials", return_value=stored),
+            patch("agblogger_cli.sync_client.login_interactive") as mock_login,
+            pytest.raises(httpx.ConnectError, match="connection failed"),
+        ):
+            _authenticate(mock_client, "https://blog.example.com", None, None)
+
+        mock_login.assert_not_called()
 
     def test_full_login_when_no_stored_credentials(self, tmp_path: Path) -> None:
         mock_client = MagicMock()
@@ -847,3 +923,30 @@ class TestLogoutCommand:
 
         captured = capsys.readouterr()
         assert "No stored credentials" in captured.out
+
+    def test_logout_accepts_server_after_subcommand(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        stored: StoredCredentials = {"username": "admin", "refresh_token": "my-token"}
+        monkeypatch.setattr(
+            "sys.argv",
+            [
+                "agblogger",
+                "--dir",
+                str(tmp_path),
+                "logout",
+                "--server",
+                "https://blog.example.com",
+            ],
+        )
+        with (
+            patch("agblogger_cli.sync_client.load_credentials", return_value=stored),
+            patch("agblogger_cli.sync_client.revoke_session") as mock_revoke,
+            patch("agblogger_cli.sync_client.delete_credentials") as mock_delete,
+        ):
+            from agblogger_cli.sync_client import main
+
+            main()
+
+        mock_revoke.assert_called_once_with("https://blog.example.com", "my-token")
+        mock_delete.assert_called_once_with("https://blog.example.com")

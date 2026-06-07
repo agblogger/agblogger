@@ -239,8 +239,6 @@ class TestSyncClientLogin:
         assert client._csrf_token is None
 
     def test_restore_session_returns_false_on_transport_error(self, tmp_path: Path) -> None:
-        import httpx
-
         content_dir = tmp_path / "content"
         content_dir.mkdir()
 
@@ -251,10 +249,53 @@ class TestSyncClientLogin:
         client.client = MagicMock()
         client.client.post.side_effect = httpx.TransportError("connection failed")
 
-        result = client.restore_session("some-token")
+        with pytest.raises(httpx.TransportError, match="connection failed"):
+            client.restore_session("some-token")
 
-        assert result is False
         assert client._csrf_token is None
+
+    def test_restore_session_raises_on_server_error(self, tmp_path: Path) -> None:
+        content_dir = tmp_path / "content"
+        content_dir.mkdir()
+
+        request = httpx.Request("POST", "http://localhost:8000/api/auth/refresh")
+        response = httpx.Response(status_code=503, request=request)
+
+        client = SyncClient.__new__(SyncClient)
+        client.content_dir = content_dir
+        client.server_url = "http://localhost:8000"
+        client._csrf_token = None
+        client.client = MagicMock()
+        client.client.post.return_value = response
+
+        with pytest.raises(httpx.HTTPStatusError):
+            client.restore_session("some-token")
+
+        assert client._csrf_token is None
+
+    def test_refresh_session_persists_rotated_refresh_token(self, tmp_path: Path) -> None:
+        content_dir = tmp_path / "content"
+        content_dir.mkdir()
+
+        response = MagicMock()
+        response.status_code = 200
+        response.json.return_value = {"csrf_token": "fresh-csrf"}
+
+        client = SyncClient.__new__(SyncClient)
+        client.content_dir = content_dir
+        client.server_url = "https://blog.example.com"
+        client._csrf_token = "stale-csrf"
+        client._credential_username = "admin"
+        client.client = MagicMock()
+        client.client.post.return_value = response
+        client.client.cookies.get.return_value = "rotated-during-sync"
+
+        with patch("agblogger_cli.sync_client.save_credentials") as mock_save:
+            assert client._refresh_session() is True
+
+        mock_save.assert_called_once_with(
+            "https://blog.example.com", "admin", "rotated-during-sync"
+        )
 
 
 class TestSyncDeletePrunesEmptyDirectories:

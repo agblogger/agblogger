@@ -102,6 +102,30 @@ class TestSaveCredentials:
         assert result is not None
         assert result["refresh_token"] == "new-token"
 
+    def test_warns_when_config_directory_cannot_be_created(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        creds_path = tmp_path / "config" / "credentials.json"
+        with (
+            patch("agblogger_cli.credentials._credentials_path", return_value=creds_path),
+            patch("pathlib.Path.mkdir", side_effect=PermissionError("read-only home")),
+        ):
+            save_credentials("https://blog.example.com", "admin", "mytoken")
+
+        assert "Warning: failed to save credentials" in capsys.readouterr().err
+
+    def test_warns_when_temporary_file_cannot_be_created(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        creds_path = tmp_path / "credentials.json"
+        with (
+            patch("agblogger_cli.credentials._credentials_path", return_value=creds_path),
+            patch("agblogger_cli.credentials.tempfile.mkstemp", side_effect=OSError("no space")),
+        ):
+            save_credentials("https://blog.example.com", "admin", "mytoken")
+
+        assert "Warning: failed to save credentials" in capsys.readouterr().err
+
 
 class TestDeleteCredentials:
     def test_removes_entry(self, tmp_path: Path) -> None:
