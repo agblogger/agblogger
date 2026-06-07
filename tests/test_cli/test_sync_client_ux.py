@@ -11,6 +11,7 @@ import pytest
 
 from agblogger_cli.sync_client import (
     CONFIG_FILE,
+    _authenticate,
     confirm_sync,
     format_conflict_details,
     format_plan_summary,
@@ -218,7 +219,7 @@ class TestSyncConfirmationIntegration:
         mock_client = self._setup(tmp_path, monkeypatch, _plan(to_upload=["a.md"]), yes_flag=True)
         with (
             patch("agblogger_cli.sync_client.SyncClient", return_value=mock_client),
-            patch("agblogger_cli.sync_client.login_interactive", return_value="token"),
+            patch("agblogger_cli.sync_client._authenticate"),
         ):
             from agblogger_cli.sync_client import main
 
@@ -231,7 +232,7 @@ class TestSyncConfirmationIntegration:
         mock_client = self._setup(tmp_path, monkeypatch, _plan(to_upload=["a.md"]))
         with (
             patch("agblogger_cli.sync_client.SyncClient", return_value=mock_client),
-            patch("agblogger_cli.sync_client.login_interactive", return_value="token"),
+            patch("agblogger_cli.sync_client._authenticate"),
             patch("agblogger_cli.sync_client.confirm_sync", return_value=True) as mock_confirm,
         ):
             from agblogger_cli.sync_client import main
@@ -246,7 +247,7 @@ class TestSyncConfirmationIntegration:
         mock_client = self._setup(tmp_path, monkeypatch, _plan())
         with (
             patch("agblogger_cli.sync_client.SyncClient", return_value=mock_client),
-            patch("agblogger_cli.sync_client.login_interactive", return_value="token"),
+            patch("agblogger_cli.sync_client._authenticate"),
             patch("agblogger_cli.sync_client.confirm_sync") as mock_confirm,
         ):
             from agblogger_cli.sync_client import main
@@ -264,7 +265,7 @@ class TestSyncConfirmationIntegration:
         mock_client = self._setup(tmp_path, monkeypatch, _plan(to_delete_local=["a.md"]))
         with (
             patch("agblogger_cli.sync_client.SyncClient", return_value=mock_client),
-            patch("agblogger_cli.sync_client.login_interactive", return_value="token"),
+            patch("agblogger_cli.sync_client._authenticate"),
             patch("agblogger_cli.sync_client.confirm_sync", return_value=False),
             pytest.raises(SystemExit),
         ):
@@ -291,7 +292,7 @@ class TestSyncConfirmationIntegration:
         )
         with (
             patch("agblogger_cli.sync_client.SyncClient", return_value=mock_client),
-            patch("agblogger_cli.sync_client.login_interactive", return_value="token"),
+            patch("agblogger_cli.sync_client._authenticate"),
             patch("agblogger_cli.sync_client.confirm_sync", return_value=True),
         ):
             from agblogger_cli.sync_client import main
@@ -320,7 +321,7 @@ class TestStatusWarnings:
 
         with (
             patch("agblogger_cli.sync_client.SyncClient", return_value=mock_client),
-            patch("agblogger_cli.sync_client.login_interactive", return_value="token"),
+            patch("agblogger_cli.sync_client._authenticate"),
         ):
             from agblogger_cli.sync_client import main
 
@@ -505,7 +506,7 @@ class TestMainHttpErrorHandling:
         )
         with (
             patch("agblogger_cli.sync_client.SyncClient", return_value=mock_client),
-            patch("agblogger_cli.sync_client.login_interactive", return_value="token"),
+            patch("agblogger_cli.sync_client._authenticate"),
             pytest.raises(SystemExit) as exc_info,
         ):
             from agblogger_cli.sync_client import main
@@ -530,7 +531,7 @@ class TestMainHttpErrorHandling:
         )
         with (
             patch("agblogger_cli.sync_client.SyncClient", return_value=mock_client),
-            patch("agblogger_cli.sync_client.login_interactive", return_value="token"),
+            patch("agblogger_cli.sync_client._authenticate"),
             pytest.raises(SystemExit) as exc_info,
         ):
             from agblogger_cli.sync_client import main
@@ -558,8 +559,8 @@ class TestMainHelpBehavior:
                 side_effect=AssertionError("load_config called"),
             ),
             patch(
-                "agblogger_cli.sync_client.login_interactive",
-                side_effect=AssertionError("login_interactive called"),
+                "agblogger_cli.sync_client._authenticate",
+                side_effect=AssertionError("_authenticate called"),
             ),
             patch(
                 "agblogger_cli.sync_client.SyncClient",
@@ -602,7 +603,7 @@ class TestPATEnvIgnored:
 
         with (
             patch("agblogger_cli.sync_client.SyncClient", return_value=mock_client),
-            patch("agblogger_cli.sync_client.login_interactive", return_value="token"),
+            patch("agblogger_cli.sync_client._authenticate"),
         ):
             from agblogger_cli.sync_client import main
 
@@ -679,7 +680,7 @@ class TestStatusFormattingRegression:
 
         with (
             patch("agblogger_cli.sync_client.SyncClient", return_value=mock_client),
-            patch("agblogger_cli.sync_client.login_interactive", return_value="token"),
+            patch("agblogger_cli.sync_client._authenticate"),
         ):
             from agblogger_cli.sync_client import main
 
@@ -754,6 +755,55 @@ class TestLoginCommand:
             main()
 
         assert exc_info.value.code == 1
+
+
+class TestAuthenticate:
+    def test_uses_stored_credentials_when_restore_succeeds(self, tmp_path: Path) -> None:
+        stored: StoredCredentials = {"username": "admin", "refresh_token": "stored-token"}
+        mock_client = MagicMock()
+        mock_client.restore_session.return_value = True
+        mock_client.client.cookies.get.return_value = "rotated-token"
+
+        with (
+            patch("agblogger_cli.sync_client.load_credentials", return_value=stored),
+            patch("agblogger_cli.sync_client.save_credentials") as mock_save,
+            patch("agblogger_cli.sync_client.login_interactive") as mock_login,
+        ):
+            _authenticate(mock_client, "https://blog.example.com", None, None)
+
+        mock_client.restore_session.assert_called_once_with("stored-token")
+        mock_save.assert_called_once_with("https://blog.example.com", "admin", "rotated-token")
+        mock_login.assert_not_called()
+
+    def test_falls_back_to_login_when_restore_fails(self, tmp_path: Path) -> None:
+        stored: StoredCredentials = {"username": "admin", "refresh_token": "expired-token"}
+        mock_client = MagicMock()
+        mock_client.restore_session.return_value = False
+        mock_client.client.cookies.get.return_value = "new-refresh-token"
+
+        with (
+            patch("agblogger_cli.sync_client.load_credentials", return_value=stored),
+            patch("agblogger_cli.sync_client.login_interactive", return_value="admin") as mock_login,
+            patch("agblogger_cli.sync_client.save_credentials") as mock_save,
+        ):
+            _authenticate(mock_client, "https://blog.example.com", None, None)
+
+        mock_login.assert_called_once_with(mock_client, cli_username="admin", config_username=None)
+        mock_save.assert_called_once_with("https://blog.example.com", "admin", "new-refresh-token")
+
+    def test_full_login_when_no_stored_credentials(self, tmp_path: Path) -> None:
+        mock_client = MagicMock()
+        mock_client.client.cookies.get.return_value = "new-refresh-token"
+
+        with (
+            patch("agblogger_cli.sync_client.load_credentials", return_value=None),
+            patch("agblogger_cli.sync_client.login_interactive", return_value="admin") as mock_login,
+            patch("agblogger_cli.sync_client.save_credentials") as mock_save,
+        ):
+            _authenticate(mock_client, "https://blog.example.com", "admin", None)
+
+        mock_login.assert_called_once_with(mock_client, cli_username="admin", config_username=None)
+        mock_save.assert_called_once_with("https://blog.example.com", "admin", "new-refresh-token")
 
 
 class TestLogoutCommand:

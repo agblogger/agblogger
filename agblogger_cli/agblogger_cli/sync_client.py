@@ -245,7 +245,7 @@ def login_interactive(
     *,
     cli_username: str | None,
     config_username: str | None,
-) -> None:
+) -> str:
     """Interactively authenticate and persist a refreshable session on the client."""
     username = cli_username or config_username
     if not username:
@@ -269,6 +269,35 @@ def login_interactive(
     except ValueError as exc:
         print(f"Error: {exc}")
         sys.exit(1)
+
+    return username
+
+
+def _authenticate(
+    client: SyncClient,
+    server_url: str,
+    cli_username: str | None,
+    config_username: str | None,
+) -> None:
+    """Authenticate using stored credentials if available, falling back to interactive login."""
+    creds = load_credentials(server_url)
+
+    if creds is not None and client.restore_session(creds["refresh_token"]):
+        rotated = client.client.cookies.get("refresh_token")
+        if rotated:
+            save_credentials(server_url, creds["username"], rotated)
+        return
+
+    # Stored token missing or expired — fall back to interactive login
+    fallback_username = cli_username or (creds["username"] if creds else None) or config_username
+    used_username = login_interactive(
+        client,
+        cli_username=fallback_username,
+        config_username=None,
+    )
+    refresh_token = client.client.cookies.get("refresh_token")
+    if refresh_token:
+        save_credentials(server_url, used_username, refresh_token)
 
 
 # ── Sync client ──────────────────────────────────────────────────────
@@ -786,11 +815,12 @@ def main() -> None:
         print(f"Logged out from {server_url}")
         return
 
-    # Authenticate interactively
+    # Authenticate using stored credentials or interactive login
     try:
         with SyncClient(server_url, content_dir) as client:
-            login_interactive(
+            _authenticate(
                 client,
+                server_url,
                 cli_username=args.username,
                 config_username=config.get("username"),
             )
