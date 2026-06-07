@@ -205,6 +205,10 @@ html {
   margin-top: 0.5rem;
 }
 
+.prose .footnotes {
+  font-size: 0.8rem;
+}
+
 .prose iframe {
   width: 100%;
   aspect-ratio: 16 / 9;
