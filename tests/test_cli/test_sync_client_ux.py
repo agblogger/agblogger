@@ -24,6 +24,8 @@ from agblogger_cli.sync_client import (
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from agblogger_cli.credentials import StoredCredentials
+
 
 _EMPTY_PLAN: dict[str, Any] = {
     "to_upload": [],
@@ -570,7 +572,9 @@ class TestMainHelpBehavior:
 
         captured = capsys.readouterr()
         assert "usage: agblogger" in captured.out
-        assert "{init,status,sync}" in captured.out
+        assert "init" in captured.out
+        assert "status" in captured.out
+        assert "sync" in captured.out
 
 
 # ── PAT env var is ignored entirely ──────────────────────────────────
@@ -688,3 +692,107 @@ class TestStatusFormattingRegression:
                 break
         else:
             pytest.fail("'To delete remote' line not found in output")
+
+
+class TestLoginCommand:
+    def test_login_command_saves_credentials(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        content_dir = tmp_path / "content"
+        content_dir.mkdir()
+        (content_dir / ".agblogger.json").write_text(
+            '{"server": "http://localhost:8000"}'
+        )
+
+        mock_client_instance = MagicMock()
+        mock_client_instance.__enter__ = MagicMock(return_value=mock_client_instance)
+        mock_client_instance.__exit__ = MagicMock(return_value=False)
+        mock_client_instance.client.cookies.get.return_value = "new-refresh-token"
+
+        monkeypatch.setattr(
+            "sys.argv", ["agblogger", "--dir", str(content_dir), "login", "--username", "admin"]
+        )
+        with (
+            patch("agblogger_cli.sync_client.SyncClient", return_value=mock_client_instance),
+            patch("agblogger_cli.sync_client.getpass.getpass", return_value="secret"),
+            patch("agblogger_cli.sync_client.save_credentials") as mock_save,
+        ):
+            from agblogger_cli.sync_client import main
+            main()
+
+        mock_save.assert_called_once_with("http://localhost:8000", "admin", "new-refresh-token")
+
+    def test_login_command_exits_on_invalid_credentials(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import httpx
+        content_dir = tmp_path / "content"
+        content_dir.mkdir()
+        (content_dir / ".agblogger.json").write_text(
+            '{"server": "http://localhost:8000"}'
+        )
+
+        request = httpx.Request("POST", "http://localhost:8000/api/auth/login")
+        mock_client_instance = MagicMock()
+        mock_client_instance.__enter__ = MagicMock(return_value=mock_client_instance)
+        mock_client_instance.__exit__ = MagicMock(return_value=False)
+        mock_client_instance.login.side_effect = httpx.HTTPStatusError(
+            "unauthorized",
+            request=request,
+            response=httpx.Response(status_code=401, request=request),
+        )
+
+        monkeypatch.setattr(
+            "sys.argv", ["agblogger", "--dir", str(content_dir), "login", "--username", "admin"]
+        )
+        with (
+            patch("agblogger_cli.sync_client.SyncClient", return_value=mock_client_instance),
+            patch("agblogger_cli.sync_client.getpass.getpass", return_value="wrong"),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            from agblogger_cli.sync_client import main
+            main()
+
+        assert exc_info.value.code == 1
+
+
+class TestLogoutCommand:
+    def test_logout_command_revokes_and_deletes_credentials(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        content_dir = tmp_path / "content"
+        content_dir.mkdir()
+        (content_dir / ".agblogger.json").write_text(
+            '{"server": "http://localhost:8000"}'
+        )
+
+        stored: StoredCredentials = {"username": "admin", "refresh_token": "my-token"}
+
+        monkeypatch.setattr("sys.argv", ["agblogger", "--dir", str(content_dir), "logout"])
+        with (
+            patch("agblogger_cli.sync_client.load_credentials", return_value=stored),
+            patch("agblogger_cli.sync_client.revoke_session") as mock_revoke,
+            patch("agblogger_cli.sync_client.delete_credentials") as mock_delete,
+        ):
+            from agblogger_cli.sync_client import main
+            main()
+
+        mock_revoke.assert_called_once_with("http://localhost:8000", "my-token")
+        mock_delete.assert_called_once_with("http://localhost:8000")
+
+    def test_logout_command_exits_cleanly_when_no_credentials(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        content_dir = tmp_path / "content"
+        content_dir.mkdir()
+        (content_dir / ".agblogger.json").write_text(
+            '{"server": "http://localhost:8000"}'
+        )
+
+        monkeypatch.setattr("sys.argv", ["agblogger", "--dir", str(content_dir), "logout"])
+        with patch("agblogger_cli.sync_client.load_credentials", return_value=None):
+            from agblogger_cli.sync_client import main
+            main()
+
+        captured = capsys.readouterr()
+        assert "No stored credentials" in captured.out

@@ -16,6 +16,12 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+from agblogger_cli.credentials import (
+    delete_credentials,
+    load_credentials,
+    revoke_session,
+    save_credentials,
+)
 from agblogger_cli.sync_paths import is_sync_managed_path
 from agblogger_cli.version import get_cli_version
 
@@ -699,6 +705,9 @@ def main() -> None:
     subparsers.add_parser("status", help="Show what would change")
     sync_parser = subparsers.add_parser("sync", help="Bidirectional sync")
     sync_parser.add_argument("--yes", "-y", action="store_true", help="Skip confirmation prompt")
+    login_parser = subparsers.add_parser("login", help="Save credentials for this server")
+    login_parser.add_argument("--username", "-u", help="Username for authentication")
+    subparsers.add_parser("logout", help="Revoke and delete stored credentials")
 
     args = parser.parse_args()
     content_dir = Path(args.dir).resolve()
@@ -738,6 +747,44 @@ def main() -> None:
     except ValueError as exc:
         print(f"Error: {exc}")
         sys.exit(1)
+
+    if args.command == "login":
+        username = args.username or config.get("username")
+        if not username:
+            username = input("Username: ")
+        password = getpass.getpass("Password: ")
+        with SyncClient(server_url, content_dir) as client:
+            try:
+                client.login(username, password)
+            except httpx.ConnectError:
+                print(f"Error: Could not connect to server at {server_url}")
+                sys.exit(1)
+            except httpx.TimeoutException:
+                print(f"Error: Connection to {server_url} timed out")
+                sys.exit(1)
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code == 401:
+                    print("Error: Invalid username or password")
+                    sys.exit(1)
+                print(f"Error: Login failed (HTTP {exc.response.status_code})")
+                sys.exit(1)
+            refresh_token = client.client.cookies.get("refresh_token")
+            if refresh_token:
+                save_credentials(server_url, username, refresh_token)
+                print(f"Logged in. Credentials saved for {server_url}")
+            else:
+                print("Warning: server did not return a refresh token; session will not persist.")
+        return
+
+    if args.command == "logout":
+        creds = load_credentials(server_url)
+        if creds is None:
+            print("No stored credentials for this server.")
+            return
+        revoke_session(server_url, creds["refresh_token"])
+        delete_credentials(server_url)
+        print(f"Logged out from {server_url}")
+        return
 
     # Authenticate interactively
     try:
