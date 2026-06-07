@@ -4,30 +4,38 @@ from __future__ import annotations
 
 import json
 import stat
-from pathlib import Path
+import sys
+from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import pytest
 
 from agblogger_cli.credentials import delete_credentials, load_credentials, save_credentials
 
+if TYPE_CHECKING:
+    from pathlib import Path
+
 
 class TestLoadCredentials:
     def test_returns_none_when_file_missing(self, tmp_path: Path) -> None:
-        with patch("agblogger_cli.credentials._credentials_path", return_value=tmp_path / "credentials.json"):
+        creds_path = tmp_path / "credentials.json"
+        with patch("agblogger_cli.credentials._credentials_path", return_value=creds_path):
             result = load_credentials("https://blog.example.com")
         assert result is None
 
     def test_returns_none_for_unknown_server(self, tmp_path: Path) -> None:
         creds_path = tmp_path / "credentials.json"
-        creds_path.write_text(json.dumps({"https://other.example.com": {"username": "admin", "refresh_token": "tok"}}))
+        creds_path.write_text(
+            json.dumps({"https://other.example.com": {"username": "admin", "refresh_token": "tok"}})
+        )
         with patch("agblogger_cli.credentials._credentials_path", return_value=creds_path):
             result = load_credentials("https://blog.example.com")
         assert result is None
 
     def test_returns_credentials_for_known_server(self, tmp_path: Path) -> None:
         creds_path = tmp_path / "credentials.json"
-        creds_path.write_text(json.dumps({"https://blog.example.com": {"username": "admin", "refresh_token": "mytoken"}}))
+        payload = {"https://blog.example.com": {"username": "admin", "refresh_token": "mytoken"}}
+        creds_path.write_text(json.dumps(payload))
         with patch("agblogger_cli.credentials._credentials_path", return_value=creds_path):
             result = load_credentials("https://blog.example.com")
         assert result is not None
@@ -37,6 +45,13 @@ class TestLoadCredentials:
     def test_returns_none_on_malformed_json(self, tmp_path: Path) -> None:
         creds_path = tmp_path / "credentials.json"
         creds_path.write_text("not-json{{{")
+        with patch("agblogger_cli.credentials._credentials_path", return_value=creds_path):
+            result = load_credentials("https://blog.example.com")
+        assert result is None
+
+    def test_returns_none_when_json_is_not_a_dict(self, tmp_path: Path) -> None:
+        creds_path = tmp_path / "credentials.json"
+        creds_path.write_text("[]")
         with patch("agblogger_cli.credentials._credentials_path", return_value=creds_path):
             result = load_credentials("https://blog.example.com")
         assert result is None
@@ -52,6 +67,9 @@ class TestSaveCredentials:
         assert result["username"] == "admin"
         assert result["refresh_token"] == "mytoken"
 
+    _posix_only = pytest.mark.skipif(sys.platform == "win32", reason="POSIX permissions only")
+
+    @_posix_only
     def test_sets_restrictive_permissions(self, tmp_path: Path) -> None:
         creds_path = tmp_path / "credentials.json"
         with patch("agblogger_cli.credentials._credentials_path", return_value=creds_path):

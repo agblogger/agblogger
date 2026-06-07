@@ -26,13 +26,21 @@ def _load_all() -> dict[str, StoredCredentials]:
     if not path.exists():
         return {}
     try:
-        raw: object = json.loads(path.read_text(encoding="utf-8"))
-        if not isinstance(raw, dict):
-            return {}
-        data: dict[str, StoredCredentials] = raw
-        return data
+        raw = json.loads(path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, UnicodeDecodeError, OSError):
         return {}
+    if not isinstance(raw, dict):
+        return {}
+    result: dict[str, StoredCredentials] = {}
+    for k, v in raw.items():
+        if (
+            isinstance(k, str)
+            and isinstance(v, dict)
+            and isinstance(v.get("username"), str)
+            and isinstance(v.get("refresh_token"), str)
+        ):
+            result[k] = StoredCredentials(username=v["username"], refresh_token=v["refresh_token"])
+    return result
 
 
 def _save_all(data: dict[str, StoredCredentials]) -> None:
@@ -58,5 +66,7 @@ def save_credentials(server_url: str, username: str, refresh_token: str) -> None
 def delete_credentials(server_url: str) -> None:
     """Remove stored credentials for server_url. No-op if not present."""
     data = _load_all()
-    data.pop(server_url, None)
+    if server_url not in data:
+        return
+    del data[server_url]
     _save_all(data)
