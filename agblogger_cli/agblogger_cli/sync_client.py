@@ -390,6 +390,33 @@ class SyncClient:
 
         self._csrf_token = csrf_token
 
+    def restore_session(self, refresh_token: str) -> bool:
+        """Restore a session from a stored refresh token.
+
+        Sends refresh_token in the request body. On success, sets self._csrf_token
+        and the server's rotated refresh token is readable via
+        self.client.cookies.get("refresh_token"). Returns False on failure.
+        """
+        try:
+            resp = self._call(
+                "POST",
+                "/api/auth/refresh",
+                json={"refresh_token": refresh_token},
+            )
+        except httpx.TransportError:
+            return False
+        if resp.status_code != 200:
+            return False
+        try:
+            data = resp.json()
+        except ValueError:
+            return False
+        csrf_token = data.get("csrf_token")
+        if not isinstance(csrf_token, str) or not csrf_token:
+            return False
+        self._csrf_token = csrf_token
+        return True
+
     def _get_last_sync_commit(self) -> str | None:
         """Get the commit hash from the last sync."""
         try:

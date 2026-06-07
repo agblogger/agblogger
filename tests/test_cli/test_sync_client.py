@@ -195,6 +195,67 @@ class TestSyncClientLogin:
         client.client.post.assert_not_called()
         client.client.close.assert_called_once_with()
 
+    def test_restore_session_returns_true_on_success(self, tmp_path: Path) -> None:
+        content_dir = tmp_path / "content"
+        content_dir.mkdir()
+
+        response = MagicMock()
+        response.status_code = 200
+        response.json.return_value = {"csrf_token": "new-csrf"}
+
+        client = SyncClient.__new__(SyncClient)
+        client.content_dir = content_dir
+        client.server_url = "http://localhost:8000"
+        client._csrf_token = None
+        client.client = MagicMock()
+        client.client.post.return_value = response
+
+        result = client.restore_session("stored-refresh-token")
+
+        assert result is True
+        assert client._csrf_token == "new-csrf"
+        client.client.post.assert_called_once_with(
+            "/api/auth/refresh",
+            json={"refresh_token": "stored-refresh-token"},
+        )
+
+    def test_restore_session_returns_false_on_401(self, tmp_path: Path) -> None:
+        content_dir = tmp_path / "content"
+        content_dir.mkdir()
+
+        response = MagicMock()
+        response.status_code = 401
+
+        client = SyncClient.__new__(SyncClient)
+        client.content_dir = content_dir
+        client.server_url = "http://localhost:8000"
+        client._csrf_token = None
+        client.client = MagicMock()
+        client.client.post.return_value = response
+
+        result = client.restore_session("expired-token")
+
+        assert result is False
+        assert client._csrf_token is None
+
+    def test_restore_session_returns_false_on_transport_error(self, tmp_path: Path) -> None:
+        import httpx
+
+        content_dir = tmp_path / "content"
+        content_dir.mkdir()
+
+        client = SyncClient.__new__(SyncClient)
+        client.content_dir = content_dir
+        client.server_url = "http://localhost:8000"
+        client._csrf_token = None
+        client.client = MagicMock()
+        client.client.post.side_effect = httpx.TransportError("connection failed")
+
+        result = client.restore_session("some-token")
+
+        assert result is False
+        assert client._csrf_token is None
+
 
 class TestSyncDeletePrunesEmptyDirectories:
     """Deleting a local file during sync should remove empty parent directories."""
