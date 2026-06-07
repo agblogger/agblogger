@@ -863,7 +863,7 @@ async def facebook_callback(
 
     if error is not None:
         logger.warning("Facebook OAuth error: %s", error)
-        error_params = urlencode({"oauth_error": error})
+        error_params = urlencode({"oauth_error": "facebook_oauth_failed"})
         return RedirectResponse(url=f"{base_url}/admin?{error_params}", status_code=303)
 
     if code is None:
