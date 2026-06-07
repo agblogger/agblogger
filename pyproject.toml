@@ -142,6 +142,9 @@ known_first_party = ["backend", "cli", "agblogger_cli", "tests"]
 ignore_notebooks = true
 
 [tool.deptry.per_rule_ignores]
+DEP003 = [
+    "platformdirs",
+]
 DEP002 = [
     "agblogger-cli",
     "aiosqlite",

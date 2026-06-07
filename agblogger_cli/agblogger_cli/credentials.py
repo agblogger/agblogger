@@ -29,7 +29,7 @@ def _load_all() -> dict[str, StoredCredentials]:
         return {}
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, UnicodeDecodeError, OSError):
+    except json.JSONDecodeError, UnicodeDecodeError, OSError:
         return {}
     if not isinstance(raw, dict):
         return {}

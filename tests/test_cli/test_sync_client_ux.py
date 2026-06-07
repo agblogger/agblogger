@@ -701,9 +701,7 @@ class TestLoginCommand:
     ) -> None:
         content_dir = tmp_path / "content"
         content_dir.mkdir()
-        (content_dir / ".agblogger.json").write_text(
-            '{"server": "http://localhost:8000"}'
-        )
+        (content_dir / ".agblogger.json").write_text('{"server": "http://localhost:8000"}')
 
         mock_client_instance = MagicMock()
         mock_client_instance.__enter__ = MagicMock(return_value=mock_client_instance)
@@ -719,6 +717,7 @@ class TestLoginCommand:
             patch("agblogger_cli.sync_client.save_credentials") as mock_save,
         ):
             from agblogger_cli.sync_client import main
+
             main()
 
         mock_save.assert_called_once_with("http://localhost:8000", "admin", "new-refresh-token")
@@ -727,11 +726,10 @@ class TestLoginCommand:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         import httpx
+
         content_dir = tmp_path / "content"
         content_dir.mkdir()
-        (content_dir / ".agblogger.json").write_text(
-            '{"server": "http://localhost:8000"}'
-        )
+        (content_dir / ".agblogger.json").write_text('{"server": "http://localhost:8000"}')
 
         request = httpx.Request("POST", "http://localhost:8000/api/auth/login")
         mock_client_instance = MagicMock()
@@ -752,6 +750,7 @@ class TestLoginCommand:
             pytest.raises(SystemExit) as exc_info,
         ):
             from agblogger_cli.sync_client import main
+
             main()
 
         assert exc_info.value.code == 1
@@ -783,7 +782,9 @@ class TestAuthenticate:
 
         with (
             patch("agblogger_cli.sync_client.load_credentials", return_value=stored),
-            patch("agblogger_cli.sync_client.login_interactive", return_value="admin") as mock_login,
+            patch(
+                "agblogger_cli.sync_client.login_interactive", return_value="admin"
+            ) as mock_login,
             patch("agblogger_cli.sync_client.save_credentials") as mock_save,
         ):
             _authenticate(mock_client, "https://blog.example.com", None, None)
@@ -797,7 +798,9 @@ class TestAuthenticate:
 
         with (
             patch("agblogger_cli.sync_client.load_credentials", return_value=None),
-            patch("agblogger_cli.sync_client.login_interactive", return_value="admin") as mock_login,
+            patch(
+                "agblogger_cli.sync_client.login_interactive", return_value="admin"
+            ) as mock_login,
             patch("agblogger_cli.sync_client.save_credentials") as mock_save,
         ):
             _authenticate(mock_client, "https://blog.example.com", "admin", None)
@@ -812,9 +815,7 @@ class TestLogoutCommand:
     ) -> None:
         content_dir = tmp_path / "content"
         content_dir.mkdir()
-        (content_dir / ".agblogger.json").write_text(
-            '{"server": "http://localhost:8000"}'
-        )
+        (content_dir / ".agblogger.json").write_text('{"server": "http://localhost:8000"}')
 
         stored: StoredCredentials = {"username": "admin", "refresh_token": "my-token"}
 
@@ -825,6 +826,7 @@ class TestLogoutCommand:
             patch("agblogger_cli.sync_client.delete_credentials") as mock_delete,
         ):
             from agblogger_cli.sync_client import main
+
             main()
 
         mock_revoke.assert_called_once_with("http://localhost:8000", "my-token")
@@ -835,13 +837,12 @@ class TestLogoutCommand:
     ) -> None:
         content_dir = tmp_path / "content"
         content_dir.mkdir()
-        (content_dir / ".agblogger.json").write_text(
-            '{"server": "http://localhost:8000"}'
-        )
+        (content_dir / ".agblogger.json").write_text('{"server": "http://localhost:8000"}')
 
         monkeypatch.setattr("sys.argv", ["agblogger", "--dir", str(content_dir), "logout"])
         with patch("agblogger_cli.sync_client.load_credentials", return_value=None):
             from agblogger_cli.sync_client import main
+
             main()
 
         captured = capsys.readouterr()

@@ -1155,7 +1155,7 @@ class TestDownloadTransportError:
                 raise httpx.ConnectError("Connection refused")
 
         http_client = _RaisingHttpClient(responses={"/api/sync/commit": commit_resp})
-        client = SyncClient("http://example.com", content_dir, "test-token")
+        client = SyncClient("http://example.com", content_dir)
         client.client = http_client  # type: ignore[assignment]
 
         client.status = lambda: {
