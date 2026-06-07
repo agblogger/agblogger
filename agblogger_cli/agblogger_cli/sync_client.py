@@ -231,7 +231,7 @@ def confirm_sync(plan: dict[str, Any]) -> bool:
         print(summary)
     try:
         response = input("Proceed with sync? [y/N]: ")
-    except KeyboardInterrupt, EOFError:
+    except (KeyboardInterrupt, EOFError):
         print()
         return False
     return response.strip().lower() in {"y", "yes"}
@@ -796,6 +796,9 @@ def main() -> None:
                     print("Error: Invalid username or password")
                     sys.exit(1)
                 print(f"Error: Login failed (HTTP {exc.response.status_code})")
+                sys.exit(1)
+            except ValueError as exc:
+                print(f"Error: {exc}")
                 sys.exit(1)
             refresh_token = client.client.cookies.get("refresh_token")
             if refresh_token:

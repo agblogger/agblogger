@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import contextlib
 import json
+import os
 import sys
+import tempfile
 from pathlib import Path
 from typing import TypedDict
 
@@ -29,7 +31,7 @@ def _load_all() -> dict[str, StoredCredentials]:
         return {}
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError, UnicodeDecodeError, OSError:
+    except (json.JSONDecodeError, UnicodeDecodeError, OSError):
         return {}
     if not isinstance(raw, dict):
         return {}
@@ -48,9 +50,16 @@ def _load_all() -> dict[str, StoredCredentials]:
 def _save_all(data: dict[str, StoredCredentials]) -> None:
     path = _credentials_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
-    with contextlib.suppress(OSError):
-        path.chmod(0o600)
+    fd, tmp = tempfile.mkstemp(dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(json.dumps(data, indent=2))
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, path)
+    except OSError as exc:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp)
+        print(f"Warning: failed to save credentials: {exc}", file=sys.stderr)
 
 
 def load_credentials(server_url: str) -> StoredCredentials | None:
