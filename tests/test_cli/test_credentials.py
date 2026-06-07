@@ -142,6 +142,7 @@ class TestRevokeSession:
             "/api/auth/logout",
             json={"refresh_token": "mytoken"},
         )
+        mock_httpx.Client.assert_called_once_with(base_url="https://blog.example.com", timeout=10.0)
 
     def test_prints_warning_on_http_error(self, capsys: pytest.CaptureFixture[str]) -> None:
         with patch("agblogger_cli.credentials.httpx") as mock_httpx:
