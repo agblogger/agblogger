@@ -271,54 +271,24 @@ def login_interactive(
 class SyncClient:
     """Client for syncing with AgBlogger server."""
 
-    def __init__(self, server_url: str, content_dir: Path, token: str | None = None) -> None:
+    def __init__(self, server_url: str, content_dir: Path) -> None:
         self.server_url = server_url.rstrip("/")
         self.content_dir = content_dir
-        headers: dict[str, str] | None = None
-        if token is not None:
-            headers = {"Authorization": f"Bearer {token}"}
         self.client = httpx.Client(
             base_url=self.server_url,
-            headers=headers,
             timeout=60.0,
         )
         self._csrf_token: str | None = None
 
     def close(self) -> None:
         """Close the HTTP client."""
-        try:
-            self.logout()
-        finally:
-            self.client.close()
+        self.client.close()
 
     def __enter__(self) -> SyncClient:
         return self
 
     def __exit__(self, *args: object) -> None:
         self.close()
-
-    def logout(self) -> None:
-        """Revoke the current session refresh token when the CLI exits."""
-        if getattr(self, "_csrf_token", None) is None:
-            return
-        if "Authorization" in self.client.headers:
-            return
-
-        try:
-            resp = self._call(
-                "POST",
-                "/api/auth/logout",
-                json={},
-                headers={"X-CSRF-Token": self._csrf_token},
-            )
-            resp.raise_for_status()
-        except (httpx.HTTPError, ValueError) as exc:
-            print(
-                f"Warning: failed to revoke CLI session on exit: {exc}",
-                file=sys.stderr,
-            )
-        finally:
-            self._csrf_token = None
 
     def _call(
         self,
@@ -419,8 +389,6 @@ class SyncClient:
             raise ValueError("Server response missing csrf token")
 
         self._csrf_token = csrf_token
-        if "Authorization" in self.client.headers:
-            del self.client.headers["Authorization"]
 
     def _get_last_sync_commit(self) -> str | None:
         """Get the commit hash from the last sync."""
