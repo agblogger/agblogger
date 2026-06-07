@@ -6,11 +6,17 @@ import json
 import stat
 import sys
 from typing import TYPE_CHECKING
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
+import httpx
 import pytest
 
-from agblogger_cli.credentials import delete_credentials, load_credentials, save_credentials
+from agblogger_cli.credentials import (
+    delete_credentials,
+    load_credentials,
+    revoke_session,
+    save_credentials,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -120,3 +126,35 @@ class TestDeleteCredentials:
         creds_path = tmp_path / "credentials.json"
         with patch("agblogger_cli.credentials._credentials_path", return_value=creds_path):
             delete_credentials("https://blog.example.com")  # should not raise
+
+
+class TestRevokeSession:
+    def test_posts_refresh_token_to_logout_endpoint(self) -> None:
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        with patch("agblogger_cli.credentials.httpx") as mock_httpx:
+            mock_client = MagicMock()
+            mock_httpx.Client.return_value.__enter__ = MagicMock(return_value=mock_client)
+            mock_httpx.Client.return_value.__exit__ = MagicMock(return_value=False)
+            mock_client.post.return_value = mock_response
+            revoke_session("https://blog.example.com", "mytoken")
+        mock_client.post.assert_called_once_with(
+            "/api/auth/logout",
+            json={"refresh_token": "mytoken"},
+        )
+
+    def test_prints_warning_on_http_error(self, capsys: pytest.CaptureFixture[str]) -> None:
+        with patch("agblogger_cli.credentials.httpx") as mock_httpx:
+            mock_client = MagicMock()
+            mock_httpx.Client.return_value.__enter__ = MagicMock(return_value=mock_client)
+            mock_httpx.Client.return_value.__exit__ = MagicMock(return_value=False)
+            mock_httpx.HTTPError = httpx.HTTPError
+            request = httpx.Request("POST", "https://blog.example.com/api/auth/logout")
+            mock_client.post.side_effect = httpx.HTTPStatusError(
+                "server error",
+                request=request,
+                response=httpx.Response(status_code=500, request=request),
+            )
+            revoke_session("https://blog.example.com", "mytoken")
+        captured = capsys.readouterr()
+        assert "Warning" in captured.err

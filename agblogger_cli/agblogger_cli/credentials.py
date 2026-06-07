@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import contextlib
 import json
+import sys
 from pathlib import Path
 from typing import TypedDict
 
+import httpx
 from platformdirs import user_config_dir
 
 _APP_NAME = "agblogger"
@@ -70,3 +72,16 @@ def delete_credentials(server_url: str) -> None:
         return
     del data[server_url]
     _save_all(data)
+
+
+def revoke_session(server_url: str, refresh_token: str) -> None:
+    """Revoke a refresh token server-side. Prints a warning on failure."""
+    try:
+        with httpx.Client(base_url=server_url, timeout=10.0) as client:
+            resp = client.post(
+                "/api/auth/logout",
+                json={"refresh_token": refresh_token},
+            )
+            resp.raise_for_status()
+    except (httpx.HTTPError, OSError) as exc:
+        print(f"Warning: failed to revoke session: {exc}", file=sys.stderr)
