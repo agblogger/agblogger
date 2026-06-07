@@ -9,6 +9,7 @@ authors = [{ name = "Lukasz Czajka" }]
 dependencies = [
     "httpx>=0.28",
     "httpcore>=1.0,<2",
+    "platformdirs>=4.0",
 ]
 
 [project.scripts]

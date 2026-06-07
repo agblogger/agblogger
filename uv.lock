@@ -111,12 +111,14 @@ source = { editable = "agblogger_cli" }
 dependencies = [
     { name = "httpcore" },
     { name = "httpx" },
+    { name = "platformdirs" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "httpcore", specifier = ">=1.0,<2" },
     { name = "httpx", specifier = ">=0.28" },
+    { name = "platformdirs", specifier = ">=4.0" },
 ]
 
 [[package]]
