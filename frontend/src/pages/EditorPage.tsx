@@ -432,16 +432,47 @@ export default function EditorPage() {
 
         <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1">
           <div className="flex items-center gap-6">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={isDraft}
-                onChange={(e) => setIsDraft(e.target.checked)}
-                disabled={saving}
-                className="rounded border-border text-accent focus:ring-accent/20"
-              />
-              <span className="text-sm text-ink">Draft</span>
-            </label>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={isDraft}
+              aria-label="Draft"
+              onClick={() => setIsDraft((d) => !d)}
+              disabled={saving}
+              className={`inline-flex items-center gap-2.5 px-3 py-2 rounded-lg border transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 ${
+                isDraft
+                  ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-300 dark:border-amber-700'
+                  : 'bg-paper-warm border-border'
+              }`}
+            >
+              <div
+                className={`relative w-8 h-[18px] rounded-full flex-shrink-0 transition-colors ${
+                  isDraft ? 'bg-amber-400 dark:bg-amber-500' : 'bg-border-dark'
+                }`}
+              >
+                <div
+                  className={`absolute top-0.5 w-3.5 h-3.5 bg-white rounded-full shadow-sm transition-transform ${
+                    isDraft ? 'translate-x-[14px]' : 'translate-x-0.5'
+                  }`}
+                />
+              </div>
+              <div>
+                <div
+                  className={`text-[10px] font-mono font-semibold uppercase tracking-widest leading-tight ${
+                    isDraft ? 'text-amber-800 dark:text-amber-300' : 'text-muted'
+                  }`}
+                >
+                  DRAFT
+                </div>
+                <div
+                  className={`text-[11px] leading-tight mt-0.5 ${
+                    isDraft ? 'text-amber-700 dark:text-amber-400' : 'text-muted'
+                  }`}
+                >
+                  {isDraft ? 'Not publicly visible' : 'Publicly visible'}
+                </div>
+              </div>
+            </button>
 
             {author !== null && (
               <span className="text-sm text-muted">
