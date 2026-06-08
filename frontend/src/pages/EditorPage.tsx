@@ -569,6 +569,7 @@ export default function EditorPage() {
       <div className="hidden lg:flex justify-end mb-2">
         <button
           type="button"
+          aria-label="Toggle scroll sync"
           onClick={() => setSyncScroll((s) => !s)}
           className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-lg border transition-colors ${
             syncScroll
