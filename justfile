@@ -230,10 +230,15 @@ check-backend-static:
     run_step $'\n── Backend: import contracts ──' uv run lint-imports
     run_step $'\n── Backend: linting ──' uv run ruff check backend/ cli/ agblogger_cli/ tests/
     run_step $'\n── Backend: format check ──' uv run ruff format --check backend/ cli/ agblogger_cli/ tests/
-    requirements_file="$(mktemp)"
-    trap 'rm -f "$_out" "$requirements_file"' EXIT
-    uv export --format requirements.txt --no-dev --no-emit-project --frozen -o "$requirements_file" > /dev/null
-    run_step $'\n── Backend: vulnerability audit ──' uv run pip-audit --progress-spinner off --requirement "$requirements_file"
+    _audit_json="$(mktemp)"
+    _prod_file="$(mktemp)"
+    trap 'rm -f "$_out" "$_audit_json" "$_prod_file"' EXIT
+    uv export --format requirements.txt --no-dev --no-emit-project --frozen 2>/dev/null \
+        | grep -vE '^(#|-|$)' | sed 's/[=><\[].*//' | tr '[:upper:]' '[:lower:]' | tr '_' '-' > "$_prod_file"
+    _pip_rc=0
+    uv run pip-audit --progress-spinner off --path .venv --format json -o "$_audit_json" 2>/dev/null || _pip_rc=$?
+    [ "$_pip_rc" -lt 2 ] || { echo "pip-audit error (exit $_pip_rc)"; exit "$_pip_rc"; }
+    run_step $'\n── Backend: vulnerability audit ──' uv run python3 -c 'import sys,json;d=json.load(open(sys.argv[1]));p={l.strip() for l in open(sys.argv[2]) if l.strip()};v=[(x["name"],x.get("version","?"),y["id"]) for x in d.get("dependencies",[]) for y in x.get("vulns",[]) if x.get("name","").lower().replace("_","-") in p];[print(f"{n}=={ver}:{vid}") for n,ver,vid in v];sys.exit(bool(v))' "$_audit_json" "$_prod_file"
     echo "✓ Backend static checks passed"
 
 # Backend tests with coverage.
