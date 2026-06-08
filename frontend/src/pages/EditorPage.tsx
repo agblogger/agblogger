@@ -24,6 +24,7 @@ import MarkdownToolbar from '@/components/editor/MarkdownToolbar'
 import { actions as toolbarActions } from '@/components/editor/toolbarActions'
 import { wrapSelection } from '@/components/editor/wrapSelection'
 import FileStrip from '@/components/editor/FileStrip'
+import { useScrollSync } from '@/hooks/useScrollSync'
 
 const KEY_MAP: Record<string, string> = {
   b: 'bold',
@@ -56,12 +57,16 @@ export default function EditorPage() {
   const previewRequestRef = useRef(0)
   const previewRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const { syncEnabled, toggleSync, onEditorScroll, onPreviewScroll } = useScrollSync({
+    textareaRef,
+    previewRef,
+    content: body,
+  })
   const { data: accounts = [], error: socialAccountsErr } = useSocialAccounts()
   const socialAccountsError = socialAccountsErr ? 'Failed to load connected social accounts. Please try again.' : null
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([])
   const [showCrossPostDialog, setShowCrossPostDialog] = useState(false)
   const [mobileTab, setMobileTab] = useState<'edit' | 'preview'>('edit')
-  const [syncScroll, setSyncScroll] = useState(true)
   const [savedFilePath, setSavedFilePath] = useState<string | null>(null)
   const [fileStripRefreshToken, setFileStripRefreshToken] = useState(0)
   const [effectiveFilePath, setEffectiveFilePath] = useState<string | null>(
@@ -570,9 +575,9 @@ export default function EditorPage() {
         <button
           type="button"
           aria-label="Toggle scroll sync"
-          onClick={() => setSyncScroll((s) => !s)}
+          onClick={toggleSync}
           className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-lg border transition-colors ${
-            syncScroll
+            syncEnabled
               ? 'bg-accent/10 border-accent/30 text-accent'
               : 'bg-paper-warm border-border text-muted hover:text-ink'
           }`}
@@ -598,6 +603,7 @@ export default function EditorPage() {
             value={body}
             onChange={(e) => setBody(e.target.value)}
             onKeyDown={handleEditorKeyDown}
+            onScroll={onEditorScroll}
             disabled={saving}
             className="w-full flex-1 overflow-y-auto p-4 bg-paper-warm border border-border rounded-lg
                      font-mono text-sm leading-relaxed text-ink resize-none
@@ -607,12 +613,15 @@ export default function EditorPage() {
           />
         </div>
 
-        <div className={`h-[80vh] p-6 bg-paper border border-border rounded-lg overflow-y-auto ${mobileTab === 'edit' ? 'hidden lg:block' : ''}`}>
+        <div
+          ref={previewRef}
+          onScroll={onPreviewScroll}
+          className={`h-[80vh] p-6 bg-paper border border-border rounded-lg overflow-y-auto ${mobileTab === 'edit' ? 'hidden lg:block' : ''}`}
+        >
           {previewError ? (
             <p className="text-sm text-red-600 dark:text-red-400 italic">Preview unavailable</p>
           ) : preview !== null ? (
             <div
-              ref={previewRef}
               className="prose max-w-none"
               // nosemgrep: typescript.react.security.audit.react-dangerouslysetinnerhtml
               // Preview HTML is rendered and sanitized server-side.

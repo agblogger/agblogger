@@ -179,6 +179,45 @@ export function useScrollSync({
     }
   }, [])
 
+  // Invalidate map on textarea container resize (width change breaks mirror measurements)
+  useEffect(() => {
+    const textarea = textareaRef.current
+    if (!textarea) return
+    const observer = new ResizeObserver(() => {
+      mapRef.current = null
+    })
+    observer.observe(textarea)
+    return () => observer.disconnect()
+  }, [textareaRef])
+
+  // Invalidate map when images load inside the preview (they change offsetTop of everything below)
+  useEffect(() => {
+    const preview = previewRef.current
+    if (!preview) return
+
+    const handleLoad = () => {
+      mapRef.current = null
+    }
+
+    const attachToImages = () => {
+      preview.querySelectorAll('img').forEach((img) => {
+        img.removeEventListener('load', handleLoad)
+        img.addEventListener('load', handleLoad)
+      })
+    }
+
+    const mutationObserver = new MutationObserver(attachToImages)
+    mutationObserver.observe(preview, { childList: true, subtree: true })
+    attachToImages()
+
+    return () => {
+      mutationObserver.disconnect()
+      preview.querySelectorAll('img').forEach((img) =>
+        img.removeEventListener('load', handleLoad),
+      )
+    }
+  }, [previewRef])
+
   const getOrBuildMap = useCallback((): SyncMap | null => {
     if (mapRef.current) return mapRef.current
     const textarea = textareaRef.current

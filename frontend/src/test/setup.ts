@@ -1,6 +1,16 @@
 import '@testing-library/jest-dom/vitest'
 import { afterEach, beforeEach } from 'vitest'
 
+// jsdom does not implement ResizeObserver; provide a no-op stub so hooks that
+// use it (e.g. useScrollSync) do not throw in the test environment.
+if (typeof globalThis.ResizeObserver === 'undefined') {
+  globalThis.ResizeObserver = class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+}
+
 const WARNING_GUARD_KEY = '__agblogger_warning_guard_installed__'
 type WarningProcess = {
   on(event: 'warning', listener: (warning: Error) => void): void
