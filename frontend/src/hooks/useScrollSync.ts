@@ -1,6 +1,6 @@
 import { type RefObject, useCallback, useEffect, useRef } from 'react'
 
-interface SyncPoint {
+export interface SyncPoint {
   editorPx: number
   previewPx: number
 }
@@ -73,7 +73,7 @@ function buildSyncPoints(
     .sort((a, b) => a.editorPx - b.editorPx)
 }
 
-function editorToPreview(points: SyncPoint[], scrollTop: number): number {
+export function editorToPreview(points: SyncPoint[], scrollTop: number): number {
   if (points.length === 0) return 0
   let lo = 0
   let hi = points.length - 1
@@ -90,7 +90,7 @@ function editorToPreview(points: SyncPoint[], scrollTop: number): number {
   return p0.previewPx + t * (p1.previewPx - p0.previewPx)
 }
 
-function previewToEditor(points: SyncPoint[], scrollTop: number): number {
+export function previewToEditor(points: SyncPoint[], scrollTop: number): number {
   if (points.length === 0) return 0
   let lo = 0
   let hi = points.length - 1
