@@ -57,7 +57,7 @@ export default function EditorPage() {
   const previewRequestRef = useRef(0)
   const previewRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const { syncEditorToPreview, syncPreviewToEditor } = useScrollSync({
+  useScrollSync({
     textareaRef,
     previewRef,
     content: body,
@@ -588,7 +588,6 @@ export default function EditorPage() {
             value={body}
             onChange={(e) => setBody(e.target.value)}
             onKeyDown={handleEditorKeyDown}
-            onScroll={syncEditorToPreview}
             disabled={saving}
             className="w-full flex-1 overflow-y-auto p-4 bg-paper-warm border border-border rounded-lg
                      font-mono text-sm leading-relaxed text-ink resize-none
@@ -600,7 +599,6 @@ export default function EditorPage() {
 
         <div
           ref={previewRef}
-          onScroll={syncPreviewToEditor}
           className={`relative h-[80vh] p-6 bg-paper border border-border rounded-lg overflow-y-auto ${mobileTab === 'edit' ? 'hidden lg:block' : ''}`}
         >
           {previewError ? (
