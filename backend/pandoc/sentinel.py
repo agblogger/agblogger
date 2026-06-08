@@ -1,4 +1,3 @@
-# backend/pandoc/sentinel.py
 """Scroll-sync sentinel injection for the preview render path."""
 
 from __future__ import annotations

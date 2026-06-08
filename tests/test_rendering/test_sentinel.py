@@ -1,9 +1,7 @@
-# tests/test_rendering/test_sentinel.py
 """Tests for scroll-sync sentinel injection."""
 
 from __future__ import annotations
 
-import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
@@ -61,9 +59,7 @@ class TestSplitMarkdownBlocks:
 
     @given(st.text(min_size=0, max_size=300))
     @settings(max_examples=200)
-    def test_all_returned_line_numbers_point_to_non_blank_lines(
-        self, markdown: str
-    ) -> None:
+    def test_all_returned_line_numbers_point_to_non_blank_lines(self, markdown: str) -> None:
         lines = markdown.split("\n")
         for line_no in _split_markdown_blocks(markdown):
             assert 0 <= line_no < len(lines)
