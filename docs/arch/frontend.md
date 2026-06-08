@@ -23,7 +23,7 @@ Single-resource reads (individual posts, pages, label detail) use SWR hooks for 
 
 The timeline route treats the URL as the canonical filter state. Pagination, label filters, and date filters all round-trip through query params, with date ranges encoded as API-ready UTC/ISO timestamps in the URL while the UI still renders local `YYYY-MM-DD` input values.
 
-Auth-sensitive reads scope their cache key by user ID so the cache invalidates on login/logout. Individual post reads also wait for the startup authentication check before fetching, allowing a refreshable browser session to be restored before a draft can be cached as a public `404` response. Write operations always use direct API calls.
+Auth-sensitive reads scope their cache key by user ID so the cache invalidates on login/logout. Write operations always use direct API calls.
 
 ## Server-Side Preloading
 
