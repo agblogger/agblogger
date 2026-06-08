@@ -5,7 +5,7 @@ from __future__ import annotations
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from backend.pandoc.sentinel import _split_markdown_blocks
+from backend.pandoc.sentinel import _inject_sentinels_into_html, _split_markdown_blocks
 
 
 class TestSplitMarkdownBlocks:
@@ -70,9 +70,6 @@ class TestSplitMarkdownBlocks:
     def test_line_numbers_are_strictly_increasing(self, markdown: str) -> None:
         result = _split_markdown_blocks(markdown)
         assert result == sorted(set(result))
-
-
-from backend.pandoc.sentinel import _inject_sentinels_into_html
 
 
 class TestInjectSentinelsIntoHtml:

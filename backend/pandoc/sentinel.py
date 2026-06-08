@@ -122,7 +122,7 @@ def _inject_sentinels_into_html(html: str, block_lines: list[int]) -> str:
 
     parts: list[str] = []
     prev = 0
-    for offset, line_no in zip(finder.offsets, block_lines):
+    for offset, line_no in zip(finder.offsets, block_lines, strict=False):
         parts.append(html[prev:offset])
         parts.append(f'<span id="agbpos-L{line_no}"></span>')
         prev = offset
