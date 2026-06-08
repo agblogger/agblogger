@@ -363,14 +363,22 @@ describe('EditorPage', () => {
       expect(screen.getByText('Cross-post after saving:')).toBeInTheDocument()
     })
 
-    const draftCheckbox = screen.getByRole('checkbox', { name: /draft/i })
-    await user.click(draftCheckbox)
-
+    // New post starts as draft — cross-posting should already be disabled
     const crossPostCheckbox = screen.getByRole('checkbox', { name: /alice\.bsky\.social/i })
     expect(crossPostCheckbox).toBeDisabled()
     expect(
       screen.getByText('Publish the post to enable cross-posting after saving.'),
     ).toBeInTheDocument()
+
+    // Toggle draft off — cross-posting should become enabled
+    const draftCheckbox = screen.getByRole('checkbox', { name: /draft/i })
+    await user.click(draftCheckbox)
+    expect(crossPostCheckbox).not.toBeDisabled()
+    expect(
+      screen.queryByText('Publish the post to enable cross-posting after saving.'),
+    ).not.toBeInTheDocument()
+    await user.click(crossPostCheckbox)
+    expect(crossPostCheckbox).toBeChecked()
   })
 
   it('shows an error when connected social accounts cannot be loaded', async () => {
@@ -579,7 +587,7 @@ describe('EditorPage', () => {
         subtitle: null,
         body: '',
         labels: [],
-        is_draft: false,
+        is_draft: true,   // changed: new posts default to draft
       })
     })
 
@@ -727,10 +735,10 @@ describe('EditorPage', () => {
     })
 
     const checkbox = screen.getByRole('checkbox', { name: /draft/i })
-    expect(checkbox).not.toBeChecked()
+    expect(checkbox).toBeChecked()     // changed: starts checked (draft by default)
 
     await user.click(checkbox)
-    expect(checkbox).toBeChecked()
+    expect(checkbox).not.toBeChecked() // changed: click turns draft off
   })
 
   it('shows 404 save error', async () => {
@@ -1243,13 +1251,17 @@ describe('EditorPage', () => {
       expect(screen.getByText('Cross-post after saving:')).toBeInTheDocument()
     })
 
-    // Check the platform checkbox first (while not draft)
+    // Toggle draft off to enable the bluesky checkbox
+    const draftCheckbox = screen.getByRole('checkbox', { name: /draft/i })
+    await user.click(draftCheckbox)
+
+    // Check the platform checkbox (now enabled because draft is off)
     const blueskyCheckbox = screen.getByRole('checkbox', { name: /alice\.bsky\.social/i })
     await user.click(blueskyCheckbox)
 
-    // Toggle draft on — checkboxes get disabled but selection state is preserved
-    const draftCheckbox = screen.getByRole('checkbox', { name: /draft/i })
+    // Toggle draft back on — checkboxes get disabled but selection state is preserved
     await user.click(draftCheckbox)
+    expect(blueskyCheckbox).toBeChecked() // selection preserved even though checkbox is disabled
 
     // Type a title and save
     await user.type(screen.getByLabelText(/Title/), 'Test')
