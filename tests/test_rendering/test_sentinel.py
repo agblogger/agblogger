@@ -70,3 +70,62 @@ class TestSplitMarkdownBlocks:
     def test_line_numbers_are_strictly_increasing(self, markdown: str) -> None:
         result = _split_markdown_blocks(markdown)
         assert result == sorted(set(result))
+
+
+from backend.pandoc.sentinel import _inject_sentinels_into_html
+
+
+class TestInjectSentinelsIntoHtml:
+    def test_basic_two_paragraphs(self) -> None:
+        html = "<p>First.</p>\n<p>Second.</p>"
+        result = _inject_sentinels_into_html(html, [0, 2])
+        assert '<span id="agbpos-L0"></span><p>First.</p>' in result
+        assert '<span id="agbpos-L2"></span><p>Second.</p>' in result
+
+    def test_heading_gets_sentinel(self) -> None:
+        html = "<h2>Heading</h2>\n<p>Para.</p>"
+        result = _inject_sentinels_into_html(html, [0, 2])
+        assert 'agbpos-L0' in result
+        assert 'agbpos-L2' in result
+
+    def test_nested_paragraph_in_blockquote_not_collected(self) -> None:
+        html = "<blockquote>\n<p>Quoted.</p>\n</blockquote>\n<p>After.</p>"
+        result = _inject_sentinels_into_html(html, [0, 2])
+        # Only 2 sentinels: one for blockquote, one for after-paragraph
+        assert result.count("agbpos-L") == 2
+        # Inner <p> must NOT get a sentinel
+        assert "<span" not in result.split("<blockquote>")[1].split("</blockquote>")[0]
+
+    def test_more_source_blocks_than_html_elements(self) -> None:
+        # Loose list: 2 source blocks map to 1 <ul> element
+        html = "<ul>\n<li><p>Item 1</p></li>\n<li><p>Item 2</p></li>\n</ul>\n<p>After.</p>"
+        result = _inject_sentinels_into_html(html, [0, 2, 4])
+        # Only 2 sentinels (ul + p), not 3
+        assert result.count("agbpos-L") == 2
+        assert "agbpos-L0" in result   # ul gets first line number
+        assert "agbpos-L2" in result   # p gets second line number
+
+    def test_empty_block_lines(self) -> None:
+        html = "<p>Paragraph.</p>"
+        result = _inject_sentinels_into_html(html, [])
+        assert result == html
+
+    def test_empty_html(self) -> None:
+        result = _inject_sentinels_into_html("", [0])
+        assert result == ""
+
+    def test_pre_block_gets_sentinel(self) -> None:
+        html = '<div class="sourceCode"><pre><code>x = 1</code></pre></div>'
+        result = _inject_sentinels_into_html(html, [0])
+        assert "agbpos-L0" in result
+
+    def test_id_format_survives_sanitizer_regex(self) -> None:
+        import re
+        html = "<p>Test.</p>"
+        result = _inject_sentinels_into_html(html, [42])
+        ids = re.findall(r'id="([^"]+)"', result)
+        assert ids == ["agbpos-L42"]
+        # Verify the id matches _SAFE_ID_RE from renderer.py
+        safe_id_re = re.compile(r"^[a-zA-Z][a-zA-Z0-9:_-]*$")
+        for id_val in ids:
+            assert safe_id_re.fullmatch(id_val)
