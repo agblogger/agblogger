@@ -170,9 +170,10 @@ class TestConfirmSync:
         with patch("builtins.input", return_value="n"):
             assert confirm_sync(_plan(to_upload=["a.md"])) is False
 
-    def test_empty_input_returns_false(self) -> None:
-        with patch("builtins.input", return_value=""):
-            assert confirm_sync(_plan(to_upload=["a.md"])) is False
+    def test_empty_input_returns_true(self) -> None:
+        with patch("builtins.input", return_value="") as mock_input:
+            assert confirm_sync(_plan(to_upload=["a.md"])) is True
+        mock_input.assert_called_once_with("Proceed with sync? [Y/n]: ")
 
     def test_keyboard_interrupt_returns_false(self) -> None:
         with patch("builtins.input", side_effect=KeyboardInterrupt):

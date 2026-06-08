@@ -230,11 +230,11 @@ def confirm_sync(plan: dict[str, Any]) -> bool:
     if summary:
         print(summary)
     try:
-        response = input("Proceed with sync? [y/N]: ")
+        response = input("Proceed with sync? [Y/n]: ")
     except KeyboardInterrupt, EOFError:
         print()
         return False
-    return response.strip().lower() in {"y", "yes"}
+    return response.strip().lower() in {"", "y", "yes"}
 
 
 # ── Authentication ───────────────────────────────────────────────────
