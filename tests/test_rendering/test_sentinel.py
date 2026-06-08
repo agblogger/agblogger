@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, patch
 
-import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
@@ -137,7 +136,6 @@ class TestInjectSentinelsIntoHtml:
 
 
 class TestRenderMarkdownPreview:
-    @pytest.mark.anyio
     async def test_sentinels_present_in_output(self) -> None:
         mock_html = "<p>Paragraph one.</p>\n<p>Paragraph two.</p>"
         with patch(
@@ -148,7 +146,6 @@ class TestRenderMarkdownPreview:
         assert 'id="agbpos-L0"' in html
         assert 'id="agbpos-L2"' in html
 
-    @pytest.mark.anyio
     async def test_single_paragraph_has_sentinel(self) -> None:
         mock_html = "<p>Only paragraph.</p>"
         with patch(
@@ -158,7 +155,6 @@ class TestRenderMarkdownPreview:
             html = await render_markdown_preview("Only paragraph.")
         assert 'id="agbpos-L0"' in html
 
-    @pytest.mark.anyio
     async def test_empty_markdown_no_sentinel(self) -> None:
         with patch(
             "backend.pandoc.sentinel.render_markdown",

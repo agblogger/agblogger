@@ -149,6 +149,8 @@ def _inject_sentinels_into_html(html: str, block_lines: list[int]) -> str:
 
 async def render_markdown_preview(markdown: str) -> str:
     """Render markdown to HTML with scroll-sync sentinels for the editor preview."""
+    if not markdown.strip():
+        return ""
     block_lines = _split_markdown_blocks(markdown)
     html = await render_markdown(markdown)
     return _inject_sentinels_into_html(html, block_lines)
