@@ -85,10 +85,11 @@ function editorScrollToLine(editorLines: number[], scrollTop: number): number {
   let hi = editorLines.length - 1
   while (lo < hi) {
     const mid = (lo + hi + 1) >> 1
-    if (editorLines[mid] <= scrollTop) lo = mid
+    if ((editorLines[mid] ?? 0) <= scrollTop) lo = mid
     else hi = mid - 1
   }
   const lineTop = editorLines[lo]
+  if (lineTop === undefined) return lo
   const nextTop = editorLines[lo + 1]
   if (nextTop === undefined || nextTop <= lineTop) return lo
   return lo + Math.min(1, (scrollTop - lineTop) / (nextTop - lineTop))
@@ -101,10 +102,11 @@ function lineToPreviewScroll(sentinels: SentinelEntry[], fractionalLine: number)
   let hi = sentinels.length - 1
   while (lo < hi) {
     const mid = (lo + hi + 1) >> 1
-    if (sentinels[mid].line <= fractionalLine) lo = mid
+    if ((sentinels[mid]?.line ?? 0) <= fractionalLine) lo = mid
     else hi = mid - 1
   }
   const s0 = sentinels[lo]
+  if (!s0) return 0
   const s1 = sentinels[lo + 1]
   if (!s1 || s1.line <= s0.line) return s0.top
   const t = Math.min(1, Math.max(0, (fractionalLine - s0.line) / (s1.line - s0.line)))
@@ -118,10 +120,11 @@ function previewScrollToLine(sentinels: SentinelEntry[], scrollTop: number): num
   let hi = sentinels.length - 1
   while (lo < hi) {
     const mid = (lo + hi + 1) >> 1
-    if (sentinels[mid].top <= scrollTop) lo = mid
+    if ((sentinels[mid]?.top ?? 0) <= scrollTop) lo = mid
     else hi = mid - 1
   }
   const s0 = sentinels[lo]
+  if (!s0) return 0
   const s1 = sentinels[lo + 1]
   if (!s1 || s1.top <= s0.top) return s0.line
   const t = Math.min(1, Math.max(0, (scrollTop - s0.top) / (s1.top - s0.top)))
@@ -131,8 +134,9 @@ function previewScrollToLine(sentinels: SentinelEntry[], scrollTop: number): num
 // Returns editor scrollTop for a fractional line index
 function lineToEditorScroll(editorLines: number[], fractionalLine: number): number {
   if (editorLines.length === 0) return 0
-  const idx = Math.min(Math.floor(fractionalLine), editorLines.length - 1)
-  const fraction = fractionalLine - Math.floor(fractionalLine)
+  const floorIdx = Math.floor(fractionalLine)
+  const idx = Math.min(floorIdx, editorLines.length - 1)
+  const fraction = fractionalLine - floorIdx
   const lineTop = editorLines[idx] ?? 0
   const nextTop = editorLines[idx + 1]
   if (nextTop === undefined) return lineTop
