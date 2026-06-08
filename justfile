@@ -233,12 +233,13 @@ check-backend-static:
     _audit_json="$(mktemp)"
     _prod_file="$(mktemp)"
     trap 'rm -f "$_out" "$_audit_json" "$_prod_file"' EXIT
-    uv export --format requirements.txt --no-dev --no-emit-project --frozen 2>/dev/null \
+    uv export --all-packages --format requirements.txt --no-dev --no-emit-workspace --frozen 2>/dev/null \
         | grep -vE '^(#|-|$)' | sed 's/[=><\[].*//' | tr '[:upper:]' '[:lower:]' | tr '_' '-' > "$_prod_file"
+    _site_packages="$(.venv/bin/python -c 'import sysconfig; print(sysconfig.get_path("purelib"))')"
     _pip_rc=0
-    uv run pip-audit --progress-spinner off --path .venv --format json -o "$_audit_json" 2>/dev/null || _pip_rc=$?
+    uv run pip-audit --progress-spinner off --path "$_site_packages" --format json -o "$_audit_json" 2>/dev/null || _pip_rc=$?
     [ "$_pip_rc" -lt 2 ] || { echo "pip-audit error (exit $_pip_rc)"; exit "$_pip_rc"; }
-    run_step $'\n── Backend: vulnerability audit ──' uv run python3 -c 'import sys,json;d=json.load(open(sys.argv[1]));p={l.strip() for l in open(sys.argv[2]) if l.strip()};v=[(x["name"],x.get("version","?"),y["id"]) for x in d.get("dependencies",[]) for y in x.get("vulns",[]) if x.get("name","").lower().replace("_","-") in p];[print(f"{n}=={ver}:{vid}") for n,ver,vid in v];sys.exit(bool(v))' "$_audit_json" "$_prod_file"
+    run_step $'\n── Backend: vulnerability audit ──' uv run python3 -c 'import sys,json;d=json.load(open(sys.argv[1]));a=d.get("dependencies",[]);p={l.strip() for l in open(sys.argv[2]) if l.strip()};v=[(x["name"],x.get("version","?"),y["id"]) for x in a for y in x.get("vulns",[]) if x.get("name","").lower().replace("_","-") in p];not a and print("pip-audit inspected no dependencies");[print(f"{n}=={ver}:{vid}") for n,ver,vid in v];sys.exit(2 if not a else bool(v))' "$_audit_json" "$_prod_file"
     echo "✓ Backend static checks passed"
 
 # Backend tests with coverage.

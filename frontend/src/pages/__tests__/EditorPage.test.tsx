@@ -1,4 +1,4 @@
-import { createElement } from 'react'
+import { act, createElement } from 'react'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
@@ -98,13 +98,14 @@ function renderEditor(path = '/editor/new') {
     ],
     { initialEntries: [path] },
   )
-  return render(
+  const result = render(
     createElement(
       SWRConfig,
       { value: { provider: () => new Map(), dedupingInterval: 0, shouldRetryOnError: false } },
       createElement(RouterProvider, { router }),
     ),
   )
+  return { ...result, router }
 }
 
 function renderEditorWithPost(path: string) {
@@ -775,6 +776,23 @@ describe('EditorPage', () => {
     })
 
     expect(screen.getByRole('switch', { name: /draft/i })).toHaveAttribute('aria-checked', 'false')
+  })
+
+  it('draft toggle resets when navigating from a published post to a new post', async () => {
+    mockFetchPostForEdit.mockResolvedValue(editResponse)
+    const { router } = renderEditor('/editor/posts/existing/index.md')
+
+    await waitFor(() => {
+      expect(screen.getByRole('switch', { name: /draft/i })).toHaveAttribute('aria-checked', 'false')
+    })
+
+    await act(async () => {
+      await router.navigate('/editor/new')
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('switch', { name: /draft/i })).toHaveAttribute('aria-checked', 'true')
+    })
   })
 
   it('shows 404 save error', async () => {
@@ -1491,6 +1509,17 @@ describe('EditorPage', () => {
       content: 'Body text', labels: [],
     }
     vi.mocked(createPost).mockResolvedValue(savedPost)
+    mockFetchPostForEdit.mockResolvedValue({
+      file_path: savedPost.file_path,
+      title: savedPost.title,
+      subtitle: savedPost.subtitle,
+      body: savedPost.content ?? '',
+      labels: savedPost.labels,
+      is_draft: savedPost.is_draft,
+      created_at: savedPost.created_at,
+      modified_at: savedPost.modified_at,
+      author: savedPost.author ?? '',
+    })
 
     renderEditor('/editor/new')
 

@@ -37,9 +37,9 @@ Each target is fail-fast, and the default full gate `just check` runs `check-sta
   - Config: `[tool.ruff]` and `[tool.ruff.lint]` in `pyproject.toml`.
 - `uv run ruff format --check backend/ cli/ tests/`
   - Formatting compliance check for Python code.
-- `uv export --format requirements.txt --no-dev --no-emit-project --frozen -o "$requirements_file"` then `uv run pip-audit --progress-spinner off --requirement "$requirements_file"`
-  - Audits the locked runtime Python dependency set, not the dev toolchain.
-  - The export omits dev dependencies and omits the editable local project itself, so the audit reflects shipped runtime dependencies from `uv.lock`.
+- Resolves the virtualenv's `site-packages` directory through `.venv/bin/python`, audits the installed environment with `pip-audit --path`, and reports vulnerabilities belonging to production dependencies exported from the lockfile.
+  - Audits the locked runtime dependency union for all Python workspace packages, including the backend and standalone CLI, not the dev toolchain.
+  - The export omits dev dependencies and editable workspace projects, so the audit reflects shipped third-party runtime dependencies from `uv.lock`.
 
 ## Frontend (`check-frontend-static`)
 

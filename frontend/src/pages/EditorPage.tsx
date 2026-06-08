@@ -72,6 +72,12 @@ export default function EditorPage() {
       ? 'Save post first to add images'
       : undefined
 
+  useEffect(() => {
+    if (isNew) {
+      setIsDraft(true)
+    }
+  }, [isNew])
+
   useCodeBlockEnhance(previewRef, renderedPreview)
 
   const draftOwnerId = user?.id ?? 0
