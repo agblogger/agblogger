@@ -1,13 +1,8 @@
 import { type RefObject, useCallback, useEffect, useRef } from 'react'
 
-interface SentinelEntry {
-  line: number
-  top: number
-}
-
-interface SyncMap {
-  editorLines: number[]
-  sentinels: SentinelEntry[]
+interface SyncPoint {
+  editorPx: number
+  previewPx: number
 }
 
 interface UseScrollSyncOptions {
@@ -39,12 +34,12 @@ function setupMirror(mirror: HTMLDivElement, textarea: HTMLTextAreaElement): voi
   mirror.style.width = `${textarea.clientWidth}px`
 }
 
-function buildSyncMap(
+function buildSyncPoints(
   textarea: HTMLTextAreaElement,
   preview: HTMLDivElement,
   mirror: HTMLDivElement,
   content: string,
-): SyncMap {
+): SyncPoint[] {
   setupMirror(mirror, textarea)
 
   const lines = content.split('\n')
@@ -65,75 +60,51 @@ function buildSyncMap(
   )
 
   const sentinelEls = preview.querySelectorAll<HTMLElement>('[id^="agbpos-L"]')
-  const sentinels: SentinelEntry[] = Array.from(sentinelEls)
-    .map((el) => ({
-      line: parseInt(el.id.slice('agbpos-L'.length), 10),
-      top: el.offsetTop,
-    }))
-    .sort((a, b) => a.line - b.line)
-
-  return { editorLines, sentinels }
+  return Array.from(sentinelEls)
+    .map((el) => {
+      const line = parseInt(el.id.slice('agbpos-L'.length), 10)
+      const editorPx = editorLines[line] ?? 0
+      // Use the next sibling's offsetTop to skip the sentinel's own margin-top,
+      // so headings and other block elements with top margin sync to their content start
+      const nextEl = el.nextElementSibling as HTMLElement | null
+      const previewPx = nextEl?.offsetTop ?? el.offsetTop
+      return { editorPx, previewPx }
+    })
+    .sort((a, b) => a.editorPx - b.editorPx)
 }
 
-function editorScrollToLine(editorLines: number[], scrollTop: number): number {
-  if (editorLines.length === 0) return 0
+function editorToPreview(points: SyncPoint[], scrollTop: number): number {
+  if (points.length === 0) return 0
   let lo = 0
-  let hi = editorLines.length - 1
+  let hi = points.length - 1
   while (lo < hi) {
     const mid = (lo + hi + 1) >> 1
-    if ((editorLines[mid] ?? 0) <= scrollTop) lo = mid
+    if ((points[mid]?.editorPx ?? 0) <= scrollTop) lo = mid
     else hi = mid - 1
   }
-  const lineTop = editorLines[lo]
-  if (lineTop === undefined) return lo
-  const nextTop = editorLines[lo + 1]
-  if (nextTop === undefined || nextTop <= lineTop) return lo
-  return lo + Math.min(1, (scrollTop - lineTop) / (nextTop - lineTop))
+  const p0 = points[lo]
+  if (!p0) return 0
+  const p1 = points[lo + 1]
+  if (!p1 || p1.editorPx <= p0.editorPx) return p0.previewPx
+  const t = Math.min(1, Math.max(0, (scrollTop - p0.editorPx) / (p1.editorPx - p0.editorPx)))
+  return p0.previewPx + t * (p1.previewPx - p0.previewPx)
 }
 
-function lineToPreviewScroll(sentinels: SentinelEntry[], fractionalLine: number): number {
-  if (sentinels.length === 0) return 0
+function previewToEditor(points: SyncPoint[], scrollTop: number): number {
+  if (points.length === 0) return 0
   let lo = 0
-  let hi = sentinels.length - 1
+  let hi = points.length - 1
   while (lo < hi) {
     const mid = (lo + hi + 1) >> 1
-    if ((sentinels[mid]?.line ?? 0) <= fractionalLine) lo = mid
+    if ((points[mid]?.previewPx ?? 0) <= scrollTop) lo = mid
     else hi = mid - 1
   }
-  const s0 = sentinels[lo]
-  if (!s0) return 0
-  const s1 = sentinels[lo + 1]
-  if (!s1 || s1.line <= s0.line) return s0.top
-  const t = Math.min(1, Math.max(0, (fractionalLine - s0.line) / (s1.line - s0.line)))
-  return s0.top + t * (s1.top - s0.top)
-}
-
-function previewScrollToLine(sentinels: SentinelEntry[], scrollTop: number): number {
-  if (sentinels.length === 0) return 0
-  let lo = 0
-  let hi = sentinels.length - 1
-  while (lo < hi) {
-    const mid = (lo + hi + 1) >> 1
-    if ((sentinels[mid]?.top ?? 0) <= scrollTop) lo = mid
-    else hi = mid - 1
-  }
-  const s0 = sentinels[lo]
-  if (!s0) return 0
-  const s1 = sentinels[lo + 1]
-  if (!s1 || s1.top <= s0.top) return s0.line
-  const t = Math.min(1, Math.max(0, (scrollTop - s0.top) / (s1.top - s0.top)))
-  return s0.line + t * (s1.line - s0.line)
-}
-
-function lineToEditorScroll(editorLines: number[], fractionalLine: number): number {
-  if (editorLines.length === 0) return 0
-  const floorIdx = Math.floor(fractionalLine)
-  const idx = Math.min(floorIdx, editorLines.length - 1)
-  const fraction = fractionalLine - floorIdx
-  const lineTop = editorLines[idx] ?? 0
-  const nextTop = editorLines[idx + 1]
-  if (nextTop === undefined) return lineTop
-  return lineTop + fraction * (nextTop - lineTop)
+  const p0 = points[lo]
+  if (!p0) return 0
+  const p1 = points[lo + 1]
+  if (!p1 || p1.previewPx <= p0.previewPx) return p0.editorPx
+  const t = Math.min(1, Math.max(0, (scrollTop - p0.previewPx) / (p1.previewPx - p0.previewPx)))
+  return p0.editorPx + t * (p1.editorPx - p0.editorPx)
 }
 
 export function useScrollSync({
@@ -141,11 +112,11 @@ export function useScrollSync({
   previewRef,
   content,
 }: UseScrollSyncOptions): UseScrollSyncResult {
-  const mapRef = useRef<SyncMap | null>(null)
+  const pointsRef = useRef<SyncPoint[] | null>(null)
   const mirrorRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
-    mapRef.current = null
+    pointsRef.current = null
   }, [content])
 
   useEffect(() => {
@@ -167,7 +138,7 @@ export function useScrollSync({
     const textarea = textareaRef.current
     if (!textarea) return
     const observer = new ResizeObserver(() => {
-      mapRef.current = null
+      pointsRef.current = null
     })
     observer.observe(textarea)
     return () => observer.disconnect()
@@ -178,7 +149,7 @@ export function useScrollSync({
     if (!preview) return
 
     const handleLoad = () => {
-      mapRef.current = null
+      pointsRef.current = null
     }
 
     const attachToImages = () => {
@@ -189,7 +160,10 @@ export function useScrollSync({
       })
     }
 
-    const mutationObserver = new MutationObserver(attachToImages)
+    const mutationObserver = new MutationObserver(() => {
+      pointsRef.current = null
+      attachToImages()
+    })
     mutationObserver.observe(preview, { childList: true, subtree: true })
     attachToImages()
 
@@ -201,36 +175,34 @@ export function useScrollSync({
     }
   }, [previewRef])
 
-  const getOrBuildMap = useCallback((): SyncMap | null => {
-    if (mapRef.current) return mapRef.current
+  const getOrBuildPoints = useCallback((): SyncPoint[] | null => {
+    if (pointsRef.current) return pointsRef.current
     const textarea = textareaRef.current
     const preview = previewRef.current
     const mirror = mirrorRef.current
     if (!textarea || !preview || !mirror) return null
-    const map = buildSyncMap(textarea, preview, mirror, content)
-    mapRef.current = map
-    return map
+    const points = buildSyncPoints(textarea, preview, mirror, content)
+    pointsRef.current = points
+    return points
   }, [textareaRef, previewRef, content])
 
   const syncEditorToPreview = useCallback(() => {
     const textarea = textareaRef.current
     const preview = previewRef.current
     if (!textarea || !preview) return
-    const map = getOrBuildMap()
-    if (!map) return
-    const fractionalLine = editorScrollToLine(map.editorLines, textarea.scrollTop)
-    preview.scrollTop = lineToPreviewScroll(map.sentinels, fractionalLine)
-  }, [textareaRef, previewRef, getOrBuildMap])
+    const points = getOrBuildPoints()
+    if (!points) return
+    preview.scrollTop = editorToPreview(points, textarea.scrollTop)
+  }, [textareaRef, previewRef, getOrBuildPoints])
 
   const syncPreviewToEditor = useCallback(() => {
     const textarea = textareaRef.current
     const preview = previewRef.current
     if (!textarea || !preview) return
-    const map = getOrBuildMap()
-    if (!map) return
-    const fractionalLine = previewScrollToLine(map.sentinels, preview.scrollTop)
-    textarea.scrollTop = lineToEditorScroll(map.editorLines, fractionalLine)
-  }, [textareaRef, previewRef, getOrBuildMap])
+    const points = getOrBuildPoints()
+    if (!points) return
+    textarea.scrollTop = previewToEditor(points, preview.scrollTop)
+  }, [textareaRef, previewRef, getOrBuildPoints])
 
   return { syncEditorToPreview, syncPreviewToEditor }
 }
