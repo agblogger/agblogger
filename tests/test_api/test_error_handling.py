@@ -120,7 +120,7 @@ class TestRenderEndpointPandocFailure:
     async def test_preview_pandoc_failure_returns_502(self, client: AsyncClient) -> None:
         token = await login(client)
         with patch(
-            "backend.api.render.render_markdown",
+            "backend.api.render.render_markdown_preview",
             new_callable=AsyncMock,
             side_effect=RenderError("pandoc not found"),
         ):
@@ -165,7 +165,7 @@ class TestRuntimeErrorHandler:
     async def test_non_render_runtime_error_returns_500(self, client: AsyncClient) -> None:
         token = await login(client)
         with patch(
-            "backend.api.render.render_markdown",
+            "backend.api.render.render_markdown_preview",
             new_callable=AsyncMock,
             side_effect=RuntimeError("unexpected internal issue"),
         ):
@@ -185,7 +185,7 @@ class TestRenderErrorHandler:
     async def test_render_error_returns_502(self, client: AsyncClient) -> None:
         token = await login(client)
         with patch(
-            "backend.api.render.render_markdown",
+            "backend.api.render.render_markdown_preview",
             new_callable=AsyncMock,
             side_effect=RenderError("pandoc server down"),
         ):
@@ -619,7 +619,7 @@ class TestTypeErrorHandler:
         """TypeError should be caught by global handler and return 500."""
         token = await login(client)
         with patch(
-            "backend.api.render.render_markdown",
+            "backend.api.render.render_markdown_preview",
             new_callable=AsyncMock,
             side_effect=TypeError("deliberate test error"),
         ):
@@ -735,7 +735,7 @@ class TestConnectionErrorHandler:
     async def test_connection_error_returns_502(self, client: AsyncClient) -> None:
         token = await login(client)
         with patch(
-            "backend.api.render.render_markdown",
+            "backend.api.render.render_markdown_preview",
             new_callable=AsyncMock,
             side_effect=ConnectionError("Connection refused"),
         ):
@@ -751,7 +751,7 @@ class TestConnectionErrorHandler:
     async def test_timeout_error_returns_504(self, client: AsyncClient) -> None:
         token = await login(client)
         with patch(
-            "backend.api.render.render_markdown",
+            "backend.api.render.render_markdown_preview",
             new_callable=AsyncMock,
             side_effect=TimeoutError("timed out"),
         ):
@@ -997,7 +997,7 @@ class TestExternalServiceErrorHandler:
 
         token = await login(client)
         with patch(
-            "backend.api.render.render_markdown",
+            "backend.api.render.render_markdown_preview",
             new_callable=AsyncMock,
             side_effect=ExternalServiceError("secret internal details"),
         ):

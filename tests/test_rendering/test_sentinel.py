@@ -2,10 +2,17 @@
 
 from __future__ import annotations
 
+from unittest.mock import AsyncMock, patch
+
+import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from backend.pandoc.sentinel import _inject_sentinels_into_html, _split_markdown_blocks
+from backend.pandoc.sentinel import (
+    _inject_sentinels_into_html,
+    _split_markdown_blocks,
+    render_markdown_preview,
+)
 
 
 class TestSplitMarkdownBlocks:
@@ -82,8 +89,8 @@ class TestInjectSentinelsIntoHtml:
     def test_heading_gets_sentinel(self) -> None:
         html = "<h2>Heading</h2>\n<p>Para.</p>"
         result = _inject_sentinels_into_html(html, [0, 2])
-        assert 'agbpos-L0' in result
-        assert 'agbpos-L2' in result
+        assert "agbpos-L0" in result
+        assert "agbpos-L2" in result
 
     def test_nested_paragraph_in_blockquote_not_collected(self) -> None:
         html = "<blockquote>\n<p>Quoted.</p>\n</blockquote>\n<p>After.</p>"
@@ -99,8 +106,8 @@ class TestInjectSentinelsIntoHtml:
         result = _inject_sentinels_into_html(html, [0, 2, 4])
         # Only 2 sentinels (ul + p), not 3
         assert result.count("agbpos-L") == 2
-        assert "agbpos-L0" in result   # ul gets first line number
-        assert "agbpos-L2" in result   # p gets second line number
+        assert "agbpos-L0" in result  # ul gets first line number
+        assert "agbpos-L2" in result  # p gets second line number
 
     def test_empty_block_lines(self) -> None:
         html = "<p>Paragraph.</p>"
@@ -118,6 +125,7 @@ class TestInjectSentinelsIntoHtml:
 
     def test_id_format_survives_sanitizer_regex(self) -> None:
         import re
+
         html = "<p>Test.</p>"
         result = _inject_sentinels_into_html(html, [42])
         ids = re.findall(r'id="([^"]+)"', result)
@@ -126,3 +134,35 @@ class TestInjectSentinelsIntoHtml:
         safe_id_re = re.compile(r"^[a-zA-Z][a-zA-Z0-9:_-]*$")
         for id_val in ids:
             assert safe_id_re.fullmatch(id_val)
+
+
+class TestRenderMarkdownPreview:
+    @pytest.mark.anyio
+    async def test_sentinels_present_in_output(self) -> None:
+        mock_html = "<p>Paragraph one.</p>\n<p>Paragraph two.</p>"
+        with patch(
+            "backend.pandoc.sentinel.render_markdown",
+            AsyncMock(return_value=mock_html),
+        ):
+            html = await render_markdown_preview("Paragraph one.\n\nParagraph two.")
+        assert 'id="agbpos-L0"' in html
+        assert 'id="agbpos-L2"' in html
+
+    @pytest.mark.anyio
+    async def test_single_paragraph_has_sentinel(self) -> None:
+        mock_html = "<p>Only paragraph.</p>"
+        with patch(
+            "backend.pandoc.sentinel.render_markdown",
+            AsyncMock(return_value=mock_html),
+        ):
+            html = await render_markdown_preview("Only paragraph.")
+        assert 'id="agbpos-L0"' in html
+
+    @pytest.mark.anyio
+    async def test_empty_markdown_no_sentinel(self) -> None:
+        with patch(
+            "backend.pandoc.sentinel.render_markdown",
+            AsyncMock(return_value=""),
+        ):
+            html = await render_markdown_preview("")
+        assert "agbpos" not in html

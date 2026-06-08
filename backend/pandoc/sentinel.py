@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from html.parser import HTMLParser
 
+from backend.pandoc.renderer import render_markdown
+
 _FENCE_RE = re.compile(r"^(`{3,}|~{3,})")
 
 
@@ -58,11 +60,26 @@ def _split_markdown_blocks(markdown: str) -> list[int]:
     return block_lines
 
 
-_TOP_LEVEL_BLOCK_TAGS: frozenset[str] = frozenset({
-    "p", "h1", "h2", "h3", "h4", "h5", "h6",
-    "pre", "ul", "ol", "blockquote", "table",
-    "figure", "div", "details", "section",
-})
+_TOP_LEVEL_BLOCK_TAGS: frozenset[str] = frozenset(
+    {
+        "p",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "pre",
+        "ul",
+        "ol",
+        "blockquote",
+        "table",
+        "figure",
+        "div",
+        "details",
+        "section",
+    }
+)
 _VOID_TAGS: frozenset[str] = frozenset({"br", "hr", "img", "input"})
 
 
@@ -128,3 +145,10 @@ def _inject_sentinels_into_html(html: str, block_lines: list[int]) -> str:
         prev = offset
     parts.append(html[prev:])
     return "".join(parts)
+
+
+async def render_markdown_preview(markdown: str) -> str:
+    """Render markdown to HTML with scroll-sync sentinels for the editor preview."""
+    block_lines = _split_markdown_blocks(markdown)
+    html = await render_markdown(markdown)
+    return _inject_sentinels_into_html(html, block_lines)

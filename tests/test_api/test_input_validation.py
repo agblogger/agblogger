@@ -208,7 +208,7 @@ class TestValueErrorForwarding:
 
         token = await login(client)
         with patch(
-            "backend.api.render.render_markdown",
+            "backend.api.render.render_markdown_preview",
             new_callable=AsyncMock,
             side_effect=ValueError("Custom validation message from service"),
         ):

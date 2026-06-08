@@ -10,7 +10,8 @@ from pydantic import BaseModel, Field
 
 from backend.api.deps import require_admin
 from backend.models.user import AdminUser
-from backend.pandoc.renderer import RenderError, render_markdown, rewrite_relative_urls
+from backend.pandoc.renderer import RenderError, rewrite_relative_urls
+from backend.pandoc.sentinel import render_markdown_preview
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +38,7 @@ async def preview(
 ) -> RenderResponse:
     """Render markdown to HTML for preview."""
     try:
-        html = await render_markdown(body.markdown)
+        html = await render_markdown_preview(body.markdown)
     except RenderError as exc:
         logger.error("Pandoc rendering failed in preview: %s", exc)
         raise HTTPException(status_code=502, detail="Markdown rendering failed") from exc
