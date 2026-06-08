@@ -600,18 +600,20 @@ export default function EditorPage() {
           <button
             type="button"
             onClick={syncEditorToPreview}
+            disabled={saving}
             title="Go to editor position in preview"
             aria-label="Go to editor position in preview"
-            className="p-1.5 text-muted hover:text-ink hover:bg-paper-warm rounded transition-colors"
+            className="p-1.5 text-muted hover:text-ink hover:bg-paper-warm rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <ChevronRight size={16} />
           </button>
           <button
             type="button"
             onClick={syncPreviewToEditor}
+            disabled={saving}
             title="Go to preview position in editor"
             aria-label="Go to preview position in editor"
-            className="p-1.5 text-muted hover:text-ink hover:bg-paper-warm rounded transition-colors"
+            className="p-1.5 text-muted hover:text-ink hover:bg-paper-warm rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <ChevronLeft size={16} />
           </button>
