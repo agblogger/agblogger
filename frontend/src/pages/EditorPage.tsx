@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Save, ArrowLeft, Eye } from 'lucide-react'
+import { Save, ArrowLeft, Eye, ChevronRight, ChevronLeft } from 'lucide-react'
 import { useSWRConfig } from 'swr'
 import { formatLocalDate } from '@/utils/date'
 
@@ -57,7 +57,7 @@ export default function EditorPage() {
   const previewRequestRef = useRef(0)
   const previewRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  useScrollSync({
+  const { syncEditorToPreview, syncPreviewToEditor } = useScrollSync({
     textareaRef,
     previewRef,
     content: body,
@@ -570,8 +570,7 @@ export default function EditorPage() {
         </button>
       </div>
 
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_2.5rem_1fr] gap-4">
         <div className={`flex flex-col h-[80vh] ${mobileTab === 'preview' ? 'hidden lg:flex' : ''}`}>
           <MarkdownToolbar
             textareaRef={textareaRef}
@@ -595,6 +594,27 @@ export default function EditorPage() {
                      disabled:opacity-50"
             spellCheck={false}
           />
+        </div>
+
+        <div className="hidden lg:flex flex-col items-center justify-center gap-2">
+          <button
+            type="button"
+            onClick={syncEditorToPreview}
+            title="Go to editor position in preview"
+            aria-label="Go to editor position in preview"
+            className="p-1.5 text-muted hover:text-ink hover:bg-paper-warm rounded transition-colors"
+          >
+            <ChevronRight size={16} />
+          </button>
+          <button
+            type="button"
+            onClick={syncPreviewToEditor}
+            title="Go to preview position in editor"
+            aria-label="Go to preview position in editor"
+            className="p-1.5 text-muted hover:text-ink hover:bg-paper-warm rounded transition-colors"
+          >
+            <ChevronLeft size={16} />
+          </button>
         </div>
 
         <div
