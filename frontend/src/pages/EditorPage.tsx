@@ -43,7 +43,7 @@ export default function EditorPage() {
   const [subtitle, setSubtitle] = useState('')
   const [body, setBody] = useState('')
   const [labels, setLabels] = useState<string[]>([])
-  const [isDraft, setIsDraft] = useState(false)
+  const [isDraft, setIsDraft] = useState(isNew)
   const [loadedAuthor, setLoadedAuthor] = useState<string | null>(null)
   const [createdAt, setCreatedAt] = useState<string | null>(null)
   const [modifiedAt, setModifiedAt] = useState<string | null>(null)
