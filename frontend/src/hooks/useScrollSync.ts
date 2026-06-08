@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { type RefObject, useCallback, useEffect, useRef, useState } from 'react'
 
 interface SentinelEntry {
   line: number
@@ -11,8 +11,8 @@ interface SyncMap {
 }
 
 interface UseScrollSyncOptions {
-  textareaRef: React.RefObject<HTMLTextAreaElement>
-  previewRef: React.RefObject<HTMLDivElement>
+  textareaRef: RefObject<HTMLTextAreaElement | null>
+  previewRef: RefObject<HTMLDivElement | null>
   content: string
 }
 
