@@ -86,3 +86,75 @@ describe('useScrollSync', () => {
     expect(previewScrollTopSetter).not.toHaveBeenCalled()
   })
 })
+
+describe('scroll sync position helpers (via hook behaviour)', () => {
+  it('scrolling editor with sentinel data moves preview proportionally', () => {
+    // Set up a textarea at scrollTop=0, a preview with a sentinel at offsetTop=100 for line 0
+    const textarea = makeTextarea(0)
+    const preview = makeDiv(0)
+
+    // Inject a sentinel element into the preview div
+    const sentinel = document.createElement('span')
+    sentinel.id = 'agbpos-L0'
+    Object.defineProperty(sentinel, 'offsetTop', { get: () => 0, configurable: true })
+    preview.appendChild(sentinel)
+
+    const previewScrollSetter = vi.fn()
+    Object.defineProperty(preview, 'scrollTop', {
+      get: () => 0,
+      set: previewScrollSetter,
+      configurable: true,
+    })
+
+    const { result } = renderHook(() =>
+      useScrollSync({
+        textareaRef: { current: textarea },
+        previewRef: { current: preview },
+        content: 'Hello world.',
+      })
+    )
+
+    act(() => result.current.onEditorScroll())
+    // With only one sentinel at top=0 and editor at scrollTop=0,
+    // preview should be set to 0
+    expect(previewScrollSetter).toHaveBeenCalledWith(0)
+  })
+
+  it('re-entrancy guard prevents feedback loop', () => {
+    const textarea = makeTextarea(100)
+    const preview = makeDiv(0)
+
+    const previewScrollSetter = vi.fn()
+    Object.defineProperty(preview, 'scrollTop', {
+      get: () => 0,
+      set: previewScrollSetter,
+      configurable: true,
+    })
+    const textareaScrollSetter = vi.fn()
+    Object.defineProperty(textarea, 'scrollTop', {
+      get: () => 100,
+      set: textareaScrollSetter,
+      configurable: true,
+    })
+
+    const { result } = renderHook(() =>
+      useScrollSync({
+        textareaRef: { current: textarea },
+        previewRef: { current: preview },
+        content: 'Paragraph.',
+      })
+    )
+
+    // Simulate editor scroll triggering preview scroll triggering editor scroll again
+    act(() => {
+      result.current.onEditorScroll()
+      // Immediately call preview scroll (simulating the scroll event it fires)
+      result.current.onPreviewScroll()
+    })
+
+    // textareaScrollSetter should NOT have been called (re-entrancy guard active)
+    expect(textareaScrollSetter).not.toHaveBeenCalled()
+    // But preview should have been set once from editor scroll
+    expect(previewScrollSetter).toHaveBeenCalledTimes(1)
+  })
+})
