@@ -237,7 +237,7 @@ describe('EditorPage', () => {
       expect(screen.getByLabelText(/title/i)).toHaveValue('Existing Post')
     })
 
-    await user.click(screen.getByRole('checkbox', { name: /draft/i }))
+    await user.click(screen.getByRole('switch', { name: /draft/i }))
     await user.click(screen.getByRole('button', { name: /save/i }))
 
     await waitFor(() => {
@@ -317,7 +317,7 @@ describe('EditorPage', () => {
       expect(screen.getByLabelText(/title/i)).toHaveValue('My Title')
     })
 
-    await user.click(screen.getByRole('checkbox', { name: /draft/i }))
+    await user.click(screen.getByRole('switch', { name: /draft/i }))
     await user.click(screen.getByRole('button', { name: /save/i }))
     await user.click(screen.getByRole('button', { name: /view post/i }))
 
@@ -371,8 +371,8 @@ describe('EditorPage', () => {
     ).toBeInTheDocument()
 
     // Toggle draft off — cross-posting should become enabled
-    const draftCheckbox = screen.getByRole('checkbox', { name: /draft/i })
-    await user.click(draftCheckbox)
+    const draftToggle = screen.getByRole('switch', { name: /draft/i })
+    await user.click(draftToggle)
     expect(crossPostCheckbox).not.toBeDisabled()
     expect(
       screen.queryByText('Publish the post to enable cross-posting after saving.'),
@@ -726,19 +726,44 @@ describe('EditorPage', () => {
     })
   })
 
-  it('draft checkbox toggles isDraft', async () => {
+  it('draft toggle toggles isDraft', async () => {
     const user = userEvent.setup()
     renderEditor('/editor/new')
 
     await waitFor(() => {
-      expect(screen.getByText('Draft')).toBeInTheDocument()
+      expect(screen.getByRole('switch', { name: /draft/i })).toBeInTheDocument()
     })
 
-    const checkbox = screen.getByRole('checkbox', { name: /draft/i })
-    expect(checkbox).toBeChecked()     // changed: starts checked (draft by default)
+    const toggle = screen.getByRole('switch', { name: /draft/i })
+    expect(toggle).toHaveAttribute('aria-checked', 'true')  // starts as draft
 
-    await user.click(checkbox)
-    expect(checkbox).not.toBeChecked() // changed: click turns draft off
+    await user.click(toggle)
+    expect(toggle).toHaveAttribute('aria-checked', 'false')
+  })
+
+  it('draft toggle shows "Not publicly visible" when draft is on', async () => {
+    renderEditor('/editor/new')
+
+    await waitFor(() => {
+      expect(screen.getByRole('switch', { name: /draft/i })).toBeInTheDocument()
+    })
+
+    expect(screen.getByText('Not publicly visible')).toBeInTheDocument()
+  })
+
+  it('draft toggle shows "Publicly visible" and aria-checked=false when draft is off', async () => {
+    const user = userEvent.setup()
+    renderEditor('/editor/new')
+
+    await waitFor(() => {
+      expect(screen.getByRole('switch', { name: /draft/i })).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('switch', { name: /draft/i }))
+
+    expect(screen.getByText('Publicly visible')).toBeInTheDocument()
+    expect(screen.queryByText('Not publicly visible')).not.toBeInTheDocument()
+    expect(screen.getByRole('switch', { name: /draft/i })).toHaveAttribute('aria-checked', 'false')
   })
 
   it('shows 404 save error', async () => {
@@ -815,7 +840,7 @@ describe('EditorPage', () => {
     })
 
     // Uncheck Draft to publish
-    await user.click(screen.getByRole('checkbox', { name: /draft/i }))
+    await user.click(screen.getByRole('switch', { name: /draft/i }))
     await user.click(screen.getByRole('button', { name: /save/i }))
 
     await waitFor(() => {
@@ -1252,15 +1277,15 @@ describe('EditorPage', () => {
     })
 
     // Toggle draft off to enable the bluesky checkbox
-    const draftCheckbox = screen.getByRole('checkbox', { name: /draft/i })
-    await user.click(draftCheckbox)
+    const draftToggle = screen.getByRole('switch', { name: /draft/i })
+    await user.click(draftToggle)
 
     // Check the platform checkbox (now enabled because draft is off)
     const blueskyCheckbox = screen.getByRole('checkbox', { name: /alice\.bsky\.social/i })
     await user.click(blueskyCheckbox)
 
     // Toggle draft back on — checkboxes get disabled but selection state is preserved
-    await user.click(draftCheckbox)
+    await user.click(draftToggle)
     expect(blueskyCheckbox).toBeChecked() // selection preserved even though checkbox is disabled
 
     // Type a title and save
