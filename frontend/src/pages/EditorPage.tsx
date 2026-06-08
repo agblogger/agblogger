@@ -61,6 +61,7 @@ export default function EditorPage() {
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([])
   const [showCrossPostDialog, setShowCrossPostDialog] = useState(false)
   const [mobileTab, setMobileTab] = useState<'edit' | 'preview'>('edit')
+  const [syncScroll, setSyncScroll] = useState(true)
   const [savedFilePath, setSavedFilePath] = useState<string | null>(null)
   const [fileStripRefreshToken, setFileStripRefreshToken] = useState(0)
   const [effectiveFilePath, setEffectiveFilePath] = useState<string | null>(
@@ -564,8 +565,23 @@ export default function EditorPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4" style={{ minHeight: '60vh' }}>
-        <div className={mobileTab === 'preview' ? 'hidden lg:block' : ''}>
+      {/* Scroll sync toggle — desktop only */}
+      <div className="hidden lg:flex justify-end mb-2">
+        <button
+          type="button"
+          onClick={() => setSyncScroll((s) => !s)}
+          className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-lg border transition-colors ${
+            syncScroll
+              ? 'bg-accent/10 border-accent/30 text-accent'
+              : 'bg-paper-warm border-border text-muted hover:text-ink'
+          }`}
+        >
+          ⇄ Sync
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className={`flex flex-col h-[80vh] ${mobileTab === 'preview' ? 'hidden lg:flex' : ''}`}>
           <MarkdownToolbar
             textareaRef={textareaRef}
             value={body}
@@ -582,7 +598,7 @@ export default function EditorPage() {
             onChange={(e) => setBody(e.target.value)}
             onKeyDown={handleEditorKeyDown}
             disabled={saving}
-            className="w-full h-full min-h-[60vh] p-4 bg-paper-warm border border-border rounded-lg
+            className="w-full flex-1 overflow-y-auto p-4 bg-paper-warm border border-border rounded-lg
                      font-mono text-sm leading-relaxed text-ink resize-none
                      focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/20
                      disabled:opacity-50"
@@ -590,7 +606,7 @@ export default function EditorPage() {
           />
         </div>
 
-        <div className={`p-6 bg-paper border border-border rounded-lg overflow-y-auto ${mobileTab === 'edit' ? 'hidden lg:block' : ''}`}>
+        <div className={`h-[80vh] p-6 bg-paper border border-border rounded-lg overflow-y-auto ${mobileTab === 'edit' ? 'hidden lg:block' : ''}`}>
           {previewError ? (
             <p className="text-sm text-red-600 dark:text-red-400 italic">Preview unavailable</p>
           ) : preview !== null ? (
