@@ -20,7 +20,7 @@ function makeDiv(scrollTop = 0, scrollHeight = 2000, clientHeight = 400): HTMLDi
 }
 
 describe('useScrollSync', () => {
-  it('starts with sync enabled', () => {
+  it('exposes syncEditorToPreview and syncPreviewToEditor functions', () => {
     const { result } = renderHook(() =>
       useScrollSync({
         textareaRef: { current: null },
@@ -28,10 +28,11 @@ describe('useScrollSync', () => {
         content: '',
       })
     )
-    expect(result.current.syncEnabled).toBe(true)
+    expect(typeof result.current.syncEditorToPreview).toBe('function')
+    expect(typeof result.current.syncPreviewToEditor).toBe('function')
   })
 
-  it('toggleSync toggles syncEnabled', () => {
+  it('syncEditorToPreview is a no-op when refs are null', () => {
     const { result } = renderHook(() =>
       useScrollSync({
         textareaRef: { current: null },
@@ -39,13 +40,10 @@ describe('useScrollSync', () => {
         content: '',
       })
     )
-    act(() => result.current.toggleSync())
-    expect(result.current.syncEnabled).toBe(false)
-    act(() => result.current.toggleSync())
-    expect(result.current.syncEnabled).toBe(true)
+    expect(() => result.current.syncEditorToPreview()).not.toThrow()
   })
 
-  it('onEditorScroll is a no-op when refs are null', () => {
+  it('syncPreviewToEditor is a no-op when refs are null', () => {
     const { result } = renderHook(() =>
       useScrollSync({
         textareaRef: { current: null },
@@ -53,47 +51,15 @@ describe('useScrollSync', () => {
         content: '',
       })
     )
-    // Should not throw
-    expect(() => result.current.onEditorScroll()).not.toThrow()
-  })
-
-  it('onPreviewScroll is a no-op when refs are null', () => {
-    const { result } = renderHook(() =>
-      useScrollSync({
-        textareaRef: { current: null },
-        previewRef: { current: null },
-        content: '',
-      })
-    )
-    expect(() => result.current.onPreviewScroll()).not.toThrow()
-  })
-
-  it('scroll handlers are no-ops when syncEnabled is false', () => {
-    const textarea = makeTextarea()
-    const preview = makeDiv()
-    const previewScrollTopSetter = vi.fn()
-    Object.defineProperty(preview, 'scrollTop', { get: () => 0, set: previewScrollTopSetter, configurable: true })
-
-    const { result } = renderHook(() =>
-      useScrollSync({
-        textareaRef: { current: textarea },
-        previewRef: { current: preview },
-        content: 'Some content',
-      })
-    )
-    act(() => result.current.toggleSync())  // disable sync
-    act(() => result.current.onEditorScroll())
-    expect(previewScrollTopSetter).not.toHaveBeenCalled()
+    expect(() => result.current.syncPreviewToEditor()).not.toThrow()
   })
 })
 
-describe('scroll sync position helpers (via hook behaviour)', () => {
-  it('scrolling editor with sentinel data moves preview proportionally', () => {
-    // Set up a textarea at scrollTop=0, a preview with a sentinel at offsetTop=100 for line 0
+describe('sync position helpers (via hook behaviour)', () => {
+  it('syncEditorToPreview sets preview.scrollTop based on editor position', () => {
     const textarea = makeTextarea(0)
     const preview = makeDiv(0)
 
-    // Inject a sentinel element into the preview div
     const sentinel = document.createElement('span')
     sentinel.id = 'agbpos-L0'
     Object.defineProperty(sentinel, 'offsetTop', { get: () => 0, configurable: true })
@@ -114,25 +80,22 @@ describe('scroll sync position helpers (via hook behaviour)', () => {
       })
     )
 
-    act(() => result.current.onEditorScroll())
-    // With only one sentinel at top=0 and editor at scrollTop=0,
-    // preview should be set to 0
+    act(() => result.current.syncEditorToPreview())
     expect(previewScrollSetter).toHaveBeenCalledWith(0)
   })
 
-  it('re-entrancy guard prevents feedback loop', () => {
-    const textarea = makeTextarea(100)
+  it('syncPreviewToEditor sets textarea.scrollTop based on preview position', () => {
+    const textarea = makeTextarea(0)
     const preview = makeDiv(0)
 
-    const previewScrollSetter = vi.fn()
-    Object.defineProperty(preview, 'scrollTop', {
-      get: () => 0,
-      set: previewScrollSetter,
-      configurable: true,
-    })
+    const sentinel = document.createElement('span')
+    sentinel.id = 'agbpos-L0'
+    Object.defineProperty(sentinel, 'offsetTop', { get: () => 0, configurable: true })
+    preview.appendChild(sentinel)
+
     const textareaScrollSetter = vi.fn()
     Object.defineProperty(textarea, 'scrollTop', {
-      get: () => 100,
+      get: () => 0,
       set: textareaScrollSetter,
       configurable: true,
     })
@@ -141,20 +104,11 @@ describe('scroll sync position helpers (via hook behaviour)', () => {
       useScrollSync({
         textareaRef: { current: textarea },
         previewRef: { current: preview },
-        content: 'Paragraph.',
+        content: 'Hello world.',
       })
     )
 
-    // Simulate editor scroll triggering preview scroll triggering editor scroll again
-    act(() => {
-      result.current.onEditorScroll()
-      // Immediately call preview scroll (simulating the scroll event it fires)
-      result.current.onPreviewScroll()
-    })
-
-    // textareaScrollSetter should NOT have been called (re-entrancy guard active)
-    expect(textareaScrollSetter).not.toHaveBeenCalled()
-    // But preview should have been set once from editor scroll
-    expect(previewScrollSetter).toHaveBeenCalledTimes(1)
+    act(() => result.current.syncPreviewToEditor())
+    expect(textareaScrollSetter).toHaveBeenCalledWith(0)
   })
 })

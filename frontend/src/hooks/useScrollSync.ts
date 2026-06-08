@@ -1,4 +1,4 @@
-import { type RefObject, useCallback, useEffect, useRef, useState } from 'react'
+import { type RefObject, useCallback, useEffect, useRef } from 'react'
 
 interface SentinelEntry {
   line: number
@@ -17,10 +17,8 @@ interface UseScrollSyncOptions {
 }
 
 interface UseScrollSyncResult {
-  syncEnabled: boolean
-  toggleSync: () => void
-  onEditorScroll: () => void
-  onPreviewScroll: () => void
+  syncEditorToPreview: () => void
+  syncPreviewToEditor: () => void
 }
 
 function setupMirror(mirror: HTMLDivElement, textarea: HTMLTextAreaElement): void {
@@ -49,7 +47,6 @@ function buildSyncMap(
 ): SyncMap {
   setupMirror(mirror, textarea)
 
-  // Populate mirror with one div per source line
   const lines = content.split('\n')
   mirror.innerHTML = ''
   const fragment = document.createDocumentFragment()
@@ -57,7 +54,7 @@ function buildSyncMap(
     const div = document.createElement('div')
     div.style.margin = '0'
     div.style.padding = '0'
-    // Use a zero-width space so empty lines retain their line-height
+    // Zero-width space so empty lines retain their line-height
     div.textContent = line.length > 0 ? line : '​'
     fragment.appendChild(div)
   }
@@ -78,7 +75,6 @@ function buildSyncMap(
   return { editorLines, sentinels }
 }
 
-// Returns fractional line index for a given editor scrollTop
 function editorScrollToLine(editorLines: number[], scrollTop: number): number {
   if (editorLines.length === 0) return 0
   let lo = 0
@@ -95,7 +91,6 @@ function editorScrollToLine(editorLines: number[], scrollTop: number): number {
   return lo + Math.min(1, (scrollTop - lineTop) / (nextTop - lineTop))
 }
 
-// Returns preview scrollTop for a fractional line index
 function lineToPreviewScroll(sentinels: SentinelEntry[], fractionalLine: number): number {
   if (sentinels.length === 0) return 0
   let lo = 0
@@ -113,7 +108,6 @@ function lineToPreviewScroll(sentinels: SentinelEntry[], fractionalLine: number)
   return s0.top + t * (s1.top - s0.top)
 }
 
-// Returns fractional line index for a given preview scrollTop
 function previewScrollToLine(sentinels: SentinelEntry[], scrollTop: number): number {
   if (sentinels.length === 0) return 0
   let lo = 0
@@ -131,7 +125,6 @@ function previewScrollToLine(sentinels: SentinelEntry[], scrollTop: number): num
   return s0.line + t * (s1.line - s0.line)
 }
 
-// Returns editor scrollTop for a fractional line index
 function lineToEditorScroll(editorLines: number[], fractionalLine: number): number {
   if (editorLines.length === 0) return 0
   const floorIdx = Math.floor(fractionalLine)
@@ -148,22 +141,13 @@ export function useScrollSync({
   previewRef,
   content,
 }: UseScrollSyncOptions): UseScrollSyncResult {
-  const [syncEnabled, setSyncEnabled] = useState(true)
-  const syncEnabledRef = useRef(syncEnabled)
   const mapRef = useRef<SyncMap | null>(null)
-  const syncingRef = useRef(false)
   const mirrorRef = useRef<HTMLDivElement | null>(null)
 
-  useEffect(() => {
-    syncEnabledRef.current = syncEnabled
-  }, [syncEnabled])
-
-  // Invalidate map when content changes
   useEffect(() => {
     mapRef.current = null
   }, [content])
 
-  // Create mirror div on mount
   useEffect(() => {
     const mirror = document.createElement('div')
     mirror.style.position = 'absolute'
@@ -179,7 +163,6 @@ export function useScrollSync({
     }
   }, [])
 
-  // Invalidate map on textarea container resize (width change breaks mirror measurements)
   useEffect(() => {
     const textarea = textareaRef.current
     if (!textarea) return
@@ -190,7 +173,6 @@ export function useScrollSync({
     return () => observer.disconnect()
   }, [textareaRef])
 
-  // Invalidate map when images load inside the preview (they change offsetTop of everything below)
   useEffect(() => {
     const preview = previewRef.current
     if (!preview) return
@@ -230,39 +212,25 @@ export function useScrollSync({
     return map
   }, [textareaRef, previewRef, content])
 
-  const toggleSync = useCallback(() => setSyncEnabled((s) => !s), [])
-
-  const onEditorScroll = useCallback(() => {
-    if (!syncEnabledRef.current || syncingRef.current) return
+  const syncEditorToPreview = useCallback(() => {
     const textarea = textareaRef.current
     const preview = previewRef.current
     if (!textarea || !preview) return
     const map = getOrBuildMap()
     if (!map) return
     const fractionalLine = editorScrollToLine(map.editorLines, textarea.scrollTop)
-    const previewTop = lineToPreviewScroll(map.sentinels, fractionalLine)
-    syncingRef.current = true
-    preview.scrollTop = previewTop
-    requestAnimationFrame(() => {
-      syncingRef.current = false
-    })
+    preview.scrollTop = lineToPreviewScroll(map.sentinels, fractionalLine)
   }, [textareaRef, previewRef, getOrBuildMap])
 
-  const onPreviewScroll = useCallback(() => {
-    if (!syncEnabledRef.current || syncingRef.current) return
+  const syncPreviewToEditor = useCallback(() => {
     const textarea = textareaRef.current
     const preview = previewRef.current
     if (!textarea || !preview) return
     const map = getOrBuildMap()
     if (!map) return
     const fractionalLine = previewScrollToLine(map.sentinels, preview.scrollTop)
-    const editorTop = lineToEditorScroll(map.editorLines, fractionalLine)
-    syncingRef.current = true
-    textarea.scrollTop = editorTop
-    requestAnimationFrame(() => {
-      syncingRef.current = false
-    })
+    textarea.scrollTop = lineToEditorScroll(map.editorLines, fractionalLine)
   }, [textareaRef, previewRef, getOrBuildMap])
 
-  return { syncEnabled, toggleSync, onEditorScroll, onPreviewScroll }
+  return { syncEditorToPreview, syncPreviewToEditor }
 }

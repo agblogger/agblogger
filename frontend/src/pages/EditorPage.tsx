@@ -57,7 +57,7 @@ export default function EditorPage() {
   const previewRequestRef = useRef(0)
   const previewRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const { syncEnabled, toggleSync, onEditorScroll, onPreviewScroll } = useScrollSync({
+  const { syncEditorToPreview, syncPreviewToEditor } = useScrollSync({
     textareaRef,
     previewRef,
     content: body,
@@ -570,21 +570,6 @@ export default function EditorPage() {
         </button>
       </div>
 
-      {/* Scroll sync toggle — desktop only */}
-      <div className="hidden lg:flex justify-end mb-2">
-        <button
-          type="button"
-          aria-label="Toggle scroll sync"
-          onClick={toggleSync}
-          className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-lg border transition-colors ${
-            syncEnabled
-              ? 'bg-accent/10 border-accent/30 text-accent'
-              : 'bg-paper-warm border-border text-muted hover:text-ink'
-          }`}
-        >
-          ⇄ Sync
-        </button>
-      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className={`flex flex-col h-[80vh] ${mobileTab === 'preview' ? 'hidden lg:flex' : ''}`}>
@@ -603,7 +588,7 @@ export default function EditorPage() {
             value={body}
             onChange={(e) => setBody(e.target.value)}
             onKeyDown={handleEditorKeyDown}
-            onScroll={onEditorScroll}
+            onScroll={syncEditorToPreview}
             disabled={saving}
             className="w-full flex-1 overflow-y-auto p-4 bg-paper-warm border border-border rounded-lg
                      font-mono text-sm leading-relaxed text-ink resize-none
@@ -615,7 +600,7 @@ export default function EditorPage() {
 
         <div
           ref={previewRef}
-          onScroll={onPreviewScroll}
+          onScroll={syncPreviewToEditor}
           className={`relative h-[80vh] p-6 bg-paper border border-border rounded-lg overflow-y-auto ${mobileTab === 'edit' ? 'hidden lg:block' : ''}`}
         >
           {previewError ? (
