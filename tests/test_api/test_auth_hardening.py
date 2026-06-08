@@ -541,6 +541,28 @@ class TestPasswordChangeEnabled:
         assert resp.json()["password_change_disabled"] is False
 
 
+class TestSessionRestorationSignal:
+    """The current-user endpoint should distinguish refreshable browser sessions."""
+
+    @pytest.mark.asyncio
+    async def test_me_401_signals_when_refresh_cookie_is_available(
+        self, client: AsyncClient
+    ) -> None:
+        client.cookies.set("refresh_token", "refreshable-session")
+
+        resp = await client.get("/api/auth/me")
+
+        assert resp.status_code == 401
+        assert resp.headers["x-refresh-available"] == "1"
+
+    @pytest.mark.asyncio
+    async def test_me_401_does_not_signal_without_refresh_cookie(self, client: AsyncClient) -> None:
+        resp = await client.get("/api/auth/me")
+
+        assert resp.status_code == 401
+        assert "x-refresh-available" not in resp.headers
+
+
 class TestGetCurrentAdminLogging:
     """get_current_admin must log differentiated messages for different auth failure modes.
 

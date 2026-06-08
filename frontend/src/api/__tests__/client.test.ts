@@ -148,7 +148,27 @@ describe('client CSRF hooks', () => {
       expect(mockKyPost).not.toHaveBeenCalled()
     })
 
-    it('does not retry GET auth/me (auth check)', async () => {
+    it('refreshes and retries GET auth/me to restore an inactive browser session', async () => {
+      mockKyPost.mockReturnValue(mockJsonResponse({ csrf_token: 'new-csrf-token' }))
+      mockKyRequest.mockResolvedValue(new Response('ok', { status: 200 }))
+
+      const request = new Request('https://example.com/api/auth/me', { method: 'GET' })
+      const response = new Response('', {
+        status: 401,
+        headers: { 'X-Refresh-Available': '1' },
+      })
+
+      const result = await capturedHooks!.afterResponse[0](request, {}, response)
+
+      expect(result.status).toBe(200)
+      expect(mockKyPost).toHaveBeenCalledWith(
+        'auth/refresh',
+        expect.objectContaining({ prefixUrl: '/api' }),
+      )
+      expect(mockKyRequest).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not refresh GET auth/me without a refreshable browser session', async () => {
       const request = new Request('https://example.com/api/auth/me', { method: 'GET' })
       const response = new Response('', { status: 401 })
 

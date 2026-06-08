@@ -4,6 +4,8 @@
 
 AgBlogger uses cookie-based sessions for the web UI and for the interactive sync CLI. Browser clients and the sync CLI both rely on refresh-token rotation to survive access-token expiry. The token-login endpoint exists for non-browser automation that needs an explicit short-lived bearer token.
 
+On SPA startup, the browser restores its session through the current-user request. When the access token is no longer valid, that endpoint signals whether an HttpOnly refresh cookie is available; the client renews only refreshable sessions. Auth-sensitive single-resource reads wait for the startup auth check to resolve so private content is not fetched under a transient anonymous identity.
+
 ## Credential Boundaries
 
 Passwords are stored as bcrypt hashes. Session-based clients use short-lived JWT access tokens with server-managed refresh token rotation and a CSRF token derived from the current access token. The token-login endpoint issues short-lived bearer tokens for non-browser automation clients that manage their own reauthentication.

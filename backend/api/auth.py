@@ -320,13 +320,16 @@ async def get_csrf_token(
 
 @router.get("/me", response_model=UserResponse)
 async def me(
+    request: Request,
     user: Annotated[AdminUser | None, Depends(get_current_admin)],
 ) -> UserResponse:
     """Get current admin info."""
     if user is None:
+        headers = {"X-Refresh-Available": "1"} if request.cookies.get("refresh_token") else None
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
+            headers=headers,
         )
     return UserResponse.from_user(user)
 

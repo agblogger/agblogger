@@ -34,8 +34,9 @@ vi.mock('@/api/client', async () => {
 let mockUser: UserResponse | null = null
 
 vi.mock('@/stores/authStore', () => ({
-  useAuthStore: (selector: (s: { user: UserResponse | null }) => unknown) =>
-    selector({ user: mockUser }),
+  useAuthStore: (
+    selector: (s: { user: UserResponse | null; isInitialized: boolean }) => unknown,
+  ) => selector({ user: mockUser, isInitialized: true }),
 }))
 
 vi.mock('@/hooks/useKatex', () => ({

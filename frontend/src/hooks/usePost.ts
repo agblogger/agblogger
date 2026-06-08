@@ -8,7 +8,8 @@ import { readPreloaded } from '@/utils/preload'
 
 export function usePost(slug: string | null) {
   const userId = useAuthStore((state) => state.user?.id ?? null)
-  const key = slug !== null ? ['post', slug, userId] as const : null
+  const isAuthInitialized = useAuthStore((state) => state.isInitialized)
+  const key = slug !== null && isAuthInitialized ? ['post', slug, userId] as const : null
 
   const fallback = useScopedPreloadedFallback<PostDetail>(key, () => {
     const raw = readPreloaded({

@@ -92,13 +92,15 @@ const api = ky.create({
       async (request, _options, response) => {
         if (response.status !== 401) return response
 
-        // Don't attempt token refresh for auth-check or login endpoints —
-        // a 401 here means the user is not authenticated or gave bad credentials.
+        // GET /auth/me refreshes only when the server confirms that the
+        // HttpOnly refresh cookie exists. This restores inactive sessions
+        // without making every anonymous startup attempt a failed refresh.
         const alreadyRetried = request.headers.get('X-Auth-Retry') === '1'
         const isAuthCheck = request.method === 'GET' && request.url.includes('/auth/me')
+        const canRestoreSession = response.headers.get('X-Refresh-Available') === '1'
         const isLogin = request.url.includes('/auth/login')
         const isRefresh = request.url.includes('/auth/refresh')
-        if (alreadyRetried || isAuthCheck || isLogin || isRefresh) {
+        if (alreadyRetried || (isAuthCheck && !canRestoreSession) || isLogin || isRefresh) {
           return response
         }
 

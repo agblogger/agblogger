@@ -58,6 +58,7 @@ describe('usePost', () => {
   })
 
   it('fetches post by slug', async () => {
+    useAuthStore.setState({ isInitialized: true })
     mockFetchPost.mockResolvedValue(postDetail)
 
     const { result } = renderHook(() => usePost('my-post/index.md'), {
@@ -69,6 +70,37 @@ describe('usePost', () => {
     })
 
     expect(mockFetchPost).toHaveBeenCalledWith('my-post/index.md')
+  })
+
+  it('waits for auth initialization before fetching a potentially private post', async () => {
+    mockFetchPost.mockResolvedValue({
+      ...postDetail,
+      is_draft: true,
+    })
+
+    const { result } = renderHook(() => usePost('draft-post/index.md'), {
+      wrapper: SWRTestWrapper,
+    })
+
+    expect(result.current.isLoading).toBe(false)
+    expect(mockFetchPost).not.toHaveBeenCalled()
+
+    act(() => {
+      useAuthStore.setState({
+        user: {
+          id: 1,
+          username: 'admin',
+          email: 'admin@example.com',
+          display_name: 'Admin',
+        },
+        isInitialized: true,
+      })
+    })
+
+    await waitFor(() => {
+      expect(result.current.data?.is_draft).toBe(true)
+    })
+    expect(mockFetchPost).toHaveBeenCalledWith('draft-post/index.md')
   })
 
   it('does not fetch when slug is null', async () => {
@@ -87,6 +119,7 @@ describe('usePost', () => {
 
   it('revalidates with a separate cache entry after logout', async () => {
     useAuthStore.setState({
+      isInitialized: true,
       user: {
         id: 1,
         username: 'author',
@@ -124,6 +157,7 @@ describe('usePost', () => {
   })
 
   it('does not reuse preloaded fallback after the slug changes', async () => {
+    useAuthStore.setState({ isInitialized: true })
     injectPostPreload(postDetail)
     mockFetchPost.mockImplementation(() => new Promise(() => {}))
 
