@@ -570,31 +570,32 @@ export default function EditorPage() {
         </button>
       </div>
 
+      <div className={mobileTab === 'preview' ? 'hidden lg:block' : ''}>
+        <MarkdownToolbar
+          textareaRef={textareaRef}
+          value={body}
+          onChange={setBody}
+          disabled={saving}
+          onImageClick={imageUploadEnabled ? triggerImageUpload : undefined}
+          imageUploading={imageUploading}
+          {...(imageDisabledReason !== undefined && { imageDisabledReason })}
+        />
+        <input {...imageInputProps} />
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_2.5rem_1fr] gap-4">
-        <div className={`flex flex-col h-[80vh] ${mobileTab === 'preview' ? 'hidden lg:flex' : ''}`}>
-          <MarkdownToolbar
-            textareaRef={textareaRef}
-            value={body}
-            onChange={setBody}
-            disabled={saving}
-            onImageClick={imageUploadEnabled ? triggerImageUpload : undefined}
-            imageUploading={imageUploading}
-            {...(imageDisabledReason !== undefined && { imageDisabledReason })}
-          />
-          <input {...imageInputProps} />
-          <textarea
-            ref={textareaRef}
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            onKeyDown={handleEditorKeyDown}
-            disabled={saving}
-            className="w-full flex-1 overflow-y-auto p-4 bg-paper-warm border border-border rounded-lg
-                     font-mono text-sm leading-relaxed text-ink resize-none
-                     focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/20
-                     disabled:opacity-50"
-            spellCheck={false}
-          />
-        </div>
+        <textarea
+          ref={textareaRef}
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          onKeyDown={handleEditorKeyDown}
+          disabled={saving}
+          className={`w-full h-[80vh] overflow-y-auto p-4 bg-paper-warm border border-border rounded-lg
+                   font-mono text-sm leading-relaxed text-ink resize-none
+                   focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/20
+                   disabled:opacity-50 ${mobileTab === 'preview' ? 'hidden lg:block' : ''}`}
+          spellCheck={false}
+        />
 
         <div className="hidden lg:flex flex-col items-center justify-center gap-2">
           <button
