@@ -766,6 +766,17 @@ describe('EditorPage', () => {
     expect(screen.getByRole('switch', { name: /draft/i })).toHaveAttribute('aria-checked', 'false')
   })
 
+  it('draft toggle starts unchecked for existing non-draft post', async () => {
+    mockFetchPostForEdit.mockResolvedValue(editResponse)
+    renderEditor('/editor/posts/existing/index.md')
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Title/)).toHaveValue('Existing Post')
+    })
+
+    expect(screen.getByRole('switch', { name: /draft/i })).toHaveAttribute('aria-checked', 'false')
+  })
+
   it('shows 404 save error', async () => {
     const mockCreatePost = vi.mocked(createPost)
     mockCreatePost.mockRejectedValue(
