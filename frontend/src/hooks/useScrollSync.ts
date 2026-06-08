@@ -203,6 +203,7 @@ export function useScrollSync({
       preview.querySelectorAll('img').forEach((img) => {
         img.removeEventListener('load', handleLoad)
         img.addEventListener('load', handleLoad)
+        if (img.complete) handleLoad()
       })
     }
 

@@ -616,7 +616,7 @@ export default function EditorPage() {
         <div
           ref={previewRef}
           onScroll={onPreviewScroll}
-          className={`h-[80vh] p-6 bg-paper border border-border rounded-lg overflow-y-auto ${mobileTab === 'edit' ? 'hidden lg:block' : ''}`}
+          className={`relative h-[80vh] p-6 bg-paper border border-border rounded-lg overflow-y-auto ${mobileTab === 'edit' ? 'hidden lg:block' : ''}`}
         >
           {previewError ? (
             <p className="text-sm text-red-600 dark:text-red-400 italic">Preview unavailable</p>
