@@ -141,6 +141,30 @@ html {
     margin-bottom: 0;
 }
 
+.prose .note {
+    border: 1px solid var(--color-border-dark);
+    border-left: 3px solid var(--color-muted);
+    background: var(--color-paper-warm);
+    border-radius: 4px;
+    padding: 0.75rem 1.25rem;
+    margin: 1.5rem 0;
+}
+
+.prose .note::before {
+    content: "Note";
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+    margin-bottom: 0.5rem;
+}
+
+.prose .note p:last-child {
+    margin-bottom: 0;
+}
+
 .prose dl {
     margin: 1.5rem 0;
 }
