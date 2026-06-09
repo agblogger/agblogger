@@ -4,6 +4,7 @@ import {
   List, ListOrdered,
   Link, ImagePlus, Youtube,
   TextQuote, Code, FileCode,
+  Superscript, StickyNote,
   Save, Maximize2, Minimize2,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -59,6 +60,9 @@ const items: readonly ToolbarItem[] = [
   { key: 'blockquote', label: 'Blockquote', Icon: TextQuote, shortcut: `${mod}+Shift+.` },
   { key: 'code', label: 'Code', Icon: Code, shortcut: `${mod}+E` },
   { key: 'codeblock', label: 'Code Block', Icon: FileCode, shortcut: `${mod}+Shift+E` },
+  { separator: true },
+  { key: 'footnote', label: 'Footnote', Icon: Superscript, shortcut: `${mod}+Shift+F` },
+  { key: 'note', label: 'Note', Icon: StickyNote },
 ]
 
 export default function MarkdownToolbar({

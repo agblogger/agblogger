@@ -288,7 +288,7 @@ describe('wrapSelection', () => {
 })
 
 describe('MarkdownToolbar', () => {
-  it('renders all 16 toolbar buttons including image and blockquote', () => {
+  it('renders all 18 toolbar buttons including image, footnote, and note', () => {
     const ref = createRef<HTMLTextAreaElement>()
     render(
       <MarkdownToolbar textareaRef={ref} value="" onChange={() => {}} onImageClick={() => {}} />,
@@ -309,6 +309,8 @@ describe('MarkdownToolbar', () => {
     expect(screen.getByLabelText(/^Blockquote/)).toBeInTheDocument()
     expect(screen.getByLabelText(/^Code \(/)).toBeInTheDocument()
     expect(screen.getByLabelText(/^Code Block/)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^Footnote/)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^Note/)).toBeInTheDocument()
   })
 
   it('blockquote button inserts with linePrefix mode', async () => {
@@ -553,10 +555,10 @@ describe('MarkdownToolbar', () => {
     expect(screen.getByLabelText('Exit fullscreen')).toBeInTheDocument()
   })
 
-  it('renders 4 group separators between button groups', () => {
+  it('renders 5 group separators between button groups', () => {
     const ref = createRef<HTMLTextAreaElement>()
     render(<MarkdownToolbar textareaRef={ref} value="" onChange={() => {}} />)
-    expect(screen.getAllByRole('separator')).toHaveLength(4)
+    expect(screen.getAllByRole('separator')).toHaveLength(5)
   })
 
   it('underline button inserts bracketed span syntax', async () => {
@@ -643,5 +645,40 @@ describe('MarkdownToolbar', () => {
     expect(onChange).toHaveBeenCalledWith(
       '<iframe src="https://www.youtube.com/embed/VIDEO_ID" allowfullscreen></iframe>',
     )
+  })
+
+  it('footnote button wraps selection in ^[...] syntax', async () => {
+    const onChange = vi.fn()
+    const textarea = document.createElement('textarea')
+    textarea.value = 'hello world'
+    textarea.selectionStart = 6
+    textarea.selectionEnd = 11
+    const ref = { current: textarea }
+
+    const user = userEvent.setup()
+    render(<MarkdownToolbar textareaRef={ref} value="hello world" onChange={onChange} />)
+    await user.click(screen.getByLabelText(/^Footnote/))
+    expect(onChange).toHaveBeenCalledWith('hello ^[world]')
+  })
+
+  it('note button inserts fenced div', async () => {
+    const onChange = vi.fn()
+    const textarea = document.createElement('textarea')
+    textarea.value = ''
+    textarea.selectionStart = 0
+    textarea.selectionEnd = 0
+    const ref = { current: textarea }
+
+    const user = userEvent.setup()
+    render(<MarkdownToolbar textareaRef={ref} value="" onChange={onChange} />)
+    await user.click(screen.getByLabelText(/^Note/))
+    expect(onChange).toHaveBeenCalledWith('::: {.note}\nnote text\n:::')
+  })
+
+  it('footnote button shows keyboard shortcut in title', () => {
+    const ref = createRef<HTMLTextAreaElement>()
+    render(<MarkdownToolbar textareaRef={ref} value="" onChange={() => {}} />)
+    const btn = screen.getByRole('button', { name: /Footnote/ })
+    expect(btn.title).toMatch(/Footnote \((Cmd|Ctrl)\+Shift\+F\)/)
   })
 })
