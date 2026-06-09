@@ -86,6 +86,54 @@ describe('MarkdownEditor', () => {
     expect(onChange).toHaveBeenCalledWith('**hi**')
   })
 
+  it('inserts two spaces on Tab and keeps focus in the textarea', async () => {
+    const onChange = vi.fn()
+    const user = userEvent.setup()
+    render(<MarkdownEditor value="ab" onChange={onChange} />)
+    const textarea = screen.getByRole<HTMLTextAreaElement>('textbox')
+    textarea.focus()
+    textarea.setSelectionRange(2, 2)
+    await user.keyboard('{Tab}')
+    expect(onChange).toHaveBeenCalledWith('ab  ')
+    expect(textarea).toHaveFocus()
+  })
+
+  it('indents every line of a multi-line selection on Tab', async () => {
+    const onChange = vi.fn()
+    const user = userEvent.setup()
+    render(<MarkdownEditor value={'one\ntwo'} onChange={onChange} />)
+    const textarea = screen.getByRole<HTMLTextAreaElement>('textbox')
+    textarea.focus()
+    textarea.setSelectionRange(0, 7)
+    await user.keyboard('{Tab}')
+    expect(onChange).toHaveBeenCalledWith('  one\n  two')
+  })
+
+  it('dedents a multi-line selection on Shift+Tab', async () => {
+    const onChange = vi.fn()
+    const user = userEvent.setup()
+    render(<MarkdownEditor value={'  one\n  two'} onChange={onChange} />)
+    const textarea = screen.getByRole<HTMLTextAreaElement>('textbox')
+    textarea.focus()
+    textarea.setSelectionRange(0, 11)
+    await user.keyboard('{Shift>}{Tab}{/Shift}')
+    expect(onChange).toHaveBeenCalledWith('one\ntwo')
+  })
+
+  it('moves the caret with smart Home and End', async () => {
+    const user = userEvent.setup()
+    render(<MarkdownEditor value="  hello" onChange={() => {}} />)
+    const textarea = screen.getByRole<HTMLTextAreaElement>('textbox')
+    textarea.focus()
+    textarea.setSelectionRange(7, 7)
+    await user.keyboard('{Home}')
+    expect(textarea.selectionStart).toBe(2) // first non-whitespace
+    await user.keyboard('{Home}')
+    expect(textarea.selectionStart).toBe(0) // toggles to column 0
+    await user.keyboard('{End}')
+    expect(textarea.selectionStart).toBe(7) // end of line
+  })
+
   it('renders the mobile edit/preview tab controls', () => {
     render(<MarkdownEditor value="" onChange={() => {}} />)
     expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument()

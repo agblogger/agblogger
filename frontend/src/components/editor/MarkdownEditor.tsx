@@ -5,12 +5,21 @@ import { ChevronRight, ChevronLeft, Eye } from 'lucide-react'
 import MarkdownToolbar from './MarkdownToolbar'
 import { actions as toolbarActions } from './toolbarActions'
 import { wrapSelection } from './wrapSelection'
+import {
+  dedentLines,
+  indentLines,
+  insertSpaces,
+  lineEndTarget,
+  pageTarget,
+  smartHomeTarget,
+} from './textareaKeys'
 import { useScrollSync } from '@/hooks/useScrollSync'
 import { useMarkdownPreview } from '@/hooks/useMarkdownPreview'
 import FileStrip from './FileStrip'
 import { useFileUpload } from './useFileUpload'
 
 const KEY_MAP: Record<string, string> = { b: 'bold', i: 'italic', h: 'heading', k: 'link' }
+const NAVIGATION_KEYS = new Set(['Home', 'End', 'PageUp', 'PageDown'])
 
 export interface MarkdownEditorProps {
   value: string
@@ -120,7 +129,76 @@ export default function MarkdownEditor({
     })
   }
 
+  function applyTab(shiftKey: boolean) {
+    const textarea = textareaRef.current
+    if (!textarea) return
+    const start = textarea.selectionStart
+    const end = textarea.selectionEnd
+    const result = shiftKey
+      ? dedentLines(value, start, end)
+      : value.slice(start, end).includes('\n')
+        ? indentLines(value, start, end)
+        : insertSpaces(value, start, end, 2)
+    onChange(result.value)
+    requestAnimationFrame(() => {
+      textarea.focus()
+      textarea.setSelectionRange(result.selectionStart, result.selectionEnd)
+    })
+  }
+
+  function pageLinesFor(textarea: HTMLTextAreaElement): number {
+    const style = window.getComputedStyle(textarea)
+    let lineHeight = parseFloat(style.lineHeight)
+    if (Number.isNaN(lineHeight) || lineHeight <= 0) {
+      const fontSize = parseFloat(style.fontSize)
+      lineHeight = Number.isNaN(fontSize) ? 16 : fontSize * 1.2
+    }
+    return Math.max(1, Math.floor(textarea.clientHeight / lineHeight) - 1)
+  }
+
+  function applyNavigation(key: string, shiftKey: boolean) {
+    const textarea = textareaRef.current
+    if (!textarea) return
+    const start = textarea.selectionStart
+    const end = textarea.selectionEnd
+    const backward = textarea.selectionDirection === 'backward'
+    const collapsed = start === end
+    const anchor = collapsed ? start : backward ? end : start
+    const active = collapsed ? start : backward ? start : end
+
+    let target: number
+    if (key === 'Home') {
+      target = smartHomeTarget(value, active)
+    } else if (key === 'End') {
+      target = lineEndTarget(value, active)
+    } else {
+      target = pageTarget(value, active, pageLinesFor(textarea), key === 'PageUp' ? 'up' : 'down')
+    }
+
+    if (shiftKey) {
+      const newStart = Math.min(anchor, target)
+      const newEnd = Math.max(anchor, target)
+      textarea.setSelectionRange(newStart, newEnd, target < anchor ? 'backward' : 'forward')
+    } else {
+      textarea.setSelectionRange(target, target)
+    }
+  }
+
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
+    const hasOtherMod = e.metaKey || e.ctrlKey || e.altKey
+
+    if (e.key === 'Tab' && !hasOtherMod) {
+      e.preventDefault()
+      applyTab(e.shiftKey)
+      return
+    }
+
+    if (!hasOtherMod && NAVIGATION_KEYS.has(e.key)) {
+      e.preventDefault()
+      applyNavigation(e.key, e.shiftKey)
+      return
+    }
+
     const isMod = e.metaKey || e.ctrlKey
     if (!isMod) return
 

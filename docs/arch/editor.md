@@ -13,9 +13,10 @@ itself, so hosts retain it for autosave, save payloads, and dirty tracking.
 
 **Component owns:** the toolbar (formatting actions + save + fullscreen toggle),
 textarea, live preview, scroll sync, keyboard shortcuts (formatting +
-Cmd/Ctrl+S), mobile edit/preview tabs, the fullscreen overlay, and — when
-`enableAssets` is set — file attachment management (upload/delete/rename) plus
-toolbar image upload.
+Cmd/Ctrl+S; Tab/Shift+Tab indent and block indent/dedent; editor-style caret
+navigation via smart Home/End and PageUp/PageDown), mobile edit/preview tabs,
+the fullscreen overlay, and — when `enableAssets` is set — file attachment
+management (upload/delete/rename) plus toolbar image upload.
 
 **Host owns:** metadata fields, autosave, the `onSave` handler and error
 banners.
@@ -28,6 +29,7 @@ banners.
   `render/preview` call plus KaTeX hydration and code-block enhancement; the
   single source of preview behavior.
 - Supporting units: `wrapSelection`/`toolbarActions` (formatting transforms),
+  `textareaKeys` (pure Tab-indent and caret-navigation math),
   `useScrollSync` (editor↔preview alignment), `useFileUpload` + `FileStrip` +
   `markdownAssetReferences` (assets).
 
