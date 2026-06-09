@@ -1,4 +1,6 @@
-import { Bold, Italic, Heading2, Link, ImagePlus, TextQuote, Code, FileCode } from 'lucide-react'
+import {
+  Bold, Italic, Heading2, Link, ImagePlus, TextQuote, Code, FileCode, Save, Maximize2, Minimize2,
+} from 'lucide-react'
 import type { RefObject } from 'react'
 import { actions } from './toolbarActions'
 import { wrapSelection } from './wrapSelection'
@@ -11,6 +13,11 @@ interface MarkdownToolbarProps {
   onImageClick?: (() => void) | undefined
   imageUploading?: boolean
   imageDisabledReason?: string
+  onSave?: (() => void) | undefined
+  saving?: boolean
+  canSave?: boolean
+  isFullscreen?: boolean
+  onToggleFullscreen?: (() => void) | undefined
 }
 
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.userAgent)
@@ -35,6 +42,11 @@ export default function MarkdownToolbar({
   onImageClick,
   imageUploading,
   imageDisabledReason,
+  onSave,
+  saving = false,
+  canSave = true,
+  isFullscreen = false,
+  onToggleFullscreen,
 }: MarkdownToolbarProps) {
   function handleAction(key: string) {
     if (key === 'image') return // handled via onImageClick
@@ -64,6 +76,8 @@ export default function MarkdownToolbar({
     return `Image (${shortcut})`
   }
 
+  const saveDisabled = (disabled ?? false) || saving || !canSave
+
   return (
     <div className="flex items-center gap-1 mb-2">
       {buttons.map(({ key, label, Icon, shortcut }) => {
@@ -72,6 +86,10 @@ export default function MarkdownToolbar({
           ? (disabled ?? false) || imageDisabledReason !== undefined || onImageClick === undefined || imageUploading === true
           : disabled
         const title = isImage ? imageTitle(shortcut) : `${label} (${shortcut})`
+
+        if (isImage && onImageClick === undefined && imageDisabledReason === undefined) {
+          return null
+        }
 
         return (
           <button
@@ -90,6 +108,37 @@ export default function MarkdownToolbar({
           </button>
         )
       })}
+
+      {(onSave !== undefined || onToggleFullscreen !== undefined) && (
+        <div className="ml-auto flex items-center gap-1">
+          {onSave !== undefined && (
+            <button
+              type="button"
+              onClick={() => onSave()}
+              disabled={saveDisabled}
+              className={`p-1.5 text-muted hover:text-ink hover:bg-paper-warm rounded transition-colors
+                       disabled:opacity-50 disabled:cursor-not-allowed${saving ? ' animate-pulse' : ''}`}
+              title={saving ? 'Saving...' : `Save (${mod}+S)`}
+              aria-label="Save"
+            >
+              <Save size={16} />
+            </button>
+          )}
+          {onToggleFullscreen !== undefined && (
+            <button
+              type="button"
+              onClick={() => onToggleFullscreen()}
+              disabled={disabled}
+              className="p-1.5 text-muted hover:text-ink hover:bg-paper-warm rounded transition-colors
+                       disabled:opacity-50 disabled:cursor-not-allowed"
+              title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+              aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+            >
+              {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+            </button>
+          )}
+        </div>
+      )}
     </div>
   )
 }

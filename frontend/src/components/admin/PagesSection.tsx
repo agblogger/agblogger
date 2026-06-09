@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   FileText,
   ArrowUp,
@@ -12,7 +12,6 @@ import {
 
 import AlertBanner from '@/components/AlertBanner'
 import { HTTPError } from '@/api/client'
-import api from '@/api/client'
 import type { AdminPageConfig } from '@/api/client'
 import {
   createAdminPage,
@@ -20,53 +19,10 @@ import {
   updateAdminPageOrder,
   deleteAdminPage,
 } from '@/api/admin'
-import { useRenderedHtml } from '@/hooks/useKatex'
 import { refreshSiteConfig } from '@/stores/siteStore'
+import MarkdownEditor from '@/components/editor/MarkdownEditor'
 
 const BUILTIN_PAGE_IDS = new Set(['timeline', 'labels'])
-
-function PagePreview({ markdown }: { markdown: string }) {
-  const [html, setHtml] = useState<string | null>(null)
-  const [previewError, setPreviewError] = useState(false)
-  const requestRef = useRef(0)
-  const hasContent = markdown.trim().length > 0
-
-  useEffect(() => {
-    if (!hasContent) return
-    const requestId = ++requestRef.current
-    const timer = setTimeout(async () => {
-      try {
-        const resp = await api
-          .post('render/preview', { json: { markdown } })
-          .json<{ html: string }>()
-        if (requestRef.current === requestId) {
-          setHtml(resp.html)
-          setPreviewError(false)
-        }
-      } catch (err) {
-        console.warn('Page preview render failed:', err)
-        if (requestRef.current === requestId) {
-          setPreviewError(true)
-        }
-      }
-    }, 500)
-    return () => clearTimeout(timer)
-  }, [markdown, hasContent])
-
-  const rendered = useRenderedHtml(hasContent ? html : null)
-
-  if (previewError) {
-    return <p className="text-sm text-red-600 dark:text-red-400 italic">Preview unavailable</p>
-  }
-
-  if (!rendered) {
-    return <p className="text-sm text-muted italic">Preview will appear here...</p>
-  }
-
-  // nosemgrep: typescript.react.security.audit.react-dangerouslysetinnerhtml
-  // Page HTML is rendered and sanitized server-side by the backend rendering pipeline.
-  return <div className="prose max-w-none" dangerouslySetInnerHTML={{ __html: rendered }} />
-}
 
 interface PagesSectionProps {
   initialPages: AdminPageConfig[]
@@ -409,24 +365,18 @@ export default function PagesSection({
                 {!BUILTIN_PAGE_IDS.has(page.id) && page.file !== null && (
                   <div>
                     <label className="block text-xs font-medium text-muted mb-1">Content</label>
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                      <textarea
-                        value={editContent}
-                        onChange={(e) => {
-                          setEditContent(e.target.value)
-                          setPageEditSuccess(null)
-                        }}
-                        disabled={busy}
-                        className="w-full min-h-[300px] p-4 bg-paper-warm border border-border rounded-lg
-                                 font-mono text-sm leading-relaxed text-ink resize-y
-                                 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/20
-                                 disabled:opacity-50"
-                        spellCheck={false}
-                      />
-                      <div className="p-4 bg-paper border border-border rounded-lg overflow-y-auto min-h-[300px]">
-                        <PagePreview markdown={editContent} />
-                      </div>
-                    </div>
+                    <MarkdownEditor
+                      value={editContent}
+                      onChange={(v) => {
+                        setEditContent(v)
+                        setPageEditSuccess(null)
+                      }}
+                      disabled={busy}
+                      onSave={() => void handleSavePage()}
+                      saving={savingPage}
+                      canSave={editTitle.trim().length > 0}
+                      editorHeight="24rem"
+                    />
                   </div>
                 )}
 

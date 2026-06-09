@@ -1,5 +1,10 @@
 import '@testing-library/jest-dom/vitest'
-import { afterEach, beforeEach } from 'vitest'
+import { afterEach, beforeEach, vi } from 'vitest'
+
+// Expose vitest's `vi` object as `jest` so that @testing-library/dom's
+// jestFakeTimersAreEnabled() can detect vitest fake timers and make
+// waitFor() advance the fake clock properly inside vi.useFakeTimers() tests.
+Object.assign(globalThis, { jest: vi })
 
 // jsdom does not implement ResizeObserver; provide a no-op stub so hooks that
 // use it (e.g. useScrollSync) do not throw in the test environment.

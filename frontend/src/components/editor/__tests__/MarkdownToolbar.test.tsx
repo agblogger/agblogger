@@ -143,7 +143,7 @@ describe('MarkdownToolbar', () => {
   it('renders all 8 toolbar buttons including image and blockquote', () => {
     const ref = createRef<HTMLTextAreaElement>()
     render(
-      <MarkdownToolbar textareaRef={ref} value="" onChange={() => {}} />,
+      <MarkdownToolbar textareaRef={ref} value="" onChange={() => {}} onImageClick={() => {}} />,
     )
     expect(screen.getByLabelText(/^Bold/)).toBeInTheDocument()
     expect(screen.getByLabelText(/^Italic/)).toBeInTheDocument()
@@ -266,13 +266,10 @@ describe('MarkdownToolbar', () => {
     expect(onImageClick).toHaveBeenCalledOnce()
   })
 
-  it('image button is disabled when onImageClick is not provided', () => {
+  it('does not render the image button when no image support is wired', () => {
     const ref = createRef<HTMLTextAreaElement>()
-    render(
-      <MarkdownToolbar textareaRef={ref} value="" onChange={() => {}} />,
-    )
-
-    expect(screen.getByLabelText(/^Image/)).toBeDisabled()
+    render(<MarkdownToolbar textareaRef={ref} value="" onChange={() => {}} />)
+    expect(screen.queryByLabelText(/^Image/)).not.toBeInTheDocument()
   })
 
   it('image button is disabled when imageUploading is true', () => {
@@ -335,5 +332,68 @@ describe('MarkdownToolbar', () => {
     )
 
     expect(screen.getByLabelText(/^Image/)).not.toBeDisabled()
+  })
+
+  it('does not render save or fullscreen buttons by default', () => {
+    const ref = createRef<HTMLTextAreaElement>()
+    render(<MarkdownToolbar textareaRef={ref} value="" onChange={() => {}} />)
+    expect(screen.queryByLabelText('Save')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/fullscreen/i)).not.toBeInTheDocument()
+  })
+
+  it('save button calls onSave when enabled', async () => {
+    const onSave = vi.fn()
+    const ref = createRef<HTMLTextAreaElement>()
+    const user = userEvent.setup()
+    render(<MarkdownToolbar textareaRef={ref} value="x" onChange={() => {}} onSave={onSave} />)
+    await user.click(screen.getByLabelText('Save'))
+    expect(onSave).toHaveBeenCalledOnce()
+  })
+
+  it('save button is disabled when canSave is false', () => {
+    const onSave = vi.fn()
+    const ref = createRef<HTMLTextAreaElement>()
+    render(
+      <MarkdownToolbar textareaRef={ref} value="" onChange={() => {}} onSave={onSave} canSave={false} />,
+    )
+    expect(screen.getByLabelText('Save')).toBeDisabled()
+  })
+
+  it('save button is disabled and shows Saving… while saving', () => {
+    const onSave = vi.fn()
+    const ref = createRef<HTMLTextAreaElement>()
+    render(
+      <MarkdownToolbar textareaRef={ref} value="x" onChange={() => {}} onSave={onSave} saving />,
+    )
+    const btn = screen.getByLabelText('Save')
+    expect(btn).toBeDisabled()
+    expect(btn).toHaveAttribute('title', 'Saving...')
+  })
+
+  it('fullscreen button toggles and reflects state in its label', async () => {
+    const onToggleFullscreen = vi.fn()
+    const ref = createRef<HTMLTextAreaElement>()
+    const user = userEvent.setup()
+    const { rerender } = render(
+      <MarkdownToolbar
+        textareaRef={ref}
+        value=""
+        onChange={() => {}}
+        onToggleFullscreen={onToggleFullscreen}
+      />,
+    )
+    await user.click(screen.getByLabelText('Enter fullscreen'))
+    expect(onToggleFullscreen).toHaveBeenCalledOnce()
+
+    rerender(
+      <MarkdownToolbar
+        textareaRef={ref}
+        value=""
+        onChange={() => {}}
+        onToggleFullscreen={onToggleFullscreen}
+        isFullscreen
+      />,
+    )
+    expect(screen.getByLabelText('Exit fullscreen')).toBeInTheDocument()
   })
 })

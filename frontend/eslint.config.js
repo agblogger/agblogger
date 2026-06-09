@@ -57,6 +57,7 @@ export default defineConfig([
       '@typescript-eslint/restrict-template-expressions': 'off',
       '@typescript-eslint/consistent-type-imports': 'off',
       '@typescript-eslint/array-type': 'off',
+      '@typescript-eslint/require-await': 'off',
     },
   },
   {

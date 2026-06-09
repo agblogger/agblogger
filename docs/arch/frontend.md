@@ -37,7 +37,7 @@ Application boot also installs small compatibility shims needed by runtime depen
 
 ## Editing Architecture
 
-The editor is built around structured post authoring instead of raw filesystem manipulation. Metadata editing, markdown editing, preview, and asset management are presented as one workflow over a canonical post unit. Preview rendering is delegated to the backend so the editor and published site use the same rendering and sanitization pipeline.
+Post and page authoring share one reusable editing surface, `MarkdownEditor` (`frontend/src/components/editor/`). It owns the toolbar, textarea, debounced live preview, editor↔preview scroll sync, keyboard shortcuts, mobile tabs, fullscreen mode, and opt-in asset management; hosts own metadata, autosave, and save handling. Preview rendering is delegated to the backend so the editor and the published site use the same rendering and sanitization pipeline. See [editor.md](editor.md).
 
 ## Rendering Model
 
