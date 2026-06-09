@@ -1,6 +1,8 @@
 import type { WrapAction } from './wrapSelection'
 
-export function calloutAction(type: string): WrapAction {
+export type CalloutType = 'note'
+
+export function calloutAction(type: CalloutType): WrapAction {
   return {
     before: `::: {.${type}}\n`,
     after: '\n:::',
