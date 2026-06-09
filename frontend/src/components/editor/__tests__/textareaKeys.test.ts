@@ -142,9 +142,11 @@ describe('visualRowHomeTarget', () => {
 })
 
 describe('visualRowEndTarget', () => {
-  // Visual-row end. On a wrap-boundary row the hanging trailing space is
-  // trimmed so the caret renders at the end of the CURRENT row rather than the
-  // start of the next one. On the final visual row it goes to the true line end.
+  // Visual-row end. The wrap-boundary offset (rowEnd) must never be returned:
+  // a textarea renders a caret placed there with downstream affinity, i.e. at
+  // the START of the next visual row, so End would overshoot a whole row. The
+  // target is the last offset that still renders on the CURRENT row. On the
+  // final visual row there is no wrap after, so the true line end is safe.
   it('trims the hanging trailing space on a wrap-boundary row', () => {
     const value = 'hello world foo' // row0 = "hello world " ends with space at 11
     expect(visualRowEndTarget(value, 0, 12, 15)).toBe(11)
@@ -155,9 +157,11 @@ describe('visualRowEndTarget', () => {
     expect(visualRowEndTarget(value, 12, 15, 15)).toBe(15)
   })
 
-  it('does not trim when the wrap breaks mid-word (no trailing space)', () => {
+  it('steps back one glyph when the wrap breaks mid-word (no trailing space)', () => {
+    // rowEnd 8 is a soft-wrap boundary; landing there renders on the next row.
+    // 7 is the last glyph of this row and renders on it (verified in-browser).
     const value = 'abcdefghijklmno'
-    expect(visualRowEndTarget(value, 0, 8, 15)).toBe(8)
+    expect(visualRowEndTarget(value, 0, 8, 15)).toBe(7)
   })
 
   it('keeps trailing spaces on a single-row line (no wrap after)', () => {

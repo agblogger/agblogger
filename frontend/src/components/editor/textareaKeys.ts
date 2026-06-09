@@ -167,13 +167,21 @@ export function visualRowHomeTarget(
 }
 
 /**
- * Visual-row end target. On a wrap-boundary row (`rowEnd` < `lineEnd`) the
- * space that caused the wrap hangs at the row's end; landing exactly on
- * `rowEnd` is the next row's start offset, which the browser renders at the
- * start of the next visual row. Trimming the trailing whitespace lands the
- * caret after the last visible glyph so it renders at the end of the current
- * row. On the final visual row it goes to the true line end (keeping any
- * trailing spaces, since nothing wraps after them).
+ * Visual-row end target. On a wrap-boundary row (`rowEnd` < `lineEnd`), `rowEnd`
+ * is also the first offset of the next visual row, and a textarea renders a
+ * caret placed there with downstream affinity — i.e. at the START of the next
+ * row. Returning `rowEnd` would therefore overshoot End by a whole visual row
+ * (and strand a follow-up Home, which would compute that next row's start).
+ *
+ * So the target is the last offset that still renders on the CURRENT row:
+ * - Space-wrap: trim the hanging trailing whitespace, landing just before the
+ *   space(s) — a normal mid-row offset that renders unambiguously on this row.
+ * - Mid-word wrap (no trailing whitespace): step back one glyph off the
+ *   boundary to the row's last character.
+ *
+ * On the final visual row nothing wraps after it, so the true line end is safe
+ * (and keeps any trailing spaces). Verified against real textarea layout via
+ * Playwright — see the editor's Home/End browser tests.
  */
 export function visualRowEndTarget(
   value: string,
@@ -186,7 +194,8 @@ export function visualRowEndTarget(
   while (end > rowStart && (value[end - 1] === ' ' || value[end - 1] === '\t')) {
     end--
   }
-  return end
+  if (end === rowEnd) end -= 1
+  return Math.max(rowStart, end)
 }
 
 /**
