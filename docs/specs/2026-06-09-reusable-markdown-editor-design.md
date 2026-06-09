@@ -147,5 +147,5 @@ interface MarkdownEditorProps {
 
 ## Docs
 
-Update the Editing Architecture section of `docs/arch/frontend.md` to describe
-the shared `MarkdownEditor` used by both post and page editing.
+Update the Editing Architecture section of `docs/arch/frontend.md` to very briefly mention
+the shared `MarkdownEditor` used by both post and page editing. Create a new `docs/arch/editor.md` to describe the editor component architecture in more depth. Keep arch docs concise and match existing style.
