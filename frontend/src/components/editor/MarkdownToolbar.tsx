@@ -1,6 +1,12 @@
 import {
-  Bold, Italic, Heading2, Link, ImagePlus, TextQuote, Code, FileCode, Save, Maximize2, Minimize2,
+  Bold, Italic, Underline, Strikethrough, Highlighter,
+  Heading2, Heading3, Heading4,
+  List, ListOrdered,
+  Link, ImagePlus, Youtube,
+  TextQuote, Code, FileCode,
+  Save, Maximize2, Minimize2,
 } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import type { RefObject } from 'react'
 import { actions } from './toolbarActions'
 import { wrapSelection } from './wrapSelection'
@@ -23,16 +29,37 @@ interface MarkdownToolbarProps {
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.userAgent)
 const mod = isMac ? 'Cmd' : 'Ctrl'
 
-const buttons = [
+type ButtonDef = {
+  key: string
+  label: string
+  Icon: LucideIcon
+  shortcut?: string
+}
+
+type ToolbarItem = ButtonDef | { separator: true }
+
+const items: readonly ToolbarItem[] = [
   { key: 'bold', label: 'Bold', Icon: Bold, shortcut: `${mod}+B` },
   { key: 'italic', label: 'Italic', Icon: Italic, shortcut: `${mod}+I` },
-  { key: 'heading', label: 'Heading', Icon: Heading2, shortcut: `${mod}+H` },
+  { key: 'underline', label: 'Underline', Icon: Underline, shortcut: `${mod}+U` },
+  { key: 'strikethrough', label: 'Strikethrough', Icon: Strikethrough, shortcut: `${mod}+Shift+X` },
+  { key: 'highlight', label: 'Highlight', Icon: Highlighter },
+  { separator: true },
+  { key: 'heading', label: 'Heading 2', Icon: Heading2, shortcut: `${mod}+H` },
+  { key: 'h3', label: 'Heading 3', Icon: Heading3 },
+  { key: 'h4', label: 'Heading 4', Icon: Heading4 },
+  { separator: true },
+  { key: 'bulletList', label: 'Bullet List', Icon: List, shortcut: `${mod}+Shift+8` },
+  { key: 'orderedList', label: 'Ordered List', Icon: ListOrdered, shortcut: `${mod}+Shift+7` },
+  { separator: true },
   { key: 'link', label: 'Link', Icon: Link, shortcut: `${mod}+K` },
   { key: 'image', label: 'Image', Icon: ImagePlus, shortcut: `${mod}+Shift+I` },
+  { key: 'youtube', label: 'YouTube', Icon: Youtube },
+  { separator: true },
   { key: 'blockquote', label: 'Blockquote', Icon: TextQuote, shortcut: `${mod}+Shift+.` },
   { key: 'code', label: 'Code', Icon: Code, shortcut: `${mod}+E` },
   { key: 'codeblock', label: 'Code Block', Icon: FileCode, shortcut: `${mod}+Shift+E` },
-] as const
+]
 
 export default function MarkdownToolbar({
   textareaRef,
@@ -49,7 +76,7 @@ export default function MarkdownToolbar({
   onToggleFullscreen,
 }: MarkdownToolbarProps) {
   function handleAction(key: string) {
-    if (key === 'image') return // handled via onImageClick
+    if (key === 'image') return
     const textarea = textareaRef.current
     if (!textarea) return
 
@@ -80,12 +107,26 @@ export default function MarkdownToolbar({
 
   return (
     <div className="flex items-center gap-1 mb-2">
-      {buttons.map(({ key, label, Icon, shortcut }) => {
+      {items.map((item, i) => {
+        if ('separator' in item) {
+          return (
+            <div
+              key={`sep-${i}`}
+              role="separator"
+              className="w-px h-4 bg-border mx-0.5 flex-shrink-0"
+            />
+          )
+        }
+
+        const { key, label, Icon, shortcut } = item
         const isImage = key === 'image'
         const isDisabled = isImage
           ? (disabled ?? false) || imageDisabledReason !== undefined || onImageClick === undefined || imageUploading === true
           : disabled
-        const title = isImage ? imageTitle(shortcut) : `${label} (${shortcut})`
+        const title = isImage
+          ? imageTitle(shortcut ?? '')
+          : shortcut !== undefined ? `${label} (${shortcut})` : label
+        const ariaLabel = shortcut !== undefined ? `${label} (${shortcut})` : label
 
         if (isImage && onImageClick === undefined && imageDisabledReason === undefined) {
           return null
@@ -102,7 +143,7 @@ export default function MarkdownToolbar({
                        isImage && imageUploading === true ? ' animate-pulse' : ''
                      }`}
             title={title}
-            aria-label={`${label} (${shortcut})`}
+            aria-label={ariaLabel}
           >
             <Icon size={16} />
           </button>

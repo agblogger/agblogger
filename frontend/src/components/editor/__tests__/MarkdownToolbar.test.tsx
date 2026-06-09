@@ -239,16 +239,24 @@ describe('wrapSelection', () => {
 })
 
 describe('MarkdownToolbar', () => {
-  it('renders all 8 toolbar buttons including image and blockquote', () => {
+  it('renders all 16 toolbar buttons including image and blockquote', () => {
     const ref = createRef<HTMLTextAreaElement>()
     render(
       <MarkdownToolbar textareaRef={ref} value="" onChange={() => {}} onImageClick={() => {}} />,
     )
     expect(screen.getByLabelText(/^Bold/)).toBeInTheDocument()
     expect(screen.getByLabelText(/^Italic/)).toBeInTheDocument()
-    expect(screen.getByLabelText(/^Heading/)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^Underline/)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^Strikethrough/)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^Highlight/)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^Heading 2/)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^Heading 3/)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^Heading 4/)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^Bullet List/)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^Ordered List/)).toBeInTheDocument()
     expect(screen.getByLabelText(/^Link/)).toBeInTheDocument()
     expect(screen.getByLabelText(/^Image/)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^YouTube/)).toBeInTheDocument()
     expect(screen.getByLabelText(/^Blockquote/)).toBeInTheDocument()
     expect(screen.getByLabelText(/^Code \(/)).toBeInTheDocument()
     expect(screen.getByLabelText(/^Code Block/)).toBeInTheDocument()
@@ -313,7 +321,7 @@ describe('MarkdownToolbar', () => {
       <MarkdownToolbar textareaRef={ref} value="some text" onChange={onChange} />,
     )
 
-    await user.click(screen.getByLabelText(/^Heading/))
+    await user.click(screen.getByLabelText(/^Heading 2/))
 
     expect(onChange).toHaveBeenCalledWith('some text\n## Heading')
   })
@@ -494,5 +502,97 @@ describe('MarkdownToolbar', () => {
       />,
     )
     expect(screen.getByLabelText('Exit fullscreen')).toBeInTheDocument()
+  })
+
+  it('renders 4 group separators between button groups', () => {
+    const ref = createRef<HTMLTextAreaElement>()
+    render(<MarkdownToolbar textareaRef={ref} value="" onChange={() => {}} />)
+    expect(screen.getAllByRole('separator')).toHaveLength(4)
+  })
+
+  it('underline button inserts bracketed span syntax', async () => {
+    const onChange = vi.fn()
+    const textarea = document.createElement('textarea')
+    textarea.value = 'hello world'
+    textarea.selectionStart = 6
+    textarea.selectionEnd = 11
+    const ref = { current: textarea }
+
+    const user = userEvent.setup()
+    render(<MarkdownToolbar textareaRef={ref} value="hello world" onChange={onChange} />)
+    await user.click(screen.getByLabelText(/^Underline/))
+    expect(onChange).toHaveBeenCalledWith('hello [world]{.underline}')
+  })
+
+  it('strikethrough button wraps selection with tilde markers', async () => {
+    const onChange = vi.fn()
+    const textarea = document.createElement('textarea')
+    textarea.value = 'hello world'
+    textarea.selectionStart = 6
+    textarea.selectionEnd = 11
+    const ref = { current: textarea }
+
+    const user = userEvent.setup()
+    render(<MarkdownToolbar textareaRef={ref} value="hello world" onChange={onChange} />)
+    await user.click(screen.getByLabelText(/^Strikethrough/))
+    expect(onChange).toHaveBeenCalledWith('hello ~~world~~')
+  })
+
+  it('highlight button wraps selection with equals markers', async () => {
+    const onChange = vi.fn()
+    const textarea = document.createElement('textarea')
+    textarea.value = 'hello world'
+    textarea.selectionStart = 6
+    textarea.selectionEnd = 11
+    const ref = { current: textarea }
+
+    const user = userEvent.setup()
+    render(<MarkdownToolbar textareaRef={ref} value="hello world" onChange={onChange} />)
+    await user.click(screen.getByLabelText(/^Highlight/))
+    expect(onChange).toHaveBeenCalledWith('hello ==world==')
+  })
+
+  it('bullet list button prefixes each selected line', async () => {
+    const onChange = vi.fn()
+    const textarea = document.createElement('textarea')
+    textarea.value = 'line one\nline two'
+    textarea.selectionStart = 0
+    textarea.selectionEnd = 17
+    const ref = { current: textarea }
+
+    const user = userEvent.setup()
+    render(<MarkdownToolbar textareaRef={ref} value={'line one\nline two'} onChange={onChange} />)
+    await user.click(screen.getByLabelText(/^Bullet List/))
+    expect(onChange).toHaveBeenCalledWith('- line one\n- line two')
+  })
+
+  it('ordered list button prefixes each selected line', async () => {
+    const onChange = vi.fn()
+    const textarea = document.createElement('textarea')
+    textarea.value = 'line one\nline two'
+    textarea.selectionStart = 0
+    textarea.selectionEnd = 17
+    const ref = { current: textarea }
+
+    const user = userEvent.setup()
+    render(<MarkdownToolbar textareaRef={ref} value={'line one\nline two'} onChange={onChange} />)
+    await user.click(screen.getByLabelText(/^Ordered List/))
+    expect(onChange).toHaveBeenCalledWith('1. line one\n1. line two')
+  })
+
+  it('youtube button inserts iframe placeholder with VIDEO_ID selected', async () => {
+    const onChange = vi.fn()
+    const textarea = document.createElement('textarea')
+    textarea.value = ''
+    textarea.selectionStart = 0
+    textarea.selectionEnd = 0
+    const ref = { current: textarea }
+
+    const user = userEvent.setup()
+    render(<MarkdownToolbar textareaRef={ref} value="" onChange={onChange} />)
+    await user.click(screen.getByLabelText(/^YouTube/))
+    expect(onChange).toHaveBeenCalledWith(
+      '<iframe src="https://www.youtube.com/embed/VIDEO_ID" allowfullscreen></iframe>',
+    )
   })
 })
