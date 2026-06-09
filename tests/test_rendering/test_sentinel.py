@@ -330,7 +330,13 @@ class TestDefinitionListScanning:
         result = _split_markdown_blocks(markdown)
         assert result == sorted(set(result))
         for line_no in result:
-            assert not _DEF_MARKER_RE.match(lines[line_no])
+            if not _DEF_MARKER_RE.match(lines[line_no]):
+                continue
+            # A def-marker line attached to a preceding term is absorbed into the
+            # term's block, never its own. It is only ever a block start as an
+            # "orphan": at the document start, or after a blank line, with no term
+            # on the line directly above. See test_orphan_marker_no_preceding_term.
+            assert line_no == 0 or not lines[line_no - 1].strip()
 
 
 class TestDefinitionListAndHorizontalRule:
