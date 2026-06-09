@@ -312,6 +312,8 @@ export default function MarkdownEditor({
       actionKey = 'bulletList'
     } else if (e.key === '&' && e.shiftKey) {
       actionKey = 'orderedList'
+    } else if ((e.key === 'f' || e.key === 'F') && e.shiftKey) {
+      actionKey = 'footnote'
     } else if (!e.shiftKey) {
       actionKey = KEY_MAP[e.key.toLowerCase()]
     }

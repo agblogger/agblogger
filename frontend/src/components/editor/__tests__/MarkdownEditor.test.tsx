@@ -294,4 +294,15 @@ describe('MarkdownEditor', () => {
     await user.keyboard('{Control>}{Shift>}&{/Shift}{/Control}')
     expect(onChange).toHaveBeenCalledWith('1. hi')
   })
+
+  it('applies footnote shortcut (Ctrl+Shift+F) via onChange', async () => {
+    const onChange = vi.fn()
+    const user = userEvent.setup()
+    render(<MarkdownEditor value="hi" onChange={onChange} />)
+    const textarea = screen.getByRole<HTMLTextAreaElement>('textbox')
+    textarea.focus()
+    textarea.setSelectionRange(0, 2)
+    await user.keyboard('{Control>}{Shift>}f{/Shift}{/Control}')
+    expect(onChange).toHaveBeenCalledWith('^[hi]')
+  })
 })
