@@ -53,6 +53,10 @@ html {
     color: #e0ddd8;
 }
 
+.prose .underline {
+    text-decoration: underline;
+}
+
 /* Prose styling for rendered content */
 .prose {
     font-size: 1.05rem;
