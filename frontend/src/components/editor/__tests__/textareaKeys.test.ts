@@ -10,6 +10,8 @@ import {
   visualEndTarget,
   visualPageTarget,
   visualRowCount,
+  visualRowEndTarget,
+  visualRowHomeTarget,
   visualSmartHomeTarget,
 } from '../textareaKeys'
 
@@ -112,6 +114,55 @@ describe('lineEndTarget', () => {
 
   it('moves to the end of the value on the last line', () => {
     expect(lineEndTarget('one\ntwo', 5)).toBe(7)
+  })
+})
+
+describe('visualRowHomeTarget', () => {
+  // Visual-row smart-home: toggle within the VISUAL ROW between its first
+  // non-whitespace char and its start. It must never jump to the logical line
+  // start on a continuation row — that was the "flies to the top of the
+  // paragraph" bug.
+  const wrapped = 'abcdefghijklmnopqrst' // pretend row0=[0,10), row1=[10,20)
+
+  it('moves to the visual row start from mid continuation row', () => {
+    expect(visualRowHomeTarget(wrapped, 15, 10, 20)).toBe(10)
+  })
+
+  it('stays at the visual row start instead of flying to logical column 0', () => {
+    // Regression: caret already at a continuation row start must NOT go to 0.
+    expect(visualRowHomeTarget(wrapped, 10, 10, 20)).toBe(10)
+  })
+
+  it('toggles first-non-whitespace and start on an indented first row', () => {
+    const indented = '  hello'
+    expect(visualRowHomeTarget(indented, 5, 0, 7)).toBe(2) // mid row → first non-ws
+    expect(visualRowHomeTarget(indented, 2, 0, 7)).toBe(0) // at first non-ws → row start
+    expect(visualRowHomeTarget(indented, 0, 0, 7)).toBe(0) // at row start → stays
+  })
+})
+
+describe('visualRowEndTarget', () => {
+  // Visual-row end. On a wrap-boundary row the hanging trailing space is
+  // trimmed so the caret renders at the end of the CURRENT row rather than the
+  // start of the next one. On the final visual row it goes to the true line end.
+  it('trims the hanging trailing space on a wrap-boundary row', () => {
+    const value = 'hello world foo' // row0 = "hello world " ends with space at 11
+    expect(visualRowEndTarget(value, 0, 12, 15)).toBe(11)
+  })
+
+  it('goes to the true line end on the final visual row', () => {
+    const value = 'hello world foo'
+    expect(visualRowEndTarget(value, 12, 15, 15)).toBe(15)
+  })
+
+  it('does not trim when the wrap breaks mid-word (no trailing space)', () => {
+    const value = 'abcdefghijklmno'
+    expect(visualRowEndTarget(value, 0, 8, 15)).toBe(8)
+  })
+
+  it('keeps trailing spaces on a single-row line (no wrap after)', () => {
+    const value = 'hi   '
+    expect(visualRowEndTarget(value, 0, 5, 5)).toBe(5)
   })
 })
 

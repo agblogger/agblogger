@@ -144,6 +144,52 @@ export function visualEndTarget(
 }
 
 /**
+ * Visual-row smart-home target. Toggles within a single visual row: from
+ * anywhere past the row's first non-whitespace character it moves there, and
+ * from at-or-before it (including the row start) it moves to the row start.
+ *
+ * Crucially it stays inside the visual row — on a continuation row it never
+ * jumps to the logical line start. On the first visual row of a line
+ * `rowStart` equals the line start, so this reduces to classic smart-home.
+ * `rowStart`/`rowEnd` are absolute offsets bounding the caret's visual row.
+ */
+export function visualRowHomeTarget(
+  value: string,
+  caret: number,
+  rowStart: number,
+  rowEnd: number,
+): number {
+  let firstNonWs = rowStart
+  while (firstNonWs < rowEnd && (value[firstNonWs] === ' ' || value[firstNonWs] === '\t')) {
+    firstNonWs++
+  }
+  return caret > firstNonWs ? firstNonWs : rowStart
+}
+
+/**
+ * Visual-row end target. On a wrap-boundary row (`rowEnd` < `lineEnd`) the
+ * space that caused the wrap hangs at the row's end; landing exactly on
+ * `rowEnd` is the next row's start offset, which the browser renders at the
+ * start of the next visual row. Trimming the trailing whitespace lands the
+ * caret after the last visible glyph so it renders at the end of the current
+ * row. On the final visual row it goes to the true line end (keeping any
+ * trailing spaces, since nothing wraps after them).
+ */
+export function visualRowEndTarget(
+  value: string,
+  rowStart: number,
+  rowEnd: number,
+  lineEnd: number,
+): number {
+  if (rowEnd >= lineEnd) return lineEnd
+  let end = rowEnd
+  while (end > rowStart && (value[end - 1] === ' ' || value[end - 1] === '\t')) {
+    end--
+  }
+  return end
+}
+
+/**
  * Smart-home target: the first non-whitespace character of the line, or column
  * zero when the caret already sits at that first non-whitespace character.
  */

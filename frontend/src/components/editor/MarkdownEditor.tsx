@@ -12,6 +12,8 @@ import {
   lineEndTarget,
   smartHomeTarget,
   visualPageTarget,
+  visualRowEndTarget,
+  visualRowHomeTarget,
 } from './textareaKeys'
 import { useScrollSync } from '@/hooks/useScrollSync'
 import { useMarkdownPreview } from '@/hooks/useMarkdownPreview'
@@ -292,19 +294,22 @@ export default function MarkdownEditor({
       return
     }
 
-    // Home / End: query the actual browser word-wrap layout via a mirror div.
+    // Home / End: query the actual browser word-wrap layout via a mirror div,
+    // then toggle/land within that visual row (never the whole logical line).
+    // When no layout is available (JSDOM / SSR) fall back to logical-line moves.
     const bounds = getVisualRowBounds(textarea, active)
     let target: number
     if (key === 'Home') {
-      if (bounds !== null) {
-        // At visual row start: smart-home toggle (first non-ws ↔ col 0).
-        // Past visual row start: jump there first.
-        target = active > bounds.rowStart ? bounds.rowStart : smartHomeTarget(value, active)
-      } else {
-        target = smartHomeTarget(value, active)
-      }
+      target =
+        bounds !== null
+          ? visualRowHomeTarget(value, active, bounds.rowStart, bounds.rowEnd)
+          : smartHomeTarget(value, active)
     } else {
-      target = bounds !== null ? bounds.rowEnd : lineEndTarget(value, active)
+      const lineEnd = lineEndTarget(value, active)
+      target =
+        bounds !== null
+          ? visualRowEndTarget(value, bounds.rowStart, bounds.rowEnd, lineEnd)
+          : lineEnd
     }
 
     if (shiftKey) {

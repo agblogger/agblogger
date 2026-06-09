@@ -176,9 +176,11 @@ describe('MarkdownEditor', () => {
     spy.mockRestore()
   })
 
-  it('End moves to the word-wrap visual row end, not a fixed-char-count offset', async () => {
-    // Same layout: "hello " on row 0, "world" on row 1.
-    // Caret at 3 is on row 0, so End must move to 6 (first char of next row).
+  it('End moves to the end of the current visual row, trimming the wrapped space', async () => {
+    // Same layout: "hello " on row 0, "world" on row 1 (space at index 5 hangs
+    // at the wrap). Caret at 3 is on row 0, so End must move to 5 — after the
+    // last visible glyph "o" — not to 6, which is the next row's start offset
+    // and would render the caret at the beginning of "world".
     const user = userEvent.setup()
     render(<MarkdownEditor value="hello world" onChange={() => {}} />)
     const textarea = screen.getByRole<HTMLTextAreaElement>('textbox')
@@ -193,7 +195,33 @@ describe('MarkdownEditor', () => {
     textarea.focus()
     textarea.setSelectionRange(3, 3) // within "hello" on visual row 0
     await user.keyboard('{End}')
-    expect(textarea.selectionStart).toBe(6) // visual row 0 end = first char of row 1
+    expect(textarea.selectionStart).toBe(5) // end of visible row 0 content
+
+    spy.mockRestore()
+  })
+
+  it('Home at a continuation visual-row start stays there, not at logical column 0', async () => {
+    // Regression for the "flies to the top of the paragraph" bug: pressing End
+    // leaves the caret at the next row's start offset; the following Home used
+    // to apply logical smart-home and jump to column 0 of the whole line.
+    // It must instead stay at the visual row start.
+    //
+    // Layout: "hello " on row 0, "world" on row 1. Caret at 6 = start of row 1.
+    const user = userEvent.setup()
+    render(<MarkdownEditor value="hello world" onChange={() => {}} />)
+    const textarea = screen.getByRole<HTMLTextAreaElement>('textbox')
+
+    Object.defineProperty(textarea, 'clientWidth', { value: 100, configurable: true })
+
+    const spy = vi.spyOn(Range.prototype, 'getBoundingClientRect').mockImplementation(function (this: Range) {
+      const top = this.startOffset < 6 ? 0 : 20
+      return { top, height: 20, width: 8, left: 0, bottom: top + 20, right: 8, x: 0, y: top, toJSON: () => ({}) } as DOMRect
+    })
+
+    textarea.focus()
+    textarea.setSelectionRange(6, 6) // start of "world" on visual row 1
+    await user.keyboard('{Home}')
+    expect(textarea.selectionStart).toBe(6) // stays at row 1 start, not 0
 
     spy.mockRestore()
   })
