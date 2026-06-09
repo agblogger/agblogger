@@ -18,7 +18,7 @@ import { useMarkdownPreview } from '@/hooks/useMarkdownPreview'
 import FileStrip from './FileStrip'
 import { useFileUpload } from './useFileUpload'
 
-const KEY_MAP: Record<string, string> = { b: 'bold', i: 'italic', h: 'heading', k: 'link' }
+const KEY_MAP: Record<string, string> = { b: 'bold', i: 'italic', h: 'heading', k: 'link', u: 'underline' }
 const NAVIGATION_KEYS = new Set(['Home', 'End', 'PageUp', 'PageDown'])
 
 /**
@@ -306,6 +306,12 @@ export default function MarkdownEditor({
       actionKey = e.shiftKey ? 'codeblock' : 'code'
     } else if ((e.key === '>' || e.key === '.') && e.shiftKey) {
       actionKey = 'blockquote'
+    } else if ((e.key === 'x' || e.key === 'X') && e.shiftKey) {
+      actionKey = 'strikethrough'
+    } else if (e.key === '*' && e.shiftKey) {
+      actionKey = 'bulletList'
+    } else if (e.key === '&' && e.shiftKey) {
+      actionKey = 'orderedList'
     } else if (!e.shiftKey) {
       actionKey = KEY_MAP[e.key.toLowerCase()]
     }

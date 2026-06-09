@@ -250,4 +250,48 @@ describe('MarkdownEditor', () => {
     expect(imageBtn).toBeDisabled()
     expect(imageBtn).toHaveAttribute('title', 'Save post first to add images')
   })
+
+  it('applies underline shortcut (Ctrl+U) via onChange', async () => {
+    const onChange = vi.fn()
+    const user = userEvent.setup()
+    render(<MarkdownEditor value="hi" onChange={onChange} />)
+    const textarea = screen.getByRole<HTMLTextAreaElement>('textbox')
+    textarea.focus()
+    textarea.setSelectionRange(0, 2)
+    await user.keyboard('{Control>}u{/Control}')
+    expect(onChange).toHaveBeenCalledWith('[hi]{.underline}')
+  })
+
+  it('applies strikethrough shortcut (Ctrl+Shift+X) via onChange', async () => {
+    const onChange = vi.fn()
+    const user = userEvent.setup()
+    render(<MarkdownEditor value="hi" onChange={onChange} />)
+    const textarea = screen.getByRole<HTMLTextAreaElement>('textbox')
+    textarea.focus()
+    textarea.setSelectionRange(0, 2)
+    await user.keyboard('{Control>}{Shift>}x{/Shift}{/Control}')
+    expect(onChange).toHaveBeenCalledWith('~~hi~~')
+  })
+
+  it('applies bullet list shortcut (Ctrl+Shift+8) via onChange', async () => {
+    const onChange = vi.fn()
+    const user = userEvent.setup()
+    render(<MarkdownEditor value="hi" onChange={onChange} />)
+    const textarea = screen.getByRole<HTMLTextAreaElement>('textbox')
+    textarea.focus()
+    textarea.setSelectionRange(0, 2)
+    await user.keyboard('{Control>}{Shift>}*{/Shift}{/Control}')
+    expect(onChange).toHaveBeenCalledWith('- hi')
+  })
+
+  it('applies ordered list shortcut (Ctrl+Shift+7) via onChange', async () => {
+    const onChange = vi.fn()
+    const user = userEvent.setup()
+    render(<MarkdownEditor value="hi" onChange={onChange} />)
+    const textarea = screen.getByRole<HTMLTextAreaElement>('textbox')
+    textarea.focus()
+    textarea.setSelectionRange(0, 2)
+    await user.keyboard('{Control>}{Shift>}&{/Shift}{/Control}')
+    expect(onChange).toHaveBeenCalledWith('1. hi')
+  })
 })
