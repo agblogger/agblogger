@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Save, ArrowLeft, Eye, ChevronRight, ChevronLeft } from 'lucide-react'
+import { Save, ArrowLeft, Eye } from 'lucide-react'
 import { useSWRConfig } from 'swr'
 import { formatLocalDate } from '@/utils/date'
 
@@ -9,29 +9,14 @@ import AlertBanner from '@/components/AlertBanner'
 import { HTTPError } from '@/api/client'
 import { parseErrorDetail } from '@/api/parseError'
 import { useSocialAccounts } from '@/hooks/useSocialAccounts'
-import api from '@/api/client'
-import { useCodeBlockEnhance } from '@/hooks/useCodeBlockEnhance'
-import { useFileUpload } from '@/components/editor/useFileUpload'
 import { postUrl } from '@/utils/postUrl'
 import { buildEditorDraftStorageKey, useEditorAutoSave } from '@/hooks/useEditorAutoSave'
 import type { DraftData } from '@/hooks/useEditorAutoSave'
-import { useRenderedHtml } from '@/hooks/useKatex'
 import { useRequireAdmin } from '@/hooks/useRequireAdmin'
 import CrossPostDialog from '@/components/crosspost/CrossPostDialog'
 import PlatformIcon from '@/components/crosspost/PlatformIcon'
 import LabelInput from '@/components/editor/LabelInput'
-import MarkdownToolbar from '@/components/editor/MarkdownToolbar'
-import { actions as toolbarActions } from '@/components/editor/toolbarActions'
-import { wrapSelection } from '@/components/editor/wrapSelection'
-import FileStrip from '@/components/editor/FileStrip'
-import { useScrollSync } from '@/hooks/useScrollSync'
-
-const KEY_MAP: Record<string, string> = {
-  b: 'bold',
-  i: 'italic',
-  h: 'heading',
-  k: 'link',
-}
+import MarkdownEditor from '@/components/editor/MarkdownEditor'
 
 export default function EditorPage() {
   const { '*': filePath } = useParams()
@@ -50,41 +35,21 @@ export default function EditorPage() {
   const [modifiedAt, setModifiedAt] = useState<string | null>(null)
   const [loading, setLoading] = useState(!isNew)
   const [saving, setSaving] = useState(false)
-  const [preview, setPreview] = useState<string | null>(null)
-  const [previewError, setPreviewError] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const renderedPreview = useRenderedHtml(preview)
-  const previewRequestRef = useRef(0)
-  const previewRef = useRef<HTMLDivElement>(null)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const { syncEditorToPreview, syncPreviewToEditor } = useScrollSync({
-    textareaRef,
-    previewRef,
-    content: body,
-  })
   const { data: accounts = [], error: socialAccountsErr } = useSocialAccounts()
   const socialAccountsError = socialAccountsErr ? 'Failed to load connected social accounts. Please try again.' : null
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([])
   const [showCrossPostDialog, setShowCrossPostDialog] = useState(false)
-  const [mobileTab, setMobileTab] = useState<'edit' | 'preview'>('edit')
   const [savedFilePath, setSavedFilePath] = useState<string | null>(null)
-  const [fileStripRefreshToken, setFileStripRefreshToken] = useState(0)
   const [effectiveFilePath, setEffectiveFilePath] = useState<string | null>(
     isNew ? null : filePath,
   )
-  const imageUploadEnabled = effectiveFilePath !== null
-  const imageDisabledReason =
-    effectiveFilePath === null
-      ? 'Save post first to add images'
-      : undefined
 
   useEffect(() => {
     if (isNew) {
       setIsDraft(true)
     }
   }, [isNew])
-
-  useCodeBlockEnhance(previewRef, renderedPreview)
 
   const draftOwnerId = user?.id ?? 0
   const autoSaveKey = buildEditorDraftStorageKey(draftOwnerId, isNew ? undefined : filePath)
@@ -137,32 +102,6 @@ export default function EditorPage() {
   }, [filePath, isNew])
 
   const author = isNew ? (user?.display_name ?? user?.username ?? null) : loadedAuthor
-
-  useEffect(() => {
-    if (body.length === 0) return
-    const requestId = ++previewRequestRef.current
-    const timer = setTimeout(async () => {
-      try {
-        const payload: { markdown: string; file_path?: string } = { markdown: body }
-        if (!isNew && filePath) {
-          payload.file_path = filePath
-        }
-        const resp = await api
-          .post('render/preview', { json: payload })
-          .json<{ html: string }>()
-        if (previewRequestRef.current === requestId) {
-          setPreview(resp.html)
-          setPreviewError(false)
-        }
-      } catch (err) {
-        console.error('Preview failed:', err)
-        if (previewRequestRef.current === requestId) {
-          setPreviewError(true)
-        }
-      }
-    }, 500)
-    return () => clearTimeout(timer)
-  }, [body, isNew, filePath])
 
   async function handleSave() {
     setSaving(true)
@@ -223,76 +162,6 @@ export default function EditorPage() {
 
   function handleCrossPostClose() {
     setShowCrossPostDialog(false)
-  }
-
-  function handleInsertAtCursor(text: string) {
-    const textarea = textareaRef.current
-    if (!textarea) {
-      setBody((prev) => prev + '\n' + text)
-      return
-    }
-    const pos = textarea.selectionStart
-    const before = body.slice(0, pos)
-    const after = body.slice(pos)
-    setBody(before + text + after)
-  }
-
-  const {
-    triggerUpload: triggerImageUpload,
-    uploading: imageUploading,
-    inputProps: imageInputProps,
-  } = useFileUpload({
-    filePath: imageUploadEnabled ? effectiveFilePath : null,
-    accept: 'image/*',
-    multiple: false,
-    onSuccess: (filenames) => {
-      for (const name of filenames) {
-        handleInsertAtCursor(`![${name}](${name})`)
-      }
-      setFileStripRefreshToken((prev) => prev + 1)
-    },
-    onError: setError,
-  })
-
-  function handleEditorKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    const isMod = e.metaKey || e.ctrlKey
-    if (!isMod) return
-
-    let actionKey: string | undefined
-
-    if (e.key === 'e' || e.key === 'E') {
-      actionKey = e.shiftKey ? 'codeblock' : 'code'
-    } else if ((e.key === '>' || e.key === '.') && e.shiftKey) {
-      actionKey = 'blockquote'
-    } else if ((e.key === 'I' || e.key === 'i') && e.shiftKey) {
-      if (imageUploadEnabled) {
-        e.preventDefault()
-        triggerImageUpload()
-      }
-      return
-    } else if (!e.shiftKey) {
-      actionKey = KEY_MAP[e.key.toLowerCase()]
-    }
-
-    if (actionKey === undefined) return
-    const action = toolbarActions[actionKey]
-    if (action === undefined) return
-
-    e.preventDefault()
-    const textarea = textareaRef.current
-    if (!textarea) return
-
-    const { newValue, cursorStart, cursorEnd } = wrapSelection(
-      body,
-      textarea.selectionStart,
-      textarea.selectionEnd,
-      action,
-    )
-    setBody(newValue)
-    requestAnimationFrame(() => {
-      textarea.focus()
-      textarea.setSelectionRange(cursorStart, cursorEnd)
-    })
   }
 
   if (!isReady) {
@@ -534,113 +403,17 @@ export default function EditorPage() {
         )}
       </div>
 
-      <div className="mb-4">
-        <FileStrip
-          filePath={effectiveFilePath}
-          body={body}
-          onBodyChange={setBody}
-          onInsertAtCursor={handleInsertAtCursor}
-          disabled={saving}
-          refreshToken={fileStripRefreshToken}
-        />
-      </div>
-
-      <div className="flex lg:hidden mb-4 border-b border-border">
-        <button
-          type="button"
-          onClick={() => setMobileTab('edit')}
-          className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-            mobileTab === 'edit'
-              ? 'border-accent text-accent'
-              : 'border-transparent text-muted hover:text-ink'
-          }`}
-        >
-          Edit
-        </button>
-        <button
-          type="button"
-          onClick={() => setMobileTab('preview')}
-          className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-            mobileTab === 'preview'
-              ? 'border-accent text-accent'
-              : 'border-transparent text-muted hover:text-ink'
-          }`}
-        >
-          Preview
-        </button>
-      </div>
-
-      <div className={mobileTab === 'preview' ? 'hidden lg:block' : ''}>
-        <MarkdownToolbar
-          textareaRef={textareaRef}
-          value={body}
-          onChange={setBody}
-          disabled={saving}
-          onImageClick={imageUploadEnabled ? triggerImageUpload : undefined}
-          imageUploading={imageUploading}
-          {...(imageDisabledReason !== undefined && { imageDisabledReason })}
-        />
-        <input {...imageInputProps} />
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_2.5rem_1fr] gap-4">
-        <textarea
-          ref={textareaRef}
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-          onKeyDown={handleEditorKeyDown}
-          disabled={saving}
-          className={`w-full h-[80vh] overflow-y-auto p-4 bg-paper-warm border border-border rounded-lg
-                   font-mono text-sm leading-relaxed text-ink resize-none
-                   focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/20
-                   disabled:opacity-50 ${mobileTab === 'preview' ? 'hidden lg:block' : ''}`}
-          spellCheck={false}
-        />
-
-        <div className="hidden lg:flex flex-col items-center justify-center gap-2">
-          <button
-            type="button"
-            onClick={syncEditorToPreview}
-            disabled={saving}
-            title="Go to editor position in preview"
-            aria-label="Go to editor position in preview"
-            className="p-1.5 text-muted hover:text-ink hover:bg-paper-warm rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <ChevronRight size={16} />
-          </button>
-          <button
-            type="button"
-            onClick={syncPreviewToEditor}
-            disabled={saving}
-            title="Go to preview position in editor"
-            aria-label="Go to preview position in editor"
-            className="p-1.5 text-muted hover:text-ink hover:bg-paper-warm rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <ChevronLeft size={16} />
-          </button>
-        </div>
-
-        <div
-          ref={previewRef}
-          className={`relative h-[80vh] p-6 bg-paper border border-border rounded-lg overflow-y-auto ${mobileTab === 'edit' ? 'hidden lg:block' : ''}`}
-        >
-          {previewError ? (
-            <p className="text-sm text-red-600 dark:text-red-400 italic">Preview unavailable</p>
-          ) : preview !== null ? (
-            <div
-              className="prose max-w-none"
-              // nosemgrep: typescript.react.security.audit.react-dangerouslysetinnerhtml
-              // Preview HTML is rendered and sanitized server-side.
-              dangerouslySetInnerHTML={{ __html: renderedPreview }}
-            />
-          ) : (
-            <div className="flex flex-col items-center justify-center h-full min-h-[200px] border-2 border-dashed border-border/50 rounded-lg bg-paper-warm/30">
-              <Eye size={32} className="text-muted/40 mb-3" />
-              <p className="text-sm text-muted/60">Start typing to see a live preview</p>
-            </div>
-          )}
-        </div>
-      </div>
+      <MarkdownEditor
+        value={body}
+        onChange={setBody}
+        disabled={saving}
+        onSave={() => void handleSave()}
+        saving={saving}
+        canSave={title.trim().length > 0}
+        filePath={effectiveFilePath}
+        enableAssets
+        assetDisabledReason="Save post first to add images"
+      />
 
       {showCrossPostDialog && savedFilePath !== null && (
         <CrossPostDialog

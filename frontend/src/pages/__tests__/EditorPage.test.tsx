@@ -239,7 +239,7 @@ describe('EditorPage', () => {
     })
 
     await user.click(screen.getByRole('switch', { name: /draft/i }))
-    await user.click(screen.getByRole('button', { name: /save/i }))
+    await user.click(screen.getAllByRole('button', { name: /save/i })[0]!)
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /view post/i })).toBeInTheDocument()
@@ -300,7 +300,7 @@ describe('EditorPage', () => {
     await user.type(screen.getByLabelText(/title/i), 'My Title')
     const textareas = document.querySelectorAll('textarea')
     await user.type(textareas[0]!, 'Published content')
-    await user.click(screen.getByRole('button', { name: /save/i }))
+    await user.click(screen.getAllByRole('button', { name: /save/i })[0]!)
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /view post/i })).toBeInTheDocument()
@@ -319,7 +319,7 @@ describe('EditorPage', () => {
     })
 
     await user.click(screen.getByRole('switch', { name: /draft/i }))
-    await user.click(screen.getByRole('button', { name: /save/i }))
+    await user.click(screen.getAllByRole('button', { name: /save/i })[0]!)
     await user.click(screen.getByRole('button', { name: /view post/i }))
 
     await waitFor(() => {
@@ -515,7 +515,7 @@ describe('EditorPage', () => {
       expect(screen.getByLabelText(/Title/)).toBeInTheDocument()
     })
     // Title is initially empty for new posts
-    const saveButton = screen.getByRole('button', { name: /save/i })
+    const saveButton = screen.getAllByRole('button', { name: /save/i })[0]!
     expect(saveButton).toBeDisabled()
   })
 
@@ -543,7 +543,7 @@ describe('EditorPage', () => {
       expect(screen.getByLabelText(/Title/)).toBeInTheDocument()
     })
 
-    const saveButton = screen.getByRole('button', { name: /save/i })
+    const saveButton = screen.getAllByRole('button', { name: /save/i })[0]!
     expect(saveButton).toBeDisabled()
 
     await user.type(screen.getByLabelText(/Title/), 'A Title')
@@ -580,7 +580,7 @@ describe('EditorPage', () => {
     })
 
     await user.type(screen.getByLabelText(/Title/), 'My Title')
-    await user.click(screen.getByRole('button', { name: /save/i }))
+    await user.click(screen.getAllByRole('button', { name: /save/i })[0]!)
 
     await waitFor(() => {
       expect(mockCreatePost).toHaveBeenCalledWith({
@@ -613,7 +613,7 @@ describe('EditorPage', () => {
       expect(screen.getByLabelText(/Title/)).toHaveValue('Existing Post')
     })
 
-    await user.click(screen.getByRole('button', { name: /save/i }))
+    await user.click(screen.getAllByRole('button', { name: /save/i })[0]!)
 
     await waitFor(() => {
       expect(mockUpdatePost).toHaveBeenCalledWith('posts/existing/index.md', {
@@ -642,7 +642,7 @@ describe('EditorPage', () => {
     })
 
     await user.type(screen.getByLabelText(/Title/), 'Test')
-    await user.click(screen.getByRole('button', { name: /save/i }))
+    await user.click(screen.getAllByRole('button', { name: /save/i })[0]!)
 
     await waitFor(() => {
       expect(screen.getByText('Session expired. Please log in again.')).toBeInTheDocument()
@@ -662,7 +662,7 @@ describe('EditorPage', () => {
     })
 
     await user.type(screen.getByLabelText(/Title/), 'Test')
-    await user.click(screen.getByRole('button', { name: /save/i }))
+    await user.click(screen.getAllByRole('button', { name: /save/i })[0]!)
 
     await waitFor(() => {
       expect(screen.getByText('Conflict: this post was modified elsewhere.')).toBeInTheDocument()
@@ -682,7 +682,7 @@ describe('EditorPage', () => {
     })
 
     await user.type(screen.getByLabelText(/Title/), 'Test')
-    await user.click(screen.getByRole('button', { name: /save/i }))
+    await user.click(screen.getAllByRole('button', { name: /save/i })[0]!)
 
     await waitFor(() => {
       expect(screen.getByText('Title cannot be empty')).toBeInTheDocument()
@@ -702,7 +702,7 @@ describe('EditorPage', () => {
     })
 
     await user.type(screen.getByLabelText(/Title/), 'Test')
-    await user.click(screen.getByRole('button', { name: /save/i }))
+    await user.click(screen.getAllByRole('button', { name: /save/i })[0]!)
 
     await waitFor(() => {
       expect(screen.getByText('Field required, Invalid format')).toBeInTheDocument()
@@ -720,7 +720,7 @@ describe('EditorPage', () => {
     })
 
     await user.type(screen.getByLabelText(/Title/), 'Test')
-    await user.click(screen.getByRole('button', { name: /save/i }))
+    await user.click(screen.getAllByRole('button', { name: /save/i })[0]!)
 
     await waitFor(() => {
       expect(screen.getByText('Failed to save post. The server may be unavailable.')).toBeInTheDocument()
@@ -808,7 +808,7 @@ describe('EditorPage', () => {
     })
 
     await user.type(screen.getByLabelText(/Title/), 'Test')
-    await user.click(screen.getByRole('button', { name: /save/i }))
+    await user.click(screen.getAllByRole('button', { name: /save/i })[0]!)
 
     await waitFor(() => {
       expect(screen.getByText('Post not found. It may have been deleted.')).toBeInTheDocument()
@@ -828,7 +828,7 @@ describe('EditorPage', () => {
     })
 
     await user.type(screen.getByLabelText(/Title/), 'Test')
-    await user.click(screen.getByRole('button', { name: /save/i }))
+    await user.click(screen.getAllByRole('button', { name: /save/i })[0]!)
 
     await waitFor(() => {
       expect(screen.getByText('Failed to save post. Please try again.')).toBeInTheDocument()
@@ -870,7 +870,7 @@ describe('EditorPage', () => {
 
     // Uncheck Draft to publish
     await user.click(screen.getByRole('switch', { name: /draft/i }))
-    await user.click(screen.getByRole('button', { name: /save/i }))
+    await user.click(screen.getAllByRole('button', { name: /save/i })[0]!)
 
     await waitFor(() => {
       expect(screen.getByText(/Created.*Mar 15/)).toBeInTheDocument()
@@ -895,7 +895,7 @@ describe('EditorPage', () => {
       expect(screen.getByText(/Modified.*Feb 1/)).toBeInTheDocument()
     })
 
-    await user.click(screen.getByRole('button', { name: /save/i }))
+    await user.click(screen.getAllByRole('button', { name: /save/i })[0]!)
 
     await waitFor(() => {
       expect(screen.getByText(/Modified.*Feb 22/)).toBeInTheDocument()
@@ -922,7 +922,7 @@ describe('EditorPage', () => {
       expect(screen.getByText(`Modified ${formatLocalDate(initialModifiedAt, { dateStyle: 'medium', timeStyle: 'medium' })}`)).toBeInTheDocument()
     })
 
-    await user.click(screen.getByRole('button', { name: /save/i }))
+    await user.click(screen.getAllByRole('button', { name: /save/i })[0]!)
 
     await waitFor(() => {
       expect(screen.getByText(`Modified ${formatLocalDate(updatedModifiedAt, { dateStyle: 'medium', timeStyle: 'medium' })}`)).toBeInTheDocument()
@@ -1015,7 +1015,7 @@ describe('EditorPage', () => {
     })
 
     await user.type(screen.getByLabelText(/Title/), 'Test')
-    await user.click(screen.getByRole('button', { name: /save/i }))
+    await user.click(screen.getAllByRole('button', { name: /save/i })[0]!)
 
     await waitFor(() => {
       expect(screen.getByText('Validation error. Check your input.')).toBeInTheDocument()
@@ -1035,7 +1035,7 @@ describe('EditorPage', () => {
     })
 
     await user.type(screen.getByLabelText(/Title/), 'Test')
-    await user.click(screen.getByRole('button', { name: /save/i }))
+    await user.click(screen.getAllByRole('button', { name: /save/i })[0]!)
 
     await waitFor(() => {
       expect(screen.getByText('Validation error. Check your input.')).toBeInTheDocument()
@@ -1068,7 +1068,7 @@ describe('EditorPage', () => {
     })
 
     await user.type(screen.getByLabelText(/Title/), 'My Title')
-    await user.click(screen.getByRole('button', { name: /save/i }))
+    await user.click(screen.getAllByRole('button', { name: /save/i })[0]!)
 
     // Should stay on editor (Title input still visible)
     await waitFor(() => {
@@ -1193,7 +1193,7 @@ describe('EditorPage', () => {
     })
 
     await user.type(screen.getByLabelText(/Title/), 'Test')
-    await user.click(screen.getByRole('button', { name: /save/i }))
+    await user.click(screen.getAllByRole('button', { name: /save/i })[0]!)
 
     await waitFor(() => {
       expect(
@@ -1216,7 +1216,7 @@ describe('EditorPage', () => {
     })
 
     await user.type(screen.getByLabelText(/Title/), 'Test')
-    await user.click(screen.getByRole('button', { name: /save/i }))
+    await user.click(screen.getAllByRole('button', { name: /save/i })[0]!)
 
     await waitFor(() => {
       expect(screen.getByText('Validation error. Check your input.')).toBeInTheDocument()
@@ -1319,7 +1319,7 @@ describe('EditorPage', () => {
 
     // Type a title and save
     await user.type(screen.getByLabelText(/Title/), 'Test')
-    await user.click(screen.getByRole('button', { name: /save/i }))
+    await user.click(screen.getAllByRole('button', { name: /save/i })[0]!)
 
     await waitFor(() => {
       expect(mockCreatePost).toHaveBeenCalledWith({
@@ -1484,7 +1484,7 @@ describe('EditorPage', () => {
     })
 
     await user.type(screen.getByLabelText(/Title/), 'My Title')
-    await user.click(screen.getByRole('button', { name: /save/i }))
+    await user.click(screen.getAllByRole('button', { name: /save/i })[0]!)
 
     // After a successful save, the editor navigates to /editor/<file_path>.
     // Navigation must proceed without a blocking confirm dialog — verified by
@@ -1533,7 +1533,7 @@ describe('EditorPage', () => {
     await user.type(screen.getByPlaceholderText('Post title'), 'Test Title')
     await user.type(subtitleInput, 'My subtitle')
 
-    await user.click(screen.getByRole('button', { name: /save/i }))
+    await user.click(screen.getAllByRole('button', { name: /save/i })[0]!)
 
     await waitFor(() => {
       expect(createPost).toHaveBeenCalledWith(
