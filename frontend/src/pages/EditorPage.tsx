@@ -227,6 +227,7 @@ export default function EditorPage() {
           <button
             onClick={() => void handleSave()}
             disabled={saving || !title.trim()}
+            aria-label="Save post"
             className="flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium
                      bg-accent text-white rounded-lg hover:bg-accent-light disabled:opacity-50 transition-colors"
           >
