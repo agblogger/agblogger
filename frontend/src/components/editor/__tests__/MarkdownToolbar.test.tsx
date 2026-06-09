@@ -143,7 +143,7 @@ describe('MarkdownToolbar', () => {
   it('renders all 8 toolbar buttons including image and blockquote', () => {
     const ref = createRef<HTMLTextAreaElement>()
     render(
-      <MarkdownToolbar textareaRef={ref} value="" onChange={() => {}} />,
+      <MarkdownToolbar textareaRef={ref} value="" onChange={() => {}} onImageClick={() => {}} />,
     )
     expect(screen.getByLabelText(/^Bold/)).toBeInTheDocument()
     expect(screen.getByLabelText(/^Italic/)).toBeInTheDocument()
@@ -266,13 +266,10 @@ describe('MarkdownToolbar', () => {
     expect(onImageClick).toHaveBeenCalledOnce()
   })
 
-  it('image button is disabled when onImageClick is not provided', () => {
+  it('does not render the image button when no image support is wired', () => {
     const ref = createRef<HTMLTextAreaElement>()
-    render(
-      <MarkdownToolbar textareaRef={ref} value="" onChange={() => {}} />,
-    )
-
-    expect(screen.getByLabelText(/^Image/)).toBeDisabled()
+    render(<MarkdownToolbar textareaRef={ref} value="" onChange={() => {}} />)
+    expect(screen.queryByLabelText(/^Image/)).not.toBeInTheDocument()
   })
 
   it('image button is disabled when imageUploading is true', () => {

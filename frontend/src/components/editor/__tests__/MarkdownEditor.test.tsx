@@ -6,6 +6,14 @@ import { useMarkdownPreview } from '@/hooks/useMarkdownPreview'
 import MarkdownEditor from '../MarkdownEditor'
 
 vi.mock('@/hooks/useMarkdownPreview', () => ({ useMarkdownPreview: vi.fn() }))
+vi.mock('@/hooks/usePostAssets', () => ({
+  usePostAssets: () => ({ data: { assets: [] }, error: undefined, mutate: vi.fn() }),
+}))
+vi.mock('@/api/posts', () => ({
+  uploadAssets: vi.fn(),
+  deletePostAsset: vi.fn(),
+  renamePostAsset: vi.fn(),
+}))
 
 const mockPreview = vi.mocked(useMarkdownPreview)
 
@@ -71,7 +79,7 @@ describe('MarkdownEditor', () => {
     const onChange = vi.fn()
     const user = userEvent.setup()
     render(<MarkdownEditor value="hi" onChange={onChange} />)
-    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement
+    const textarea = screen.getByRole<HTMLTextAreaElement>('textbox')
     textarea.focus()
     textarea.setSelectionRange(0, 2)
     await user.keyboard('{Control>}b{/Control}')
@@ -105,5 +113,39 @@ describe('MarkdownEditor', () => {
     expect(screen.getByLabelText('Exit fullscreen')).toBeInTheDocument()
     await user.keyboard('{Escape}')
     expect(screen.getByLabelText('Enter fullscreen')).toBeInTheDocument()
+  })
+
+  it('does not render asset UI when enableAssets is omitted', () => {
+    render(<MarkdownEditor value="x" onChange={() => {}} />)
+    expect(screen.queryByLabelText(/^Image/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/^Files/)).not.toBeInTheDocument()
+  })
+
+  it('renders the file strip and an image button when assets are enabled', () => {
+    render(
+      <MarkdownEditor
+        value="x"
+        onChange={() => {}}
+        enableAssets
+        filePath="posts/a/index.md"
+      />,
+    )
+    expect(screen.getByText(/^Files/)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^Image/)).toBeInTheDocument()
+  })
+
+  it('disables the image button with the given reason before the file path exists', () => {
+    render(
+      <MarkdownEditor
+        value="x"
+        onChange={() => {}}
+        enableAssets
+        filePath={null}
+        assetDisabledReason="Save post first to add images"
+      />,
+    )
+    const imageBtn = screen.getByLabelText(/^Image/)
+    expect(imageBtn).toBeDisabled()
+    expect(imageBtn).toHaveAttribute('title', 'Save post first to add images')
   })
 })

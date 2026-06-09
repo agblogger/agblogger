@@ -87,6 +87,10 @@ export default function MarkdownToolbar({
           : disabled
         const title = isImage ? imageTitle(shortcut) : `${label} (${shortcut})`
 
+        if (isImage && onImageClick === undefined && imageDisabledReason === undefined) {
+          return null
+        }
+
         return (
           <button
             key={key}

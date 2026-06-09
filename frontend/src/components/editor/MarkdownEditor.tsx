@@ -6,6 +6,8 @@ import { actions as toolbarActions } from './toolbarActions'
 import { wrapSelection } from './wrapSelection'
 import { useScrollSync } from '@/hooks/useScrollSync'
 import { useMarkdownPreview } from '@/hooks/useMarkdownPreview'
+import FileStrip from './FileStrip'
+import { useFileUpload } from './useFileUpload'
 
 const KEY_MAP: Record<string, string> = { b: 'bold', i: 'italic', h: 'heading', k: 'link' }
 
@@ -17,6 +19,8 @@ export interface MarkdownEditorProps {
   saving?: boolean
   canSave?: boolean
   filePath?: string | null
+  enableAssets?: boolean
+  assetDisabledReason?: string
   editorHeight?: string
 }
 
@@ -28,6 +32,8 @@ export default function MarkdownEditor({
   saving = false,
   canSave = true,
   filePath = null,
+  enableAssets = false,
+  assetDisabledReason,
   editorHeight = '80vh',
 }: MarkdownEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -43,6 +49,37 @@ export default function MarkdownEditor({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [isFullscreen])
+
+  const [fileRefreshToken, setFileRefreshToken] = useState(0)
+  const imageUploadEnabled = enableAssets && filePath !== null
+  const imageDisabledReason =
+    enableAssets && filePath === null ? assetDisabledReason : undefined
+
+  function insertAtCursor(text: string) {
+    const textarea = textareaRef.current
+    if (!textarea) {
+      onChange(value + '\n' + text)
+      return
+    }
+    const pos = textarea.selectionStart
+    onChange(value.slice(0, pos) + text + value.slice(pos))
+  }
+
+  const {
+    triggerUpload: triggerImageUpload,
+    uploading: imageUploading,
+    inputProps: imageInputProps,
+  } = useFileUpload({
+    filePath: imageUploadEnabled ? filePath : null,
+    accept: 'image/*',
+    multiple: false,
+    onSuccess: (filenames) => {
+      for (const name of filenames) {
+        insertAtCursor(`![${name}](${name})`)
+      }
+      setFileRefreshToken((prev) => prev + 1)
+    },
+  })
 
   const { syncEditorToPreview, syncPreviewToEditor } = useScrollSync({
     textareaRef,
@@ -87,6 +124,14 @@ export default function MarkdownEditor({
       return
     }
 
+    if ((e.key === 'i' || e.key === 'I') && e.shiftKey) {
+      if (imageUploadEnabled) {
+        e.preventDefault()
+        triggerImageUpload()
+      }
+      return
+    }
+
     let actionKey: string | undefined
     if (e.key === 'e' || e.key === 'E') {
       actionKey = e.shiftKey ? 'codeblock' : 'code'
@@ -107,6 +152,19 @@ export default function MarkdownEditor({
         isFullscreen ? 'fixed inset-0 z-50 flex flex-col bg-paper p-4 overflow-hidden' : ''
       }
     >
+      {enableAssets && !isFullscreen && (
+        <div className="mb-4">
+          <FileStrip
+            filePath={filePath}
+            body={value}
+            onBodyChange={onChange}
+            onInsertAtCursor={insertAtCursor}
+            disabled={disabled}
+            refreshToken={fileRefreshToken}
+          />
+        </div>
+      )}
+
       <div className="flex lg:hidden mb-4 border-b border-border">
         <button
           type="button"
@@ -143,7 +201,13 @@ export default function MarkdownEditor({
           canSave={canSave}
           isFullscreen={isFullscreen}
           onToggleFullscreen={() => setIsFullscreen((f) => !f)}
+          {...(enableAssets && {
+            onImageClick: imageUploadEnabled ? triggerImageUpload : undefined,
+            imageUploading,
+            ...(imageDisabledReason !== undefined && { imageDisabledReason }),
+          })}
         />
+        {enableAssets && <input {...imageInputProps} />}
       </div>
 
       <div
