@@ -1,5 +1,14 @@
 import type { WrapAction } from './wrapSelection'
 
+export function calloutAction(type: string): WrapAction {
+  return {
+    before: `::: {.${type}}\n`,
+    after: '\n:::',
+    placeholder: `${type} text`,
+    block: true,
+  }
+}
+
 export const actions: Record<string, WrapAction> = {
   bold: { before: '**', after: '**', placeholder: 'bold text' },
   italic: { before: '_', after: '_', placeholder: 'italic text' },
@@ -21,4 +30,6 @@ export const actions: Record<string, WrapAction> = {
     placeholder: 'VIDEO_ID',
     block: true,
   },
+  footnote: { before: '^[', after: ']', placeholder: 'footnote text' },
+  note: calloutAction('note'),
 }

@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi } from 'vitest'
 
 import { wrapSelection } from '../wrapSelection'
+import { calloutAction } from '../toolbarActions'
 import MarkdownToolbar from '../MarkdownToolbar'
 import { createRef } from 'react'
 
@@ -234,6 +235,54 @@ describe('wrapSelection', () => {
       )
       expect(result.cursorStart).toBe(53)
       expect(result.cursorEnd).toBe(61)
+    })
+
+    it('footnote wraps selection in ^[...] syntax', () => {
+      const result = wrapSelection('hello world', 6, 11, {
+        before: '^[',
+        after: ']',
+        placeholder: 'footnote text',
+      })
+      expect(result.newValue).toBe('hello ^[world]')
+      expect(result.cursorStart).toBe(8)
+      expect(result.cursorEnd).toBe(13)
+    })
+
+    it('footnote inserts placeholder when nothing is selected', () => {
+      const result = wrapSelection('hello ', 6, 6, {
+        before: '^[',
+        after: ']',
+        placeholder: 'footnote text',
+      })
+      expect(result.newValue).toBe('hello ^[footnote text]')
+      expect(result.cursorStart).toBe(8)
+      expect(result.cursorEnd).toBe(21)
+    })
+
+    it('calloutAction generates a WrapAction with the correct shape', () => {
+      const action = calloutAction('note')
+      expect(action).toEqual({
+        before: '::: {.note}\n',
+        after: '\n:::',
+        placeholder: 'note text',
+        block: true,
+      })
+    })
+
+    it('note action inserts fenced div at document start', () => {
+      const action = calloutAction('note')
+      const result = wrapSelection('', 0, 0, action)
+      expect(result.newValue).toBe('::: {.note}\nnote text\n:::')
+      expect(result.cursorStart).toBe(12)
+      expect(result.cursorEnd).toBe(21)
+    })
+
+    it('note action adds leading newline when not at line start', () => {
+      const action = calloutAction('note')
+      const result = wrapSelection('some text', 9, 9, action)
+      expect(result.newValue).toBe('some text\n::: {.note}\nnote text\n:::')
+      expect(result.cursorStart).toBe(22)
+      expect(result.cursorEnd).toBe(31)
     })
   })
 })
