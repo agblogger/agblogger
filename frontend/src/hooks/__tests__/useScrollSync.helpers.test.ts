@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import fc from 'fast-check'
-import { editorToPreview, previewToEditor, type SyncPoint } from '@/hooks/useScrollSync'
+import {
+  calibrateEditorOffsets,
+  editorToPreview,
+  previewToEditor,
+  type SyncPoint,
+} from '@/hooks/useScrollSync'
 
 const TOL = 1e-6
 
@@ -114,5 +119,64 @@ describe('editorToPreview / previewToEditor — pure interpolation', () => {
         }
       }),
     )
+  })
+})
+
+describe('calibrateEditorOffsets — mirror-to-textarea height calibration', () => {
+  it('is the identity when the mirror and textarea content heights match', () => {
+    fc.assert(
+      fc.property(
+        fc.array(fc.double({ min: 0, max: 100_000, noNaN: true }), { maxLength: 30 }),
+        fc.double({ min: 0, max: 100, noNaN: true }),
+        fc.double({ min: 1, max: 100_000, noNaN: true }),
+        (offsets, padTop, height) => {
+          const out = calibrateEditorOffsets(offsets, padTop, height, height)
+          out.forEach((v, i) => expect(v).toBeCloseTo(offsets[i]!, 6))
+        },
+      ),
+    )
+  })
+
+  it('keeps the padding-top anchor fixed regardless of scale', () => {
+    fc.assert(
+      fc.property(
+        fc.double({ min: 0, max: 100, noNaN: true }),
+        fc.double({ min: 1, max: 100_000, noNaN: true }),
+        fc.double({ min: 1, max: 100_000, noNaN: true }),
+        (padTop, mirrorH, realH) => {
+          const [out] = calibrateEditorOffsets([padTop], padTop, mirrorH, realH)
+          expect(out).toBeCloseTo(padTop, 6)
+        },
+      ),
+    )
+  })
+
+  it('preserves ordering and scales the text region toward the real height', () => {
+    fc.assert(
+      fc.property(
+        fc.double({ min: 0, max: 50, noNaN: true }),
+        fc.double({ min: 1, max: 100_000, noNaN: true }),
+        fc.double({ min: 1, max: 100_000, noNaN: true }),
+        (padTop, mirrorH, realH) => {
+          const a = padTop + 100
+          const b = padTop + 300
+          const [oa, ob] = calibrateEditorOffsets([a, b], padTop, mirrorH, realH)
+          expect(oa!).toBeLessThanOrEqual(ob! + 1e-9)
+          // scale > 1 (real taller than mirror) pushes points away from the anchor;
+          // scale < 1 pulls them toward it.
+          if (realH > mirrorH) expect(oa! - padTop).toBeGreaterThanOrEqual(a - padTop - 1e-9)
+          else expect(oa! - padTop).toBeLessThanOrEqual(a - padTop + 1e-9)
+        },
+      ),
+    )
+  })
+
+  it('returns offsets unchanged for degenerate (non-positive or non-finite) heights', () => {
+    const offs = [0, 10, 25, 100]
+    expect(calibrateEditorOffsets(offs, 8, 0, 500)).toEqual(offs)
+    expect(calibrateEditorOffsets(offs, 8, 500, 0)).toEqual(offs)
+    expect(calibrateEditorOffsets(offs, 8, -5, 500)).toEqual(offs)
+    expect(calibrateEditorOffsets(offs, 8, Number.NaN, 500)).toEqual(offs)
+    expect(calibrateEditorOffsets(offs, 8, 500, Number.POSITIVE_INFINITY)).toEqual(offs)
   })
 })

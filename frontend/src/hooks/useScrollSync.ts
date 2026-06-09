@@ -16,8 +16,11 @@ interface UseScrollSyncResult {
   syncPreviewToEditor: () => void
 }
 
-function setupMirror(mirror: HTMLDivElement, textarea: HTMLTextAreaElement): void {
-  const cs = getComputedStyle(textarea)
+function setupMirror(
+  mirror: HTMLDivElement,
+  textarea: HTMLTextAreaElement,
+  cs: CSSStyleDeclaration,
+): void {
   mirror.style.fontFamily = cs.fontFamily
   mirror.style.fontSize = cs.fontSize
   mirror.style.lineHeight = cs.lineHeight
@@ -40,7 +43,8 @@ function buildSyncPoints(
   mirror: HTMLDivElement,
   content: string,
 ): SyncPoint[] {
-  setupMirror(mirror, textarea)
+  const cs = getComputedStyle(textarea)
+  setupMirror(mirror, textarea, cs)
 
   const lines = content.split('\n')
   mirror.innerHTML = ''
@@ -55,8 +59,20 @@ function buildSyncPoints(
   }
   mirror.appendChild(fragment)
 
-  const editorLines = Array.from(mirror.children).map(
+  const rawEditorLines = Array.from(mirror.children).map(
     (child) => (child as HTMLElement).offsetTop,
+  )
+  // The mirror replicates the textarea's wrapping in a separate <div>, so small
+  // per-line wrap differences accumulate into a systematic drift between the
+  // mirror's geometry and the textarea's true scroll range. The textarea's own
+  // scrollHeight is ground truth — calibrate the mirror offsets against it.
+  const padTop = Number.parseFloat(cs.paddingTop) || 0
+  const padBottom = Number.parseFloat(cs.paddingBottom) || 0
+  const editorLines = calibrateEditorOffsets(
+    rawEditorLines,
+    padTop,
+    mirror.scrollHeight - padTop - padBottom,
+    textarea.scrollHeight - padTop - padBottom,
   )
 
   const sentinelEls = preview.querySelectorAll<HTMLElement>('[id^="agbpos-L"]')
@@ -71,6 +87,32 @@ function buildSyncPoints(
       return { editorPx, previewPx }
     })
     .sort((a, b) => a.editorPx - b.editorPx)
+}
+
+/**
+ * Rescale raw mirror line offsets so the mirror's total text height matches the
+ * textarea's real wrapped content height. Both share the same top padding (the
+ * text origin), so we hold `paddingTop` fixed and scale only the text region by
+ * `realContentHeight / mirrorContentHeight`. This corrects systematic wrap drift
+ * between the mirror and the textarea. Degenerate (non-positive or non-finite)
+ * heights — e.g. jsdom or an unlaid-out element — leave the offsets untouched.
+ */
+export function calibrateEditorOffsets(
+  offsets: number[],
+  paddingTop: number,
+  mirrorContentHeight: number,
+  realContentHeight: number,
+): number[] {
+  if (
+    !Number.isFinite(mirrorContentHeight) ||
+    !Number.isFinite(realContentHeight) ||
+    mirrorContentHeight <= 0 ||
+    realContentHeight <= 0
+  ) {
+    return offsets
+  }
+  const scale = realContentHeight / mirrorContentHeight
+  return offsets.map((px) => paddingTop + (px - paddingTop) * scale)
 }
 
 export function editorToPreview(points: SyncPoint[], scrollTop: number): number {
