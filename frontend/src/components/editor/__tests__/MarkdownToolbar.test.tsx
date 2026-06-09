@@ -137,6 +137,105 @@ describe('wrapSelection', () => {
     expect(result.cursorStart).toBe(0)
     expect(result.cursorEnd).toBe(12)
   })
+
+  describe('new toolbar actions', () => {
+    it('underline wraps selection with bracketed span syntax', () => {
+      const result = wrapSelection('hi', 0, 2, {
+        before: '[',
+        after: ']{.underline}',
+        placeholder: 'underlined text',
+      })
+      expect(result.newValue).toBe('[hi]{.underline}')
+      expect(result.cursorStart).toBe(1)
+      expect(result.cursorEnd).toBe(3)
+    })
+
+    it('strikethrough wraps selection with tilde markers', () => {
+      const result = wrapSelection('hi', 0, 2, {
+        before: '~~',
+        after: '~~',
+        placeholder: 'strikethrough text',
+      })
+      expect(result.newValue).toBe('~~hi~~')
+      expect(result.cursorStart).toBe(2)
+      expect(result.cursorEnd).toBe(4)
+    })
+
+    it('highlight wraps selection with equals markers', () => {
+      const result = wrapSelection('hi', 0, 2, {
+        before: '==',
+        after: '==',
+        placeholder: 'highlighted text',
+      })
+      expect(result.newValue).toBe('==hi==')
+      expect(result.cursorStart).toBe(2)
+      expect(result.cursorEnd).toBe(4)
+    })
+
+    it('h3 inserts block with leading newline and ### prefix', () => {
+      const result = wrapSelection('some text', 9, 9, {
+        before: '### ',
+        after: '',
+        placeholder: 'Heading 3',
+        block: true,
+      })
+      expect(result.newValue).toBe('some text\n### Heading 3')
+      expect(result.cursorStart).toBe(14)
+      expect(result.cursorEnd).toBe(23)
+    })
+
+    it('h4 inserts block with leading newline and #### prefix', () => {
+      const result = wrapSelection('some text', 9, 9, {
+        before: '#### ',
+        after: '',
+        placeholder: 'Heading 4',
+        block: true,
+      })
+      expect(result.newValue).toBe('some text\n#### Heading 4')
+      expect(result.cursorStart).toBe(15)
+      expect(result.cursorEnd).toBe(24)
+    })
+
+    it('bulletList prefixes each selected line with "- "', () => {
+      const result = wrapSelection('line one\nline two', 0, 17, {
+        before: '',
+        after: '',
+        placeholder: 'list item',
+        linePrefix: '- ',
+        block: true,
+      })
+      expect(result.newValue).toBe('- line one\n- line two')
+      expect(result.cursorStart).toBe(0)
+      expect(result.cursorEnd).toBe(21)
+    })
+
+    it('orderedList prefixes each selected line with "1. "', () => {
+      const result = wrapSelection('line one\nline two', 0, 17, {
+        before: '',
+        after: '',
+        placeholder: 'list item',
+        linePrefix: '1. ',
+        block: true,
+      })
+      expect(result.newValue).toBe('1. line one\n1. line two')
+      expect(result.cursorStart).toBe(0)
+      expect(result.cursorEnd).toBe(23)
+    })
+
+    it('youtube inserts iframe block with VIDEO_ID placeholder selected', () => {
+      const result = wrapSelection('some text', 9, 9, {
+        before: '<iframe src="https://www.youtube.com/embed/',
+        after: '" allowfullscreen></iframe>',
+        placeholder: 'VIDEO_ID',
+        block: true,
+      })
+      expect(result.newValue).toBe(
+        'some text\n<iframe src="https://www.youtube.com/embed/VIDEO_ID" allowfullscreen></iframe>',
+      )
+      expect(result.cursorStart).toBe(53)
+      expect(result.cursorEnd).toBe(61)
+    })
+  })
 })
 
 describe('MarkdownToolbar', () => {
