@@ -1,4 +1,4 @@
-import { useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { ChevronRight, ChevronLeft, Eye } from 'lucide-react'
 
 import MarkdownToolbar from './MarkdownToolbar'
@@ -33,6 +33,16 @@ export default function MarkdownEditor({
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const previewRef = useRef<HTMLDivElement>(null)
   const [mobileTab, setMobileTab] = useState<'edit' | 'preview'>('edit')
+  const [isFullscreen, setIsFullscreen] = useState(false)
+
+  useEffect(() => {
+    if (!isFullscreen) return
+    function onKey(e: globalThis.KeyboardEvent) {
+      if (e.key === 'Escape') setIsFullscreen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [isFullscreen])
 
   const { syncEditorToPreview, syncPreviewToEditor } = useScrollSync({
     textareaRef,
@@ -92,7 +102,11 @@ export default function MarkdownEditor({
   }
 
   return (
-    <div>
+    <div
+      className={
+        isFullscreen ? 'fixed inset-0 z-50 flex flex-col bg-paper p-4 overflow-hidden' : ''
+      }
+    >
       <div className="flex lg:hidden mb-4 border-b border-border">
         <button
           type="button"
@@ -127,21 +141,27 @@ export default function MarkdownEditor({
           {...(onSave !== undefined && { onSave })}
           saving={saving}
           canSave={canSave}
+          isFullscreen={isFullscreen}
+          onToggleFullscreen={() => setIsFullscreen((f) => !f)}
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_2.5rem_1fr] gap-4">
+      <div
+        className={`grid grid-cols-1 lg:grid-cols-[1fr_2.5rem_1fr] gap-4 ${
+          isFullscreen ? 'flex-1 min-h-0' : ''
+        }`}
+      >
         <textarea
           ref={textareaRef}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={handleKeyDown}
           disabled={disabled}
-          style={{ height: editorHeight }}
+          style={isFullscreen ? undefined : { height: editorHeight }}
           className={`w-full overflow-y-auto p-4 bg-paper-warm border border-border rounded-lg
                    font-mono text-sm leading-relaxed text-ink resize-none
                    focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/20
-                   disabled:opacity-50 ${mobileTab === 'preview' ? 'hidden lg:block' : ''}`}
+                   disabled:opacity-50 ${mobileTab === 'preview' ? 'hidden lg:block' : ''} ${isFullscreen ? 'h-full' : ''}`}
           spellCheck={false}
         />
 
@@ -170,10 +190,10 @@ export default function MarkdownEditor({
 
         <div
           ref={previewRef}
-          style={{ height: editorHeight }}
+          style={isFullscreen ? undefined : { height: editorHeight }}
           className={`relative p-6 bg-paper border border-border rounded-lg overflow-y-auto ${
             mobileTab === 'edit' ? 'hidden lg:block' : ''
-          }`}
+          } ${isFullscreen ? 'h-full' : ''}`}
         >
           {previewError ? (
             <p className="text-sm text-red-600 dark:text-red-400 italic">Preview unavailable</p>

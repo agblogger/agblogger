@@ -88,4 +88,22 @@ describe('MarkdownEditor', () => {
     render(<MarkdownEditor value="x" onChange={() => {}} />)
     expect(screen.queryByLabelText('Save')).not.toBeInTheDocument()
   })
+
+  it('toggles fullscreen via the toolbar and back again', async () => {
+    const user = userEvent.setup()
+    render(<MarkdownEditor value="x" onChange={() => {}} />)
+    await user.click(screen.getByLabelText('Enter fullscreen'))
+    expect(screen.getByLabelText('Exit fullscreen')).toBeInTheDocument()
+    await user.click(screen.getByLabelText('Exit fullscreen'))
+    expect(screen.getByLabelText('Enter fullscreen')).toBeInTheDocument()
+  })
+
+  it('exits fullscreen when Escape is pressed', async () => {
+    const user = userEvent.setup()
+    render(<MarkdownEditor value="x" onChange={() => {}} />)
+    await user.click(screen.getByLabelText('Enter fullscreen'))
+    expect(screen.getByLabelText('Exit fullscreen')).toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    expect(screen.getByLabelText('Enter fullscreen')).toBeInTheDocument()
+  })
 })
