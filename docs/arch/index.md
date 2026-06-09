@@ -28,6 +28,7 @@ The backend serves both the JSON API and the built frontend, so browser clients 
 
 - Read [backend.md](backend.md) for backend, API, rendering, filesystem, or service-layer tasks.
 - Read [frontend.md](frontend.md) for SPA, route, state, or browser-session tasks.
+- Read [editor.md](editor.md) for the shared markdown editing component used by post and page authoring.
 - Read [data-flow.md](data-flow.md) when the task touches canonical content flow, cache updates, or read/write behavior across layers.
 - Read [formats.md](formats.md) when the task touches markdown front matter, site TOML, label TOML, or the structure of the `content/` tree.
 - Read [auth.md](auth.md) and [security.md](security.md) for authentication, authorization, session, validation, or security-sensitive work.
