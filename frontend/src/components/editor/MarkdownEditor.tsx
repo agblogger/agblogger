@@ -10,10 +10,8 @@ import {
   indentLines,
   insertSpaces,
   lineEndTarget,
+  pageTarget,
   smartHomeTarget,
-  visualPageTarget,
-  visualRowEndTarget,
-  visualRowHomeTarget,
 } from './textareaKeys'
 import { useScrollSync } from '@/hooks/useScrollSync'
 import { useMarkdownPreview } from '@/hooks/useMarkdownPreview'
@@ -22,6 +20,75 @@ import { useFileUpload } from './useFileUpload'
 
 const KEY_MAP: Record<string, string> = { b: 'bold', i: 'italic', h: 'heading', k: 'link' }
 const NAVIGATION_KEYS = new Set(['Home', 'End', 'PageUp', 'PageDown'])
+
+/**
+ * Move the focused textarea's caret/selection by `steps` of `granularity` using
+ * the browser's native `Selection.modify`. This drives Home/End ('lineboundary')
+ * and PageUp/PageDown ('line') through the real layout engine, so word-wrap and
+ * caret affinity are always correct — it is the same machinery behind macOS
+ * Cmd+Left/Right and visual line up/down. Returns false when `Selection.modify`
+ * is unavailable (e.g. jsdom under test), letting callers fall back to
+ * logical-line movement.
+ */
+function moveByModify(
+  granularity: 'lineboundary' | 'line',
+  direction: 'backward' | 'forward',
+  extend: boolean,
+  steps: number,
+): boolean {
+  const selection = window.getSelection()
+  if (!selection) return false
+  // `Selection.modify` is non-standard; the DOM lib types mark it required, but
+  // it is absent in some environments (jsdom under test), so read it through an
+  // optional-typed view and fall back when missing.
+  const modify = (selection as { modify?: Selection['modify'] }).modify
+  if (!modify) return false
+  try {
+    for (let i = 0; i < steps; i++) {
+      modify.call(selection, extend ? 'extend' : 'move', direction, granularity)
+    }
+  } catch {
+    return false
+  }
+  return true
+}
+
+/** Offset of the moving end of the textarea's current selection. */
+function activeOffset(textarea: HTMLTextAreaElement): number {
+  const { selectionStart, selectionEnd, selectionDirection } = textarea
+  if (selectionStart === selectionEnd) return selectionStart
+  return selectionDirection === 'backward' ? selectionStart : selectionEnd
+}
+
+/** Apply a computed caret target, collapsing or extending the selection. */
+function applyCaretTarget(textarea: HTMLTextAreaElement, target: number, extend: boolean): void {
+  if (!extend) {
+    textarea.setSelectionRange(target, target)
+    return
+  }
+  const { selectionStart, selectionEnd, selectionDirection } = textarea
+  const anchor =
+    selectionStart === selectionEnd
+      ? selectionStart
+      : selectionDirection === 'backward'
+        ? selectionEnd
+        : selectionStart
+  textarea.setSelectionRange(
+    Math.min(anchor, target),
+    Math.max(anchor, target),
+    target < anchor ? 'backward' : 'forward',
+  )
+}
+
+/** Effective line height of the textarea in CSS pixels. */
+function textareaLineHeight(textarea: HTMLTextAreaElement): number {
+  const style = window.getComputedStyle(textarea)
+  const lineHeight = parseFloat(style.lineHeight)
+  if (Number.isNaN(lineHeight) || lineHeight <= 0) {
+    return parseFloat(style.fontSize) * 1.2 || 16
+  }
+  return lineHeight
+}
 
 export interface MarkdownEditorProps {
   value: string
@@ -148,177 +215,56 @@ export default function MarkdownEditor({
     })
   }
 
-  function textareaPageMetrics(textarea: HTMLTextAreaElement): { charsPerRow: number; lineHeight: number } {
-    const style = window.getComputedStyle(textarea)
-    let lineHeight = parseFloat(style.lineHeight)
-    if (Number.isNaN(lineHeight) || lineHeight <= 0) {
-      lineHeight = parseFloat(style.fontSize) * 1.2 || 16
-    }
-    const pl = parseFloat(style.paddingLeft) || 0
-    const pr = parseFloat(style.paddingRight) || 0
-    const contentWidth = textarea.clientWidth - pl - pr
-    if (contentWidth <= 0) {
-      return { charsPerRow: Number.MAX_SAFE_INTEGER, lineHeight }
-    }
-    const canvas = document.createElement('canvas')
-    const ctx = canvas.getContext('2d')
-    let charWidth: number
-    if (ctx) {
-      ctx.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`
-      const w = ctx.measureText('M').width
-      charWidth = w > 0 ? w : parseFloat(style.fontSize) * 0.6 || 8
-    } else {
-      charWidth = parseFloat(style.fontSize) * 0.6 || 8
-    }
-    return { charsPerRow: Math.max(1, Math.floor(contentWidth / charWidth)), lineHeight }
-  }
-
-  // Returns the visual row boundaries for the caret's position using the actual
-  // browser word-wrap layout. Creates a short-lived mirror div to run Range
-  // queries — accurate for any wrapping algorithm. Returns null when no layout
-  // is available (JSDOM / SSR), signalling callers to fall back to logical-line
-  // behavior.
-  function getVisualRowBounds(
-    textarea: HTMLTextAreaElement,
-    caret: number,
-  ): { rowStart: number; rowEnd: number } | null {
-    const val = textarea.value
-    const ls = val.lastIndexOf('\n', caret - 1) + 1
-    const nlIdx = val.indexOf('\n', caret)
-    const le = nlIdx === -1 ? val.length : nlIdx
-    const line = val.slice(ls, le)
-
-    if (line.length === 0) return { rowStart: ls, rowEnd: le }
-
-    const caretInLine = Math.min(caret - ls, line.length - 1)
-    const style = window.getComputedStyle(textarea)
-
-    const mirror = document.createElement('div')
-    mirror.style.cssText =
-      `position:absolute;left:-9999px;top:0;` +
-      `width:${textarea.clientWidth}px;` +
-      `font-family:${style.fontFamily};` +
-      `font-size:${style.fontSize};` +
-      `font-weight:${style.fontWeight};` +
-      `line-height:${style.lineHeight};` +
-      `letter-spacing:${style.letterSpacing || '0'};` +
-      `padding-left:${style.paddingLeft};` +
-      `padding-right:${style.paddingRight};` +
-      `white-space:pre-wrap;overflow-wrap:break-word;word-break:normal;box-sizing:border-box`
-    mirror.textContent = line
-    document.body.appendChild(mirror)
-
-    const textNode = mirror.firstChild as Text
-    const range = document.createRange()
-    range.setStart(textNode, caretInLine)
-    range.setEnd(textNode, caretInLine + 1)
-
-    // Range.getBoundingClientRect is not available in all environments (e.g. JSDOM).
-    if (typeof range.getBoundingClientRect !== 'function') {
-      document.body.removeChild(mirror)
-      return null
-    }
-    const caretRect = range.getBoundingClientRect()
-
-    if (caretRect.height === 0) {
-      document.body.removeChild(mirror)
-      return null
-    }
-
-    const caretY = caretRect.top
-
-    // Binary search for the first char on the current visual row.
-    let lo = 0
-    let hi = caretInLine
-    while (lo < hi) {
-      const mid = Math.floor((lo + hi) / 2)
-      range.setStart(textNode, mid)
-      range.setEnd(textNode, mid + 1)
-      if (range.getBoundingClientRect().top < caretY) lo = mid + 1
-      else hi = mid
-    }
-    const rowStartInLine = lo
-
-    // Binary search for the first char on the NEXT visual row (= exclusive row end).
-    lo = caretInLine
-    hi = line.length
-    while (lo < hi) {
-      const mid = Math.floor((lo + hi) / 2)
-      range.setStart(textNode, mid)
-      range.setEnd(textNode, mid + 1)
-      if (range.getBoundingClientRect().top <= caretY) lo = mid + 1
-      else hi = mid
-    }
-    const rowEndInLine = lo
-
-    document.body.removeChild(mirror)
-    return { rowStart: ls + rowStartInLine, rowEnd: ls + rowEndInLine }
-  }
-
   function applyNavigation(key: string, shiftKey: boolean) {
     const textarea = textareaRef.current
     if (!textarea) return
-    const start = textarea.selectionStart
-    const end = textarea.selectionEnd
-    const backward = textarea.selectionDirection === 'backward'
-    const collapsed = start === end
-    const anchor = collapsed ? start : backward ? end : start
-    const active = collapsed ? start : backward ? start : end
 
-    if (key === 'PageUp' || key === 'PageDown') {
-      const { charsPerRow, lineHeight } = textareaPageMetrics(textarea)
-      const visibleRows = Math.max(1, Math.floor(textarea.clientHeight / lineHeight) - 1)
-      const direction = key === 'PageUp' ? 'up' : 'down'
-      const target = visualPageTarget(value, active, charsPerRow, visibleRows, direction)
-      const scrollTop = Math.max(
+    if (key === 'Home' || key === 'End') {
+      const direction = key === 'Home' ? 'backward' : 'forward'
+      const caretBefore = textarea.selectionStart
+      if (moveByModify('lineboundary', direction, shiftKey, 1)) {
+        // Smart Home on the FIRST visual row only: toggle first-non-whitespace
+        // ↔ column zero. On wrapped continuation rows the native move already
+        // landed at the visual row start, so leave it.
+        if (key === 'Home' && !shiftKey) {
+          const lineStart = value.lastIndexOf('\n', caretBefore - 1) + 1
+          if (textarea.selectionStart === lineStart) {
+            const target = smartHomeTarget(value, caretBefore)
+            if (target !== textarea.selectionStart) textarea.setSelectionRange(target, target)
+          }
+        }
+        return
+      }
+      // Fallback (no live layout, e.g. jsdom): logical line start/end.
+      const active = activeOffset(textarea)
+      const target = key === 'Home' ? smartHomeTarget(value, active) : lineEndTarget(value, active)
+      applyCaretTarget(textarea, target, shiftKey)
+      return
+    }
+
+    // PageUp / PageDown: move a viewport's worth of visual lines.
+    const direction = key === 'PageUp' ? 'backward' : 'forward'
+    const visibleRows = Math.max(
+      1,
+      Math.floor(textarea.clientHeight / textareaLineHeight(textarea)) - 1,
+    )
+    if (moveByModify('line', direction, shiftKey, visibleRows)) {
+      // Scroll a page so the caret keeps its on-screen row.
+      textarea.scrollTop = Math.max(
         0,
         Math.min(
           textarea.scrollHeight - textarea.clientHeight,
-          direction === 'up'
+          direction === 'backward'
             ? textarea.scrollTop - textarea.clientHeight
             : textarea.scrollTop + textarea.clientHeight,
         ),
       )
-      // Defer to the next frame so setSelectionRange + scrollTop take effect
-      // after e.preventDefault() has fully suppressed the browser's default.
-      requestAnimationFrame(() => {
-        if (shiftKey) {
-          const newStart = Math.min(anchor, target)
-          const newEnd = Math.max(anchor, target)
-          textarea.setSelectionRange(newStart, newEnd, target < anchor ? 'backward' : 'forward')
-        } else {
-          textarea.setSelectionRange(target, target)
-        }
-        textarea.scrollTop = scrollTop
-      })
       return
     }
-
-    // Home / End: query the actual browser word-wrap layout via a mirror div,
-    // then toggle/land within that visual row (never the whole logical line).
-    // When no layout is available (JSDOM / SSR) fall back to logical-line moves.
-    const bounds = getVisualRowBounds(textarea, active)
-    let target: number
-    if (key === 'Home') {
-      target =
-        bounds !== null
-          ? visualRowHomeTarget(value, active, bounds.rowStart, bounds.rowEnd)
-          : smartHomeTarget(value, active)
-    } else {
-      const lineEnd = lineEndTarget(value, active)
-      target =
-        bounds !== null
-          ? visualRowEndTarget(value, bounds.rowStart, bounds.rowEnd, lineEnd)
-          : lineEnd
-    }
-
-    if (shiftKey) {
-      const newStart = Math.min(anchor, target)
-      const newEnd = Math.max(anchor, target)
-      textarea.setSelectionRange(newStart, newEnd, target < anchor ? 'backward' : 'forward')
-    } else {
-      textarea.setSelectionRange(target, target)
-    }
+    // Fallback: logical page move.
+    const active = activeOffset(textarea)
+    const target = pageTarget(value, active, visibleRows, direction === 'backward' ? 'up' : 'down')
+    applyCaretTarget(textarea, target, shiftKey)
   }
 
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {

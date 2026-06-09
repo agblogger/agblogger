@@ -13,10 +13,16 @@ itself, so hosts retain it for autosave, save payloads, and dirty tracking.
 
 **Component owns:** the toolbar (formatting actions + save + fullscreen toggle),
 textarea, live preview, scroll sync, keyboard shortcuts (formatting +
-Cmd/Ctrl+S; Tab/Shift+Tab indent and block indent/dedent; editor-style caret
-navigation via smart Home/End and PageUp/PageDown), mobile edit/preview tabs,
+Cmd/Ctrl+S; Tab/Shift+Tab indent and block indent/dedent; word-wrap-aware caret
+navigation via Home/End and PageUp/PageDown), mobile edit/preview tabs,
 the fullscreen overlay, and — when `enableAssets` is set — file attachment
 management (upload/delete/rename) plus toolbar image upload.
+
+Visual caret navigation (Home/End/PageUp/PageDown) is driven by the browser's
+native `Selection.modify` (`lineboundary`/`line` granularity), so word-wrap and
+caret affinity come straight from the real layout engine — no off-screen mirror
+measurement. `textareaKeys` supplies logical-line fallbacks for environments
+without live layout (jsdom/SSR).
 
 **Host owns:** metadata fields, autosave, the `onSave` handler and error
 banners.
@@ -29,9 +35,9 @@ banners.
   `render/preview` call plus KaTeX hydration and code-block enhancement; the
   single source of preview behavior.
 - Supporting units: `wrapSelection`/`toolbarActions` (formatting transforms),
-  `textareaKeys` (pure Tab-indent and caret-navigation math),
-  `useScrollSync` (editor↔preview alignment), `useFileUpload` + `FileStrip` +
-  `markdownAssetReferences` (assets).
+  `textareaKeys` (pure Tab-indent math plus logical-line Home/End and page-move
+  fallbacks), `useScrollSync` (editor↔preview alignment), `useFileUpload` +
+  `FileStrip` + `markdownAssetReferences` (assets).
 
 ## Usage
 

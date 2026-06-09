@@ -1,6 +1,10 @@
 /**
  * Pure helpers backing the markdown editor's textarea key handling: Tab
- * indentation and editor-style caret navigation (smart Home/End, page moves).
+ * indentation, plus the logical-line Home/End and page-move FALLBACKS.
+ *
+ * Visual (word-wrap-aware) Home/End/PageUp/PageDown are driven natively in the
+ * browser via `Selection.modify` in `MarkdownEditor`; these pure helpers are the
+ * fallback used only when no live layout exists (e.g. jsdom under test, SSR).
  *
  * Every function operates purely on the string value and selection offsets so
  * the logic can be unit- and property-tested without a DOM. The component layer
@@ -106,99 +110,6 @@ export function dedentLines(value: string, selStart: number, selEnd: number): Ed
 }
 
 /**
- * Smart-home target in visual-row space for a monospace textarea with wrapping.
- * - If the caret is not at the start of its visual row, move there.
- * - If already at the visual row start, apply the logical-line smart-home toggle
- *   (first non-whitespace ↔ column zero), delegating to `smartHomeTarget`.
- * For non-wrapping lines (vrInLine === 0) this is identical to `smartHomeTarget`.
- */
-export function visualSmartHomeTarget(
-  value: string,
-  caret: number,
-  charsPerRow: number,
-): number {
-  const ls = lineStartIndex(value, caret)
-  const vrInLine = Math.floor((caret - ls) / charsPerRow)
-  if (vrInLine > 0) {
-    const vrs = ls + vrInLine * charsPerRow
-    if (caret > vrs) return vrs
-  }
-  return smartHomeTarget(value, caret)
-}
-
-/**
- * End-of-visual-row target for a monospace textarea with wrapping.
- * Moves to the start of the next visual row (= one past the last char of the
- * current row). On the final visual row of a logical line this is the logical
- * line end, identical to `lineEndTarget`.
- */
-export function visualEndTarget(
-  value: string,
-  caret: number,
-  charsPerRow: number,
-): number {
-  const ls = lineStartIndex(value, caret)
-  const le = lineEndIndex(value, caret)
-  const vrInLine = Math.floor((caret - ls) / charsPerRow)
-  return ls + Math.min((vrInLine + 1) * charsPerRow, le - ls)
-}
-
-/**
- * Visual-row smart-home target. Toggles within a single visual row: from
- * anywhere past the row's first non-whitespace character it moves there, and
- * from at-or-before it (including the row start) it moves to the row start.
- *
- * Crucially it stays inside the visual row — on a continuation row it never
- * jumps to the logical line start. On the first visual row of a line
- * `rowStart` equals the line start, so this reduces to classic smart-home.
- * `rowStart`/`rowEnd` are absolute offsets bounding the caret's visual row.
- */
-export function visualRowHomeTarget(
-  value: string,
-  caret: number,
-  rowStart: number,
-  rowEnd: number,
-): number {
-  let firstNonWs = rowStart
-  while (firstNonWs < rowEnd && (value[firstNonWs] === ' ' || value[firstNonWs] === '\t')) {
-    firstNonWs++
-  }
-  return caret > firstNonWs ? firstNonWs : rowStart
-}
-
-/**
- * Visual-row end target. On a wrap-boundary row (`rowEnd` < `lineEnd`), `rowEnd`
- * is also the first offset of the next visual row, and a textarea renders a
- * caret placed there with downstream affinity — i.e. at the START of the next
- * row. Returning `rowEnd` would therefore overshoot End by a whole visual row
- * (and strand a follow-up Home, which would compute that next row's start).
- *
- * So the target is the last offset that still renders on the CURRENT row:
- * - Space-wrap: trim the hanging trailing whitespace, landing just before the
- *   space(s) — a normal mid-row offset that renders unambiguously on this row.
- * - Mid-word wrap (no trailing whitespace): step back one glyph off the
- *   boundary to the row's last character.
- *
- * On the final visual row nothing wraps after it, so the true line end is safe
- * (and keeps any trailing spaces). Verified against real textarea layout via
- * Playwright — see the editor's Home/End browser tests.
- */
-export function visualRowEndTarget(
-  value: string,
-  rowStart: number,
-  rowEnd: number,
-  lineEnd: number,
-): number {
-  if (rowEnd >= lineEnd) return lineEnd
-  let end = rowEnd
-  while (end > rowStart && (value[end - 1] === ' ' || value[end - 1] === '\t')) {
-    end--
-  }
-  if (end === rowEnd) end -= 1
-  return Math.max(rowStart, end)
-}
-
-/**
  * Smart-home target: the first non-whitespace character of the line, or column
  * zero when the caret already sits at that first non-whitespace character.
  */
@@ -224,73 +135,6 @@ function lineStarts(value: string): number[] {
     if (value[i] === '\n') starts.push(i + 1)
   }
   return starts
-}
-
-/**
- * Number of visual rows occupied by a logical line in a monospace textarea.
- * An empty line still takes one visual row.
- */
-export function visualRowCount(lineLength: number, charsPerRow: number): number {
-  return lineLength === 0 ? 1 : Math.ceil(lineLength / charsPerRow)
-}
-
-/**
- * Move the caret one visual page up or down in a monospace textarea with word
- * wrap, preserving the visual column within the row. `charsPerRow` and
- * `visibleRows` are derived from DOM metrics by the caller.
- */
-export function visualPageTarget(
-  value: string,
-  caret: number,
-  charsPerRow: number,
-  visibleRows: number,
-  direction: PageDirection,
-): number {
-  const lines = value.split('\n')
-
-  // Find caret's logical line and character column.
-  let caretLine = 0
-  let linePos = 0
-  for (let i = 0; i < lines.length; i++) {
-    if (i === lines.length - 1 || caret <= linePos + (lines[i]?.length ?? 0)) {
-      caretLine = i
-      break
-    }
-    linePos += (lines[i]?.length ?? 0) + 1
-  }
-  const caretCol = caret - linePos
-
-  // Visual row of caret and column-within-that-row.
-  let caretVR = 0
-  for (let i = 0; i < caretLine; i++) {
-    caretVR += visualRowCount(lines[i]?.length ?? 0, charsPerRow)
-  }
-  caretVR += Math.floor(caretCol / charsPerRow)
-  const colInVR = caretCol % charsPerRow
-
-  // Total visual rows across all lines (for clamping).
-  const totalVR = lines.reduce((sum, l) => sum + visualRowCount(l.length, charsPerRow), 0)
-
-  // Target visual row, clamped within [0, totalVR-1].
-  const targetVR = Math.max(
-    0,
-    Math.min(totalVR - 1, direction === 'up' ? caretVR - visibleRows : caretVR + visibleRows),
-  )
-
-  // Map target visual row → character offset, preserving visual column.
-  let vr = 0
-  for (let i = 0; i < lines.length; i++) {
-    const lVR = visualRowCount(lines[i]?.length ?? 0, charsPerRow)
-    if (vr + lVR > targetVR) {
-      const vrInLine = targetVR - vr
-      const col = Math.min(vrInLine * charsPerRow + colInVR, lines[i]?.length ?? 0)
-      let off = 0
-      for (let j = 0; j < i; j++) off += (lines[j]?.length ?? 0) + 1
-      return off + col
-    }
-    vr += lVR
-  }
-  return value.length
 }
 
 /**
