@@ -15,7 +15,7 @@ itself, so hosts retain it for autosave, save payloads, and dirty tracking.
 textarea, live preview, scroll sync, keyboard shortcuts (formatting +
 Cmd/Ctrl+S), mobile edit/preview tabs, the fullscreen overlay, and — when
 `enableAssets` is set — file attachment management (upload/delete/rename) plus
-toolbar image upload. Assets are hidden in fullscreen.
+toolbar image upload.
 
 **Host owns:** metadata fields, autosave, the `onSave` handler and error
 banners.

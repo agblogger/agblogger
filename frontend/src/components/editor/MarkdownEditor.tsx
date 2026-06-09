@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { createPortal } from 'react-dom'
 import { ChevronRight, ChevronLeft, Eye } from 'lucide-react'
 
 import MarkdownToolbar from './MarkdownToolbar'
@@ -47,7 +48,14 @@ export default function MarkdownEditor({
       if (e.key === 'Escape') setIsFullscreen(false)
     }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    // Lock background scroll so the overlay spans the full window (no scrollbar
+    // gutter) and the page behind it cannot scroll.
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      document.body.style.overflow = previousOverflow
+    }
   }, [isFullscreen])
 
   const [fileRefreshToken, setFileRefreshToken] = useState(0)
@@ -146,7 +154,7 @@ export default function MarkdownEditor({
     applyAction(actionKey)
   }
 
-  return (
+  const content = (
     <div
       className={
         isFullscreen ? 'fixed inset-0 z-50 flex flex-col bg-paper p-4 overflow-hidden' : ''
@@ -278,4 +286,10 @@ export default function MarkdownEditor({
       </div>
     </div>
   )
+
+  // In fullscreen, portal to document.body so the `fixed inset-0` overlay
+  // anchors to the viewport. Hosts wrap the editor in a transformed
+  // `animate-fade-in` element, which would otherwise become the containing
+  // block and confine the overlay to the host's content column.
+  return isFullscreen ? createPortal(content, document.body) : content
 }

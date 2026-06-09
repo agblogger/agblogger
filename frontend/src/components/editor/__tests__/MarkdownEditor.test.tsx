@@ -115,6 +115,24 @@ describe('MarkdownEditor', () => {
     expect(screen.getByLabelText('Enter fullscreen')).toBeInTheDocument()
   })
 
+  it('portals the editor out of its host container when fullscreen', async () => {
+    // Hosts (EditorPage, AdminPage) wrap the editor in a transformed
+    // `animate-fade-in` element, which establishes a containing block for the
+    // `fixed inset-0` overlay. Portaling to document.body escapes it so
+    // fullscreen covers the whole viewport, not just the host's column.
+    const user = userEvent.setup()
+    const { container } = render(<MarkdownEditor value="x" onChange={() => {}} />)
+    expect(container.contains(screen.getByRole('textbox'))).toBe(true)
+
+    await user.click(screen.getByLabelText('Enter fullscreen'))
+    const fsTextarea = screen.getByRole('textbox')
+    expect(container.contains(fsTextarea)).toBe(false)
+    expect(document.body.contains(fsTextarea)).toBe(true)
+
+    await user.click(screen.getByLabelText('Exit fullscreen'))
+    expect(container.contains(screen.getByRole('textbox'))).toBe(true)
+  })
+
   it('does not render asset UI when enableAssets is omitted', () => {
     render(<MarkdownEditor value="x" onChange={() => {}} />)
     expect(screen.queryByLabelText(/^Image/)).not.toBeInTheDocument()
