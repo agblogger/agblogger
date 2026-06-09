@@ -39,3 +39,17 @@ banners.
 
 Preview HTML is rendered and sanitized server-side; the component mounts it via
 `dangerouslySetInnerHTML`.
+
+## Scroll sync
+
+`useScrollSync` (`frontend/src/hooks/`) keeps the textarea and preview aligned in
+both directions. It builds a sorted source-line → pixel anchor map and queries it
+by binary search with linear interpolation between anchors; the map is cached and
+invalidated on content, resize, or image load.
+
+- **Preview side:** the backend emits source-line sentinels (`agbpos-L<n>` ids),
+  each anchoring a mapped line to its preview pixel offset.
+- **Editor side:** a `<textarea>` exposes no internal text geometry, so an
+  off-screen mirror `<div>` replicates its wrapping to measure each line's pixel
+  offset. Offsets are calibrated against the textarea's real `scrollHeight`, so
+  systematic wrap drift between mirror and textarea self-corrects.
