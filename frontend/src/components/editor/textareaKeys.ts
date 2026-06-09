@@ -106,6 +106,44 @@ export function dedentLines(value: string, selStart: number, selEnd: number): Ed
 }
 
 /**
+ * Smart-home target in visual-row space for a monospace textarea with wrapping.
+ * - If the caret is not at the start of its visual row, move there.
+ * - If already at the visual row start, apply the logical-line smart-home toggle
+ *   (first non-whitespace ↔ column zero), delegating to `smartHomeTarget`.
+ * For non-wrapping lines (vrInLine === 0) this is identical to `smartHomeTarget`.
+ */
+export function visualSmartHomeTarget(
+  value: string,
+  caret: number,
+  charsPerRow: number,
+): number {
+  const ls = lineStartIndex(value, caret)
+  const vrInLine = Math.floor((caret - ls) / charsPerRow)
+  if (vrInLine > 0) {
+    const vrs = ls + vrInLine * charsPerRow
+    if (caret > vrs) return vrs
+  }
+  return smartHomeTarget(value, caret)
+}
+
+/**
+ * End-of-visual-row target for a monospace textarea with wrapping.
+ * Moves to the start of the next visual row (= one past the last char of the
+ * current row). On the final visual row of a logical line this is the logical
+ * line end, identical to `lineEndTarget`.
+ */
+export function visualEndTarget(
+  value: string,
+  caret: number,
+  charsPerRow: number,
+): number {
+  const ls = lineStartIndex(value, caret)
+  const le = lineEndIndex(value, caret)
+  const vrInLine = Math.floor((caret - ls) / charsPerRow)
+  return ls + Math.min((vrInLine + 1) * charsPerRow, le - ls)
+}
+
+/**
  * Smart-home target: the first non-whitespace character of the line, or column
  * zero when the caret already sits at that first non-whitespace character.
  */
@@ -131,6 +169,73 @@ function lineStarts(value: string): number[] {
     if (value[i] === '\n') starts.push(i + 1)
   }
   return starts
+}
+
+/**
+ * Number of visual rows occupied by a logical line in a monospace textarea.
+ * An empty line still takes one visual row.
+ */
+export function visualRowCount(lineLength: number, charsPerRow: number): number {
+  return lineLength === 0 ? 1 : Math.ceil(lineLength / charsPerRow)
+}
+
+/**
+ * Move the caret one visual page up or down in a monospace textarea with word
+ * wrap, preserving the visual column within the row. `charsPerRow` and
+ * `visibleRows` are derived from DOM metrics by the caller.
+ */
+export function visualPageTarget(
+  value: string,
+  caret: number,
+  charsPerRow: number,
+  visibleRows: number,
+  direction: PageDirection,
+): number {
+  const lines = value.split('\n')
+
+  // Find caret's logical line and character column.
+  let caretLine = 0
+  let linePos = 0
+  for (let i = 0; i < lines.length; i++) {
+    if (i === lines.length - 1 || caret <= linePos + (lines[i]?.length ?? 0)) {
+      caretLine = i
+      break
+    }
+    linePos += (lines[i]?.length ?? 0) + 1
+  }
+  const caretCol = caret - linePos
+
+  // Visual row of caret and column-within-that-row.
+  let caretVR = 0
+  for (let i = 0; i < caretLine; i++) {
+    caretVR += visualRowCount(lines[i]?.length ?? 0, charsPerRow)
+  }
+  caretVR += Math.floor(caretCol / charsPerRow)
+  const colInVR = caretCol % charsPerRow
+
+  // Total visual rows across all lines (for clamping).
+  const totalVR = lines.reduce((sum, l) => sum + visualRowCount(l.length, charsPerRow), 0)
+
+  // Target visual row, clamped within [0, totalVR-1].
+  const targetVR = Math.max(
+    0,
+    Math.min(totalVR - 1, direction === 'up' ? caretVR - visibleRows : caretVR + visibleRows),
+  )
+
+  // Map target visual row → character offset, preserving visual column.
+  let vr = 0
+  for (let i = 0; i < lines.length; i++) {
+    const lVR = visualRowCount(lines[i]?.length ?? 0, charsPerRow)
+    if (vr + lVR > targetVR) {
+      const vrInLine = targetVR - vr
+      const col = Math.min(vrInLine * charsPerRow + colInVR, lines[i]?.length ?? 0)
+      let off = 0
+      for (let j = 0; j < i; j++) off += (lines[j]?.length ?? 0) + 1
+      return off + col
+    }
+    vr += lVR
+  }
+  return value.length
 }
 
 /**

@@ -10,8 +10,8 @@ import {
   indentLines,
   insertSpaces,
   lineEndTarget,
-  pageTarget,
   smartHomeTarget,
+  visualPageTarget,
 } from './textareaKeys'
 import { useScrollSync } from '@/hooks/useScrollSync'
 import { useMarkdownPreview } from '@/hooks/useMarkdownPreview'
@@ -146,14 +146,111 @@ export default function MarkdownEditor({
     })
   }
 
-  function pageLinesFor(textarea: HTMLTextAreaElement): number {
+  function textareaPageMetrics(textarea: HTMLTextAreaElement): { charsPerRow: number; lineHeight: number } {
     const style = window.getComputedStyle(textarea)
     let lineHeight = parseFloat(style.lineHeight)
     if (Number.isNaN(lineHeight) || lineHeight <= 0) {
-      const fontSize = parseFloat(style.fontSize)
-      lineHeight = Number.isNaN(fontSize) ? 16 : fontSize * 1.2
+      lineHeight = parseFloat(style.fontSize) * 1.2 || 16
     }
-    return Math.max(1, Math.floor(textarea.clientHeight / lineHeight) - 1)
+    const pl = parseFloat(style.paddingLeft) || 0
+    const pr = parseFloat(style.paddingRight) || 0
+    const contentWidth = textarea.clientWidth - pl - pr
+    if (contentWidth <= 0) {
+      return { charsPerRow: Number.MAX_SAFE_INTEGER, lineHeight }
+    }
+    const canvas = document.createElement('canvas')
+    const ctx = canvas.getContext('2d')
+    let charWidth: number
+    if (ctx) {
+      ctx.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`
+      const w = ctx.measureText('M').width
+      charWidth = w > 0 ? w : parseFloat(style.fontSize) * 0.6 || 8
+    } else {
+      charWidth = parseFloat(style.fontSize) * 0.6 || 8
+    }
+    return { charsPerRow: Math.max(1, Math.floor(contentWidth / charWidth)), lineHeight }
+  }
+
+  // Returns the visual row boundaries for the caret's position using the actual
+  // browser word-wrap layout. Creates a short-lived mirror div to run Range
+  // queries — accurate for any wrapping algorithm. Returns null when no layout
+  // is available (JSDOM / SSR), signalling callers to fall back to logical-line
+  // behavior.
+  function getVisualRowBounds(
+    textarea: HTMLTextAreaElement,
+    caret: number,
+  ): { rowStart: number; rowEnd: number } | null {
+    const val = textarea.value
+    const ls = val.lastIndexOf('\n', caret - 1) + 1
+    const nlIdx = val.indexOf('\n', caret)
+    const le = nlIdx === -1 ? val.length : nlIdx
+    const line = val.slice(ls, le)
+
+    if (line.length === 0) return { rowStart: ls, rowEnd: le }
+
+    const caretInLine = Math.min(caret - ls, line.length - 1)
+    const style = window.getComputedStyle(textarea)
+
+    const mirror = document.createElement('div')
+    mirror.style.cssText =
+      `position:absolute;left:-9999px;top:0;` +
+      `width:${textarea.clientWidth}px;` +
+      `font-family:${style.fontFamily};` +
+      `font-size:${style.fontSize};` +
+      `font-weight:${style.fontWeight};` +
+      `line-height:${style.lineHeight};` +
+      `letter-spacing:${style.letterSpacing || '0'};` +
+      `padding-left:${style.paddingLeft};` +
+      `padding-right:${style.paddingRight};` +
+      `white-space:pre-wrap;overflow-wrap:break-word;word-break:normal;box-sizing:border-box`
+    mirror.textContent = line
+    document.body.appendChild(mirror)
+
+    const textNode = mirror.firstChild as Text
+    const range = document.createRange()
+    range.setStart(textNode, caretInLine)
+    range.setEnd(textNode, caretInLine + 1)
+
+    // Range.getBoundingClientRect is not available in all environments (e.g. JSDOM).
+    if (typeof range.getBoundingClientRect !== 'function') {
+      document.body.removeChild(mirror)
+      return null
+    }
+    const caretRect = range.getBoundingClientRect()
+
+    if (caretRect.height === 0) {
+      document.body.removeChild(mirror)
+      return null
+    }
+
+    const caretY = caretRect.top
+
+    // Binary search for the first char on the current visual row.
+    let lo = 0
+    let hi = caretInLine
+    while (lo < hi) {
+      const mid = Math.floor((lo + hi) / 2)
+      range.setStart(textNode, mid)
+      range.setEnd(textNode, mid + 1)
+      if (range.getBoundingClientRect().top < caretY) lo = mid + 1
+      else hi = mid
+    }
+    const rowStartInLine = lo
+
+    // Binary search for the first char on the NEXT visual row (= exclusive row end).
+    lo = caretInLine
+    hi = line.length
+    while (lo < hi) {
+      const mid = Math.floor((lo + hi) / 2)
+      range.setStart(textNode, mid)
+      range.setEnd(textNode, mid + 1)
+      if (range.getBoundingClientRect().top <= caretY) lo = mid + 1
+      else hi = mid
+    }
+    const rowEndInLine = lo
+
+    document.body.removeChild(mirror)
+    return { rowStart: ls + rowStartInLine, rowEnd: ls + rowEndInLine }
   }
 
   function applyNavigation(key: string, shiftKey: boolean) {
@@ -166,13 +263,48 @@ export default function MarkdownEditor({
     const anchor = collapsed ? start : backward ? end : start
     const active = collapsed ? start : backward ? start : end
 
+    if (key === 'PageUp' || key === 'PageDown') {
+      const { charsPerRow, lineHeight } = textareaPageMetrics(textarea)
+      const visibleRows = Math.max(1, Math.floor(textarea.clientHeight / lineHeight) - 1)
+      const direction = key === 'PageUp' ? 'up' : 'down'
+      const target = visualPageTarget(value, active, charsPerRow, visibleRows, direction)
+      const scrollTop = Math.max(
+        0,
+        Math.min(
+          textarea.scrollHeight - textarea.clientHeight,
+          direction === 'up'
+            ? textarea.scrollTop - textarea.clientHeight
+            : textarea.scrollTop + textarea.clientHeight,
+        ),
+      )
+      // Defer to the next frame so setSelectionRange + scrollTop take effect
+      // after e.preventDefault() has fully suppressed the browser's default.
+      requestAnimationFrame(() => {
+        if (shiftKey) {
+          const newStart = Math.min(anchor, target)
+          const newEnd = Math.max(anchor, target)
+          textarea.setSelectionRange(newStart, newEnd, target < anchor ? 'backward' : 'forward')
+        } else {
+          textarea.setSelectionRange(target, target)
+        }
+        textarea.scrollTop = scrollTop
+      })
+      return
+    }
+
+    // Home / End: query the actual browser word-wrap layout via a mirror div.
+    const bounds = getVisualRowBounds(textarea, active)
     let target: number
     if (key === 'Home') {
-      target = smartHomeTarget(value, active)
-    } else if (key === 'End') {
-      target = lineEndTarget(value, active)
+      if (bounds !== null) {
+        // At visual row start: smart-home toggle (first non-ws ↔ col 0).
+        // Past visual row start: jump there first.
+        target = active > bounds.rowStart ? bounds.rowStart : smartHomeTarget(value, active)
+      } else {
+        target = smartHomeTarget(value, active)
+      }
     } else {
-      target = pageTarget(value, active, pageLinesFor(textarea), key === 'PageUp' ? 'up' : 'down')
+      target = bounds !== null ? bounds.rowEnd : lineEndTarget(value, active)
     }
 
     if (shiftKey) {

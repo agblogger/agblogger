@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest'
 
 import { useMarkdownPreview } from '@/hooks/useMarkdownPreview'
 import MarkdownEditor from '../MarkdownEditor'
@@ -16,6 +16,21 @@ vi.mock('@/api/posts', () => ({
 }))
 
 const mockPreview = vi.mocked(useMarkdownPreview)
+
+beforeAll(() => {
+  // JSDOM does not implement Range.getBoundingClientRect. Define a stub
+  // (returning a zero rect) so vi.spyOn can mock it in individual tests that
+  // simulate browser layout. The zero height acts as the "no layout" signal
+  // that makes getVisualRowBounds fall back to logical-line behavior.
+  if (!('getBoundingClientRect' in Range.prototype)) {
+    Object.defineProperty(Range.prototype, 'getBoundingClientRect', {
+      value: () =>
+        ({ top: 0, height: 0, width: 0, left: 0, bottom: 0, right: 0, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect,
+      writable: true,
+      configurable: true,
+    })
+  }
+})
 
 beforeEach(() => {
   mockPreview.mockReturnValue({ html: '', error: false, hasContent: false })
@@ -132,6 +147,55 @@ describe('MarkdownEditor', () => {
     expect(textarea.selectionStart).toBe(0) // toggles to column 0
     await user.keyboard('{End}')
     expect(textarea.selectionStart).toBe(7) // end of line
+  })
+
+  it('Home moves to the word-wrap visual row start, not a fixed-char-count offset', async () => {
+    // "hello world" wraps visually after "hello " (word boundary at char 6).
+    // With character-counting charsPerRow the current code picks the wrong row
+    // start. The DOM-mirror fix must detect the actual word-wrap boundary.
+    //
+    // We stub Range.prototype.getBoundingClientRect to simulate the layout:
+    //   chars 0-5 → top=0 (row 0)   chars 6-10 → top=20 (row 1)
+    // Caret at 8 is on row 1, so Home must move to 6, not to 0.
+    const user = userEvent.setup()
+    render(<MarkdownEditor value="hello world" onChange={() => {}} />)
+    const textarea = screen.getByRole<HTMLTextAreaElement>('textbox')
+
+    Object.defineProperty(textarea, 'clientWidth', { value: 100, configurable: true })
+
+    const spy = vi.spyOn(Range.prototype, 'getBoundingClientRect').mockImplementation(function (this: Range) {
+      const top = this.startOffset < 6 ? 0 : 20
+      return { top, height: 20, width: 8, left: 0, bottom: top + 20, right: 8, x: 0, y: top, toJSON: () => ({}) } as DOMRect
+    })
+
+    textarea.focus()
+    textarea.setSelectionRange(8, 8) // within "world" on visual row 1
+    await user.keyboard('{Home}')
+    expect(textarea.selectionStart).toBe(6) // visual row 1 start = start of "world"
+
+    spy.mockRestore()
+  })
+
+  it('End moves to the word-wrap visual row end, not a fixed-char-count offset', async () => {
+    // Same layout: "hello " on row 0, "world" on row 1.
+    // Caret at 3 is on row 0, so End must move to 6 (first char of next row).
+    const user = userEvent.setup()
+    render(<MarkdownEditor value="hello world" onChange={() => {}} />)
+    const textarea = screen.getByRole<HTMLTextAreaElement>('textbox')
+
+    Object.defineProperty(textarea, 'clientWidth', { value: 100, configurable: true })
+
+    const spy = vi.spyOn(Range.prototype, 'getBoundingClientRect').mockImplementation(function (this: Range) {
+      const top = this.startOffset < 6 ? 0 : 20
+      return { top, height: 20, width: 8, left: 0, bottom: top + 20, right: 8, x: 0, y: top, toJSON: () => ({}) } as DOMRect
+    })
+
+    textarea.focus()
+    textarea.setSelectionRange(3, 3) // within "hello" on visual row 0
+    await user.keyboard('{End}')
+    expect(textarea.selectionStart).toBe(6) // visual row 0 end = first char of row 1
+
+    spy.mockRestore()
   })
 
   it('renders the mobile edit/preview tab controls', () => {
