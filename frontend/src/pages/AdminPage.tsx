@@ -15,6 +15,7 @@ import SocialAccountsPanel from '@/components/crosspost/SocialAccountsPanel'
 import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
 
 const AnalyticsPanel = lazy(() => import('@/components/admin/AnalyticsPanel'))
+const SubscriptionsPanel = lazy(() => import('@/components/admin/SubscriptionsPanel'))
 
 const ADMIN_TABS = [
   { key: 'settings', label: 'Settings' },
@@ -22,6 +23,7 @@ const ADMIN_TABS = [
   { key: 'account', label: 'Account' },
   { key: 'social', label: 'Social' },
   { key: 'analytics', label: 'Analytics' },
+  { key: 'subscriptions', label: 'Subscriptions' },
 ] as const
 
 type AdminTabKey = (typeof ADMIN_TABS)[number]['key']
@@ -66,7 +68,8 @@ export default function AdminPage() {
   const [accountSaving, setAccountSaving] = useState(false)
   const [socialBusy, setSocialBusy] = useState(false)
   const [analyticsBusy, setAnalyticsBusy] = useState(false)
-  const busy = siteSaving || pagesSaving || accountSaving || socialBusy || analyticsBusy
+  const [subscriptionsBusy, setSubscriptionsBusy] = useState(false)
+  const busy = siteSaving || pagesSaving || accountSaving || socialBusy || analyticsBusy || subscriptionsBusy
 
   // === Dirty tracking from sections ===
   const [siteDirty, setSiteDirty] = useState(false)
@@ -166,6 +169,11 @@ export default function AdminPage() {
       {activeTab === 'analytics' && (
         <Suspense fallback={<LoadingSpinner />}>
           <AnalyticsPanel busy={busy} onBusyChange={setAnalyticsBusy} />
+        </Suspense>
+      )}
+      {activeTab === 'subscriptions' && (
+        <Suspense fallback={<LoadingSpinner />}>
+          <SubscriptionsPanel busy={busy} onBusyChange={setSubscriptionsBusy} />
         </Suspense>
       )}
     </div>
