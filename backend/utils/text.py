@@ -101,6 +101,6 @@ def count_words(body: str) -> int:
     Strips fenced code blocks and inline code before counting so that
     code tokens do not inflate the reading-time estimate.
     """
-    body = _strip_fenced_code(body)
     body = _strip_inline_code(body)
+    body = _strip_fenced_code(body)
     return len(body.split())
