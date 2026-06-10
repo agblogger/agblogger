@@ -247,6 +247,30 @@ describe('SubscriptionsPanel', () => {
     expect(screen.getByText('sent')).toBeInTheDocument()
   })
 
+  it('renders failed broadcast row with error styling', async () => {
+    vi.mocked(apiMod.fetchBroadcasts).mockResolvedValue({
+      broadcasts: [
+        {
+          id: 2,
+          post_path: 'posts/hello',
+          post_title: 'Hello World',
+          resend_broadcast_id: 'br_456',
+          trigger: 'manual',
+          status: 'failed',
+          sent_at: '2024-01-02T12:00:00Z',
+          error: 'Segment not found',
+        },
+      ],
+    })
+    renderPanel()
+    await screen.findByText(/42/)
+    await waitFor(() => expect(screen.getByText('Hello World')).toBeInTheDocument())
+    const statusBadge = screen.getByText('failed')
+    expect(statusBadge).toBeInTheDocument()
+    expect(statusBadge.className).toMatch(/red/)
+    expect(screen.getByText('Segment not found')).toBeInTheDocument()
+  })
+
   it('shows empty state when no broadcasts', async () => {
     renderPanel()
     await screen.findByText(/42/)

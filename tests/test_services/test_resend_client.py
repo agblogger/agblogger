@@ -178,3 +178,13 @@ async def test_count_contacts_network_error_raises(monkeypatch: pytest.MonkeyPat
     with pytest.raises(ResendError) as exc:
         await resend_client.count_contacts(api_key="re_x", segment_id="seg_1")
     assert "down" not in str(exc.value)
+
+
+@pytest.mark.asyncio
+async def test_create_segment_raises_when_no_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={})
+
+    monkeypatch.setattr(resend_client, "_get_client", lambda: _client(handler))
+    with pytest.raises(ResendError, match="Resend did not return a segment id"):
+        await resend_client.create_segment(api_key="re_x", name="My Audience")

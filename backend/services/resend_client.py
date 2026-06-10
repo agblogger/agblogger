@@ -93,7 +93,10 @@ async def create_contact(*, api_key: str, segment_id: str, email: str) -> None:
 async def create_segment(*, api_key: str, name: str) -> str:
     """Create a segment/audience and return its id."""
     data = await _post(api_key, "/audiences", {"name": name})
-    return str(data.get("id", ""))
+    segment_id = str(data.get("id", ""))
+    if not segment_id:
+        raise ResendError("Resend did not return a segment id")
+    return segment_id
 
 
 async def create_and_send_broadcast(

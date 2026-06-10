@@ -490,7 +490,7 @@ export default function SubscriptionsPanel({ busy, onBusyChange }: Props) {
                         className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
                           b.status === 'sent'
                             ? 'bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400'
-                            : b.status === 'error'
+                            : b.status === 'failed'
                               ? 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400'
                               : 'bg-surface text-muted'
                         }`}
