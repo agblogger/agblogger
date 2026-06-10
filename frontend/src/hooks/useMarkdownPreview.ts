@@ -38,9 +38,7 @@ export function useMarkdownPreview({
   const hasContent = value.trim().length > 0
 
   useEffect(() => {
-    if (!hasContent) {
-      return
-    }
+    if (value.trim().length === 0) return
     const requestId = ++requestRef.current
     const timer = setTimeout(() => {
       const payload: { markdown: string; file_path?: string } = { markdown: value }
@@ -64,7 +62,7 @@ export function useMarkdownPreview({
         })
     }, debounceMs)
     return () => clearTimeout(timer)
-  }, [value, filePath, hasContent, debounceMs])
+  }, [value, filePath, debounceMs])
 
   const html = useRenderedHtml(hasContent ? serverHtml : null)
   useCodeBlockEnhance(previewRef, html)

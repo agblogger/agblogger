@@ -8,6 +8,7 @@ import {
   Save, Maximize2, Minimize2,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { memo } from 'react'
 import type { RefObject } from 'react'
 import { actions } from './toolbarActions'
 import { wrapSelection } from './wrapSelection'
@@ -65,7 +66,7 @@ const items: readonly ToolbarItem[] = [
   { key: 'note', label: 'Note', Icon: StickyNote },
 ]
 
-export default function MarkdownToolbar({
+export default memo(function MarkdownToolbar({
   textareaRef,
   value,
   onChange,
@@ -186,4 +187,4 @@ export default function MarkdownToolbar({
       )}
     </div>
   )
-}
+})

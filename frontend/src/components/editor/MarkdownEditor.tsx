@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronRight, ChevronLeft, Eye } from 'lucide-react'
 
@@ -182,6 +182,8 @@ export default function MarkdownEditor({
     filePath,
     previewRef,
   })
+
+  const handleToggleFullscreen = useCallback(() => setIsFullscreen((f) => !f), [])
 
   const saveAllowed = canSave && !saving && !disabled
 
@@ -368,7 +370,7 @@ export default function MarkdownEditor({
           saving={saving}
           canSave={canSave}
           isFullscreen={isFullscreen}
-          onToggleFullscreen={() => setIsFullscreen((f) => !f)}
+          onToggleFullscreen={handleToggleFullscreen}
           {...(enableAssets && {
             onImageClick: imageUploadEnabled ? triggerImageUpload : undefined,
             imageUploading,
