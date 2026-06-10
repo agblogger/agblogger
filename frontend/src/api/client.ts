@@ -150,6 +150,7 @@ export interface PostSummary {
 export interface PostDetail extends PostSummary {
   rendered_html: string
   content: string | null
+  word_count: number
 }
 
 export interface PostListResponse {
