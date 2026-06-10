@@ -4,6 +4,7 @@ import {
   List, ListOrdered,
   Link, ImagePlus, Youtube,
   TextQuote, Code, FileCode,
+  Sigma, Pi,
   Superscript, StickyNote,
   Save, Maximize2, Minimize2,
 } from 'lucide-react'
@@ -61,6 +62,8 @@ const items: readonly ToolbarItem[] = [
   { key: 'blockquote', label: 'Blockquote', Icon: TextQuote, shortcut: `${mod}+Shift+.` },
   { key: 'code', label: 'Code', Icon: Code, shortcut: `${mod}+E` },
   { key: 'codeblock', label: 'Code Block', Icon: FileCode, shortcut: `${mod}+Shift+E` },
+  { key: 'math', label: 'Math', Icon: Sigma },
+  { key: 'mathblock', label: 'Math Block', Icon: Pi },
   { separator: true },
   { key: 'footnote', label: 'Footnote', Icon: Superscript, shortcut: `${mod}+Shift+F` },
   { key: 'note', label: 'Note', Icon: StickyNote },

@@ -334,7 +334,7 @@ describe('wrapSelection', () => {
 })
 
 describe('MarkdownToolbar', () => {
-  it('renders all 18 toolbar buttons including image, footnote, and note', () => {
+  it('renders all 20 toolbar buttons including image, footnote, note, math, and math block', () => {
     const ref = createRef<HTMLTextAreaElement>()
     render(
       <MarkdownToolbar textareaRef={ref} value="" onChange={() => {}} onImageClick={() => {}} />,
@@ -726,5 +726,42 @@ describe('MarkdownToolbar', () => {
     render(<MarkdownToolbar textareaRef={ref} value="" onChange={() => {}} />)
     const btn = screen.getByRole('button', { name: /Footnote/ })
     expect(btn.title).toMatch(/Footnote \((Cmd|Ctrl)\+Shift\+F\)/)
+  })
+
+  it('renders all 20 toolbar buttons including math and math block', () => {
+    const ref = createRef<HTMLTextAreaElement>()
+    render(
+      <MarkdownToolbar textareaRef={ref} value="" onChange={() => {}} onImageClick={() => {}} />,
+    )
+    expect(screen.getByLabelText(/^Math Block/)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^Math$/)).toBeInTheDocument()
+  })
+
+  it('math button wraps selection with $ delimiters', async () => {
+    const onChange = vi.fn()
+    const textarea = document.createElement('textarea')
+    textarea.value = 'hello world'
+    textarea.selectionStart = 6
+    textarea.selectionEnd = 11
+    const ref = { current: textarea }
+
+    const user = userEvent.setup()
+    render(<MarkdownToolbar textareaRef={ref} value="hello world" onChange={onChange} />)
+    await user.click(screen.getByLabelText(/^Math$/))
+    expect(onChange).toHaveBeenCalledWith('hello $world$')
+  })
+
+  it('math block button inserts $$ block with placeholder', async () => {
+    const onChange = vi.fn()
+    const textarea = document.createElement('textarea')
+    textarea.value = ''
+    textarea.selectionStart = 0
+    textarea.selectionEnd = 0
+    const ref = { current: textarea }
+
+    const user = userEvent.setup()
+    render(<MarkdownToolbar textareaRef={ref} value="" onChange={onChange} />)
+    await user.click(screen.getByLabelText(/^Math Block/))
+    expect(onChange).toHaveBeenCalledWith('$$\n\\sum_{i=0}^n i^2\n$$')
   })
 })
