@@ -116,9 +116,8 @@ async def _upsert_social_account(
                         await create_social_account(session, user_id, account_data, secret_key)
                 except DuplicateAccountError:
                     logger.error(
-                        "Race condition: failed to re-create %s account %s after deletion",
+                        "Race condition: failed to re-create %s account after deletion (account identifier redacted)",
                         platform,
-                        account_name,
                         exc_info=True,
                     )
                     raise HTTPException(
