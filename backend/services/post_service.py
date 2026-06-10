@@ -270,6 +270,7 @@ async def get_post(
         labels=post_label_ids,
         rendered_html=post.rendered_html or "",
         content=None,  # Raw content not included in public view; use the /edit endpoint
+        word_count=post.word_count,
     )
 
 
