@@ -800,7 +800,9 @@ describe('MarkdownToolbar', () => {
       const ref = createRef<HTMLTextAreaElement>()
       const { container } = render(<MarkdownToolbar textareaRef={ref} value="" onChange={() => {}} />)
       makeNarrow(container.firstChild as HTMLElement)
-      expect(screen.getByLabelText('More formatting options')).toBeInTheDocument()
+      const toolbarEl = container.firstChild as HTMLElement
+      const btn = toolbarEl.querySelector('[aria-label="More formatting options"]') as HTMLElement
+      expect(btn.style.visibility).not.toBe('hidden')
     })
 
     it('clicking overflow button opens dropdown with overflow items', async () => {
