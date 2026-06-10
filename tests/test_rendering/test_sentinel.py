@@ -15,6 +15,7 @@ from backend.pandoc.sentinel import (
     BlockAnchor,
     _BlockTagFinder,
     _build_line_offsets,
+    _classify_div_fence,
     _inject_sentinels_into_html,
     _scan_blocks,
     _scan_document,
@@ -428,6 +429,24 @@ class TestScanBlocksProperties:
 
 
 class TestFencedDivs:
+    @pytest.mark.parametrize(
+        ("line", "expected"),
+        [
+            ("::", None),
+            (":::", False),
+            ("::::", False),
+            (":::\t \t", False),
+            ("::: note", True),
+            ("::::{.warning}", True),
+            (":::\t" + "x", True),
+        ],
+    )
+    def test_classifies_fence_lines(self, line: str, expected: bool | None) -> None:
+        assert _classify_div_fence(line) is expected
+
+    def test_tab_heavy_closer_is_classified_without_regex_backtracking(self) -> None:
+        assert _classify_div_fence(":::" + "\t" * 100_000) is False
+
     def test_simple_div_is_one_block(self) -> None:
         md = "::: note\nText.\n:::\n\nAfter."
         assert _split_markdown_blocks(md) == [0, 4]

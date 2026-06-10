@@ -36,8 +36,6 @@ _LINK_REF_DEF_RE = re.compile(r"^\s{0,3}\[[^^\]][^\]]*\]:\s")
 _FOOTNOTE_REF_RE = re.compile(r"\[\^([^\]]+)\](?!:)")
 # A definition-list marker line: ``:`` or ``~`` followed by whitespace (already de-indented).
 _DEF_MARKER_RE = re.compile(r"^[:~]\s")
-# A fenced-div line: 3+ colons; non-empty trailing attributes mean an opener, bare a closer.
-_DIV_FENCE_RE = re.compile(r"^(:{3,})\s*(.*)$")
 _ESCAPABLE_PUNCTUATION = frozenset(string.punctuation)
 
 
@@ -65,6 +63,21 @@ class ScanResult:
 
     blocks: list[BlockAnchor]
     footnote_lines: tuple[int, ...] = ()
+
+
+def _classify_div_fence(line: str) -> bool | None:
+    """Return whether a fenced-div line opens, closes, or is not a fence."""
+    if not line.startswith(":::"):
+        return None
+
+    trailing_start = 3
+    while trailing_start < len(line) and line[trailing_start] == ":":
+        trailing_start += 1
+    while trailing_start < len(line):
+        if not line[trailing_start].isspace():
+            return True
+        trailing_start += 1
+    return False
 
 
 def _mask_inline_code_and_escapes(markdown: str) -> str:
@@ -259,12 +272,11 @@ def _scan_document(markdown: str) -> ScanResult:
                 fence_len = len(fence_match.group(1))
                 i += 1
                 continue
-            div_match = _DIV_FENCE_RE.match(raw)
-            if div_match:
-                if div_match.group(2).strip():
-                    div_depth += 1
-                else:
-                    div_depth -= 1
+            div_fence = _classify_div_fence(raw)
+            if div_fence is True:
+                div_depth += 1
+            elif div_fence is False:
+                div_depth -= 1
             i += 1
             continue
 
@@ -298,8 +310,7 @@ def _scan_document(markdown: str) -> ScanResult:
             i += 1
             continue
 
-        div_match = _DIV_FENCE_RE.match(raw)
-        if div_match and div_match.group(2).strip():
+        if _classify_div_fence(raw) is True:
             # A fenced-div opener at the top level: one <div> block. Inner blocks are
             # swallowed by the ``div_depth > 0`` branch above until the matching closer.
             if in_gap:
