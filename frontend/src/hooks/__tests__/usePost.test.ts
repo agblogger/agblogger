@@ -30,6 +30,7 @@ const postDetail: PostDetail = {
   labels: [],
   rendered_html: '<p>Hello</p>',
   content: '# Hello',
+  word_count: 0,
 }
 
 const viewCountResponse: ViewCountResponse = { views: 42 }

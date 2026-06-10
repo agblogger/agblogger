@@ -56,6 +56,7 @@ const mockPost = {
   rendered_html: '<p>Test</p>',
   content: '# Test',
   labels: ['#swe'],
+  word_count: 0,
 }
 
 const mockAccounts: SocialAccount[] = [

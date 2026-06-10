@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { Calendar, User, PenLine, Trash2, Eye } from 'lucide-react'
+import { Calendar, Clock, User, PenLine, Trash2, Eye } from 'lucide-react'
 import { deletePost, fetchPostForEdit, updatePost } from '@/api/posts'
 import AlertBanner from '@/components/AlertBanner'
 import BackLink from '@/components/BackLink'
@@ -19,6 +19,7 @@ import TableOfContents from '@/components/posts/TableOfContents'
 import { usePost, useViewCount } from '@/hooks/usePost'
 import { formatLocalDate } from '@/utils/date'
 import { filePathToSlug } from '@/utils/postUrl'
+import { readingTime } from '@/utils/readingTime'
 export default function PostPage() {
   const { '*': slug } = useParams()
   const navigate = useNavigate()
@@ -194,6 +195,13 @@ export default function PostPage() {
               <div className="flex items-center gap-1.5">
                 <User size={14} />
                 <span>{post.author}</span>
+              </div>
+            )}
+
+            {post.word_count > 0 && (
+              <div className="flex items-center gap-1.5">
+                <Clock size={14} aria-hidden="true" />
+                <span>{readingTime(post.word_count)}</span>
               </div>
             )}
 

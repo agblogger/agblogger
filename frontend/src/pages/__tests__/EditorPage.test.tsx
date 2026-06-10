@@ -157,6 +157,7 @@ const postDetail: PostDetail = {
   labels: ['swe'],
   rendered_html: '<p>Published content</p>',
   content: 'Published content',
+  word_count: 0,
 }
 
 describe('EditorPage', () => {
@@ -265,6 +266,7 @@ describe('EditorPage', () => {
       ...postDetail,
       file_path: 'posts/2026-03-08-my-title/index.md',
       title: 'My Title',
+      word_count: 0,
     }
     const createdEditResponse: PostEditResponse = {
       file_path: 'posts/2026-03-08-my-title/index.md',
@@ -559,6 +561,7 @@ describe('EditorPage', () => {
       title: 'My Title', subtitle: null, author: 'jane', created_at: '2026-02-22 12:00:00+00:00',
       modified_at: '2026-02-22 12:00:00+00:00', is_draft: false,
       rendered_excerpt: '', rendered_html: '<p>Hello</p>', content: 'Hello', labels: [],
+      word_count: 0,
     }
     mockCreatePost.mockResolvedValue(savedPost)
     mockFetchPostForEdit.mockResolvedValue({
@@ -604,6 +607,7 @@ describe('EditorPage', () => {
       title: 'Existing Post', subtitle: null, author: 'Admin', created_at: '2026-02-01 12:00:00+00:00',
       modified_at: '2026-02-22 12:00:00+00:00', is_draft: false,
       rendered_excerpt: '', rendered_html: '<p>Content</p>', content: 'Content', labels: ['swe'],
+      word_count: 0,
     }
     mockUpdatePost.mockResolvedValue(updatedPost)
     const user = userEvent.setup()
@@ -859,6 +863,7 @@ describe('EditorPage', () => {
       title: 'Existing Post', subtitle: null, author: 'Admin', created_at: '2026-03-15 09:00:00+00:00',
       modified_at: '2026-03-15 09:00:00+00:00', is_draft: false,
       rendered_excerpt: '', rendered_html: '<p>Content</p>', content: 'Content', labels: ['swe'],
+      word_count: 0,
     }
     mockUpdatePost.mockResolvedValue(publishedPost)
     const user = userEvent.setup()
@@ -886,6 +891,7 @@ describe('EditorPage', () => {
       title: 'Existing Post', subtitle: null, author: 'Admin', created_at: '2026-02-01 12:00:00+00:00',
       modified_at: '2026-02-22 09:00:00+00:00', is_draft: false,
       rendered_excerpt: '', rendered_html: '<p>Content</p>', content: 'Content', labels: ['swe'],
+      word_count: 0,
     }
     mockUpdatePost.mockResolvedValue(updatedPost)
     const user = userEvent.setup()
@@ -1049,6 +1055,7 @@ describe('EditorPage', () => {
       title: 'My Title', subtitle: null, author: 'jane', created_at: '2026-03-08 12:00:00+00:00',
       modified_at: '2026-03-08 12:00:00+00:00', is_draft: false,
       rendered_excerpt: '', rendered_html: '<p>Hello</p>', content: 'Hello', labels: [],
+      word_count: 0,
     }
     mockCreatePost.mockResolvedValue(savedPost)
     // After save-and-stay navigates to /editor/<file_path>, EditorPage re-mounts
@@ -1288,6 +1295,7 @@ describe('EditorPage', () => {
       rendered_html: '<p>Test</p>',
       content: 'Test',
       labels: [],
+      word_count: 0,
     })
     mockFetchSocialAccounts.mockResolvedValue([
       {
@@ -1487,6 +1495,7 @@ describe('EditorPage', () => {
       title: 'My Title', subtitle: null, author: 'jane', created_at: '2026-03-08 12:00:00+00:00',
       modified_at: '2026-03-08 12:00:00+00:00', is_draft: false,
       rendered_excerpt: '', rendered_html: '<p>Hello</p>', content: 'Hello', labels: [],
+      word_count: 0,
     }
     mockCreatePost.mockResolvedValue(savedPost)
     mockFetchPostForEdit.mockResolvedValue({
@@ -1527,7 +1536,7 @@ describe('EditorPage', () => {
       title: 'Test Title', subtitle: 'My subtitle', author: 'jane',
       created_at: '2026-03-08 12:00:00+00:00', modified_at: '2026-03-08 12:00:00+00:00',
       is_draft: false, rendered_excerpt: '', rendered_html: '<p>Body text</p>',
-      content: 'Body text', labels: [],
+      content: 'Body text', labels: [], word_count: 0,
     }
     vi.mocked(createPost).mockResolvedValue(savedPost)
     mockFetchPostForEdit.mockResolvedValue({

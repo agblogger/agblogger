@@ -343,6 +343,7 @@ describe('TimelinePage', () => {
       id: 3, file_path: 'posts/uploaded/index.md', title: 'Uploaded', subtitle: null,
       author: 'Admin', created_at: '2026-02-22', modified_at: '2026-02-22',
       is_draft: false, rendered_excerpt: '', rendered_html: '', content: '', labels: [],
+      word_count: 0,
     })
     renderTimeline()
 
@@ -414,6 +415,7 @@ describe('TimelinePage', () => {
         id: 3, file_path: 'posts/titled/index.md', title: 'My Title', subtitle: null,
         author: 'Admin', created_at: '2026-02-22', modified_at: '2026-02-22',
         is_draft: false, rendered_excerpt: '', rendered_html: '', content: '', labels: [],
+        word_count: 0,
       })
     const user = userEvent.setup()
     renderTimeline()

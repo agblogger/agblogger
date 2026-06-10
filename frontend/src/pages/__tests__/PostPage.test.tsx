@@ -78,6 +78,7 @@ const postDetail: PostDetail = {
   labels: [],
   rendered_html: '<p>Content here</p>',
   content: 'Content here',
+  word_count: 400,
 }
 
 const draftPost: PostDetail = {
@@ -93,6 +94,7 @@ const draftPost: PostDetail = {
   labels: ['tech'],
   rendered_html: '<p>Draft content</p>',
   content: null,
+  word_count: 250,
 }
 
 let navigatedTo: string | number | null = null
@@ -654,6 +656,16 @@ describe('PostPage', () => {
     // Flush microtask queue so the fire-and-forget promise resolves
     await act(async () => {})
     expect(screen.queryByText(/views$/)).not.toBeInTheDocument()
+  })
+
+  it('renders reading time when word_count is non-zero', async () => {
+    mockFetchPost.mockResolvedValue(postDetail)
+    mockFetchViewCount.mockResolvedValue({ views: 42 })
+    renderPostPage()
+    await waitFor(() => {
+      expect(screen.getByText(/min read/)).toBeInTheDocument()
+    })
+    expect(screen.getByText(/400/)).toBeInTheDocument()
   })
 
   it('does not crash when view count fetch fails', async () => {
