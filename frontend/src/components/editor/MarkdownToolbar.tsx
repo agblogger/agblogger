@@ -197,7 +197,9 @@ export default memo(function MarkdownToolbar({
               role="separator"
               ref={(el) => { itemRefs.current[i] = el }}
               className="w-px h-4 bg-border mx-0.5 flex-shrink-0"
-              style={isOverflow ? { visibility: 'hidden', pointerEvents: 'none' } : undefined}
+              style={isOverflow
+                ? { position: 'absolute', visibility: 'hidden', pointerEvents: 'none' }
+                : undefined}
             />
           )
         }
@@ -229,7 +231,9 @@ export default memo(function MarkdownToolbar({
                      }`}
             title={title}
             aria-label={ariaLabel}
-            style={isOverflow ? { visibility: 'hidden', pointerEvents: 'none' } : undefined}
+            style={isOverflow
+              ? { position: 'absolute', visibility: 'hidden', pointerEvents: 'none' }
+              : undefined}
           >
             <Icon size={16} />
           </button>

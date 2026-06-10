@@ -21,7 +21,8 @@ import string
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
 
-from backend.pandoc.renderer import _VOID_TAGS, render_markdown
+from backend.pandoc import renderer
+from backend.pandoc.renderer import _VOID_TAGS
 
 _FENCE_RE = re.compile(r"^(`{3,}|~{3,})")
 # A list-item marker at the start of a (de-indented) line: a bullet (-, *, +) or an
@@ -582,5 +583,5 @@ async def render_markdown_preview(markdown: str) -> str:
     if not markdown.strip():
         return ""
     scan = _scan_document(markdown)
-    html = await render_markdown(markdown)
+    html = await renderer.render_markdown(markdown)
     return _inject_sentinels_into_html(html, scan.blocks, scan.footnote_lines)

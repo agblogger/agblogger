@@ -805,6 +805,19 @@ describe('MarkdownToolbar', () => {
       expect(btn.style.visibility).toBe('visible')
     })
 
+    it('overflowed items are removed from the flex layout while remaining measurable', () => {
+      const ref = createRef<HTMLTextAreaElement>()
+      const { container } = render(<MarkdownToolbar textareaRef={ref} onChange={() => {}} />)
+      makeNarrow(container.firstChild as HTMLElement)
+
+      const bold = screen.getByLabelText(/^Bold/)
+      const underline = screen.getByLabelText(/^Underline/)
+      expect(bold.style.position).toBe('')
+      expect(underline.style.position).toBe('absolute')
+      expect(underline.style.visibility).toBe('hidden')
+      expect(underline.offsetWidth).toBe(28)
+    })
+
     it('clicking overflow button opens dropdown with overflow items', async () => {
       const user = userEvent.setup()
       const ref = createRef<HTMLTextAreaElement>()

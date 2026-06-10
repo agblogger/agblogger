@@ -191,10 +191,20 @@ class TestInjectSentinelsIntoHtml:
 
 
 class TestRenderMarkdownPreview:
+    async def test_uses_canonical_renderer_binding(self) -> None:
+        mock_html = "<p>Only paragraph.</p>"
+        with patch(
+            "backend.pandoc.renderer.render_markdown",
+            AsyncMock(return_value=mock_html),
+        ) as renderer:
+            html = await render_markdown_preview("Only paragraph.")
+        renderer.assert_awaited_once_with("Only paragraph.")
+        assert 'id="agbpos-L0"' in html
+
     async def test_sentinels_present_in_output(self) -> None:
         mock_html = "<p>Paragraph one.</p>\n<p>Paragraph two.</p>"
         with patch(
-            "backend.pandoc.sentinel.render_markdown",
+            "backend.pandoc.renderer.render_markdown",
             AsyncMock(return_value=mock_html),
         ):
             html = await render_markdown_preview("Paragraph one.\n\nParagraph two.")
@@ -204,7 +214,7 @@ class TestRenderMarkdownPreview:
     async def test_single_paragraph_has_sentinel(self) -> None:
         mock_html = "<p>Only paragraph.</p>"
         with patch(
-            "backend.pandoc.sentinel.render_markdown",
+            "backend.pandoc.renderer.render_markdown",
             AsyncMock(return_value=mock_html),
         ):
             html = await render_markdown_preview("Only paragraph.")
@@ -212,7 +222,7 @@ class TestRenderMarkdownPreview:
 
     async def test_empty_markdown_no_sentinel(self) -> None:
         with patch(
-            "backend.pandoc.sentinel.render_markdown",
+            "backend.pandoc.renderer.render_markdown",
             AsyncMock(return_value=""),
         ):
             html = await render_markdown_preview("")
