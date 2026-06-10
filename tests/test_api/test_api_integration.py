@@ -160,6 +160,9 @@ class TestPosts:
         data = resp.json()
         assert data["title"] == "Hello World"
         assert "rendered_html" in data
+        assert "word_count" in data
+        assert isinstance(data["word_count"], int)
+        assert data["word_count"] > 0
 
     @pytest.mark.asyncio
     async def test_get_nonexistent_post(self, client: AsyncClient) -> None:
