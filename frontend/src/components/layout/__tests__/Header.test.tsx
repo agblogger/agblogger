@@ -29,6 +29,7 @@ const siteConfig: SiteConfigResponse = {
     { id: 'timeline', title: 'Posts', file: null },
     { id: 'labels', title: 'Labels', file: null },
   ],
+  subscriptions_enabled: false,
 }
 
 let mockUser: UserResponse | null = null

@@ -212,6 +212,7 @@ export interface SiteConfigResponse {
   title: string
   description: string
   pages: PageConfig[]
+  subscriptions_enabled: boolean
 }
 
 export interface PageResponse {
