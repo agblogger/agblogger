@@ -29,8 +29,10 @@ export function wrapSelection(
       .join('\n')
     const inserted = blockPrefix + prefixed
     const newValue = value.slice(0, selectionStart) + inserted + value.slice(selectionEnd)
-    const cursorStart = selectionStart + blockPrefix.length
-    const cursorEnd = cursorStart + prefixed.length
+    const usingPlaceholder = selected.length === 0
+    const cursorStart =
+      selectionStart + blockPrefix.length + (usingPlaceholder ? linePrefix.length : 0)
+    const cursorEnd = selectionStart + blockPrefix.length + prefixed.length
     return { newValue, cursorStart, cursorEnd }
   }
 

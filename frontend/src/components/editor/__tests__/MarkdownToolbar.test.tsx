@@ -109,7 +109,7 @@ describe('wrapSelection', () => {
       linePrefix: '> ',
     })
     expect(result.newValue).toBe('hello > quote text')
-    expect(result.cursorStart).toBe(6)
+    expect(result.cursorStart).toBe(8)
     expect(result.cursorEnd).toBe(18)
   })
 
@@ -122,7 +122,7 @@ describe('wrapSelection', () => {
       block: true,
     })
     expect(result.newValue).toBe('some text\n> quote text')
-    expect(result.cursorStart).toBe(10)
+    expect(result.cursorStart).toBe(12)
     expect(result.cursorEnd).toBe(22)
   })
 
@@ -135,7 +135,7 @@ describe('wrapSelection', () => {
       block: true,
     })
     expect(result.newValue).toBe('> quote text')
-    expect(result.cursorStart).toBe(0)
+    expect(result.cursorStart).toBe(2)
     expect(result.cursorEnd).toBe(12)
   })
 
