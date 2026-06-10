@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi } from 'vitest'
 
@@ -756,5 +756,124 @@ describe('MarkdownToolbar', () => {
     render(<MarkdownToolbar textareaRef={ref} value="" onChange={onChange} />)
     await user.click(screen.getByLabelText(/^Math Block/))
     expect(onChange).toHaveBeenCalledWith('$$\n\\sum_{i=0}^n i^2\n$$')
+  })
+
+  describe('overflow dropdown', () => {
+    let capturedObserver!: ResizeObserverCallback
+
+    beforeEach(() => {
+      vi.stubGlobal(
+        'ResizeObserver',
+        vi.fn(function (cb: ResizeObserverCallback) {
+          capturedObserver = cb
+          return { observe: vi.fn(), disconnect: vi.fn(), unobserve: vi.fn() }
+        }),
+      )
+    })
+
+    afterEach(() => {
+      vi.unstubAllGlobals()
+    })
+
+    // Sets container offsetWidth=120, all buttons/separators to 28px each.
+    // GAP=4. availableWidth = 120 - 28(overflowBtn) - 0(rightGroup) - 8(2×gap) = 84.
+    // Bold(28+4=32, sum=32 ≤ 84 ✓), Italic(sum=64 ≤ 84 ✓), Underline(sum=96 > 84 ✗)
+    // → overflowFrom=2 (Underline and everything after it overflows)
+    function makeNarrow(toolbarEl: HTMLElement) {
+      Object.defineProperty(toolbarEl, 'offsetWidth', { configurable: true, value: 120 })
+      toolbarEl.querySelectorAll('button, [role="separator"]').forEach((el) => {
+        Object.defineProperty(el, 'offsetWidth', { configurable: true, value: 28 })
+      })
+      act(() => capturedObserver([], {} as ResizeObserver))
+    }
+
+    it('overflow button is hidden when all buttons fit', () => {
+      const ref = createRef<HTMLTextAreaElement>()
+      const { container } = render(<MarkdownToolbar textareaRef={ref} value="" onChange={() => {}} />)
+      const toolbarEl = container.firstChild as HTMLElement
+      const btn = toolbarEl.querySelector('[aria-label="More formatting options"]') as HTMLElement
+      expect(btn).not.toBeNull()
+      expect(btn.style.visibility).toBe('hidden')
+    })
+
+    it('overflow button becomes visible when container is narrow', () => {
+      const ref = createRef<HTMLTextAreaElement>()
+      const { container } = render(<MarkdownToolbar textareaRef={ref} value="" onChange={() => {}} />)
+      makeNarrow(container.firstChild as HTMLElement)
+      expect(screen.getByLabelText('More formatting options')).toBeInTheDocument()
+    })
+
+    it('clicking overflow button opens dropdown with overflow items', async () => {
+      const user = userEvent.setup()
+      const ref = createRef<HTMLTextAreaElement>()
+      const { container } = render(
+        <MarkdownToolbar textareaRef={ref} value="" onChange={() => {}} />,
+      )
+      makeNarrow(container.firstChild as HTMLElement)
+      await user.click(screen.getByLabelText('More formatting options'))
+      expect(screen.getByRole('menu')).toBeInTheDocument()
+      // Underline (index 2) is the first overflow item
+      expect(screen.getByRole('menuitem', { name: 'Underline' })).toBeInTheDocument()
+    })
+
+    it('clicking dropdown item fires action and closes dropdown', async () => {
+      const onChange = vi.fn()
+      const user = userEvent.setup()
+      const textarea = document.createElement('textarea')
+      textarea.value = 'hello world'
+      textarea.selectionStart = 6
+      textarea.selectionEnd = 11
+      const ref = { current: textarea }
+      const { container } = render(
+        <MarkdownToolbar textareaRef={ref} value="hello world" onChange={onChange} />,
+      )
+      makeNarrow(container.firstChild as HTMLElement)
+      await user.click(screen.getByLabelText('More formatting options'))
+      await user.click(screen.getByRole('menuitem', { name: 'Underline' }))
+      expect(onChange).toHaveBeenCalledWith('hello [world]{.underline}')
+      expect(screen.queryByRole('menu')).toBeNull()
+    })
+
+    it('clicking outside the dropdown closes it', async () => {
+      const user = userEvent.setup()
+      const ref = createRef<HTMLTextAreaElement>()
+      const { container } = render(
+        <MarkdownToolbar textareaRef={ref} value="" onChange={() => {}} />,
+      )
+      makeNarrow(container.firstChild as HTMLElement)
+      await user.click(screen.getByLabelText('More formatting options'))
+      expect(screen.getByRole('menu')).toBeInTheDocument()
+      await user.click(document.body)
+      expect(screen.queryByRole('menu')).toBeNull()
+    })
+
+    it('pressing Escape closes the dropdown', async () => {
+      const user = userEvent.setup()
+      const ref = createRef<HTMLTextAreaElement>()
+      const { container } = render(
+        <MarkdownToolbar textareaRef={ref} value="" onChange={() => {}} />,
+      )
+      makeNarrow(container.firstChild as HTMLElement)
+      await user.click(screen.getByLabelText('More formatting options'))
+      expect(screen.getByRole('menu')).toBeInTheDocument()
+      await user.keyboard('{Escape}')
+      expect(screen.queryByRole('menu')).toBeNull()
+    })
+
+    it('save and fullscreen are always rendered regardless of overflow', () => {
+      const ref = createRef<HTMLTextAreaElement>()
+      const { container } = render(
+        <MarkdownToolbar
+          textareaRef={ref}
+          value=""
+          onChange={() => {}}
+          onSave={vi.fn()}
+          onToggleFullscreen={vi.fn()}
+        />,
+      )
+      makeNarrow(container.firstChild as HTMLElement)
+      expect(screen.getByLabelText('Save')).toBeInTheDocument()
+      expect(screen.getByLabelText('Enter fullscreen')).toBeInTheDocument()
+    })
   })
 })
