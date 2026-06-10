@@ -43,7 +43,7 @@ _REQUIRED_TO_ENABLE = (
 class EnablePreconditionError(Exception):
     """Raised when enabling is requested without the required compliance config.
 
-    The API layer maps this to HTTP 422.
+    The API layer maps this to HTTP 400.
     """
 
 

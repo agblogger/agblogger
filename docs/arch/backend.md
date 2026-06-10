@@ -55,7 +55,7 @@ Write paths also enforce storage quota checks against the managed non-hidden con
 
 The database uses two separate declarative bases to distinguish durable state from derived cache state:
 
-- **DurableBase** tables (admin users, admin refresh tokens, social accounts, cross-posts, analytics settings) are managed by Alembic migrations. Schema changes are applied programmatically during application startup. These tables persist across restarts and upgrades.
+- **DurableBase** tables (admin users, admin refresh tokens, social accounts, cross-posts, analytics settings, subscription settings and broadcast ledger) are managed by Alembic migrations. Schema changes are applied programmatically during application startup. These tables persist across restarts and upgrades. All subscription tables live in the main database — there is no separate database file for subscriptions.
 - **CacheBase** tables (posts cache, pages cache, labels cache, label associations, sync manifest) are dropped and recreated on every startup. Their content is rebuilt from the filesystem.
 
 This separation means adding a column to a durable table requires an Alembic migration, while cache table schema changes take effect automatically on the next restart.
@@ -70,6 +70,7 @@ The API is organized around a small set of concerns:
 - preview and rendering
 - sync and cross-posting
 - analytics (admin dashboard stats + public view counts)
+- subscriptions (public opt-in + confirm, admin settings and broadcast management)
 - health and operational endpoints
 
 Public read paths are broad for published content, while mutations are concentrated behind authorization boundaries.
@@ -94,11 +95,12 @@ The goal is to preserve content, preserve service availability where possible, a
 - `backend/main.py` is the main runtime entry point.
 - `backend/api/` contains the HTTP-facing modules grouped by feature area.
 - `backend/services/` contains the orchestration and business-logic layer, including services for page retrieval, page cache population, rendering, posts CRUD operations, authentication, cross-posting, sync, analytics, admin panel business logic, storage quota tracking, and SEO enrichment.
-- `backend/models/` contains SQLAlchemy ORM models for both durable tables (admin users, admin refresh tokens, social accounts, cross-posts, analytics settings) and cache tables (posts, pages, labels, sync manifest).
+- `backend/models/` contains SQLAlchemy ORM models for both durable tables (admin users, admin refresh tokens, social accounts, cross-posts, analytics settings, subscription settings, subscription broadcast ledger) and cache tables (posts, pages, labels, sync manifest).
 - `backend/schemas/` contains Pydantic request/response schemas that define the API contracts.
 - `backend/filesystem/` contains the canonical content model.
 - `backend/pandoc/server.py` manages the long-lived Pandoc server process used by the application.
 - `backend/pandoc/renderer.py` exposes the shared markdown-rendering boundary used across backend features.
 - `backend/migrations/` contains Alembic migration scripts for durable table schema changes.
+- `backend/services/resend_client.py` is the shared async HTTP boundary over the Resend API; it holds a single long-lived `httpx.AsyncClient` and is closed on app shutdown alongside other background services.
 - `backend/utils/slug.py` provides canonical post path validation and slug extraction used across API, filesystem, sync, and rendering modules.
 - `backend/utils/datetime.py` provides shared datetime parsing and formatting helpers.

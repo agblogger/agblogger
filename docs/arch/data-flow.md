@@ -32,10 +32,15 @@ Several features consume canonical content without becoming authoritative themse
 
 These remain derived views of the same content system, not separate content stores.
 
+## Subscription Broadcast Flow
+
+When a post transitions to published, the publish hook fires a background task (gated on subscriptions being enabled) that sends the post's rendered HTML to Resend as a broadcast to the subscriber segment. A once-guard checks the broadcast ledger for a prior `sent` row for the same post path to prevent duplicate automatic sends; the admin manual trigger bypasses the once-guard. Confirm opt-in follows a separate path: a signed token is emailed to the subscriber, and the confirm endpoint creates a Resend contact on verification. No subscriber email addresses are written to the local database at any point.
+
 ## Code Entry Points
 
-- `backend/api/posts.py`, `backend/api/pages.py`, and related API modules define the entry points for reads and mutations.
+- `backend/api/posts.py`, `backend/api/pages.py`, and related API modules define the entry points for reads and mutations; `posts.py` also hosts the publish hook that fires the subscription broadcast background task.
 - `backend/filesystem/content_manager.py` owns the canonical on-disk content operations.
 - `backend/services/storage_quota.py` provides the managed-content size accounting used by write paths.
 - `backend/services/cache_service.py`, `backend/services/post_service.py`, and `backend/services/page_service.py` expose the main derived read models.
 - `backend/pandoc/renderer.py` and related rendering code handle the shared HTML rendering path.
+- `backend/services/subscription_service.py` owns the broadcast firing, once-guard, and confirm-to-contact flow.

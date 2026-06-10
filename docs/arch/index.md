@@ -35,6 +35,7 @@ The backend serves both the JSON API and the built frontend, so browser clients 
 - Read [sync.md](sync.md) for sync protocol, manifest, merge, or CLI sync tasks.
 - Read [cross-posting.md](cross-posting.md) for provider integrations, connected accounts, or publication-to-social-platform tasks.
 - Read [analytics.md](analytics.md) for page-view tracking, GoatCounter sidecar, stats proxy, or view-count tasks.
+- Read [subscriptions.md](subscriptions.md) for email subscriptions, Resend integration, double opt-in, or broadcast tasks.
 - Read [testing.md](testing.md) when changing tests, validation strategy, or repository quality gates.
 - Read [deployment.md](deployment.md) only for packaging, container, runtime topology, or deployment-helper work.
 
@@ -45,3 +46,4 @@ The backend serves both the JSON API and the built frontend, so browser clients 
 - `backend/services/` contains the main orchestration logic for content, auth, sync, rendering, and integrations.
 - `frontend/src/App.tsx` is the SPA entry point, with route-level UI in `frontend/src/pages/`.
 - `cli/` contains the sync and deployment companions that sit on top of the core application architecture.
+- `backend/api/subscriptions.py` and `backend/services/subscription_service.py` are the entry points for the email-subscription feature.

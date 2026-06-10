@@ -32,6 +32,8 @@ Filesystem access is constrained to managed content paths, and sync exposes only
 
 External providers are treated as untrusted systems. Their credentials are protected at rest, provider-specific behavior is isolated behind adapters and services, and external failures are prevented from redefining core content ownership or application identity boundaries.
 
+The email subscription feature stores zero subscriber PII locally — Resend is the sole contact custodian. The Resend API key is Fernet-encrypted at rest using the app `SECRET_KEY` and is never returned by any API endpoint or logged. Confirmation tokens are signed with a `SECRET_KEY`-derived key. Enabling-state aside, the subscribe endpoint does not reveal whether a given address is already subscribed — new and existing addresses both receive the same confirmation response, since the confirmation is sent without querying Resend's contact list. The public subscribe endpoint is rate-limited per IP to protect against confirmation-email abuse and Resend transactional quota exhaustion. The operator retains GDPR controllership even though Resend stores the addresses (Resend acts as a processor).
+
 ## Runtime Hardening
 
 Production hardening combines application and deployment controls: startup validation of critical security settings, controlled proxy and host boundaries, hardened HTTP behavior, and container-oriented deployment practices that minimize exposed surface area.
@@ -55,3 +57,5 @@ Security checks are part of normal engineering workflow rather than a separate l
 - `backend/services/csrf_service.py` and `backend/services/rate_limit_service.py` cover request-boundary protections.
 - `backend/services/storage_quota.py` contains the managed-content quota boundary used by write paths.
 - `backend/crosspost/ssrf.py` and related integration code cover external-request hardening for provider integrations.
+- `backend/services/subscription_tokens.py` covers signed confirm-token creation and verification.
+- `backend/services/subscription_service.py` enforces the enable precondition and no-enumeration subscribe response.
