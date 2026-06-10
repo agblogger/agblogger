@@ -428,6 +428,18 @@ export default function Header() {
               </Link>
             )
           })}
+          {config?.subscriptions_enabled === true && (
+            <Link
+              to="/subscribe"
+              className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                location.pathname === '/subscribe'
+                  ? 'border-accent text-accent'
+                  : 'border-transparent text-muted hover:text-ink hover:border-border-dark'
+              }`}
+            >
+              Subscribe
+            </Link>
+          )}
         </nav>
       </div>
 
@@ -465,6 +477,19 @@ export default function Header() {
                 </Link>
               )
             })}
+            {config?.subscriptions_enabled === true && (
+              <Link
+                to="/subscribe"
+                onClick={closeMobileMenu}
+                className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                  location.pathname === '/subscribe'
+                    ? 'bg-accent/10 text-accent'
+                    : 'text-muted hover:text-ink hover:bg-paper-warm'
+                }`}
+              >
+                Subscribe
+              </Link>
+            )}
           </nav>
 
           <div className="flex items-center gap-3 pt-2 border-t border-border/50">

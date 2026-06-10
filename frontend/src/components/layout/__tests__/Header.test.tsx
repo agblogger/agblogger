@@ -897,4 +897,24 @@ describe('Header', () => {
       expect(screen.getByRole('listbox')).toBeInTheDocument()
     })
   })
+
+  describe('Subscribe link', () => {
+    afterEach(() => {
+      siteConfig.subscriptions_enabled = false
+    })
+
+    it('renders a Subscribe link to /subscribe when subscriptions_enabled is true', () => {
+      siteConfig.subscriptions_enabled = true
+      renderHeader()
+      const links = screen.getAllByRole('link', { name: 'Subscribe' })
+      expect(links.length).toBeGreaterThanOrEqual(1)
+      expect(links[0]).toHaveAttribute('href', '/subscribe')
+    })
+
+    it('does not render a Subscribe link when subscriptions_enabled is false', () => {
+      siteConfig.subscriptions_enabled = false
+      renderHeader()
+      expect(screen.queryByRole('link', { name: 'Subscribe' })).not.toBeInTheDocument()
+    })
+  })
 })

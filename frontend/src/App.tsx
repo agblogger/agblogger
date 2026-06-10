@@ -24,6 +24,7 @@ const EditorPage = lazy(() => import("@/pages/EditorPage"));
 const AdminPage = lazy(() => import("@/pages/AdminPage"));
 const LabelSettingsPage = lazy(() => import("@/pages/LabelSettingsPage"));
 const LabelCreatePage = lazy(() => import("@/pages/LabelCreatePage"));
+const SubscribePage = lazy(() => import("@/pages/SubscribePage"));
 
 function LazyFallback() {
   return <LoadingSpinner />;
@@ -103,6 +104,7 @@ const router = createBrowserRouter([
       { path: "/labels/new", element: <LabelCreatePage /> },
       { path: "/labels/:labelId/settings", element: <LabelSettingsPage /> },
       { path: "/labels/:labelId", element: <LabelPostsPage /> },
+      { path: "/subscribe", element: <SubscribePage /> },
       { path: "/editor/*", element: <EditorPage /> },
       { path: "/admin", element: <AdminPage /> },
     ],
