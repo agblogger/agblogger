@@ -26,6 +26,8 @@ export const actions: Record<string, WrapAction> = {
   blockquote: { before: '', after: '', placeholder: 'quote text', linePrefix: '> ', block: true },
   code: { before: '`', after: '`', placeholder: 'code' },
   codeblock: { before: '```\n', after: '\n```', placeholder: 'code', block: true },
+  math: { before: '$', after: '$', placeholder: 'x^2' },
+  mathblock: { before: '$$\n', after: '\n$$', placeholder: '\\sum_{i=0}^n i^2', block: true },
   youtube: {
     before: '<iframe src="https://www.youtube.com/embed/',
     after: '" allowfullscreen></iframe>',

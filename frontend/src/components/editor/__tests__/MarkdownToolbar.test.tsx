@@ -284,6 +284,52 @@ describe('wrapSelection', () => {
       expect(result.cursorStart).toBe(22)
       expect(result.cursorEnd).toBe(31)
     })
+
+    it('math wraps selected text with $ delimiters', () => {
+      const result = wrapSelection('hello world', 6, 11, {
+        before: '$',
+        after: '$',
+        placeholder: 'x^2',
+      })
+      expect(result.newValue).toBe('hello $world$')
+      expect(result.cursorStart).toBe(7)
+      expect(result.cursorEnd).toBe(12)
+    })
+
+    it('math inserts placeholder when nothing is selected', () => {
+      const result = wrapSelection('hello ', 6, 6, {
+        before: '$',
+        after: '$',
+        placeholder: 'x^2',
+      })
+      expect(result.newValue).toBe('hello $x^2$')
+      expect(result.cursorStart).toBe(7)
+      expect(result.cursorEnd).toBe(10)
+    })
+
+    it('mathblock wraps with $$ delimiters at document start', () => {
+      const result = wrapSelection('', 0, 0, {
+        before: '$$\n',
+        after: '\n$$',
+        placeholder: '\\sum_{i=0}^n i^2',
+        block: true,
+      })
+      expect(result.newValue).toBe('$$\n\\sum_{i=0}^n i^2\n$$')
+      expect(result.cursorStart).toBe(3)
+      expect(result.cursorEnd).toBe(19)
+    })
+
+    it('mathblock adds leading newline when not at line start', () => {
+      const result = wrapSelection('some text', 9, 9, {
+        before: '$$\n',
+        after: '\n$$',
+        placeholder: '\\sum_{i=0}^n i^2',
+        block: true,
+      })
+      expect(result.newValue).toBe('some text\n$$\n\\sum_{i=0}^n i^2\n$$')
+      expect(result.cursorStart).toBe(13)
+      expect(result.cursorEnd).toBe(29)
+    })
   })
 })
 
