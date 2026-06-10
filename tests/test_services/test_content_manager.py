@@ -122,6 +122,23 @@ class TestGenerateMarkdownExcerpt:
         assert "y = mx" not in excerpt
         assert "More text." in excerpt
 
+    def test_strips_fenced_div_markers(self) -> None:
+        content = "Before.\n\n::: {.note}\nNote content here.\n:::\n\nAfter."
+        excerpt = generate_markdown_excerpt(content)
+        assert ":::" not in excerpt
+        assert "{.note}" not in excerpt
+        assert "Note content here." in excerpt
+        assert "Before." in excerpt
+        assert "After." in excerpt
+
+    def test_strips_plain_fenced_div_markers(self) -> None:
+        content = "Before.\n\n:::\nSome content.\n:::\n\nAfter."
+        excerpt = generate_markdown_excerpt(content)
+        assert ":::" not in excerpt
+        assert "Some content." in excerpt
+        assert "Before." in excerpt
+        assert "After." in excerpt
+
 
 class TestParsePost:
     def test_basic_post(self) -> None:

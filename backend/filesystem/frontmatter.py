@@ -239,6 +239,9 @@ def generate_markdown_excerpt(content: str, max_length: int = 300) -> str:
         # Skip table lines (rows and separator lines)
         if trimmed.startswith("|"):
             continue
+        # Skip fenced div markers (Pandoc ::: syntax); content inside is kept
+        if trimmed.startswith(":::"):
+            continue
         if trimmed:
             lines.append(trimmed)
 
