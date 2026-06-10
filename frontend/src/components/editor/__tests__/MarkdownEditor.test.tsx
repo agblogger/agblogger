@@ -287,6 +287,17 @@ describe('MarkdownEditor', () => {
     expect(onChange).toHaveBeenCalledWith('- hi')
   })
 
+  it('applies bullet list shortcut when e.key is the unshifted digit (browser fallback)', async () => {
+    const onChange = vi.fn()
+    const user = userEvent.setup()
+    render(<MarkdownEditor value="hi" onChange={onChange} />)
+    const textarea = screen.getByRole<HTMLTextAreaElement>('textbox')
+    textarea.focus()
+    textarea.setSelectionRange(0, 2)
+    await user.keyboard('{Control>}{Shift>}8{/Shift}{/Control}')
+    expect(onChange).toHaveBeenCalledWith('- hi')
+  })
+
   it('applies ordered list shortcut (Ctrl+Shift+7) via onChange', async () => {
     const onChange = vi.fn()
     const user = userEvent.setup()
@@ -295,6 +306,17 @@ describe('MarkdownEditor', () => {
     textarea.focus()
     textarea.setSelectionRange(0, 2)
     await user.keyboard('{Control>}{Shift>}&{/Shift}{/Control}')
+    expect(onChange).toHaveBeenCalledWith('1. hi')
+  })
+
+  it('applies ordered list shortcut when e.key is the unshifted digit (browser fallback)', async () => {
+    const onChange = vi.fn()
+    const user = userEvent.setup()
+    render(<MarkdownEditor value="hi" onChange={onChange} />)
+    const textarea = screen.getByRole<HTMLTextAreaElement>('textbox')
+    textarea.focus()
+    textarea.setSelectionRange(0, 2)
+    await user.keyboard('{Control>}{Shift>}7{/Shift}{/Control}')
     expect(onChange).toHaveBeenCalledWith('1. hi')
   })
 

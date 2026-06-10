@@ -22,7 +22,7 @@ import { useFileUpload } from './useFileUpload'
 const KEY_MAP: Record<string, string> = { b: 'bold', i: 'italic', e: 'code', h: 'heading', k: 'link', u: 'underline' }
 const SHIFT_KEY_MAP: Record<string, string> = {
   e: 'codeblock', '>': 'blockquote', '.': 'blockquote',
-  x: 'strikethrough', '*': 'bulletList', '&': 'orderedList', f: 'footnote',
+  x: 'strikethrough', '*': 'bulletList', '8': 'bulletList', '&': 'orderedList', '7': 'orderedList', f: 'footnote',
 }
 const NAVIGATION_KEYS = new Set(['Home', 'End', 'PageUp', 'PageDown'])
 
