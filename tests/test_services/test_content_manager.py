@@ -139,6 +139,19 @@ class TestGenerateMarkdownExcerpt:
         assert "Before." in excerpt
         assert "After." in excerpt
 
+    def test_strips_raw_html_block_lines(self) -> None:
+        content = '<iframe src="https://www.youtube.com/embed/abc"></iframe>\n\nSome text.'
+        excerpt = generate_markdown_excerpt(content)
+        assert "<iframe" not in excerpt
+        assert "Some text." in excerpt
+
+    def test_strips_raw_html_block_between_text(self) -> None:
+        content = 'Before.\n\n<div class="note">note text</div>\n\nAfter.'
+        excerpt = generate_markdown_excerpt(content)
+        assert "<div" not in excerpt
+        assert "Before." in excerpt
+        assert "After." in excerpt
+
 
 class TestParsePost:
     def test_basic_post(self) -> None:

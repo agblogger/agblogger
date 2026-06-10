@@ -242,6 +242,9 @@ def generate_markdown_excerpt(content: str, max_length: int = 300) -> str:
         # Skip fenced div markers (Pandoc ::: syntax); content inside is kept
         if trimmed.startswith(":::"):
             continue
+        # Skip raw HTML block lines so they don't leak as escaped text in the excerpt
+        if trimmed.startswith("<") and ">" in trimmed:
+            continue
         if trimmed:
             lines.append(trimmed)
 
