@@ -17,6 +17,7 @@ from backend.models.post import FTS_CREATE_SQL, FTS_INSERT_SQL, PostCache
 from backend.pandoc.renderer import render_markdown, render_markdown_excerpt, rewrite_relative_urls
 from backend.services.dag import break_cycles
 from backend.services.label_service import ensure_label_cache_entry
+from backend.utils.text import count_words
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -155,6 +156,7 @@ async def rebuild_cache(
                 modified_at=post_data.modified_at,
                 is_draft=post_data.is_draft,
                 content_hash=content_h,
+                word_count=count_words(post_data.content),
                 rendered_excerpt=rendered_excerpt,
                 rendered_html=rendered_html,
             )
