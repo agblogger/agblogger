@@ -337,7 +337,7 @@ describe('MarkdownToolbar', () => {
   it('renders all 20 toolbar buttons including image, footnote, note, math, and math block', () => {
     const ref = createRef<HTMLTextAreaElement>()
     render(
-      <MarkdownToolbar textareaRef={ref} value="" onChange={() => {}} onImageClick={() => {}} />,
+      <MarkdownToolbar textareaRef={ref} onChange={() => {}} onImageClick={() => {}} />,
     )
     expect(screen.getByLabelText(/^Bold/)).toBeInTheDocument()
     expect(screen.getByLabelText(/^Italic/)).toBeInTheDocument()
@@ -371,7 +371,7 @@ describe('MarkdownToolbar', () => {
 
     const user = userEvent.setup()
     render(
-      <MarkdownToolbar textareaRef={ref} value={'line one\nline two'} onChange={onChange} />,
+      <MarkdownToolbar textareaRef={ref} onChange={onChange} />,
     )
 
     await user.click(screen.getByLabelText(/^Blockquote/))
@@ -382,7 +382,7 @@ describe('MarkdownToolbar', () => {
   it('disables all buttons when disabled prop is true', () => {
     const ref = createRef<HTMLTextAreaElement>()
     render(
-      <MarkdownToolbar textareaRef={ref} value="" onChange={() => {}} disabled />,
+      <MarkdownToolbar textareaRef={ref} onChange={() => {}} disabled />,
     )
     const buttons = screen.getAllByRole('button')
     buttons.forEach((btn) => expect(btn).toBeDisabled())
@@ -399,7 +399,7 @@ describe('MarkdownToolbar', () => {
 
     const user = userEvent.setup()
     render(
-      <MarkdownToolbar textareaRef={ref} value="hello world" onChange={onChange} />,
+      <MarkdownToolbar textareaRef={ref} onChange={onChange} />,
     )
 
     await user.click(screen.getByLabelText(/^Bold/))
@@ -417,7 +417,7 @@ describe('MarkdownToolbar', () => {
 
     const user = userEvent.setup()
     render(
-      <MarkdownToolbar textareaRef={ref} value="some text" onChange={onChange} />,
+      <MarkdownToolbar textareaRef={ref} onChange={onChange} />,
     )
 
     await user.click(screen.getByLabelText(/^Heading 2/))
@@ -431,7 +431,7 @@ describe('MarkdownToolbar', () => {
 
     const user = userEvent.setup()
     render(
-      <MarkdownToolbar textareaRef={ref} value="hello" onChange={onChange} />,
+      <MarkdownToolbar textareaRef={ref} onChange={onChange} />,
     )
 
     await user.click(screen.getByLabelText(/^Bold/))
@@ -442,7 +442,7 @@ describe('MarkdownToolbar', () => {
   it('shows keyboard shortcuts in button titles', () => {
     const ref = createRef<HTMLTextAreaElement>()
     render(
-      <MarkdownToolbar textareaRef={ref} value="" onChange={() => {}} />,
+      <MarkdownToolbar textareaRef={ref} onChange={() => {}} />,
     )
     const boldBtn = screen.getByRole('button', { name: /Bold/ })
     expect(boldBtn.title).toMatch(/Bold \((Cmd|Ctrl)\+B\)/)
@@ -462,7 +462,7 @@ describe('MarkdownToolbar', () => {
     render(
       <MarkdownToolbar
         textareaRef={ref}
-        value=""
+
         onChange={() => {}}
         onImageClick={onImageClick}
       />,
@@ -474,7 +474,7 @@ describe('MarkdownToolbar', () => {
 
   it('does not render the image button when no image support is wired', () => {
     const ref = createRef<HTMLTextAreaElement>()
-    render(<MarkdownToolbar textareaRef={ref} value="" onChange={() => {}} />)
+    render(<MarkdownToolbar textareaRef={ref} onChange={() => {}} />)
     expect(screen.queryByLabelText(/^Image/)).not.toBeInTheDocument()
   })
 
@@ -483,7 +483,7 @@ describe('MarkdownToolbar', () => {
     render(
       <MarkdownToolbar
         textareaRef={ref}
-        value=""
+
         onChange={() => {}}
         onImageClick={() => {}}
         imageUploading
@@ -498,7 +498,7 @@ describe('MarkdownToolbar', () => {
     render(
       <MarkdownToolbar
         textareaRef={ref}
-        value=""
+
         onChange={() => {}}
         imageDisabledReason="Save post first to add images"
       />,
@@ -514,7 +514,7 @@ describe('MarkdownToolbar', () => {
     render(
       <MarkdownToolbar
         textareaRef={ref}
-        value=""
+
         onChange={() => {}}
         imageDisabledReason="Save post first to add images"
       />,
@@ -531,7 +531,7 @@ describe('MarkdownToolbar', () => {
     render(
       <MarkdownToolbar
         textareaRef={ref}
-        value=""
+
         onChange={() => {}}
         onImageClick={onImageClick}
       />,
@@ -542,7 +542,7 @@ describe('MarkdownToolbar', () => {
 
   it('does not render save or fullscreen buttons by default', () => {
     const ref = createRef<HTMLTextAreaElement>()
-    render(<MarkdownToolbar textareaRef={ref} value="" onChange={() => {}} />)
+    render(<MarkdownToolbar textareaRef={ref} onChange={() => {}} />)
     expect(screen.queryByLabelText('Save')).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/fullscreen/i)).not.toBeInTheDocument()
   })
@@ -551,7 +551,7 @@ describe('MarkdownToolbar', () => {
     const onSave = vi.fn()
     const ref = createRef<HTMLTextAreaElement>()
     const user = userEvent.setup()
-    render(<MarkdownToolbar textareaRef={ref} value="x" onChange={() => {}} onSave={onSave} />)
+    render(<MarkdownToolbar textareaRef={ref} onChange={() => {}} onSave={onSave} />)
     await user.click(screen.getByLabelText('Save'))
     expect(onSave).toHaveBeenCalledOnce()
   })
@@ -560,7 +560,7 @@ describe('MarkdownToolbar', () => {
     const onSave = vi.fn()
     const ref = createRef<HTMLTextAreaElement>()
     render(
-      <MarkdownToolbar textareaRef={ref} value="" onChange={() => {}} onSave={onSave} canSave={false} />,
+      <MarkdownToolbar textareaRef={ref} onChange={() => {}} onSave={onSave} canSave={false} />,
     )
     expect(screen.getByLabelText('Save')).toBeDisabled()
   })
@@ -569,7 +569,7 @@ describe('MarkdownToolbar', () => {
     const onSave = vi.fn()
     const ref = createRef<HTMLTextAreaElement>()
     render(
-      <MarkdownToolbar textareaRef={ref} value="x" onChange={() => {}} onSave={onSave} saving />,
+      <MarkdownToolbar textareaRef={ref} onChange={() => {}} onSave={onSave} saving />,
     )
     const btn = screen.getByLabelText('Save')
     expect(btn).toBeDisabled()
@@ -583,7 +583,7 @@ describe('MarkdownToolbar', () => {
     const { rerender } = render(
       <MarkdownToolbar
         textareaRef={ref}
-        value=""
+
         onChange={() => {}}
         onToggleFullscreen={onToggleFullscreen}
       />,
@@ -594,7 +594,7 @@ describe('MarkdownToolbar', () => {
     rerender(
       <MarkdownToolbar
         textareaRef={ref}
-        value=""
+
         onChange={() => {}}
         onToggleFullscreen={onToggleFullscreen}
         isFullscreen
@@ -605,7 +605,7 @@ describe('MarkdownToolbar', () => {
 
   it('renders 5 group separators between button groups', () => {
     const ref = createRef<HTMLTextAreaElement>()
-    render(<MarkdownToolbar textareaRef={ref} value="" onChange={() => {}} />)
+    render(<MarkdownToolbar textareaRef={ref} onChange={() => {}} />)
     expect(screen.getAllByRole('separator')).toHaveLength(5)
   })
 
@@ -618,7 +618,7 @@ describe('MarkdownToolbar', () => {
     const ref = { current: textarea }
 
     const user = userEvent.setup()
-    render(<MarkdownToolbar textareaRef={ref} value="hello world" onChange={onChange} />)
+    render(<MarkdownToolbar textareaRef={ref} onChange={onChange} />)
     await user.click(screen.getByLabelText(/^Underline/))
     expect(onChange).toHaveBeenCalledWith('hello [world]{.underline}')
   })
@@ -632,7 +632,7 @@ describe('MarkdownToolbar', () => {
     const ref = { current: textarea }
 
     const user = userEvent.setup()
-    render(<MarkdownToolbar textareaRef={ref} value="hello world" onChange={onChange} />)
+    render(<MarkdownToolbar textareaRef={ref} onChange={onChange} />)
     await user.click(screen.getByLabelText(/^Strikethrough/))
     expect(onChange).toHaveBeenCalledWith('hello ~~world~~')
   })
@@ -646,7 +646,7 @@ describe('MarkdownToolbar', () => {
     const ref = { current: textarea }
 
     const user = userEvent.setup()
-    render(<MarkdownToolbar textareaRef={ref} value="hello world" onChange={onChange} />)
+    render(<MarkdownToolbar textareaRef={ref} onChange={onChange} />)
     await user.click(screen.getByLabelText(/^Highlight/))
     expect(onChange).toHaveBeenCalledWith('hello ==world==')
   })
@@ -660,7 +660,7 @@ describe('MarkdownToolbar', () => {
     const ref = { current: textarea }
 
     const user = userEvent.setup()
-    render(<MarkdownToolbar textareaRef={ref} value={'line one\nline two'} onChange={onChange} />)
+    render(<MarkdownToolbar textareaRef={ref} onChange={onChange} />)
     await user.click(screen.getByLabelText(/^Bullet List/))
     expect(onChange).toHaveBeenCalledWith('- line one\n- line two')
   })
@@ -674,7 +674,7 @@ describe('MarkdownToolbar', () => {
     const ref = { current: textarea }
 
     const user = userEvent.setup()
-    render(<MarkdownToolbar textareaRef={ref} value={'line one\nline two'} onChange={onChange} />)
+    render(<MarkdownToolbar textareaRef={ref} onChange={onChange} />)
     await user.click(screen.getByLabelText(/^Ordered List/))
     expect(onChange).toHaveBeenCalledWith('1. line one\n1. line two')
   })
@@ -688,7 +688,7 @@ describe('MarkdownToolbar', () => {
     const ref = { current: textarea }
 
     const user = userEvent.setup()
-    render(<MarkdownToolbar textareaRef={ref} value="" onChange={onChange} />)
+    render(<MarkdownToolbar textareaRef={ref} onChange={onChange} />)
     await user.click(screen.getByLabelText(/^YouTube/))
     expect(onChange).toHaveBeenCalledWith(
       '<iframe src="https://www.youtube.com/embed/VIDEO_ID" allowfullscreen></iframe>',
@@ -704,7 +704,7 @@ describe('MarkdownToolbar', () => {
     const ref = { current: textarea }
 
     const user = userEvent.setup()
-    render(<MarkdownToolbar textareaRef={ref} value="hello world" onChange={onChange} />)
+    render(<MarkdownToolbar textareaRef={ref} onChange={onChange} />)
     await user.click(screen.getByLabelText(/^Footnote/))
     expect(onChange).toHaveBeenCalledWith('hello ^[world]')
   })
@@ -718,14 +718,14 @@ describe('MarkdownToolbar', () => {
     const ref = { current: textarea }
 
     const user = userEvent.setup()
-    render(<MarkdownToolbar textareaRef={ref} value="" onChange={onChange} />)
+    render(<MarkdownToolbar textareaRef={ref} onChange={onChange} />)
     await user.click(screen.getByLabelText(/^Note/))
     expect(onChange).toHaveBeenCalledWith('::: {.note}\nnote text\n:::')
   })
 
   it('footnote button shows keyboard shortcut in title', () => {
     const ref = createRef<HTMLTextAreaElement>()
-    render(<MarkdownToolbar textareaRef={ref} value="" onChange={() => {}} />)
+    render(<MarkdownToolbar textareaRef={ref} onChange={() => {}} />)
     const btn = screen.getByRole('button', { name: /Footnote/ })
     expect(btn.title).toMatch(/Footnote \((Cmd|Ctrl)\+Shift\+F\)/)
   })
@@ -739,7 +739,7 @@ describe('MarkdownToolbar', () => {
     const ref = { current: textarea }
 
     const user = userEvent.setup()
-    render(<MarkdownToolbar textareaRef={ref} value="hello world" onChange={onChange} />)
+    render(<MarkdownToolbar textareaRef={ref} onChange={onChange} />)
     await user.click(screen.getByLabelText(/^Math$/))
     expect(onChange).toHaveBeenCalledWith('hello $world$')
   })
@@ -753,7 +753,7 @@ describe('MarkdownToolbar', () => {
     const ref = { current: textarea }
 
     const user = userEvent.setup()
-    render(<MarkdownToolbar textareaRef={ref} value="" onChange={onChange} />)
+    render(<MarkdownToolbar textareaRef={ref} onChange={onChange} />)
     await user.click(screen.getByLabelText(/^Math Block/))
     expect(onChange).toHaveBeenCalledWith('$$\n\\sum_{i=0}^n i^2\n$$')
   })
@@ -789,7 +789,7 @@ describe('MarkdownToolbar', () => {
 
     it('overflow button is hidden when all buttons fit', () => {
       const ref = createRef<HTMLTextAreaElement>()
-      const { container } = render(<MarkdownToolbar textareaRef={ref} value="" onChange={() => {}} />)
+      const { container } = render(<MarkdownToolbar textareaRef={ref} onChange={() => {}} />)
       const toolbarEl = container.firstChild as HTMLElement
       const btn = toolbarEl.querySelector('[aria-label="More formatting options"]') as HTMLElement
       expect(btn).not.toBeNull()
@@ -798,7 +798,7 @@ describe('MarkdownToolbar', () => {
 
     it('overflow button becomes visible when container is narrow', () => {
       const ref = createRef<HTMLTextAreaElement>()
-      const { container } = render(<MarkdownToolbar textareaRef={ref} value="" onChange={() => {}} />)
+      const { container } = render(<MarkdownToolbar textareaRef={ref} onChange={() => {}} />)
       makeNarrow(container.firstChild as HTMLElement)
       const toolbarEl = container.firstChild as HTMLElement
       const btn = toolbarEl.querySelector('[aria-label="More formatting options"]') as HTMLElement
@@ -809,7 +809,7 @@ describe('MarkdownToolbar', () => {
       const user = userEvent.setup()
       const ref = createRef<HTMLTextAreaElement>()
       const { container } = render(
-        <MarkdownToolbar textareaRef={ref} value="" onChange={() => {}} />,
+        <MarkdownToolbar textareaRef={ref} onChange={() => {}} />,
       )
       makeNarrow(container.firstChild as HTMLElement)
       await user.click(screen.getByLabelText('More formatting options'))
@@ -827,7 +827,7 @@ describe('MarkdownToolbar', () => {
       textarea.selectionEnd = 11
       const ref = { current: textarea }
       const { container } = render(
-        <MarkdownToolbar textareaRef={ref} value="hello world" onChange={onChange} />,
+        <MarkdownToolbar textareaRef={ref} onChange={onChange} />,
       )
       makeNarrow(container.firstChild as HTMLElement)
       await user.click(screen.getByLabelText('More formatting options'))
@@ -840,7 +840,7 @@ describe('MarkdownToolbar', () => {
       const user = userEvent.setup()
       const ref = createRef<HTMLTextAreaElement>()
       const { container } = render(
-        <MarkdownToolbar textareaRef={ref} value="" onChange={() => {}} />,
+        <MarkdownToolbar textareaRef={ref} onChange={() => {}} />,
       )
       makeNarrow(container.firstChild as HTMLElement)
       await user.click(screen.getByLabelText('More formatting options'))
@@ -853,7 +853,7 @@ describe('MarkdownToolbar', () => {
       const user = userEvent.setup()
       const ref = createRef<HTMLTextAreaElement>()
       const { container } = render(
-        <MarkdownToolbar textareaRef={ref} value="" onChange={() => {}} />,
+        <MarkdownToolbar textareaRef={ref} onChange={() => {}} />,
       )
       makeNarrow(container.firstChild as HTMLElement)
       await user.click(screen.getByLabelText('More formatting options'))
@@ -867,7 +867,7 @@ describe('MarkdownToolbar', () => {
       const { container } = render(
         <MarkdownToolbar
           textareaRef={ref}
-          value=""
+
           onChange={() => {}}
           onSave={vi.fn()}
           onToggleFullscreen={vi.fn()}

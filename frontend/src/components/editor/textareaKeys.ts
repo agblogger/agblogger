@@ -61,11 +61,9 @@ export function indentLines(value: string, selStart: number, selEnd: number): Ed
   const ls = lineStartIndex(value, selStart)
   const le = selectionLineEnd(value, selStart, selEnd)
   const region = value.slice(ls, le)
-  const lineCount = region.split('\n').length
-  const indented = region
-    .split('\n')
-    .map((line) => INDENT + line)
-    .join('\n')
+  const lines = region.split('\n')
+  const lineCount = lines.length
+  const indented = lines.map((line) => INDENT + line).join('\n')
   const newValue = value.slice(0, ls) + indented + value.slice(le)
   return {
     value: newValue,

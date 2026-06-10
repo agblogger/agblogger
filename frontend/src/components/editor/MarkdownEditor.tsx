@@ -366,7 +366,6 @@ export default function MarkdownEditor({
       <div className={mobileTab === 'preview' ? 'hidden lg:block' : ''}>
         <MarkdownToolbar
           textareaRef={textareaRef}
-          value={value}
           onChange={onChange}
           disabled={disabled}
           {...(onSave !== undefined && { onSave })}

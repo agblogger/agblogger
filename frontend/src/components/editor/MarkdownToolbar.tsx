@@ -17,7 +17,6 @@ import { wrapSelection } from './wrapSelection'
 
 interface MarkdownToolbarProps {
   textareaRef: RefObject<HTMLTextAreaElement | null>
-  value: string
   onChange: (value: string) => void
   disabled?: boolean
   onImageClick?: (() => void) | undefined
@@ -73,7 +72,6 @@ const items: readonly ToolbarItem[] = [
 
 export default memo(function MarkdownToolbar({
   textareaRef,
-  value,
   onChange,
   disabled,
   onImageClick,
@@ -155,7 +153,7 @@ export default memo(function MarkdownToolbar({
     const action = actions[key]
     if (action === undefined) return
     const { newValue, cursorStart, cursorEnd } = wrapSelection(
-      value,
+      textarea.value,
       textarea.selectionStart,
       textarea.selectionEnd,
       action,

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   FileText,
   ArrowUp,
@@ -57,6 +57,11 @@ export default function PagesSection({
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [pageEditError, setPageEditError] = useState<string | null>(null)
   const [pageEditSuccess, setPageEditSuccess] = useState<string | null>(null)
+
+  const handleEditContentChange = useCallback((v: string) => {
+    setEditContent(v)
+    setPageEditSuccess(null)
+  }, [])
 
   useEffect(() => {
     onSaving(savingOrder || creatingPage || savingPage || deletingPage)
@@ -367,10 +372,7 @@ export default function PagesSection({
                     <label className="block text-xs font-medium text-muted mb-1">Content</label>
                     <MarkdownEditor
                       value={editContent}
-                      onChange={(v) => {
-                        setEditContent(v)
-                        setPageEditSuccess(null)
-                      }}
+                      onChange={handleEditContentChange}
                       disabled={busy}
                       onSave={() => void handleSavePage()}
                       saving={savingPage}
