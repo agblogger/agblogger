@@ -20,6 +20,7 @@ import { usePost, useViewCount } from '@/hooks/usePost'
 import { formatLocalDate } from '@/utils/date'
 import { filePathToSlug } from '@/utils/postUrl'
 import { readingTime } from '@/utils/readingTime'
+
 export default function PostPage() {
   const { '*': slug } = useParams()
   const navigate = useNavigate()
