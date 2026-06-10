@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
+import DOMPurify from 'dompurify'
 import { ChevronRight, ChevronLeft, Eye } from 'lucide-react'
 
 import MarkdownToolbar from './MarkdownToolbar'
@@ -436,9 +437,7 @@ export default function MarkdownEditor({
           ) : hasContent ? (
             <div
               className="prose max-w-none"
-              // nosemgrep: typescript.react.security.audit.react-dangerouslysetinnerhtml
-              // Preview HTML is rendered and sanitized server-side.
-              dangerouslySetInnerHTML={{ __html: html }}
+              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(html) }}
             />
           ) : (
             <div className="flex flex-col items-center justify-center h-full min-h-[200px] border-2 border-dashed border-border/50 rounded-lg bg-paper-warm/30">
