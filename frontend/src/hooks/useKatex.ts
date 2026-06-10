@@ -63,7 +63,10 @@ function isApprovedYouTubeIframe(iframe: HTMLIFrameElement): boolean {
   return attrNames.every((name) => ALLOWED_IFRAME_ATTRS.has(name.toLowerCase()))
 }
 
-function sanitizeRenderedContent(html: string): string {
+function sanitizeRenderedContent(
+  html: string,
+  { allowIframes = true }: { allowIframes?: boolean } = {},
+): string {
   if (!html.includes('<iframe') || typeof document === 'undefined') {
     return DOMPurify.sanitize(html)
   }
@@ -72,12 +75,14 @@ function sanitizeRenderedContent(html: string): string {
   template.innerHTML = html
 
   const preservedIframes = new Map<string, string>()
-  for (const iframe of Array.from(template.content.querySelectorAll('iframe'))) {
-    if (!isApprovedYouTubeIframe(iframe)) continue
+  if (allowIframes) {
+    for (const iframe of Array.from(template.content.querySelectorAll('iframe'))) {
+      if (!isApprovedYouTubeIframe(iframe)) continue
 
-    const token = randomToken()
-    preservedIframes.set(token, canonicalizeApprovedIframe(iframe))
-    iframe.replaceWith(document.createTextNode(token))
+      const token = randomToken()
+      preservedIframes.set(token, canonicalizeApprovedIframe(iframe))
+      iframe.replaceWith(document.createTextNode(token))
+    }
   }
 
   const sanitized = DOMPurify.sanitize(template.innerHTML)
@@ -119,7 +124,10 @@ function loadKatex(): Promise<KatexRender> {
  *
  * Used for both full post HTML and rendered excerpts.
  */
-export function useRenderedHtml(html: string | null | undefined): string {
+export function useRenderedHtml(
+  html: string | null | undefined,
+  { allowIframes = true }: { allowIframes?: boolean } = {},
+): string {
   const hasMath = html != null && MATH_SPAN_CHECK_RE.test(html)
   const [render, setRender] = useState<KatexRender | null>(() => cachedRender)
 
@@ -132,7 +140,7 @@ export function useRenderedHtml(html: string | null | undefined): string {
 
   return useMemo(() => {
     if (html == null) return ''
-    if (!hasMath || render === null) return sanitizeRenderedContent(html)
+    if (!hasMath || render === null) return sanitizeRenderedContent(html, { allowIframes })
     const rendered = html.replace(MATH_SPAN_RE, (_match, mode: string, tex: string) => {
       const displayMode = mode === 'display'
       const katexHtml = render(decodeHtmlEntities(tex.trim()), {
@@ -141,6 +149,6 @@ export function useRenderedHtml(html: string | null | undefined): string {
       })
       return `<span class="math ${mode}">${katexHtml}</span>`
     })
-    return sanitizeRenderedContent(rendered)
-  }, [html, hasMath, render])
+    return sanitizeRenderedContent(rendered, { allowIframes })
+  }, [html, hasMath, render, allowIframes])
 }

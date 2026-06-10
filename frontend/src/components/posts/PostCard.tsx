@@ -14,7 +14,7 @@ interface PostCardProps {
 function PostCardInner({ post, index = 0 }: PostCardProps) {
   const postHref = postUrl(post.file_path)
   const staggerClass = `stagger-${Math.min(index + 1, 8)}`
-  const sanitizedExcerpt = useRenderedHtml(post.rendered_excerpt)
+  const sanitizedExcerpt = useRenderedHtml(post.rendered_excerpt, { allowIframes: false })
 
   const dateStr = formatRelativeDate(post.created_at)
 

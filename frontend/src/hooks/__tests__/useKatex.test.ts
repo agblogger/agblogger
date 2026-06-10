@@ -162,4 +162,21 @@ describe('useRenderedHtml', () => {
 
     expect(result.current).not.toContain("<iframe")
   })
+
+  it('strips approved youtube iframes when allowIframes is false', () => {
+    const html =
+      '<p>before</p>' +
+      '<iframe src="https://www.youtube.com/embed/oSyEZAm8nb8"' +
+      ' sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"' +
+      ' allowfullscreen="allowfullscreen"' +
+      ' referrerpolicy="origin"' +
+      ' loading="lazy"></iframe>' +
+      '<p>after</p>'
+
+    const { result } = renderHook(() => useRenderedHtml(html, { allowIframes: false }))
+
+    expect(result.current).not.toContain('<iframe')
+    expect(result.current).toContain('<p>before</p>')
+    expect(result.current).toContain('<p>after</p>')
+  })
 })

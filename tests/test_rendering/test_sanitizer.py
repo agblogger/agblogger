@@ -237,6 +237,19 @@ class TestExcerptSanitizer:
         result = _sanitize_excerpt_html('<p><input type="checkbox" checked disabled></p>')
         assert "<input" not in result
 
+    def test_excerpt_strips_youtube_iframe(self) -> None:
+        html = '<iframe src="https://www.youtube.com/embed/dQw4w9WgXcQ"></iframe>'
+        result = _sanitize_excerpt_html(html)
+        assert "<iframe" not in result
+
+    def test_excerpt_strips_non_youtube_iframe_silently(self) -> None:
+        html = '<p>before</p><iframe src="https://evil.com/page"></iframe><p>after</p>'
+        result = _sanitize_excerpt_html(html)
+        assert "<iframe" not in result
+        assert "Iframe not allowed" not in result
+        assert "<p>before</p>" in result
+        assert "<p>after</p>" in result
+
 
 class TestYouTubeIframe:
     """Tests for YouTube iframe embed support."""

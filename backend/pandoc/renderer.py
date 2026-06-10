@@ -129,11 +129,13 @@ class _HtmlSanitizer(HTMLParser):
         allowed_tags: frozenset[str],
         global_allowed_attrs: frozenset[str],
         tag_allowed_attrs: dict[str, frozenset[str]],
+        allow_iframes: bool = True,
     ) -> None:
         super().__init__(convert_charrefs=False)
         self._allowed_tags = allowed_tags
         self._global_allowed_attrs = global_allowed_attrs
         self._tag_allowed_attrs = tag_allowed_attrs
+        self._allow_iframes = allow_iframes
         self._parts: list[str] = []
         self._open_tags: list[str | None] = []
 
@@ -226,8 +228,14 @@ class _HtmlSanitizer(HTMLParser):
     ) -> None:
         """Allow YouTube iframes with forced security attributes; strip all others.
 
+        When allow_iframes is False (excerpt mode), all iframes are silently stripped.
         The src value is HTML-escaped before emission.
         """
+        if not self._allow_iframes:
+            if not self_closing:
+                self._open_tags.append(None)
+            return
+
         src = None
         for raw_name, raw_value in attrs:
             if raw_name.lower() == "src" and raw_value is not None:
@@ -279,6 +287,7 @@ def _sanitize_excerpt_html(rendered_html: str) -> str:
         allowed_tags=_EXCERPT_ALLOWED_TAGS,
         global_allowed_attrs=_GLOBAL_ALLOWED_ATTRS,
         tag_allowed_attrs=_EXCERPT_TAG_ALLOWED_ATTRS,
+        allow_iframes=False,
     )
     sanitizer.feed(rendered_html)
     sanitizer.close()
