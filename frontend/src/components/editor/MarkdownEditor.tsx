@@ -10,6 +10,7 @@ import {
   indentLines,
   insertSpaces,
   lineEndTarget,
+  lineStartIndex,
   pageTarget,
   smartHomeTarget,
 } from './textareaKeys'
@@ -18,7 +19,11 @@ import { useMarkdownPreview } from '@/hooks/useMarkdownPreview'
 import FileStrip from './FileStrip'
 import { useFileUpload } from './useFileUpload'
 
-const KEY_MAP: Record<string, string> = { b: 'bold', i: 'italic', h: 'heading', k: 'link', u: 'underline' }
+const KEY_MAP: Record<string, string> = { b: 'bold', i: 'italic', e: 'code', h: 'heading', k: 'link', u: 'underline' }
+const SHIFT_KEY_MAP: Record<string, string> = {
+  e: 'codeblock', '>': 'blockquote', '.': 'blockquote',
+  x: 'strikethrough', '*': 'bulletList', '&': 'orderedList', f: 'footnote',
+}
 const NAVIGATION_KEYS = new Set(['Home', 'End', 'PageUp', 'PageDown'])
 
 /**
@@ -227,7 +232,7 @@ export default function MarkdownEditor({
         // ↔ column zero. On wrapped continuation rows the native move already
         // landed at the visual row start, so leave it.
         if (key === 'Home' && !shiftKey) {
-          const lineStart = value.lastIndexOf('\n', caretBefore - 1) + 1
+          const lineStart = lineStartIndex(value, caretBefore)
           if (textarea.selectionStart === lineStart) {
             const target = smartHomeTarget(value, caretBefore)
             if (target !== textarea.selectionStart) textarea.setSelectionRange(target, target)
@@ -268,21 +273,20 @@ export default function MarkdownEditor({
   }
 
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
-    const hasOtherMod = e.metaKey || e.ctrlKey || e.altKey
+    const isMod = e.metaKey || e.ctrlKey
 
-    if (e.key === 'Tab' && !hasOtherMod) {
+    if (e.key === 'Tab' && !isMod && !e.altKey) {
       e.preventDefault()
       applyTab(e.shiftKey)
       return
     }
 
-    if (!hasOtherMod && NAVIGATION_KEYS.has(e.key)) {
+    if (!isMod && !e.altKey && NAVIGATION_KEYS.has(e.key)) {
       e.preventDefault()
       applyNavigation(e.key, e.shiftKey)
       return
     }
 
-    const isMod = e.metaKey || e.ctrlKey
     if (!isMod) return
 
     if ((e.key === 's' || e.key === 'S') && !e.shiftKey) {
@@ -301,22 +305,9 @@ export default function MarkdownEditor({
       return
     }
 
-    let actionKey: string | undefined
-    if (e.key === 'e' || e.key === 'E') {
-      actionKey = e.shiftKey ? 'codeblock' : 'code'
-    } else if ((e.key === '>' || e.key === '.') && e.shiftKey) {
-      actionKey = 'blockquote'
-    } else if ((e.key === 'x' || e.key === 'X') && e.shiftKey) {
-      actionKey = 'strikethrough'
-    } else if (e.key === '*' && e.shiftKey) {
-      actionKey = 'bulletList'
-    } else if (e.key === '&' && e.shiftKey) {
-      actionKey = 'orderedList'
-    } else if ((e.key === 'f' || e.key === 'F') && e.shiftKey) {
-      actionKey = 'footnote'
-    } else if (!e.shiftKey) {
-      actionKey = KEY_MAP[e.key.toLowerCase()]
-    }
+    const actionKey = e.shiftKey
+      ? SHIFT_KEY_MAP[e.key.toLowerCase()]
+      : KEY_MAP[e.key.toLowerCase()]
 
     if (actionKey === undefined) return
     e.preventDefault()

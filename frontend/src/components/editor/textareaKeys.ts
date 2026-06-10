@@ -23,7 +23,7 @@ export type PageDirection = 'up' | 'down'
 const INDENT = '  '
 
 /** Offset of the start of the line containing `pos`. */
-function lineStartIndex(value: string, pos: number): number {
+export function lineStartIndex(value: string, pos: number): number {
   return value.lastIndexOf('\n', pos - 1) + 1
 }
 

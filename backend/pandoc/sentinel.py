@@ -20,7 +20,7 @@ import re
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
 
-from backend.pandoc.renderer import render_markdown
+from backend.pandoc.renderer import _VOID_TAGS, render_markdown
 
 _FENCE_RE = re.compile(r"^(`{3,}|~{3,})")
 # A list-item marker at the start of a (de-indented) line: a bullet (-, *, +) or an
@@ -396,7 +396,6 @@ _TOP_LEVEL_BLOCK_TAGS: frozenset[str] = frozenset(
     }
 )
 _LIST_TAGS: frozenset[str] = frozenset({"ul", "ol"})
-_VOID_TAGS: frozenset[str] = frozenset({"br", "hr", "img", "input"})
 
 
 def _build_line_offsets(text: str) -> list[int]:

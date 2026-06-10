@@ -115,38 +115,34 @@ export function calibrateEditorOffsets(
   return offsets.map((px) => paddingTop + (px - paddingTop) * scale)
 }
 
-export function editorToPreview(points: SyncPoint[], scrollTop: number): number {
+function interpolateSync(
+  points: SyncPoint[],
+  from: keyof SyncPoint,
+  to: keyof SyncPoint,
+  scrollTop: number,
+): number {
   if (points.length === 0) return 0
   let lo = 0
   let hi = points.length - 1
   while (lo < hi) {
     const mid = (lo + hi + 1) >> 1
-    if ((points[mid]?.editorPx ?? 0) <= scrollTop) lo = mid
+    if ((points[mid]?.[from] ?? 0) <= scrollTop) lo = mid
     else hi = mid - 1
   }
   const p0 = points[lo]
   if (!p0) return 0
   const p1 = points[lo + 1]
-  if (!p1 || p1.editorPx <= p0.editorPx) return p0.previewPx
-  const t = Math.min(1, Math.max(0, (scrollTop - p0.editorPx) / (p1.editorPx - p0.editorPx)))
-  return p0.previewPx + t * (p1.previewPx - p0.previewPx)
+  if (!p1 || p1[from] <= p0[from]) return p0[to]
+  const t = Math.min(1, Math.max(0, (scrollTop - p0[from]) / (p1[from] - p0[from])))
+  return p0[to] + t * (p1[to] - p0[to])
+}
+
+export function editorToPreview(points: SyncPoint[], scrollTop: number): number {
+  return interpolateSync(points, 'editorPx', 'previewPx', scrollTop)
 }
 
 export function previewToEditor(points: SyncPoint[], scrollTop: number): number {
-  if (points.length === 0) return 0
-  let lo = 0
-  let hi = points.length - 1
-  while (lo < hi) {
-    const mid = (lo + hi + 1) >> 1
-    if ((points[mid]?.previewPx ?? 0) <= scrollTop) lo = mid
-    else hi = mid - 1
-  }
-  const p0 = points[lo]
-  if (!p0) return 0
-  const p1 = points[lo + 1]
-  if (!p1 || p1.previewPx <= p0.previewPx) return p0.editorPx
-  const t = Math.min(1, Math.max(0, (scrollTop - p0.previewPx) / (p1.previewPx - p0.previewPx)))
-  return p0.editorPx + t * (p1.editorPx - p0.editorPx)
+  return interpolateSync(points, 'previewPx', 'editorPx', scrollTop)
 }
 
 export function useScrollSync({
@@ -202,9 +198,16 @@ export function useScrollSync({
       })
     }
 
-    const mutationObserver = new MutationObserver(() => {
+    const mutationObserver = new MutationObserver((records) => {
       pointsRef.current = null
-      attachToImages()
+      const hasNewImages = records.some((r) =>
+        Array.from(r.addedNodes).some(
+          (n) =>
+            n instanceof HTMLImageElement ||
+            (n instanceof Element && n.querySelector('img') !== null),
+        ),
+      )
+      if (hasNewImages) attachToImages()
     })
     mutationObserver.observe(preview, { childList: true, subtree: true })
     attachToImages()
