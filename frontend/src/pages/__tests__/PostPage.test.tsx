@@ -668,6 +668,16 @@ describe('PostPage', () => {
     expect(screen.getByText(/400/)).toBeInTheDocument()
   })
 
+  it('does not render reading time when word_count is zero', async () => {
+    mockFetchPost.mockResolvedValue({ ...postDetail, word_count: 0 })
+    mockFetchViewCount.mockResolvedValue({ views: 42 })
+    renderPostPage()
+    await waitFor(() => {
+      expect(screen.getByText('Hello World')).toBeInTheDocument()
+    })
+    expect(screen.queryByText(/min read/)).not.toBeInTheDocument()
+  })
+
   it('does not crash when view count fetch fails', async () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     mockFetchViewCount.mockRejectedValue(new Error('network error'))
