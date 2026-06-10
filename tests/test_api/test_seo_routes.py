@@ -913,6 +913,7 @@ class TestPostSeo:
         preload = _extract_initial_data(resp.text)
         assert preload["title"] == "Hello World"
         assert "file_path" in preload
+        assert preload["word_count"] == 5
 
 
 class TestPostOgImage:

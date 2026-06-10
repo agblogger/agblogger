@@ -1565,6 +1565,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "is_draft": post.is_draft,
             "labels": label_ids,
             "content": None,
+            "word_count": post.word_count,
             "warnings": [],
         }
 
