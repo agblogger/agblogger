@@ -28,6 +28,7 @@ class PostCache(CacheBase):
     modified_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     is_draft: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    word_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     rendered_excerpt: Mapped[str | None] = mapped_column(Text, nullable=True)
     rendered_html: Mapped[str | None] = mapped_column(Text, nullable=True)
 
