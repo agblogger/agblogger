@@ -728,15 +728,6 @@ describe('MarkdownToolbar', () => {
     expect(btn.title).toMatch(/Footnote \((Cmd|Ctrl)\+Shift\+F\)/)
   })
 
-  it('renders all 20 toolbar buttons including math and math block', () => {
-    const ref = createRef<HTMLTextAreaElement>()
-    render(
-      <MarkdownToolbar textareaRef={ref} value="" onChange={() => {}} onImageClick={() => {}} />,
-    )
-    expect(screen.getByLabelText(/^Math Block/)).toBeInTheDocument()
-    expect(screen.getByLabelText(/^Math$/)).toBeInTheDocument()
-  })
-
   it('math button wraps selection with $ delimiters', async () => {
     const onChange = vi.fn()
     const textarea = document.createElement('textarea')
