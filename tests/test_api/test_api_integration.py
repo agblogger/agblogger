@@ -2192,6 +2192,73 @@ class TestAdmin:
         assert resp.status_code == 422
 
 
+class TestWordCount:
+    @pytest.mark.asyncio
+    async def test_create_post_returns_positive_word_count(self, client: AsyncClient) -> None:
+        """word_count in create response must reflect prose words in the body."""
+        login_resp = await client.post(
+            "/api/auth/token-login",
+            json={"username": "admin", "password": "admin123"},
+        )
+        token = login_resp.json()["access_token"]
+
+        resp = await client.post(
+            "/api/posts",
+            json={
+                "title": "Word Count Create Test",
+                "body": "This post has exactly seven prose words here.",
+                "labels": [],
+                "is_draft": False,
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 201
+        data = resp.json()
+        assert "word_count" in data
+        assert data["word_count"] > 0
+
+    @pytest.mark.asyncio
+    async def test_update_post_returns_updated_word_count(self, client: AsyncClient) -> None:
+        """word_count in update response must reflect the new body, not the original."""
+        login_resp = await client.post(
+            "/api/auth/token-login",
+            json={"username": "admin", "password": "admin123"},
+        )
+        token = login_resp.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # Create a short post.
+        create_resp = await client.post(
+            "/api/posts",
+            json={
+                "title": "Word Count Update Test",
+                "body": "Short body.",
+                "labels": [],
+                "is_draft": False,
+            },
+            headers=headers,
+        )
+        assert create_resp.status_code == 201
+        file_path = create_resp.json()["file_path"]
+        original_word_count = create_resp.json()["word_count"]
+
+        # Update the post with a longer body.
+        long_body = " ".join(["word"] * 50)
+        update_resp = await client.put(
+            f"/api/posts/{file_path}",
+            json={
+                "title": "Word Count Update Test",
+                "body": long_body,
+                "labels": [],
+                "is_draft": False,
+            },
+            headers=headers,
+        )
+        assert update_resp.status_code == 200
+        updated_word_count = update_resp.json()["word_count"]
+        assert updated_word_count > original_word_count
+
+
 class TestSearchAfterDelete:
     @pytest.mark.asyncio
     async def test_search_does_not_find_deleted_post(self, client: AsyncClient) -> None:

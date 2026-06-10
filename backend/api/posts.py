@@ -64,6 +64,7 @@ from backend.services.slug_service import date_slug_prefix, generate_post_path, 
 from backend.services.storage_quota import ContentSizeTracker
 from backend.utils.datetime import format_iso, now_utc
 from backend.utils.slug import file_path_to_slug, resolve_slug_candidates
+from backend.utils.text import count_words
 
 logger = logging.getLogger(__name__)
 
@@ -222,6 +223,7 @@ async def _build_post_detail(
         rendered_excerpt=post.rendered_excerpt,
         labels=labels,
         rendered_html=rendered_html,
+        word_count=post.word_count,
         warnings=warnings or [],
     )
 
@@ -410,6 +412,7 @@ async def upload_post(
                 modified_at=post_data.modified_at,
                 is_draft=post_data.is_draft,
                 content_hash=hash_content(serialized),
+                word_count=count_words(post_data.content),
                 rendered_excerpt=rendered_excerpt,
                 rendered_html=rendered_html,
             )
@@ -889,6 +892,7 @@ async def create_post_endpoint(
             modified_at=post_data.modified_at,
             is_draft=post_data.is_draft,
             content_hash=hash_content(serialized),
+            word_count=count_words(body.body),
             rendered_excerpt=rendered_excerpt,
             rendered_html=rendered_html,
         )
@@ -1042,6 +1046,7 @@ async def update_post_endpoint(
         existing.modified_at = now
         existing.is_draft = body.is_draft
         existing.content_hash = hash_content(serialized)
+        existing.word_count = count_words(body.body)
         existing.rendered_excerpt = rendered_excerpt
         existing.rendered_html = rendered_html
         await _replace_post_labels(session, post_id=existing.id, labels=body.labels)
