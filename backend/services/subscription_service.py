@@ -4,17 +4,18 @@ Stores no subscriber PII. Resend is the system of record for contacts."""
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
-from backend.models.subscription import SubscriptionSettings
+from backend.models.subscription import SubscriptionBroadcast, SubscriptionSettings
 from backend.schemas.subscription import SubscriptionSettingsResponse
 from backend.services import resend_client
 from backend.services.crypto_service import decrypt_value, encrypt_value
-from backend.services.subscription_email import build_confirmation_email
+from backend.services.subscription_email import build_broadcast_email, build_confirmation_email
 from backend.services.subscription_tokens import (
     create_confirm_token,
     normalize_email,
@@ -23,7 +24,7 @@ from backend.services.subscription_tokens import (
 from backend.utils.datetime import now_utc
 
 if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncSession
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 logger = logging.getLogger(__name__)
 
@@ -222,3 +223,132 @@ async def confirm(session: AsyncSession, *, secret_key: str, token: str) -> bool
         return False
     await resend_client.create_contact(api_key=api_key, segment_id=segment_id, email=email)
     return True
+
+
+# ── Broadcast firing + once-guard ledger ──────────────────────────────────────
+
+_broadcast_tasks: set[asyncio.Task[None]] = set()
+_MAX_BROADCAST_TASKS = 16
+
+
+async def already_broadcast(session: AsyncSession, post_path: str) -> bool:
+    """Return True if a successful broadcast was already sent for this post."""
+    result = await session.execute(
+        select(SubscriptionBroadcast)
+        .where(
+            SubscriptionBroadcast.post_path == post_path,
+            SubscriptionBroadcast.status == "sent",
+        )
+        .limit(1)
+    )
+    return result.scalar_one_or_none() is not None
+
+
+async def send_broadcast(
+    session: AsyncSession,
+    *,
+    secret_key: str,
+    post_path: str,
+    post_title: str,
+    post_html: str,
+    post_url: str,
+    trigger: str,
+) -> None:
+    """Send one broadcast via Resend and record a ledger row. Never raises."""
+    row = await _get_row(session)
+    record = SubscriptionBroadcast(
+        post_path=post_path,
+        post_title=post_title,
+        trigger=trigger,
+        status="failed",
+        sent_at=now_utc().isoformat(),
+        error=None,
+    )
+    try:
+        if row is None or not row.enabled or not row.resend_segment_id:
+            record.error = "Subscriptions not configured"
+        else:
+            api_key = decrypt_api_key(row, secret_key)
+            from_email = row.from_email
+            if api_key is None or not from_email:
+                record.error = "Subscriptions not configured"
+            else:
+                segment_id = row.resend_segment_id
+                if not segment_id:
+                    record.error = "Subscriptions not configured"
+                else:
+                    html, text = build_broadcast_email(
+                        post_url=post_url,
+                        post_title=post_title,
+                        post_html=post_html,
+                        controller_name=row.controller_name or from_email,
+                        postal_address=row.postal_address or "",
+                    )
+                    broadcast_id = await resend_client.create_and_send_broadcast(
+                        api_key=api_key,
+                        segment_id=segment_id,
+                        from_=_from_header(row),
+                        subject=post_title,
+                        html=html,
+                        text=text,
+                    )
+                    record.resend_broadcast_id = broadcast_id
+                    record.status = "sent"
+    except resend_client.ResendError as exc:
+        record.error = str(exc)
+    except Exception:  # never let a broadcast crash the caller
+        logger.error("Unexpected broadcast failure for %s", post_path, exc_info=True)
+        record.error = "Internal error"
+    session.add(record)
+    await session.commit()
+
+
+def fire_post_broadcast(
+    session_factory: async_sessionmaker[AsyncSession],
+    *,
+    secret_key: str,
+    post_path: str,
+    post_title: str,
+    post_html: str,
+    post_url: str,
+    trigger: str,
+    enforce_once_guard: bool,
+) -> None:
+    """Schedule a fire-and-forget broadcast. Used by the publish hook + manual trigger."""
+    if len(_broadcast_tasks) >= _MAX_BROADCAST_TASKS:
+        logger.warning("Dropping broadcast for %s: task limit reached", post_path)
+        return
+
+    async def _run() -> None:
+        try:
+            async with session_factory() as session:
+                # Known limitation: two concurrent fires for the same post could both
+                # pass this check before either commits a "sent" row (no DB lock).
+                # Acceptable — publish transitions are admin-only and rare.
+                if enforce_once_guard and await already_broadcast(session, post_path):
+                    return
+                await send_broadcast(
+                    session,
+                    secret_key=secret_key,
+                    post_path=post_path,
+                    post_title=post_title,
+                    post_html=post_html,
+                    post_url=post_url,
+                    trigger=trigger,
+                )
+        except Exception:
+            logger.error("Background broadcast failed for %s", post_path, exc_info=True)
+
+    task = asyncio.create_task(_run())
+    _broadcast_tasks.add(task)
+    task.add_done_callback(_broadcast_tasks.discard)
+
+
+async def close_broadcast_tasks() -> None:
+    """Drain in-flight broadcast tasks on shutdown (short timeout).
+
+    Called from the app lifespan shutdown so a graceful stop lets pending
+    Resend broadcasts finish and commit their ledger row.
+    """
+    if _broadcast_tasks:
+        await asyncio.wait(_broadcast_tasks, timeout=3.0)
