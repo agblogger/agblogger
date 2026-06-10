@@ -14,6 +14,12 @@ from backend.models.subscription import SubscriptionSettings
 from backend.schemas.subscription import SubscriptionSettingsResponse
 from backend.services import resend_client
 from backend.services.crypto_service import decrypt_value, encrypt_value
+from backend.services.subscription_email import build_confirmation_email
+from backend.services.subscription_tokens import (
+    create_confirm_token,
+    normalize_email,
+    verify_confirm_token,
+)
 from backend.utils.datetime import now_utc
 
 if TYPE_CHECKING:
@@ -38,6 +44,10 @@ class EnablePreconditionError(Exception):
 
     The API layer maps this to HTTP 422.
     """
+
+
+class SubscriptionsDisabledError(Exception):
+    """Subscriptions are disabled or not fully configured."""
 
 
 async def _get_row(session: AsyncSession) -> SubscriptionSettings | None:
@@ -164,3 +174,51 @@ async def build_settings_response(
         segment_configured=bool(row.resend_segment_id),
         subscriber_count=count,
     )
+
+
+def _from_header(row: SubscriptionSettings) -> str:
+    from_email = row.from_email or ""
+    if row.from_name and from_email:
+        return f"{row.from_name} <{from_email}>"
+    return from_email
+
+
+async def subscribe(session: AsyncSession, *, secret_key: str, email: str, base_url: str) -> None:
+    """Send a confirmation email. Persists nothing. Raises if not configured/enabled."""
+    row = await _get_row(session)
+    if row is None or not row.enabled:
+        raise SubscriptionsDisabledError()
+    api_key = decrypt_api_key(row, secret_key)
+    from_email = row.from_email
+    if api_key is None or not from_email:
+        raise SubscriptionsDisabledError()
+    controller = row.controller_name or from_email
+    token = create_confirm_token(email, secret_key)
+    confirm_url = f"{base_url.rstrip('/')}/subscribe/confirm?token={token}"
+    html, text = build_confirmation_email(confirm_url=confirm_url, controller_name=controller)
+    await resend_client.send_email(
+        api_key=api_key,
+        from_=_from_header(row),
+        to=normalize_email(email),
+        subject=f"Confirm your subscription to {controller}",
+        html=html,
+        text=text,
+    )
+
+
+async def confirm(session: AsyncSession, *, secret_key: str, token: str) -> bool:
+    """Verify the token and create the Resend contact. Returns False on bad token."""
+    email = verify_confirm_token(token, secret_key)
+    if email is None:
+        return False
+    row = await _get_row(session)
+    if row is None or not row.enabled:
+        return False
+    segment_id = row.resend_segment_id
+    if not segment_id:
+        return False
+    api_key = decrypt_api_key(row, secret_key)
+    if api_key is None:
+        return False
+    await resend_client.create_contact(api_key=api_key, segment_id=segment_id, email=email)
+    return True
