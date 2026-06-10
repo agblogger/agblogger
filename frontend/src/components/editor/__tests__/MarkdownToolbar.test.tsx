@@ -357,6 +357,8 @@ describe('MarkdownToolbar', () => {
     expect(screen.getByLabelText(/^Code Block/)).toBeInTheDocument()
     expect(screen.getByLabelText(/^Footnote/)).toBeInTheDocument()
     expect(screen.getByLabelText(/^Note/)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^Math$/)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^Math Block/)).toBeInTheDocument()
   })
 
   it('blockquote button inserts with linePrefix mode', async () => {
