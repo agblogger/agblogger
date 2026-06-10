@@ -106,6 +106,7 @@ export interface MarkdownEditorProps {
   enableAssets?: boolean
   assetDisabledReason?: string
   editorHeight?: string
+  onError?: (message: string) => void
 }
 
 export default function MarkdownEditor({
@@ -119,6 +120,7 @@ export default function MarkdownEditor({
   enableAssets = false,
   assetDisabledReason,
   editorHeight = '80vh',
+  onError,
 }: MarkdownEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const previewRef = useRef<HTMLDivElement>(null)
@@ -170,6 +172,7 @@ export default function MarkdownEditor({
       }
       setFileRefreshToken((prev) => prev + 1)
     },
+    ...(onError !== undefined && { onError }),
   })
 
   const { syncEditorToPreview, syncPreviewToEditor } = useScrollSync({
@@ -292,8 +295,8 @@ export default function MarkdownEditor({
     if (!isMod) return
 
     if ((e.key === 's' || e.key === 'S') && !e.shiftKey) {
+      e.preventDefault()
       if (onSave !== undefined && saveAllowed) {
-        e.preventDefault()
         onSave()
       }
       return

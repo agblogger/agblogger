@@ -414,6 +414,7 @@ export default function EditorPage() {
         filePath={effectiveFilePath}
         enableAssets
         assetDisabledReason="Save post first to add images"
+        onError={setError}
       />
 
       {showCrossPostDialog && savedFilePath !== null && (

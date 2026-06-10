@@ -17,7 +17,8 @@ the fullscreen overlay, and — when `enableAssets` is set — file attachment
 management (upload/delete/rename) plus toolbar image upload.
 
 **Host owns:** metadata fields, autosave, the `onSave` handler and error
-banners.
+banners. Asset upload failures are forwarded through the editor's `onError`
+callback so the host can surface them consistently.
 
 ## Pieces
 

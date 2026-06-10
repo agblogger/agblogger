@@ -276,6 +276,16 @@ class TestFootnoteDefinitions:
         assert len(scan.footnote_lines) == 3
         assert scan.footnote_lines == (2, 4, 4)
 
+    def test_reference_like_text_in_inline_code_is_ignored(self) -> None:
+        md = "Code `[^a]` then real[^b].\n\n[^a]: alpha.\n\n[^b]: beta."
+        scan = _scan_document(md)
+        assert scan.footnote_lines == (4,)
+
+    def test_escaped_reference_like_text_is_ignored(self) -> None:
+        md = "Escaped \\[^a] then real[^b].\n\n[^a]: alpha.\n\n[^b]: beta."
+        scan = _scan_document(md)
+        assert scan.footnote_lines == (4,)
+
 
 class TestLinkReferenceDefinitions:
     def test_link_ref_def_excluded_from_in_flow_blocks(self) -> None:

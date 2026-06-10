@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
@@ -68,11 +68,14 @@ describe('MarkdownEditor', () => {
 
   it('does not save on Cmd/Ctrl+S when canSave is false', async () => {
     const onSave = vi.fn()
-    const user = userEvent.setup()
     render(<MarkdownEditor value="" onChange={() => {}} onSave={onSave} canSave={false} />)
-    screen.getByRole('textbox').focus()
-    await user.keyboard('{Control>}s{/Control}')
+    const handled = fireEvent.keyDown(screen.getByRole('textbox'), {
+      key: 's',
+      ctrlKey: true,
+      cancelable: true,
+    })
     expect(onSave).not.toHaveBeenCalled()
+    expect(handled).toBe(false)
   })
 
   it('applies a formatting shortcut (Ctrl+B) via onChange', async () => {

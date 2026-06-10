@@ -1435,6 +1435,27 @@ describe('EditorPage', () => {
     })
   })
 
+  it('shows toolbar image upload failures in the editor error banner', async () => {
+    const user = userEvent.setup()
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.mocked(uploadAssets).mockRejectedValue(new Error('Network error'))
+    mockFetchPostForEdit.mockResolvedValue(directoryEditResponse)
+    renderEditor('/editor/posts/2026-03-08-existing-post/index.md')
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Title/)).toHaveValue('Existing Post')
+    })
+
+    const imageInput = document.querySelector('input[accept="image/*"]') as HTMLInputElement
+    const file = new File(['img data'], 'hero.jpg', { type: 'image/jpeg' })
+    await user.upload(imageInput, file)
+
+    await waitFor(() => {
+      expect(screen.getByText('Failed to upload files')).toBeInTheDocument()
+    })
+    consoleSpy.mockRestore()
+  })
+
   // === Navigation guarding integration ===
 
   it('blocks in-app navigation and shows confirm when editor has unsaved changes', async () => {

@@ -17,6 +17,7 @@ Known limitations (the source scanner may misalign with rendered HTML for these)
 from __future__ import annotations
 
 import re
+import string
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
 
@@ -36,6 +37,7 @@ _FOOTNOTE_REF_RE = re.compile(r"\[\^([^\]]+)\](?!:)")
 _DEF_MARKER_RE = re.compile(r"^[:~]\s")
 # A fenced-div line: 3+ colons; non-empty trailing attributes mean an opener, bare a closer.
 _DIV_FENCE_RE = re.compile(r"^(:{3,})\s*(.*)$")
+_ESCAPABLE_PUNCTUATION = frozenset(string.punctuation)
 
 
 @dataclass(frozen=True)
@@ -62,6 +64,44 @@ class ScanResult:
 
     blocks: list[BlockAnchor]
     footnote_lines: tuple[int, ...] = ()
+
+
+def _mask_inline_code_and_escapes(markdown: str) -> str:
+    """Mask syntax where pandoc does not parse footnotes, preserving source positions."""
+    masked = list(markdown)
+    i = 0
+    while i < len(markdown):
+        if (
+            markdown[i] == "\\"
+            and i + 1 < len(markdown)
+            and markdown[i + 1] in _ESCAPABLE_PUNCTUATION
+        ):
+            masked[i] = " "
+            masked[i + 1] = " "
+            i += 2
+            continue
+        if markdown[i] != "`":
+            i += 1
+            continue
+
+        run_end = i + 1
+        while run_end < len(markdown) and markdown[run_end] == "`":
+            run_end += 1
+        delimiter = markdown[i:run_end]
+        close = markdown.find(delimiter, run_end)
+        while close != -1 and (
+            (close > 0 and markdown[close - 1] == "`")
+            or (close + len(delimiter) < len(markdown) and markdown[close + len(delimiter)] == "`")
+        ):
+            close = markdown.find(delimiter, close + len(delimiter))
+        if close == -1:
+            i = run_end
+            continue
+        for pos in range(i, close + len(delimiter)):
+            if markdown[pos] != "\n":
+                masked[pos] = " "
+        i = close + len(delimiter)
+    return "".join(masked)
 
 
 def _collect_footnote_lines(lines: list[str]) -> tuple[int, ...]:
@@ -94,10 +134,11 @@ def _collect_footnote_lines(lines: list[str]) -> tuple[int, ...]:
         i += 1
 
     occurrences: list[int] = []
+    occurrence_lines = _mask_inline_code_and_escapes("\n".join(lines)).split("\n")
     in_fence = False
     fence_char = ""
     fence_len = 0
-    for idx, raw in enumerate(lines):
+    for idx, raw in enumerate(occurrence_lines):
         if in_fence:
             m = _FENCE_RE.match(raw)
             if (
