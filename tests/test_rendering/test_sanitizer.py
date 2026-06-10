@@ -191,6 +191,22 @@ class TestMarkTag:
         assert "<mark>" in result
 
 
+class TestUnderlineTag:
+    """Regression: <u> tag must pass through sanitizer for [text]{.underline} syntax."""
+
+    def test_u_tag_preserved(self) -> None:
+        result = _sanitize_html("<p>This is <u>underlined</u> text.</p>")
+        assert "<u>" in result
+        assert "</u>" in result
+        assert "underlined" in result
+
+    def test_u_tag_no_attributes_allowed(self) -> None:
+        """u tag should only allow global attrs (class, id), not arbitrary ones."""
+        result = _sanitize_html('<u onclick="alert(1)">text</u>')
+        assert "onclick" not in result
+        assert "<u>" in result
+
+
 class TestEntityHandling:
     """Tests for HTML entity handling."""
 

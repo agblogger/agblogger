@@ -80,6 +80,7 @@ _ALLOWED_TAGS: frozenset[str] = frozenset(
         "th",
         "thead",
         "tr",
+        "u",
         "ul",
         "var",
     }
