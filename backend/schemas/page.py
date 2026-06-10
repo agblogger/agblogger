@@ -27,3 +27,4 @@ class SiteConfigResponse(BaseModel):
     title: str
     description: str
     pages: list[PageConfig]
+    subscriptions_enabled: bool = False

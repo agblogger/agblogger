@@ -9,11 +9,17 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from backend.api.deps import get_content_manager, get_current_admin, get_session_factory
+from backend.api.deps import (
+    get_content_manager,
+    get_current_admin,
+    get_session,
+    get_session_factory,
+)
 from backend.filesystem.content_manager import ContentManager
 from backend.models.user import AdminUser
 from backend.schemas.admin import PAGE_ID_PATTERN
 from backend.schemas.page import PageResponse, SiteConfigResponse
+from backend.services import subscription_service
 from backend.services.analytics_service import fire_background_hit
 from backend.services.page_service import get_page, get_site_config
 
@@ -25,9 +31,12 @@ router = APIRouter(prefix="/api/pages", tags=["pages"])
 @router.get("", response_model=SiteConfigResponse)
 async def site_config(
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
+    session: Annotated[AsyncSession, Depends(get_session)],
 ) -> SiteConfigResponse:
-    """Get site configuration including page list."""
-    return get_site_config(content_manager)
+    """Get site configuration including page list and whether subscriptions are enabled."""
+    config = get_site_config(content_manager)
+    config.subscriptions_enabled = await subscription_service.is_enabled(session)
+    return config
 
 
 @router.get("/{page_id}", response_model=PageResponse)
