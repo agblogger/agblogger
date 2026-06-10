@@ -802,7 +802,7 @@ describe('MarkdownToolbar', () => {
       makeNarrow(container.firstChild as HTMLElement)
       const toolbarEl = container.firstChild as HTMLElement
       const btn = toolbarEl.querySelector('[aria-label="More formatting options"]') as HTMLElement
-      expect(btn.style.visibility).not.toBe('hidden')
+      expect(btn.style.visibility).toBe('visible')
     })
 
     it('clicking overflow button opens dropdown with overflow items', async () => {

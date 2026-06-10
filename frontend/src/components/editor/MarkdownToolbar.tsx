@@ -248,6 +248,7 @@ export default memo(function MarkdownToolbar({
                      disabled:opacity-50 disabled:cursor-not-allowed"
           title="More"
           aria-label="More formatting options"
+          aria-haspopup="menu"
           aria-expanded={dropdownOpen}
           style={{ visibility: overflowFrom < items.length ? 'visible' : 'hidden' }}
         >
