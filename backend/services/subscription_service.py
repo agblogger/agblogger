@@ -56,6 +56,12 @@ async def _get_row(session: AsyncSession) -> SubscriptionSettings | None:
     return result.scalar_one_or_none()
 
 
+async def is_enabled(session: AsyncSession) -> bool:
+    """True iff subscriptions are configured and enabled."""
+    row = await _get_row(session)
+    return bool(row and row.enabled)
+
+
 def decrypt_api_key(row: SubscriptionSettings, secret_key: str) -> str | None:
     if not row.resend_api_key_encrypted:
         return None

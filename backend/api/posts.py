@@ -50,6 +50,7 @@ from backend.schemas.post import (
     PostSave,
     SearchResult,
 )
+from backend.services import subscription_service
 from backend.services.analytics_service import fire_background_hit
 from backend.services.git_service import GitService
 from backend.services.label_service import ensure_label_cache_entry
@@ -72,6 +73,28 @@ logger = logging.getLogger(__name__)
 async def _empty_string() -> str:
     """No-op coroutine returning empty string, for use as asyncio.gather placeholder."""
     return ""
+
+
+def _fire_subscription_broadcast(
+    request: Request, *, post_path: str, post_title: str, post_html: str
+) -> None:
+    """Schedule an auto-broadcast for a post that just became published.
+
+    Fires on create or on a draft→published update. Best-effort, never blocks.
+    """
+    settings = request.app.state.settings
+    session_factory = request.app.state.session_factory
+    base_url = str(request.base_url).rstrip("/")
+    subscription_service.fire_post_broadcast(
+        session_factory,
+        secret_key=settings.secret_key,
+        post_path=post_path,
+        post_title=post_title,
+        post_html=post_html,
+        post_url=f"{base_url}/post/{file_path_to_slug(post_path)}",
+        trigger="auto",
+        enforce_once_guard=True,
+    )
 
 
 router = APIRouter(prefix="/api/posts", tags=["posts"])
@@ -835,6 +858,7 @@ def _fire_post_hit(
 @router.post("", response_model=PostDetail, status_code=201)
 async def create_post_endpoint(
     body: PostSave,
+    request: Request,
     response: Response,
     session: Annotated[AsyncSession, Depends(get_session)],
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
@@ -924,6 +948,17 @@ async def create_post_endpoint(
 
         set_git_warning(response, await git_service.try_commit(f"Create post: {file_path}"))
 
+        try:
+            if not post_data.is_draft and await subscription_service.is_enabled(session):
+                _fire_subscription_broadcast(
+                    request,
+                    post_path=file_path,
+                    post_title=post_data.title,
+                    post_html=rendered_html,
+                )
+        except Exception:
+            logger.warning("Auto-broadcast skipped; post already saved", exc_info=True)
+
         return await _build_post_detail(
             session,
             post,
@@ -937,6 +972,7 @@ async def create_post_endpoint(
 async def update_post_endpoint(
     file_path: str,
     body: PostSave,
+    request: Request,
     response: Response,
     session: Annotated[AsyncSession, Depends(get_session)],
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
@@ -977,8 +1013,11 @@ async def update_post_endpoint(
 
         now = now_utc()
 
+        # Draft → published transition: capture flag before existing.is_draft is overwritten
+        is_publish_transition = existing.is_draft and not body.is_draft
+
         # Draft → published transition: update created_at to publish time
-        if existing.is_draft and not body.is_draft:
+        if is_publish_transition:
             created_at = now
 
         title = body.title
@@ -1156,6 +1195,17 @@ async def update_post_endpoint(
             response,
             await git_service.try_commit(f"Update post: {existing.file_path}"),
         )
+
+        try:
+            if is_publish_transition and await subscription_service.is_enabled(session):
+                _fire_subscription_broadcast(
+                    request,
+                    post_path=existing.file_path,
+                    post_title=existing.title,
+                    post_html=existing.rendered_html or "",
+                )
+        except Exception:
+            logger.warning("Auto-broadcast skipped; post already saved", exc_info=True)
 
         return await _build_post_detail(
             session,
