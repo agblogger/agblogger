@@ -37,6 +37,9 @@ from backend.api.labels import router as labels_router
 from backend.api.pages import router as pages_router
 from backend.api.posts import router as posts_router
 from backend.api.render import router as render_router
+from backend.api.subscriptions import admin_router as subscriptions_admin_router
+from backend.api.subscriptions import page_router as subscriptions_page_router
+from backend.api.subscriptions import public_router as subscriptions_public_router
 from backend.api.sync import router as sync_router
 from backend.config import Settings, sqlite_database_path
 from backend.database import create_engine
@@ -602,11 +605,23 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         yield
     finally:
         from backend.services.analytics_service import close_analytics_client
+        from backend.services.resend_client import close_resend_client
+        from backend.services.subscription_service import close_broadcast_tasks
 
         try:
             await close_analytics_client()
         except Exception as exc:
             logger.error("Error during analytics client shutdown: %s", exc, exc_info=True)
+
+        try:
+            await close_broadcast_tasks()
+        except Exception as exc:
+            logger.error("Error during broadcast tasks shutdown: %s", exc, exc_info=True)
+
+        try:
+            await close_resend_client()
+        except Exception as exc:
+            logger.error("Error during Resend client shutdown: %s", exc, exc_info=True)
 
         try:
             await close_renderer()
@@ -1001,6 +1016,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(render_router)
     app.include_router(sync_router)
     app.include_router(crosspost_router)
+    app.include_router(subscriptions_public_router)
+    app.include_router(subscriptions_admin_router)
+    # page_router serves /subscribe/confirm as backend HTML — must be registered
+    # before the StaticFiles/SPA catch-all so it is not shadowed.
+    app.include_router(subscriptions_page_router)
 
     async def _serve_site_asset(
         request: Request,

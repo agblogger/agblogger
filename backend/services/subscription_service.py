@@ -207,6 +207,31 @@ async def subscribe(session: AsyncSession, *, secret_key: str, email: str, base_
     )
 
 
+async def send_test_email(session: AsyncSession, *, secret_key: str, to: str) -> None:
+    """Send a test email to verify Resend config.
+
+    Intentionally does NOT require ``enabled=True`` so the admin can verify the
+    Resend configuration during setup before enabling subscriptions.
+
+    Raises SubscriptionsDisabledError if unconfigured; ResendError on send failure.
+    """
+    row = await _get_row(session)
+    if row is None:
+        raise SubscriptionsDisabledError()
+    api_key = decrypt_api_key(row, secret_key)
+    from_email = row.from_email
+    if api_key is None or not from_email:
+        raise SubscriptionsDisabledError()
+    await resend_client.send_email(
+        api_key=api_key,
+        from_=_from_header(row),
+        to=to,
+        subject="AgBlogger test email",
+        html="<p>This is a test email from your blog.</p>",
+        text="This is a test email from your blog.",
+    )
+
+
 async def confirm(session: AsyncSession, *, secret_key: str, token: str) -> bool:
     """Verify the token and create the Resend contact. Returns False on bad token."""
     email = verify_confirm_token(token, secret_key)
