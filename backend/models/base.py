@@ -14,7 +14,8 @@ class DurableBase(DeclarativeBase):
     """Base class for durable tables managed by Alembic migrations.
 
     Tables: admin_users, admin_refresh_tokens, social_accounts, cross_posts,
-    analytics_settings, sync_manifest.
+    analytics_settings, sync_manifest, subscription_settings,
+    subscription_broadcasts.
     """
 
 
