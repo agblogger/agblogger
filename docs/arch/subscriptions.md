@@ -65,5 +65,6 @@ The public `GET /api/pages` site-config response exposes the subscription compli
 - `backend/services/subscription_tokens.py` handles signed token creation and verification for stateless double opt-in.
 - `backend/models/subscription.py` defines the `SubscriptionSettings` and `SubscriptionBroadcast` durable models.
 - `backend/migrations/versions/0006_subscription_tables.py` is the Alembic migration for both tables.
+- `frontend/src/components/layout/Header.tsx` renders the public subscribe entry point as an outlined accent "Subscribe" pill (icon + label, collapsing to icon-only below the `sm` breakpoint), shown when subscriptions are enabled.
 - `frontend/src/pages/SubscribePage.tsx` is the public opt-in form with GDPR layered notice.
 - `frontend/src/components/admin/SubscriptionsPanel.tsx` is the admin tab for settings, enable toggle, subscriber count, test email, manual broadcast, and broadcast history. It loads all post-list pages for the manual picker and refreshes shared site config after toggles.
