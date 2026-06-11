@@ -103,6 +103,22 @@ async def create_contact(*, api_key: str, segment_id: str, email: str) -> None:
         raise
 
 
+async def delete_contact(*, api_key: str, audience_id: str, contact_id: str) -> None:
+    """Permanently delete a contact from the Resend audience. Treats 404 as success."""
+    try:
+        response = await _get_client().delete(
+            f"{_API_BASE}/audiences/{audience_id}/contacts/{contact_id}",
+            headers=_headers(api_key),
+        )
+    except httpx.HTTPError as exc:
+        logger.warning("Resend delete contact %s failed: %s", contact_id, exc)
+        raise ResendError("Could not reach the email provider") from exc
+    if response.status_code == 404:
+        return
+    if response.status_code >= 400:
+        raise ResendError(_extract_message(response))
+
+
 async def create_segment(*, api_key: str, name: str) -> str:
     """Create a segment/audience and return its id."""
     data = await _post(api_key, "/audiences", {"name": name})

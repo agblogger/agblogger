@@ -258,3 +258,44 @@ async def test_check_segment_exists_network_error_raises(
         await resend_client.check_segment_exists(api_key="re_x", segment_id="seg_1")
     assert "down" not in str(exc.value)
     assert "Could not reach the email provider" in str(exc.value)
+
+
+@pytest.mark.asyncio
+async def test_delete_contact_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["method"] = request.method
+        seen["url"] = str(request.url)
+        return httpx.Response(200, json={"id": "contact_1"})
+
+    monkeypatch.setattr(resend_client, "_get_client", lambda: _client(handler))
+    await resend_client.delete_contact(
+        api_key="re_x", audience_id="aud_1", contact_id="contact_1"
+    )
+    assert seen["method"] == "DELETE"
+    assert "aud_1/contacts/contact_1" in seen["url"]
+
+
+@pytest.mark.asyncio
+async def test_delete_contact_404_treated_as_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404, json={"message": "Contact not found"})
+
+    monkeypatch.setattr(resend_client, "_get_client", lambda: _client(handler))
+    # Must not raise
+    await resend_client.delete_contact(
+        api_key="re_x", audience_id="aud_1", contact_id="gone"
+    )
+
+
+@pytest.mark.asyncio
+async def test_delete_contact_other_error_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(401, json={"message": "Invalid API key"})
+
+    monkeypatch.setattr(resend_client, "_get_client", lambda: _client(handler))
+    with pytest.raises(ResendError, match="Invalid API key"):
+        await resend_client.delete_contact(
+            api_key="re_bad", audience_id="aud_1", contact_id="c1"
+        )
