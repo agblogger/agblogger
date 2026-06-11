@@ -351,11 +351,14 @@ export default function Header() {
             {subscriptionsEnabled && !searchOpen && (
               <Link
                 to="/subscribe"
-                className="p-2 text-muted hover:text-ink transition-colors rounded-lg hover:bg-paper-warm"
+                className="flex items-center gap-1.5 rounded-full border-[1.5px] border-accent text-accent
+                         px-2 sm:px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent/10
+                         focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
                 aria-label="Subscribe"
                 title="Subscribe to new posts"
               >
-                <Mail size={18} />
+                <Mail size={16} aria-hidden="true" />
+                <span className="hidden sm:inline">Subscribe</span>
               </Link>
             )}
 
