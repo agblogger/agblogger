@@ -112,6 +112,27 @@ async def create_segment(*, api_key: str, name: str) -> str:
     return segment_id
 
 
+async def check_segment_exists(*, api_key: str, segment_id: str) -> bool:
+    """Return True if the segment exists in Resend, False if it has been deleted.
+
+    Re-raises ResendError for non-404 failures (auth errors, network errors, etc.)
+    so callers cannot accidentally swallow real problems.
+    """
+    try:
+        response = await _get_client().get(
+            f"{_API_BASE}/audiences/{segment_id}",
+            headers=_headers(api_key),
+        )
+    except httpx.HTTPError as exc:
+        logger.warning("Resend request to /audiences/%s failed: %s", segment_id, exc)
+        raise ResendError("Could not reach the email provider") from exc
+    if response.status_code == 404:
+        return False
+    if response.status_code >= 400:
+        raise ResendError(_extract_message(response))
+    return True
+
+
 async def create_and_send_broadcast(
     *, api_key: str, segment_id: str, from_: str, subject: str, html: str, text: str
 ) -> str:

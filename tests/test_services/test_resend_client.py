@@ -207,3 +207,40 @@ async def test_create_segment_raises_when_no_id(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(resend_client, "_get_client", lambda: _client(handler))
     with pytest.raises(ResendError, match="Resend did not return a segment id"):
         await resend_client.create_segment(api_key="re_x", name="My Audience")
+
+
+@pytest.mark.asyncio
+async def test_check_segment_exists_returns_true_on_2xx(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/audiences/seg_1"
+        return httpx.Response(200, json={"id": "seg_1", "name": "AgBlogger subscribers"})
+
+    monkeypatch.setattr(resend_client, "_get_client", lambda: _client(handler))
+    result = await resend_client.check_segment_exists(api_key="re_x", segment_id="seg_1")
+    assert result is True
+
+
+@pytest.mark.asyncio
+async def test_check_segment_exists_returns_false_on_404(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404, json={"message": "Audience not found"})
+
+    monkeypatch.setattr(resend_client, "_get_client", lambda: _client(handler))
+    result = await resend_client.check_segment_exists(api_key="re_x", segment_id="seg_gone")
+    assert result is False
+
+
+@pytest.mark.asyncio
+async def test_check_segment_exists_reraises_on_other_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(401, json={"message": "Invalid API key"})
+
+    monkeypatch.setattr(resend_client, "_get_client", lambda: _client(handler))
+    with pytest.raises(ResendError, match="Invalid API key"):
+        await resend_client.check_segment_exists(api_key="re_bad", segment_id="seg_1")
