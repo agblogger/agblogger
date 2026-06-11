@@ -56,9 +56,11 @@ All values use existing Tailwind theme tokens, so dark mode adapts automatically
 
 ### Accessibility
 
-- Keep `aria-label="Subscribe to new posts"`. The label text is now also visible.
-- The `Mail` icon is decorative when the text label is present.
-- The pill is a single focusable link; focus ring matches sibling controls.
+- Keep `aria-label="Subscribe"` so the accessible name stays stable whether or not the
+  text label is visible (it is hidden below `sm`). Keep the `title="Subscribe to new
+  posts"` tooltip.
+- Mark the `Mail` icon `aria-hidden` (the link's `aria-label` carries the name).
+- The pill is a single focusable link; the `focus-visible` ring matches sibling controls.
 
 ## Testing
 
