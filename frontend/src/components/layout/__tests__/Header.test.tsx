@@ -916,5 +916,11 @@ describe('Header', () => {
       renderHeader()
       expect(screen.queryByRole('link', { name: 'Subscribe' })).not.toBeInTheDocument()
     })
+
+    it('shows the visible "Subscribe" label text when subscriptions are enabled', () => {
+      siteConfig.subscriptions_enabled = true
+      renderHeader()
+      expect(screen.getByText('Subscribe')).toBeInTheDocument()
+    })
   })
 })
