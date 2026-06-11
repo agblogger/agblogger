@@ -342,3 +342,22 @@ async def test_check_segment_exists_error_during_reenable_propagates(
     assert row is not None
     assert row.enabled is True
     assert row.resend_segment_id == "seg_original"
+
+
+@pytest.mark.asyncio
+async def test_first_enable_does_not_call_check_segment_exists(
+    session: AsyncSession, monkeypatch
+) -> None:
+    async def _check_raises(*, api_key: str, segment_id: str) -> bool:
+        raise resend_client.ResendError("should not be called on first enable")
+
+    monkeypatch.setattr(resend_client, "create_segment", _fake_create_segment)
+    monkeypatch.setattr(resend_client, "check_segment_exists", _check_raises)
+
+    # First enable with no stored segment — check_segment_exists must not be invoked.
+    await subscription_service.update_settings(
+        session, secret_key=SECRET, enabled=True, api_key="re_x", from_email="a@b.com"
+    )
+    row = await subscription_service._get_row(session)
+    assert row is not None
+    assert row.resend_segment_id == "seg_auto"

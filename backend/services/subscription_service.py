@@ -154,6 +154,7 @@ async def _prepare_enable(
 ) -> None:
     """Validate compliance config and ensure a live Resend segment exists before enabling."""
     if not row.resend_api_key_encrypted:
+        # Fast path: avoids the decryption call when no key is configured at all.
         raise EnablePreconditionError("A Resend API key is required to enable subscriptions.")
     missing = [f for f in _REQUIRED_TO_ENABLE if not getattr(row, f)]
     if missing:
