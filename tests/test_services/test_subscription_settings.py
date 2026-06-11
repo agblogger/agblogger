@@ -307,3 +307,40 @@ async def test_enable_with_stale_segment_recreates(
     row = await subscription_service._get_row(session)
     assert row is not None
     assert row.resend_segment_id == "seg_2"
+
+
+@pytest.mark.asyncio
+async def test_check_segment_exists_error_during_reenable_propagates(
+    session: AsyncSession, monkeypatch
+) -> None:
+    async def _create_segment(*, api_key: str, name: str) -> str:
+        return "seg_original"
+
+    async def _check_raises(*, api_key: str, segment_id: str) -> bool:
+        raise resend_client.ResendError("auth failure")
+
+    monkeypatch.setattr(resend_client, "create_segment", _create_segment)
+    monkeypatch.setattr(resend_client, "check_segment_exists", _check_raises)
+
+    # First enable — no segment stored yet, check_segment_exists not called.
+    # Temporarily use a passing check for the first enable.
+    async def _check_ok(*, api_key: str, segment_id: str) -> bool:
+        return True
+
+    monkeypatch.setattr(resend_client, "check_segment_exists", _check_ok)
+    await subscription_service.update_settings(
+        session, secret_key=SECRET, enabled=True, api_key="re_x", from_email="a@b.com"
+    )
+
+    # Second enable — segment is stored, check_segment_exists raises.
+    monkeypatch.setattr(resend_client, "check_segment_exists", _check_raises)
+    with pytest.raises(resend_client.ResendError, match="auth failure"):
+        await subscription_service.update_settings(
+            session, secret_key=SECRET, enabled=True, api_key="re_x", from_email="a@b.com"
+        )
+
+    # Row should still be enabled with the original segment (rollback preserved state).
+    row = await subscription_service._get_row(session)
+    assert row is not None
+    assert row.enabled is True
+    assert row.resend_segment_id == "seg_original"
