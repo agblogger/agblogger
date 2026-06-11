@@ -118,6 +118,8 @@ async def check_segment_exists(*, api_key: str, segment_id: str) -> bool:
     Re-raises ResendError for non-404 failures (auth errors, network errors, etc.)
     so callers cannot accidentally swallow real problems.
     """
+    # Cannot use _get() here: it raises ResendError on all 4xx including 404.
+    # We need to distinguish 404 (segment gone) from other errors (auth, network).
     try:
         response = await _get_client().get(
             f"{_API_BASE}/audiences/{segment_id}",

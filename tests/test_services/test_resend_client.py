@@ -244,3 +244,17 @@ async def test_check_segment_exists_reraises_on_other_error(
     monkeypatch.setattr(resend_client, "_get_client", lambda: _client(handler))
     with pytest.raises(ResendError, match="Invalid API key"):
         await resend_client.check_segment_exists(api_key="re_bad", segment_id="seg_1")
+
+
+@pytest.mark.asyncio
+async def test_check_segment_exists_network_error_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("down")
+
+    monkeypatch.setattr(resend_client, "_get_client", lambda: _client(handler))
+    with pytest.raises(ResendError) as exc:
+        await resend_client.check_segment_exists(api_key="re_x", segment_id="seg_1")
+    assert "down" not in str(exc.value)
+    assert "Could not reach the email provider" in str(exc.value)
