@@ -25,6 +25,7 @@ class SubscriptionSettingsResponse(BaseModel):
     privacy_policy_url: str | None
     postal_address: str | None
     key_configured: bool
+    webhook_secret_configured: bool
     segment_configured: bool
     subscriber_count: int | None  # None when Resend is unreachable
 
@@ -32,6 +33,7 @@ class SubscriptionSettingsResponse(BaseModel):
 class SubscriptionSettingsUpdate(BaseModel):
     enabled: bool | None = None
     api_key: str | None = None  # write-only
+    webhook_secret: str | None = None  # write-only
     from_email: str | None = None
     from_name: str | None = None
     controller_name: str | None = None
