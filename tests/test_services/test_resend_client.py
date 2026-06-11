@@ -299,3 +299,15 @@ async def test_delete_contact_other_error_raises(monkeypatch: pytest.MonkeyPatch
         await resend_client.delete_contact(
             api_key="re_bad", audience_id="aud_1", contact_id="c1"
         )
+
+
+@pytest.mark.asyncio
+async def test_delete_contact_network_error_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("down")
+
+    monkeypatch.setattr(resend_client, "_get_client", lambda: _client(handler))
+    with pytest.raises(ResendError, match="Could not reach the email provider"):
+        await resend_client.delete_contact(
+            api_key="re_x", audience_id="aud_1", contact_id="c1"
+        )
