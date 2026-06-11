@@ -85,5 +85,3 @@ Add `svix` to `pyproject.toml` project dependencies. The `svix` library enforces
 - `webhook_secret` round-trips through encrypt/decrypt
 - `webhook_secret_configured` flag reflects presence correctly
 
-**Privacy policy**
-- Retention text contains "deleted", not "until you unsubscribe"
