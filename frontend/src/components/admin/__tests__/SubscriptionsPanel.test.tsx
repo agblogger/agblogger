@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('@/api/subscriptions')
 vi.mock('@/api/posts')
+vi.mock('@/stores/siteStore', () => ({ refreshSiteConfig: vi.fn() }))
 vi.mock('@/api/client', async () => {
   const { MockHTTPError } = await import('@/test/MockHTTPError')
   return {
@@ -15,6 +16,7 @@ vi.mock('@/api/client', async () => {
 import * as apiMod from '@/api/subscriptions'
 import * as postsMod from '@/api/posts'
 import SubscriptionsPanel from '@/components/admin/SubscriptionsPanel'
+import { refreshSiteConfig } from '@/stores/siteStore'
 import { MockHTTPError } from '@/test/MockHTTPError'
 
 const FULL_SETTINGS = {
@@ -128,6 +130,7 @@ describe('SubscriptionsPanel', () => {
         expect.objectContaining({ enabled: false }),
       ),
     )
+    expect(refreshSiteConfig).toHaveBeenCalled()
   })
 
   it('save calls updateSubscriptionSettings without api_key when input is empty', async () => {
@@ -195,6 +198,45 @@ describe('SubscriptionsPanel', () => {
     )
     const callArg = vi.mocked(postsMod.fetchPosts).mock.calls[0]?.[0]
     expect(callArg?.per_page).toBeLessThanOrEqual(100)
+  })
+
+  it('loads published posts from every posts page', async () => {
+    vi.mocked(postsMod.fetchPosts)
+      .mockResolvedValueOnce({
+        posts: [],
+        total: 101,
+        page: 1,
+        per_page: 100,
+        total_pages: 2,
+      })
+      .mockResolvedValueOnce({
+        posts: [
+          {
+            id: 101,
+            file_path: 'posts/older',
+            title: 'Older Published Post',
+            subtitle: null,
+            author: null,
+            created_at: '2023-01-01T00:00:00Z',
+            modified_at: '2023-01-01T00:00:00Z',
+            is_draft: false,
+            rendered_excerpt: null,
+            labels: [],
+          },
+        ],
+        total: 101,
+        page: 2,
+        per_page: 100,
+        total_pages: 2,
+      })
+
+    renderPanel()
+
+    expect(await screen.findByRole('option', { name: 'Older Published Post' })).toBeInTheDocument()
+    expect(postsMod.fetchPosts).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ page: 2, per_page: 100 }),
+    )
   })
 
   it('send broadcast calls triggerBroadcast after confirm', async () => {

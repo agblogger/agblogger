@@ -34,7 +34,7 @@ These remain derived views of the same content system, not separate content stor
 
 ## Subscription Broadcast Flow
 
-When a post transitions to published, the publish hook fires a background task (gated on subscriptions being enabled) that sends the post's rendered HTML to Resend as a broadcast to the subscriber segment. A once-guard checks the broadcast ledger for a prior `sent` row for the same post path to prevent duplicate automatic sends; the admin manual trigger bypasses the once-guard. Confirm opt-in follows a separate path: a signed token is emailed to the subscriber, and the confirm endpoint creates a Resend contact on verification. No subscriber email addresses are written to the local database at any point.
+When a post transitions to published, the publish hook fires a background task (gated on subscriptions being enabled) that sends the post's rendered HTML to Resend as a broadcast to the subscriber segment. Root-relative links and assets in that HTML are converted to absolute public URLs for email clients. A once-guard checks the broadcast ledger for a prior `sent` row for the same post path to prevent duplicate automatic sends; the admin manual trigger bypasses the once-guard. Confirm opt-in follows a separate path: a signed token is emailed to the subscriber, and the confirm endpoint creates a Resend contact on verification. No subscriber email addresses are written to the local database at any point.
 
 ## Code Entry Points
 

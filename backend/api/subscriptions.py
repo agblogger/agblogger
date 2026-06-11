@@ -147,17 +147,11 @@ async def update_settings_endpoint(
     _user: Annotated[AdminUser, Depends(require_admin)],
 ) -> SubscriptionSettingsResponse:
     try:
+        updates = body.model_dump(exclude_unset=True)
         await subscription_service.update_settings(
             session,
             secret_key=settings.secret_key,
-            enabled=body.enabled,
-            api_key=body.api_key,
-            from_email=body.from_email,
-            from_name=body.from_name,
-            controller_name=body.controller_name,
-            controller_contact=body.controller_contact,
-            privacy_policy_url=body.privacy_policy_url,
-            postal_address=body.postal_address,
+            **updates,
         )
     except EnablePreconditionError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

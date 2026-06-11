@@ -7,6 +7,8 @@ flow and suppression."""
 from __future__ import annotations
 
 import html as _html
+from html.parser import HTMLParser
+from urllib.parse import urljoin
 
 _WRAP_STYLE = "font-family:system-ui,Arial,sans-serif;max-width:640px;margin:0 auto;color:#111"
 
@@ -18,6 +20,52 @@ def _safe_href(url: str) -> str:
     if not url.startswith(_ALLOWED_URL_SCHEMES):
         return "#"
     return _html.escape(url)
+
+
+class _AbsolutePostUrlParser(HTMLParser):
+    def __init__(self, post_url: str) -> None:
+        super().__init__(convert_charrefs=False)
+        self.post_url = post_url
+        self.parts: list[str] = []
+
+    def _attributes(self, attrs: list[tuple[str, str | None]]) -> str:
+        rendered: list[str] = []
+        for name, value in attrs:
+            if value is None:
+                rendered.append(name)
+                continue
+            if name in {"href", "src"} and value.startswith("/") and not value.startswith("//"):
+                value = urljoin(self.post_url, value)
+            rendered.append(f'{name}="{_html.escape(value, quote=True)}"')
+        return f" {' '.join(rendered)}" if rendered else ""
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self.parts.append(f"<{tag}{self._attributes(attrs)}>")
+
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self.parts.append(f"<{tag}{self._attributes(attrs)}/>")
+
+    def handle_endtag(self, tag: str) -> None:
+        self.parts.append(f"</{tag}>")
+
+    def handle_data(self, data: str) -> None:
+        self.parts.append(data)
+
+    def handle_entityref(self, name: str) -> None:
+        self.parts.append(f"&{name};")
+
+    def handle_charref(self, name: str) -> None:
+        self.parts.append(f"&#{name};")
+
+    def handle_comment(self, data: str) -> None:
+        self.parts.append(f"<!--{data}-->")
+
+
+def _absolute_post_urls(post_html: str, post_url: str) -> str:
+    parser = _AbsolutePostUrlParser(post_url)
+    parser.feed(post_html)
+    parser.close()
+    return "".join(parser.parts)
 
 
 def build_confirmation_email(*, confirm_url: str, controller_name: str) -> tuple[str, str]:
@@ -53,6 +101,7 @@ def build_broadcast_email(
     safe_url = _safe_href(post_url)
     safe_name = _html.escape(controller_name)
     safe_addr = _html.escape(postal_address)
+    email_post_html = _absolute_post_urls(post_html, post_url)
     footer = (
         f'<hr style="margin-top:32px;border:none;border-top:1px solid #ddd">'
         f'<p style="color:#666;font-size:12px">'
@@ -62,7 +111,7 @@ def build_broadcast_email(
     html = (
         f'<div style="{_WRAP_STYLE}">'
         f'<p><a href="{safe_url}">{safe_title}</a></p>'
-        f"{post_html}"
+        f"{email_post_html}"
         f"{footer}"
         f"</div>"
     )

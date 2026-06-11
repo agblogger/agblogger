@@ -213,6 +213,11 @@ export interface SiteConfigResponse {
   description: string
   pages: PageConfig[]
   subscriptions_enabled: boolean
+  subscription_compliance?: {
+    controller_name: string
+    controller_contact: string
+    privacy_policy_url: string
+  } | null
 }
 
 export interface PageResponse {

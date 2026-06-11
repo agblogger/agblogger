@@ -63,6 +63,19 @@ async def _post(api_key: str, path: str, payload: dict[str, Any]) -> dict[str, A
     return _parse_json_object(response)
 
 
+async def _get(api_key: str, path: str, params: dict[str, str]) -> dict[str, Any]:
+    try:
+        response = await _get_client().get(
+            f"{_API_BASE}{path}", params=params, headers=_headers(api_key)
+        )
+    except httpx.HTTPError as exc:
+        logger.warning("Resend request to %s failed: %s", path, exc)
+        raise ResendError("Could not reach the email provider") from exc
+    if response.status_code >= 400:
+        raise ResendError(_extract_message(response))
+    return _parse_json_object(response)
+
+
 async def send_email(
     *, api_key: str, from_: str, to: str, subject: str, html: str, text: str
 ) -> str:
@@ -123,18 +136,25 @@ async def create_and_send_broadcast(
 
 async def count_contacts(*, api_key: str, segment_id: str) -> int:
     """Return the number of contacts in the segment."""
-    try:
-        response = await _get_client().get(
-            f"{_API_BASE}/audiences/{segment_id}/contacts", headers=_headers(api_key)
-        )
-    except httpx.HTTPError as exc:
-        logger.warning("Resend contact count failed: %s", exc)
-        raise ResendError("Could not reach the email provider") from exc
-    if response.status_code >= 400:
-        raise ResendError(_extract_message(response))
-    data = _parse_json_object(response)
-    items = data.get("data", [])
-    return len(items) if isinstance(items, list) else 0
+    count = 0
+    after: str | None = None
+    while True:
+        params = {"limit": "100"}
+        if after is not None:
+            params["after"] = after
+        data = await _get(api_key, f"/audiences/{segment_id}/contacts", params)
+        items = data.get("data", [])
+        if not isinstance(items, list):
+            raise ResendError("Unexpected response from the email provider")
+        count += len(items)
+        if data.get("has_more") is not True:
+            return count
+        if not items or not isinstance(items[-1], dict):
+            raise ResendError("Unexpected response from the email provider")
+        next_after = items[-1].get("id")
+        if not isinstance(next_after, str) or not next_after or next_after == after:
+            raise ResendError("Unexpected response from the email provider")
+        after = next_after
 
 
 async def close_resend_client() -> None:

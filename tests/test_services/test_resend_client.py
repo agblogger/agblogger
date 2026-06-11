@@ -112,6 +112,25 @@ async def test_count_contacts_returns_len_of_data(monkeypatch: pytest.MonkeyPatc
 
 
 @pytest.mark.asyncio
+async def test_count_contacts_follows_cursor_pagination(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen_after: list[str | None] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen_after.append(request.url.params.get("after"))
+        if request.url.params.get("after") is None:
+            return httpx.Response(
+                200,
+                json={"has_more": True, "data": [{"id": "1"}, {"id": "2"}]},
+            )
+        return httpx.Response(200, json={"has_more": False, "data": [{"id": "3"}]})
+
+    monkeypatch.setattr(resend_client, "_get_client", lambda: _client(handler))
+    count = await resend_client.count_contacts(api_key="re_x", segment_id="seg_1")
+    assert count == 3
+    assert seen_after == [None, "2"]
+
+
+@pytest.mark.asyncio
 async def test_network_error_becomes_resend_error(monkeypatch: pytest.MonkeyPatch) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("boom")

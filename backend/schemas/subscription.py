@@ -41,7 +41,7 @@ class SubscriptionSettingsUpdate(BaseModel):
 
     @model_validator(mode="after")
     def at_least_one(self) -> SubscriptionSettingsUpdate:
-        if all(v is None for v in self.__dict__.values()):
+        if not self.model_fields_set:
             raise ValueError("At least one field must be provided")
         return self
 

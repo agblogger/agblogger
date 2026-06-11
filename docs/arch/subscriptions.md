@@ -29,7 +29,7 @@ An `already_broadcast` once-guard (keyed on a prior `sent` ledger row for the po
 
 ## Enable Precondition
 
-Enabling subscriptions requires: a Resend API key, `from_email`, and the full GDPR compliance config (controller name, controller contact, privacy policy URL, postal address). The first enable lazily auto-creates the Resend segment. `EnablePreconditionError` is raised if any field is missing and mapped to HTTP 400 by the API layer.
+Enabling subscriptions requires: a Resend API key, `from_email`, and the full GDPR compliance config (controller name, controller contact, privacy policy URL, postal address). The first enable lazily auto-creates the Resend segment. Every settings update that leaves subscriptions enabled revalidates the resulting configuration, so required fields cannot be cleared while the public feature remains active. Explicit `null` values clear string settings, while omitted fields remain unchanged. `EnablePreconditionError` is raised if any required field is missing and mapped to HTTP 400 by the API layer.
 
 ## Security Model
 
@@ -50,14 +50,16 @@ Enabling subscriptions requires: a Resend API key, `from_email`, and the full GD
 - `GET /api/admin/subscriptions/broadcasts` — broadcast ledger (last 100 attempts).
 - `POST /api/admin/subscriptions/broadcasts` — manual broadcast trigger → 202 Accepted.
 
+The public `GET /api/pages` site-config response exposes the configured controller name, controller contact, and privacy-policy URL only while subscriptions are enabled. The subscribe page renders this payload in its compliance notice. Broadcast email HTML rewrites root-relative post links and asset URLs to absolute URLs using the public post origin.
+
 ## Code Entry Points
 
 - `backend/api/subscriptions.py` contains public, page, and admin routers.
 - `backend/services/subscription_service.py` orchestrates settings, subscribe/confirm, broadcast firing, and the once-guard ledger.
-- `backend/services/resend_client.py` is the shared async HTTP boundary over the Resend API; closed on app shutdown.
+- `backend/services/resend_client.py` is the shared async HTTP boundary over the Resend API; contact counts follow Resend cursor pagination, and the client is closed on app shutdown.
 - `backend/services/subscription_email.py` builds confirmation and broadcast email HTML/text payloads.
 - `backend/services/subscription_tokens.py` handles signed token creation and verification for stateless double opt-in.
 - `backend/models/subscription.py` defines the `SubscriptionSettings` and `SubscriptionBroadcast` durable models.
 - `backend/migrations/versions/0006_subscription_tables.py` is the Alembic migration for both tables.
 - `frontend/src/pages/SubscribePage.tsx` is the public opt-in form with GDPR layered notice.
-- `frontend/src/components/admin/SubscriptionsPanel.tsx` is the admin tab for settings, enable toggle, subscriber count, test email, manual broadcast, and broadcast history.
+- `frontend/src/components/admin/SubscriptionsPanel.tsx` is the admin tab for settings, enable toggle, subscriber count, test email, manual broadcast, and broadcast history. It loads all post-list pages for the manual picker and refreshes shared site config after toggles.

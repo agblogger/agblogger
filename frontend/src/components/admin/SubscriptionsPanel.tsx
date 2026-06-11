@@ -13,6 +13,7 @@ import {
 import { fetchPosts } from '@/api/posts'
 import type { PostSummary } from '@/api/client'
 import { extractErrorDetail } from '@/api/parseError'
+import { refreshSiteConfig } from '@/stores/siteStore'
 import AlertBanner from '@/components/AlertBanner'
 import ToggleSwitch from './ToggleSwitch'
 
@@ -33,6 +34,19 @@ function isEnableAllowed(s: SubscriptionSettings): boolean {
     Boolean(s.privacy_policy_url) &&
     Boolean(s.postal_address)
   )
+}
+
+async function fetchAllPublishedPosts(): Promise<PostSummary[]> {
+  const params = { per_page: 100, sort: 'created_at' as const, order: 'desc' as const }
+  const firstPage = await fetchPosts({ ...params, page: 1 })
+  const remainingPages = await Promise.all(
+    Array.from(
+      { length: Math.max(firstPage.total_pages - 1, 0) },
+      (_, index) => fetchPosts({ ...params, page: index + 2 }),
+    ),
+  )
+  const pages = [firstPage, ...remainingPages]
+  return pages.flatMap((response) => response.posts).filter((post) => !post.is_draft)
 }
 
 export default function SubscriptionsPanel({ busy, onBusyChange }: Props) {
@@ -74,12 +88,10 @@ export default function SubscriptionsPanel({ busy, onBusyChange }: Props) {
       setLoading(true)
       setInitError(null)
       try {
-        const [s, b, postsResp] = await Promise.all([
+        const [s, b, posts] = await Promise.all([
           fetchSubscriptionSettings(),
           fetchBroadcasts(),
-          // Backend caps per_page at 100 and has no published-only filter, so
-          // request the 100 most-recent posts and filter out drafts client-side.
-          fetchPosts({ per_page: 100, sort: 'created_at', order: 'desc' }),
+          fetchAllPublishedPosts(),
         ])
         if (cancelled) return
         setSettings(s)
@@ -90,7 +102,7 @@ export default function SubscriptionsPanel({ busy, onBusyChange }: Props) {
         setPrivacyPolicyUrl(s.privacy_policy_url ?? '')
         setPostalAddress(s.postal_address ?? '')
         setBroadcasts(b.broadcasts)
-        setPublishedPosts(postsResp.posts.filter((p) => !p.is_draft))
+        setPublishedPosts(posts)
       } catch (err) {
         if (cancelled) return
         setInitError(await extractErrorDetail(err, 'Failed to load subscription settings.'))
@@ -111,6 +123,7 @@ export default function SubscriptionsPanel({ busy, onBusyChange }: Props) {
     try {
       const updated = await updateSubscriptionSettings({ enabled: value })
       setSettings(updated)
+      refreshSiteConfig()
     } catch (err) {
       setSettingsError(await extractErrorDetail(err, 'Failed to update setting. Please try again.'))
     } finally {

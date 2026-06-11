@@ -80,3 +80,8 @@ async def test_site_config_reports_enabled(
 
     resp = await client.get("/api/pages")
     assert resp.json()["subscriptions_enabled"] is True
+    assert resp.json()["subscription_compliance"] == {
+        "controller_name": "J",
+        "controller_contact": "j@b.com",
+        "privacy_policy_url": "https://b/p",
+    }

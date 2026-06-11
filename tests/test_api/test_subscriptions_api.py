@@ -212,6 +212,26 @@ async def test_put_settings_precondition_returns_400(client: AsyncClient) -> Non
 
 
 @pytest.mark.asyncio
+async def test_put_settings_explicit_null_clears_optional_field(client: AsyncClient) -> None:
+    token = await _get_admin_token(client)
+    headers = {"Authorization": f"Bearer {token}"}
+    first = await client.put(
+        "/api/admin/subscriptions/settings",
+        json={"from_name": "Blog"},
+        headers=headers,
+    )
+    assert first.status_code == 200
+
+    cleared = await client.put(
+        "/api/admin/subscriptions/settings",
+        json={"from_name": None},
+        headers=headers,
+    )
+    assert cleared.status_code == 200
+    assert cleared.json()["from_name"] is None
+
+
+@pytest.mark.asyncio
 async def test_trigger_broadcast_404_for_missing_post(
     client: AsyncClient, monkeypatch: pytest.MonkeyPatch, enable_subscriptions: None
 ) -> None:

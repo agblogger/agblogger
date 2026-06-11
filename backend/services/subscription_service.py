@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
@@ -40,6 +41,21 @@ _REQUIRED_TO_ENABLE = (
 )
 
 
+class _Unset:
+    pass
+
+
+_UNSET = _Unset()
+_StringUpdate = str | None | _Unset
+
+
+@dataclass(frozen=True)
+class PublicSubscriptionCompliance:
+    controller_name: str
+    controller_contact: str
+    privacy_policy_url: str
+
+
 class EnablePreconditionError(Exception):
     """Raised when enabling is requested without the required compliance config.
 
@@ -62,6 +78,26 @@ async def is_enabled(session: AsyncSession) -> bool:
     return bool(row and row.enabled)
 
 
+async def get_public_compliance(
+    session: AsyncSession,
+) -> PublicSubscriptionCompliance | None:
+    """Return configured public compliance details only while subscriptions are enabled."""
+    row = await _get_row(session)
+    if (
+        row is None
+        or not row.enabled
+        or not row.controller_name
+        or not row.controller_contact
+        or not row.privacy_policy_url
+    ):
+        return None
+    return PublicSubscriptionCompliance(
+        controller_name=row.controller_name,
+        controller_contact=row.controller_contact,
+        privacy_policy_url=row.privacy_policy_url,
+    )
+
+
 def decrypt_api_key(row: SubscriptionSettings, secret_key: str) -> str | None:
     if not row.resend_api_key_encrypted:
         return None
@@ -74,12 +110,12 @@ async def update_settings(
     secret_key: str,
     enabled: bool | None = None,
     api_key: str | None = None,
-    from_email: str | None = None,
-    from_name: str | None = None,
-    controller_name: str | None = None,
-    controller_contact: str | None = None,
-    privacy_policy_url: str | None = None,
-    postal_address: str | None = None,
+    from_email: _StringUpdate = _UNSET,
+    from_name: _StringUpdate = _UNSET,
+    controller_name: _StringUpdate = _UNSET,
+    controller_contact: _StringUpdate = _UNSET,
+    privacy_policy_url: _StringUpdate = _UNSET,
+    postal_address: _StringUpdate = _UNSET,
 ) -> SubscriptionSettings:
     """Create/update the singleton, encrypting the key and enforcing the enable gate."""
     row = await _get_row(session)
@@ -103,18 +139,17 @@ async def update_settings(
         ("privacy_policy_url", privacy_policy_url),
         ("postal_address", postal_address),
     ):
-        if value is not None:
+        if not isinstance(value, _Unset):
             setattr(row, field, value)
 
-    if enabled is True:
+    target_enabled = row.enabled if enabled is None else enabled
+    if target_enabled:
         try:
             await _prepare_enable(session, row, secret_key)
         except Exception:
             await session.rollback()
             raise
-        row.enabled = True
-    elif enabled is False:
-        row.enabled = False
+    row.enabled = target_enabled
 
     row.updated_at = now_utc().isoformat()
     await session.commit()

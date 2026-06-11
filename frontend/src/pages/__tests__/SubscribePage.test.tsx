@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import SubscribePage from '@/pages/SubscribePage'
 import * as apiMod from '@/api/subscriptions'
+import { useSiteStore } from '@/stores/siteStore'
 
 vi.mock('@/api/client', async () => {
   const { MockHTTPError } = await import('@/test/MockHTTPError')
@@ -22,6 +23,21 @@ function renderPage() {
 describe('SubscribePage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    useSiteStore.setState({
+      config: {
+        title: 'Blog',
+        description: '',
+        pages: [],
+        subscriptions_enabled: true,
+        subscription_compliance: {
+          controller_name: 'Jane Controller',
+          controller_contact: 'privacy@example.com',
+          privacy_policy_url: 'https://example.com/legal/privacy',
+        },
+      },
+      isLoading: false,
+      error: null,
+    })
   })
 
   it('submits the email and shows a confirmation message', async () => {
@@ -39,9 +55,11 @@ describe('SubscribePage', () => {
     expect(screen.getByText(/outside the EEA/i)).toBeInTheDocument()
     expect(screen.getByText(/withdraw consent/i)).toBeInTheDocument()
     expect(screen.getByText(/supervisory authority/i)).toBeInTheDocument()
+    expect(screen.getByText(/jane controller/i)).toBeInTheDocument()
+    expect(screen.getByText(/privacy@example.com/i)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /privacy policy/i })).toHaveAttribute(
       'href',
-      '/page/privacy',
+      'https://example.com/legal/privacy',
     )
   })
 

@@ -2,8 +2,10 @@ import { useState } from 'react'
 import AlertBanner from '@/components/AlertBanner'
 import { subscribe } from '@/api/subscriptions'
 import { HTTPError } from '@/api/client'
+import { useSiteStore } from '@/stores/siteStore'
 
 export default function SubscribePage() {
+  const compliance = useSiteStore((state) => state.config?.subscription_compliance)
   const [email, setEmail] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [done, setDone] = useState(false)
@@ -79,12 +81,18 @@ export default function SubscribePage() {
       </form>
 
       <p className="text-xs text-muted mt-6 leading-relaxed">
+        {compliance !== null && compliance !== undefined
+          ? `${compliance.controller_name} (${compliance.controller_contact}) is the data controller. `
+          : ''}
         We use your email only to notify you of new posts, based on your consent. Email is
         delivered by Resend (Resend Inc., USA) as our processor; this involves a transfer
         outside the EEA under appropriate safeguards. We keep your address until you
         unsubscribe (a link is in every email). You can withdraw consent at any time and
         lodge a complaint with a supervisory authority. See our{' '}
-        <a href="/page/privacy" className="underline hover:text-ink transition-colors">
+        <a
+          href={compliance?.privacy_policy_url ?? '/page/privacy'}
+          className="underline hover:text-ink transition-colors"
+        >
           Privacy Policy
         </a>
         .

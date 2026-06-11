@@ -57,6 +57,18 @@ def test_broadcast_email_does_not_escape_post_html() -> None:
     assert "<p>Hello <strong>world</strong></p>" in html
 
 
+def test_broadcast_email_converts_root_relative_post_urls_to_absolute() -> None:
+    html, _text = build_broadcast_email(
+        post_url="https://blog.example/post/hello",
+        post_title="Hello",
+        post_html='<p><img src="/post/hello/image.png"><a href="/page/about">About</a></p>',
+        controller_name="Jane Blog",
+        postal_address="1 Main St, Town",
+    )
+    assert 'src="https://blog.example/post/hello/image.png"' in html
+    assert 'href="https://blog.example/page/about"' in html
+
+
 def test_broadcast_email_escapes_title_in_html() -> None:
     html, _text = build_broadcast_email(
         post_url="https://blog.example/post/hello",

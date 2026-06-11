@@ -18,7 +18,7 @@ from backend.api.deps import (
 from backend.filesystem.content_manager import ContentManager
 from backend.models.user import AdminUser
 from backend.schemas.admin import PAGE_ID_PATTERN
-from backend.schemas.page import PageResponse, SiteConfigResponse
+from backend.schemas.page import PageResponse, SiteConfigResponse, SubscriptionCompliance
 from backend.services import subscription_service
 from backend.services.analytics_service import fire_background_hit
 from backend.services.page_service import get_page, get_site_config
@@ -35,7 +35,17 @@ async def site_config(
 ) -> SiteConfigResponse:
     """Get site configuration including page list and whether subscriptions are enabled."""
     config = get_site_config(content_manager)
-    config.subscriptions_enabled = await subscription_service.is_enabled(session)
+    compliance = await subscription_service.get_public_compliance(session)
+    config.subscriptions_enabled = compliance is not None
+    config.subscription_compliance = (
+        SubscriptionCompliance(
+            controller_name=compliance.controller_name,
+            controller_contact=compliance.controller_contact,
+            privacy_policy_url=compliance.privacy_policy_url,
+        )
+        if compliance is not None
+        else None
+    )
     return config
 
 

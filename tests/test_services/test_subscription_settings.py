@@ -97,6 +97,43 @@ async def test_partial_update_preserves_other_fields(session: AsyncSession) -> N
 
 
 @pytest.mark.asyncio
+async def test_explicit_none_clears_optional_field(session: AsyncSession) -> None:
+    await subscription_service.update_settings(session, secret_key=SECRET, from_name="X")
+    await subscription_service.update_settings(session, secret_key=SECRET, from_name=None)
+    row = await subscription_service._get_row(session)
+    assert row is not None
+    assert row.from_name is None
+
+
+@pytest.mark.asyncio
+async def test_enabled_settings_reject_clearing_required_field(
+    session: AsyncSession, monkeypatch
+) -> None:
+    monkeypatch.setattr(resend_client, "create_segment", _fake_create_segment)
+    await subscription_service.update_settings(
+        session,
+        secret_key=SECRET,
+        enabled=True,
+        api_key="re_x",
+        from_email="a@b.com",
+        controller_name="Jane Blog",
+        controller_contact="jane@b.com",
+        privacy_policy_url="https://b.com/privacy",
+        postal_address="1 Main St",
+    )
+
+    with pytest.raises(subscription_service.EnablePreconditionError):
+        await subscription_service.update_settings(
+            session, secret_key=SECRET, controller_contact=""
+        )
+
+    row = await subscription_service._get_row(session)
+    assert row is not None
+    assert row.enabled is True
+    assert row.controller_contact == "jane@b.com"
+
+
+@pytest.mark.asyncio
 async def test_empty_api_key_does_not_overwrite_existing(session: AsyncSession) -> None:
     await subscription_service.update_settings(session, secret_key=SECRET, api_key="re_first")
     await subscription_service.update_settings(session, secret_key=SECRET, api_key="")

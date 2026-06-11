@@ -5,6 +5,12 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 
+class SubscriptionCompliance(BaseModel):
+    controller_name: str
+    controller_contact: str
+    privacy_policy_url: str
+
+
 class PageConfig(BaseModel):
     """Top-level page configuration."""
 
@@ -28,3 +34,4 @@ class SiteConfigResponse(BaseModel):
     description: str
     pages: list[PageConfig]
     subscriptions_enabled: bool = False
+    subscription_compliance: SubscriptionCompliance | None = None
