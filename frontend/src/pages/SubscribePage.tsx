@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import AlertBanner from "@/components/AlertBanner";
 import { subscribe } from "@/api/subscriptions";
 import { HTTPError } from "@/api/client";
@@ -8,6 +9,7 @@ export default function SubscribePage() {
   const compliance = useSiteStore(
     (state) => state.config?.subscription_compliance,
   );
+  const privacyPolicyUrl = compliance?.privacy_policy_url ?? "";
   const [email, setEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
@@ -95,12 +97,21 @@ export default function SubscribePage() {
           Resend
         </a>
         . See our{" "}
-        <a
-          href={compliance?.privacy_policy_url ?? "/page/privacy"}
-          className="underline hover:text-ink transition-colors"
-        >
-          Privacy Policy
-        </a>
+        {privacyPolicyUrl !== "" ? (
+          <a
+            href={privacyPolicyUrl}
+            className="underline hover:text-ink transition-colors"
+          >
+            Privacy Policy
+          </a>
+        ) : (
+          <Link
+            to="/page/privacy"
+            className="underline hover:text-ink transition-colors"
+          >
+            Privacy Policy
+          </Link>
+        )}
         .
       </p>
     </div>

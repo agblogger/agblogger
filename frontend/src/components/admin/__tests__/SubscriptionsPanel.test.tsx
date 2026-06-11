@@ -424,6 +424,27 @@ describe('SubscriptionsPanel', () => {
     expect(screen.getByText('Segment not found')).toBeInTheDocument()
   })
 
+  it('renders the broadcast sent-at timestamp as a localized string', async () => {
+    vi.mocked(apiMod.fetchBroadcasts).mockResolvedValue({
+      broadcasts: [
+        {
+          id: 5,
+          post_path: 'posts/hello',
+          post_title: 'Hello World',
+          resend_broadcast_id: 'br_5',
+          trigger: 'manual',
+          status: 'sent',
+          sent_at: '2024-01-01T12:00:00Z',
+          error: null,
+        },
+      ],
+    })
+    renderPanel()
+    await screen.findByText(/42/)
+    const expected = new Date('2024-01-01T12:00:00Z').toLocaleString()
+    await waitFor(() => expect(screen.getByText(expected)).toBeInTheDocument())
+  })
+
   it('shows empty state when no broadcasts', async () => {
     renderPanel()
     await screen.findByText(/42/)

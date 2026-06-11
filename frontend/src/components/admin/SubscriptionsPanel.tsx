@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 
 import {
@@ -13,6 +13,7 @@ import {
 import { fetchPosts } from '@/api/posts'
 import type { PostSummary } from '@/api/client'
 import { extractErrorDetail } from '@/api/parseError'
+import { mapWithConcurrency } from '@/utils/concurrency'
 import { refreshSiteConfig } from '@/stores/siteStore'
 import AlertBanner from '@/components/AlertBanner'
 import ToggleSwitch from './ToggleSwitch'
@@ -36,14 +37,21 @@ function wait(milliseconds: number): Promise<void> {
   return new Promise((resolve) => { window.setTimeout(resolve, milliseconds) })
 }
 
+const POSTS_FETCH_CONCURRENCY = 5
+
 async function fetchAllPublishedPosts(): Promise<PostSummary[]> {
   const params = { per_page: 100, sort: 'created_at' as const, order: 'desc' as const }
   const firstPage = await fetchPosts({ ...params, page: 1 })
-  const remainingPages = await Promise.all(
-    Array.from(
-      { length: Math.max(firstPage.total_pages - 1, 0) },
-      (_, index) => fetchPosts({ ...params, page: index + 2 }),
-    ),
+  const remainingPageNumbers = Array.from(
+    { length: Math.max(firstPage.total_pages - 1, 0) },
+    (_, index) => index + 2,
+  )
+  // Bound parallelism so a blog with many pages can't fire an unbounded burst
+  // of simultaneous requests on panel mount.
+  const remainingPages = await mapWithConcurrency(
+    remainingPageNumbers,
+    POSTS_FETCH_CONCURRENCY,
+    (page) => fetchPosts({ ...params, page }),
   )
   const pages = [firstPage, ...remainingPages]
   return pages.flatMap((response) => response.posts).filter((post) => !post.is_draft)
@@ -219,6 +227,17 @@ export default function SubscriptionsPanel({ busy, onBusyChange }: Props) {
   }
 
   const allBusy = busy || saving || broadcastBusy || testEmailBusy
+
+  // Pre-format timestamps once per data change so the polling re-renders during
+  // a broadcast send don't re-parse every row's date on each render.
+  const broadcastRows = useMemo(
+    () =>
+      broadcasts.map((broadcast) => ({
+        ...broadcast,
+        sentAtLabel: new Date(broadcast.sent_at).toLocaleString(),
+      })),
+    [broadcasts],
+  )
 
   if (loading) {
     return (
@@ -476,7 +495,7 @@ export default function SubscriptionsPanel({ busy, onBusyChange }: Props) {
 
       {/* ── Broadcast history ── */}
       <div className="border-t border-border pt-5">
-        {broadcasts.length === 0 ? (
+        {broadcastRows.length === 0 ? (
           <p className="text-sm text-muted">No broadcasts yet.</p>
         ) : (
           <div className="overflow-x-auto rounded-lg border border-border">
@@ -490,10 +509,10 @@ export default function SubscriptionsPanel({ busy, onBusyChange }: Props) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {broadcasts.map((b) => (
+                {broadcastRows.map((b) => (
                   <tr key={b.id} className="bg-paper hover:bg-paper-warm transition-colors">
                     <td className="px-4 py-2 text-ink">{b.post_title}</td>
-                    <td className="px-4 py-2 text-muted">{new Date(b.sent_at).toLocaleString()}</td>
+                    <td className="px-4 py-2 text-muted">{b.sentAtLabel}</td>
                     <td className="px-4 py-2">
                       <span
                         className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${

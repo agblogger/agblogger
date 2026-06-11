@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import SubscribePage from '@/pages/SubscribePage'
 import * as apiMod from '@/api/subscriptions'
 import { useSiteStore } from '@/stores/siteStore'
@@ -69,6 +69,43 @@ describe('SubscribePage', () => {
     expect(screen.getByRole('link', { name: /privacy policy/i })).toHaveAttribute(
       'href',
       '/page/privacy',
+    )
+  })
+
+  it('navigates to the privacy page client-side when no external URL is configured', async () => {
+    useSiteStore.setState({
+      config: {
+        title: 'Blog',
+        description: '',
+        pages: [],
+        subscriptions_enabled: true,
+        subscription_compliance: {
+          controller_name: null,
+          controller_contact: null,
+          privacy_policy_url: null,
+        },
+      },
+      isLoading: false,
+      error: null,
+    })
+    render(
+      <MemoryRouter initialEntries={['/subscribe']}>
+        <Routes>
+          <Route path="/subscribe" element={<SubscribePage />} />
+          <Route path="/page/privacy" element={<div>Privacy Page Loaded</div>} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    fireEvent.click(screen.getByRole('link', { name: /privacy policy/i }))
+    expect(await screen.findByText('Privacy Page Loaded')).toBeInTheDocument()
+  })
+
+  it('links out to a configured external privacy policy URL', () => {
+    // beforeEach configures an external privacy_policy_url.
+    renderPage()
+    expect(screen.getByRole('link', { name: /privacy policy/i })).toHaveAttribute(
+      'href',
+      'https://example.com/legal/privacy',
     )
   })
 
