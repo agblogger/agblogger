@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from svix.webhooks import WebhookVerificationError
 
 from backend.api.deps import (
     get_session,
@@ -36,7 +37,6 @@ from backend.services.subscription_service import (
     EnablePreconditionError,
     SubscriptionsDisabledError,
 )
-from svix.webhooks import WebhookVerificationError
 from backend.utils.slug import file_path_to_slug
 
 logger = logging.getLogger(__name__)
@@ -251,7 +251,7 @@ async def resend_webhook_endpoint(
             secret_key=settings.secret_key,
         )
     except WebhookVerificationError:
-        raise HTTPException(status_code=400, detail="Invalid webhook signature")
+        raise HTTPException(status_code=400, detail="Invalid webhook signature") from None
     except Exception:
         logger.warning("Resend webhook processing error", exc_info=True)
     return {}
