@@ -119,3 +119,66 @@ def test_broadcast_email_escapes_footer_fields() -> None:
 def test_confirmation_html_always_escapes_controller_name(name: str) -> None:
     html, _ = build_confirmation_email(confirm_url="https://blog.example/c", controller_name=name)
     assert _html.escape(name) in html
+
+
+def _broadcast(post_html: str, *, title: str = "Hello") -> str:
+    html, _text = build_broadcast_email(
+        post_url="https://blog.example/post/hello",
+        post_title=title,
+        post_html=post_html,
+        controller_name="Jane Blog",
+        postal_address="1 Main St, Town",
+    )
+    return html
+
+
+def test_broadcast_email_renders_inline_math_as_image() -> None:
+    html = _broadcast('<p>Euler: <span class="math inline">e^{i\\pi}+1=0</span>.</p>')
+    assert "latex.codecogs.com" in html
+    assert "<img" in html
+    # The Pandoc math span must be gone, replaced by the image.
+    assert 'class="math inline"' not in html
+    # Raw TeX is preserved as alt text so a blocked image still reads.
+    assert 'alt="e^{i\\pi}+1=0"' in html
+
+
+def test_broadcast_email_renders_display_math_centered() -> None:
+    html = _broadcast('<p><span class="math display">\\int_0^1 x^2\\,dx</span></p>')
+    assert "<img" in html
+    # Block image with auto side-margins is centered and valid inside a <p>.
+    assert "display:block" in html
+    assert "margin:18px auto" in html
+    assert 'class="math display"' not in html
+    # No block element injected inside Pandoc's paragraph wrapper.
+    assert "<p><div" not in html
+
+
+def test_broadcast_email_math_url_encodes_decoded_tex() -> None:
+    # Pandoc HTML-escapes "<" inside the span; it must be decoded before
+    # URL-encoding for the image service (so "<" -> "%3C", not "&lt;").
+    html = _broadcast('<span class="math inline">a &lt; b</span>')
+    assert "%3C" in html  # URL-encoded "<" appears in the image src
+
+
+def test_broadcast_email_header_precedes_title_and_content() -> None:
+    html = _broadcast("<p>Body</p>", title="My Post")
+    header_pos = html.index("View this post online")
+    title_pos = html.index("My Post")
+    body_pos = html.index("<p>Body</p>")
+    # Header (post link + unsubscribe) comes first, then the title, then content.
+    assert header_pos < title_pos < body_pos
+    assert "{{{RESEND_UNSUBSCRIBE_URL}}}" in html[:body_pos]
+    assert "https://blog.example/post/hello" in html[:body_pos]
+
+
+def test_broadcast_email_shows_title_as_heading() -> None:
+    html = _broadcast("<p>Body</p>", title="My Post")
+    assert "<h1" in html
+    heading = html[html.index("<h1") : html.index("</h1>")]
+    assert "My Post" in heading
+
+
+def test_broadcast_email_does_not_turn_prose_into_math_image() -> None:
+    html = _broadcast("<p>No math here, just text.</p>")
+    assert "latex.codecogs.com" not in html
+    assert "No math here, just text." in html

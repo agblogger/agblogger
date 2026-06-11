@@ -25,6 +25,10 @@ Subscribing creates no server-side pending row. Instead, the backend signs a sho
 
 When a post transitions from draft to published (or is created as published), the publish hook in `backend/api/posts.py` fires a background task via `subscription_service.fire_post_broadcast`, gated on subscriptions being enabled. The task builds the post's HTML email from the already-sanitized rendered HTML and creates+sends a Resend broadcast to the segment.
 
+## Email Layout & Rendering
+
+`subscription_email.build_broadcast_email` wraps the rendered post HTML for delivery; it transforms only its email copy and never affects stored HTML or the web render path. The broadcast email has a visually separated header bar (View-online link + Unsubscribe), then the post title as a heading, then the post body, then the compliance footer (controller/address + Unsubscribe). Root-relative links/assets are rewritten to absolute URLs against the public post origin. Because email clients run no JavaScript, KaTeX cannot render client-side as it does on the web (see [editor.md](editor.md)/`useKatex`); instead `_render_math_images` rewrites Pandoc's `<span class="math …">` TeX into images from an external LaTeX service (`_MATH_IMAGE_BASE_URL`), with the raw TeX as `alt` so blocked images still read.
+
 An `already_broadcast` once-guard (keyed on a prior `sent` ledger row for the post path) prevents a second automatic send per post. The admin's manual trigger bypasses the once-guard. Background broadcast work is bounded and drained on graceful shutdown so in-flight sends complete, mirroring the analytics shutdown pattern.
 
 ## Enable Precondition
