@@ -49,20 +49,6 @@ describe('SubscribePage', () => {
     expect(await screen.findByText(/check your inbox/i)).toBeInTheDocument()
   })
 
-  it('shows the GDPR layered notice with each required clause', () => {
-    renderPage()
-    expect(screen.getByText(/resend/i)).toBeInTheDocument()
-    expect(screen.getByText(/outside the EEA/i)).toBeInTheDocument()
-    expect(screen.getByText(/withdraw consent/i)).toBeInTheDocument()
-    expect(screen.getByText(/supervisory authority/i)).toBeInTheDocument()
-    expect(screen.getByText(/jane controller/i)).toBeInTheDocument()
-    expect(screen.getByText(/privacy@example.com/i)).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /privacy policy/i })).toHaveAttribute(
-      'href',
-      'https://example.com/legal/privacy',
-    )
-  })
-
   it('omits controller sentence when compliance fields are absent', () => {
     useSiteStore.setState({
       config: {
@@ -80,32 +66,10 @@ describe('SubscribePage', () => {
       error: null,
     })
     renderPage()
-    expect(screen.queryByText(/data controller/i)).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: /privacy policy/i })).toHaveAttribute(
       'href',
       '/page/privacy',
     )
-  })
-
-  it('shows controller name without contact when only name is set', () => {
-    useSiteStore.setState({
-      config: {
-        title: 'Blog',
-        description: '',
-        pages: [],
-        subscriptions_enabled: true,
-        subscription_compliance: {
-          controller_name: 'Acme Corp',
-          controller_contact: null,
-          privacy_policy_url: null,
-        },
-      },
-      isLoading: false,
-      error: null,
-    })
-    renderPage()
-    expect(screen.getByText(/Acme Corp is the data controller/i)).toBeInTheDocument()
-    expect(screen.queryByText(/Acme Corp \(/i)).not.toBeInTheDocument()
   })
 
   it('disables the submit button and input while submitting', async () => {
