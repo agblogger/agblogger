@@ -86,8 +86,8 @@ export default function SubscribePage() {
       </form>
 
       <p className="text-xs text-muted mt-6 leading-relaxed">
-        We use your email only to notify you of new posts. Email is delivered by
-        Resend as our processor. See our{" "}
+        We use your email only to notify you of new posts. Resend is the data
+        processor. See our{" "}
         <a
           href={compliance?.privacy_policy_url ?? "/page/privacy"}
           className="underline hover:text-ink transition-colors"
