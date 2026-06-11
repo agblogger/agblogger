@@ -12,7 +12,8 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
-from svix.webhooks import Webhook, WebhookVerificationError as WebhookVerificationError
+from svix.webhooks import Webhook
+from svix.webhooks import WebhookVerificationError as WebhookVerificationError
 
 from backend.models.subscription import SubscriptionBroadcast, SubscriptionSettings
 from backend.schemas.subscription import SubscriptionSettingsResponse
@@ -450,7 +451,7 @@ async def handle_resend_webhook(
 
     try:
         payload = json.loads(raw_body)
-    except (ValueError, UnicodeDecodeError):
+    except ValueError, UnicodeDecodeError:
         logger.warning("Resend webhook: malformed JSON body")
         return
 
@@ -463,9 +464,7 @@ async def handle_resend_webhook(
     audience_id = data.get("audience_id")
 
     if not contact_id or not audience_id:
-        logger.warning(
-            "Resend webhook: contact.unsubscribed missing contact id or audience_id"
-        )
+        logger.warning("Resend webhook: contact.unsubscribed missing contact id or audience_id")
         return
 
     api_key = decrypt_api_key(row, secret_key)
@@ -479,9 +478,7 @@ async def handle_resend_webhook(
         await resend_client.delete_contact(
             api_key=api_key, audience_id=audience_id, contact_id=contact_id
         )
-        logger.info(
-            "Deleted unsubscribed contact %s from audience %s", contact_id, audience_id
-        )
+        logger.info("Deleted unsubscribed contact %s from audience %s", contact_id, audience_id)
     except resend_client.ResendError as exc:
         logger.warning(
             "Resend webhook: failed to delete contact %s from audience %s: %s",

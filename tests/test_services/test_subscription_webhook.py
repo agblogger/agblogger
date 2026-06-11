@@ -22,9 +22,7 @@ _WEBHOOK_SECRET_BYTES = b"w" * 32
 _WEBHOOK_SECRET = "whsec_" + base64.b64encode(_WEBHOOK_SECRET_BYTES).decode()
 
 
-def _svix_headers(
-    payload: bytes, msg_id: str = "msg_test_1"
-) -> dict[str, str]:
+def _svix_headers(payload: bytes, msg_id: str = "msg_test_1") -> dict[str, str]:
     """Generate svix-compatible signature headers with a current timestamp."""
     ts = str(int(time.time()))
     to_sign = f"{msg_id}.{ts}.".encode() + payload

@@ -270,9 +270,7 @@ async def test_delete_contact_success(monkeypatch: pytest.MonkeyPatch) -> None:
         return httpx.Response(200, json={"id": "contact_1"})
 
     monkeypatch.setattr(resend_client, "_get_client", lambda: _client(handler))
-    await resend_client.delete_contact(
-        api_key="re_x", audience_id="aud_1", contact_id="contact_1"
-    )
+    await resend_client.delete_contact(api_key="re_x", audience_id="aud_1", contact_id="contact_1")
     assert seen["method"] == "DELETE"
     assert "aud_1/contacts/contact_1" in seen["url"]
 
@@ -284,9 +282,7 @@ async def test_delete_contact_404_treated_as_success(monkeypatch: pytest.MonkeyP
 
     monkeypatch.setattr(resend_client, "_get_client", lambda: _client(handler))
     # Must not raise
-    await resend_client.delete_contact(
-        api_key="re_x", audience_id="aud_1", contact_id="gone"
-    )
+    await resend_client.delete_contact(api_key="re_x", audience_id="aud_1", contact_id="gone")
 
 
 @pytest.mark.asyncio
@@ -296,9 +292,7 @@ async def test_delete_contact_other_error_raises(monkeypatch: pytest.MonkeyPatch
 
     monkeypatch.setattr(resend_client, "_get_client", lambda: _client(handler))
     with pytest.raises(ResendError, match="Invalid API key"):
-        await resend_client.delete_contact(
-            api_key="re_bad", audience_id="aud_1", contact_id="c1"
-        )
+        await resend_client.delete_contact(api_key="re_bad", audience_id="aud_1", contact_id="c1")
 
 
 @pytest.mark.asyncio
@@ -308,6 +302,4 @@ async def test_delete_contact_network_error_raises(monkeypatch: pytest.MonkeyPat
 
     monkeypatch.setattr(resend_client, "_get_client", lambda: _client(handler))
     with pytest.raises(ResendError, match="Could not reach the email provider"):
-        await resend_client.delete_contact(
-            api_key="re_x", audience_id="aud_1", contact_id="c1"
-        )
+        await resend_client.delete_contact(api_key="re_x", audience_id="aud_1", contact_id="c1")

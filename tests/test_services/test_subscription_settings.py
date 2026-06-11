@@ -372,8 +372,10 @@ async def test_webhook_secret_encrypted_and_flag_set(session: AsyncSession) -> N
     )
     row = await subscription_service._get_row(session)
     assert row is not None
-    assert row.resend_webhook_secret_encrypted not in (None, "whsec_test123")
-    assert decrypt_value(row.resend_webhook_secret_encrypted, SECRET) == "whsec_test123"
+    encrypted = row.resend_webhook_secret_encrypted
+    assert encrypted is not None
+    assert encrypted != "whsec_test123"
+    assert decrypt_value(encrypted, SECRET) == "whsec_test123"
 
 
 @pytest.mark.asyncio
