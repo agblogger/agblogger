@@ -421,3 +421,53 @@ async def test_webhook_resend_api_failure_still_returns_200(
         headers={**_svix_headers(payload), "content-type": "application/json"},
     )
     assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_webhook_unknown_event_type_returns_200(
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+    enable_webhook_secret: None,
+) -> None:
+    delete_calls: list[str] = []
+
+    async def fake_delete(*, api_key: str, audience_id: str, contact_id: str) -> None:
+        delete_calls.append(contact_id)
+
+    monkeypatch.setattr(resend_client, "delete_contact", fake_delete)
+
+    payload = json.dumps(
+        {"type": "contact.created", "data": {"audience_id": "aud_1", "contact": {"id": "c1"}}}
+    ).encode()
+    resp = await client.post(
+        "/api/webhooks/resend",
+        content=payload,
+        headers={**_svix_headers(payload), "content-type": "application/json"},
+    )
+    assert resp.status_code == 200
+    assert delete_calls == []
+
+
+@pytest.mark.asyncio
+async def test_webhook_missing_contact_id_returns_200(
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+    enable_webhook_secret: None,
+) -> None:
+    delete_calls: list[str] = []
+
+    async def fake_delete(*, api_key: str, audience_id: str, contact_id: str) -> None:
+        delete_calls.append(contact_id)
+
+    monkeypatch.setattr(resend_client, "delete_contact", fake_delete)
+
+    payload = json.dumps(
+        {"type": "contact.unsubscribed", "data": {"audience_id": "aud_1", "contact": {}}}
+    ).encode()
+    resp = await client.post(
+        "/api/webhooks/resend",
+        content=payload,
+        headers={**_svix_headers(payload), "content-type": "application/json"},
+    )
+    assert resp.status_code == 200
+    assert delete_calls == []
