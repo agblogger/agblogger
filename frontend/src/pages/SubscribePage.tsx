@@ -1,31 +1,33 @@
-import { useState } from 'react'
-import AlertBanner from '@/components/AlertBanner'
-import { subscribe } from '@/api/subscriptions'
-import { HTTPError } from '@/api/client'
-import { useSiteStore } from '@/stores/siteStore'
+import { useState } from "react";
+import AlertBanner from "@/components/AlertBanner";
+import { subscribe } from "@/api/subscriptions";
+import { HTTPError } from "@/api/client";
+import { useSiteStore } from "@/stores/siteStore";
 
 export default function SubscribePage() {
-  const compliance = useSiteStore((state) => state.config?.subscription_compliance)
-  const [email, setEmail] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-  const [done, setDone] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const compliance = useSiteStore(
+    (state) => state.config?.subscription_compliance,
+  );
+  const [email, setEmail] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setSubmitting(true)
-    setError(null)
+    e.preventDefault();
+    setSubmitting(true);
+    setError(null);
     try {
-      await subscribe(email)
-      setDone(true)
+      await subscribe(email);
+      setDone(true);
     } catch (err) {
       setError(
         err instanceof HTTPError && err.response.status === 429
-          ? 'Too many requests. Please try again later.'
-          : 'Subscriptions are currently unavailable. Please try again later.',
-      )
+          ? "Too many requests. Please try again later."
+          : "Subscriptions are currently unavailable. Please try again later.",
+      );
     } finally {
-      setSubmitting(false)
+      setSubmitting(false);
     }
   }
 
@@ -37,7 +39,7 @@ export default function SubscribePage() {
           Please check your inbox to confirm your subscription.
         </p>
       </div>
-    )
+    );
   }
 
   return (
@@ -48,7 +50,10 @@ export default function SubscribePage() {
         {error !== null && <AlertBanner variant="error">{error}</AlertBanner>}
 
         <div>
-          <label htmlFor="sub-email" className="block text-sm font-medium text-ink mb-1.5">
+          <label
+            htmlFor="sub-email"
+            className="block text-sm font-medium text-ink mb-1.5"
+          >
             Email
           </label>
           <input
@@ -59,8 +64,8 @@ export default function SubscribePage() {
             required
             value={email}
             onChange={(e) => {
-              setEmail(e.target.value)
-              setError(null)
+              setEmail(e.target.value);
+              setError(null);
             }}
             disabled={submitting}
             placeholder="you@example.com"
@@ -76,21 +81,15 @@ export default function SubscribePage() {
           className="w-full py-2.5 bg-accent text-white rounded-lg font-medium
                    hover:bg-accent-light disabled:opacity-50 transition-colors"
         >
-          {submitting ? 'Subscribing…' : 'Subscribe'}
+          {submitting ? "Subscribing…" : "Subscribe"}
         </button>
       </form>
 
       <p className="text-xs text-muted mt-6 leading-relaxed">
-        {compliance?.controller_name != null && compliance.controller_name !== ''
-          ? `${compliance.controller_name}${compliance.controller_contact != null && compliance.controller_contact !== '' ? ` (${compliance.controller_contact})` : ''} is the data controller. `
-          : ''}
-        We use your email only to notify you of new posts, based on your consent. Email is
-        delivered by Resend (Plus Five Five, Inc., USA) as our processor; this involves a transfer
-        outside the EEA under appropriate safeguards. We keep your address until you
-        unsubscribe (a link is in every email). You can withdraw consent at any time and
-        lodge a complaint with a supervisory authority. See our{' '}
+        We use your email only to notify you of new posts. Email is delivered by
+        Resend as our processor. See our{" "}
         <a
-          href={compliance?.privacy_policy_url ?? '/page/privacy'}
+          href={compliance?.privacy_policy_url ?? "/page/privacy"}
           className="underline hover:text-ink transition-colors"
         >
           Privacy Policy
@@ -98,5 +97,5 @@ export default function SubscribePage() {
         .
       </p>
     </div>
-  )
+  );
 }
