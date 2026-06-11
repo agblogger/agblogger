@@ -36,6 +36,7 @@ from backend.services import resend_client, subscription_service
 from backend.services.subscription_service import (
     EnablePreconditionError,
     SubscriptionsDisabledError,
+    WebhookProcessingError,
 )
 from backend.utils.slug import file_path_to_slug
 
@@ -223,7 +224,7 @@ async def trigger_broadcast_endpoint(
     if post is None or post.is_draft:
         raise HTTPException(status_code=404, detail="Published post not found")
     post_url = f"{_base_url(request)}/post/{file_path_to_slug(post.file_path)}"
-    subscription_service.fire_post_broadcast(
+    scheduled = subscription_service.fire_post_broadcast(
         session_factory,
         secret_key=settings.secret_key,
         post_path=post.file_path,
@@ -233,6 +234,11 @@ async def trigger_broadcast_endpoint(
         trigger="manual",
         enforce_once_guard=False,
     )
+    if not scheduled:
+        raise HTTPException(
+            status_code=503,
+            detail="Broadcast capacity is temporarily unavailable. Please try again.",
+        )
     return {"message": "Broadcast started"}
 
 
@@ -252,6 +258,14 @@ async def resend_webhook_endpoint(
         )
     except WebhookVerificationError:
         raise HTTPException(status_code=400, detail="Invalid webhook signature") from None
+    except WebhookProcessingError, resend_client.ResendError:
+        logger.warning("Resend unsubscribe deletion failed", exc_info=True)
+        raise HTTPException(
+            status_code=503, detail="Webhook processing temporarily unavailable"
+        ) from None
     except Exception:
         logger.warning("Resend webhook processing error", exc_info=True)
+        raise HTTPException(
+            status_code=503, detail="Webhook processing temporarily unavailable"
+        ) from None
     return {}

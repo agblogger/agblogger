@@ -163,7 +163,7 @@ async def test_fire_post_broadcast_runs_in_background(
     async with db_session_factory() as s:
         await _enable(s, monkeypatch)
 
-    subscription_service.fire_post_broadcast(
+    scheduled = subscription_service.fire_post_broadcast(
         db_session_factory,
         secret_key=SECRET,
         post_path="posts/y/index.md",
@@ -173,6 +173,7 @@ async def test_fire_post_broadcast_runs_in_background(
         trigger="auto",
         enforce_once_guard=True,
     )
+    assert scheduled is True
 
     # Drain all spawned background tasks deterministically.
     tasks = list(subscription_service._broadcast_tasks)
@@ -263,6 +264,26 @@ async def test_close_broadcast_tasks_drains_inflight(
         assert await subscription_service.already_broadcast(s, "posts/drain/index.md") is True
 
 
+def test_fire_post_broadcast_reports_capacity_rejection(
+    db_session_factory: async_sessionmaker[AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(subscription_service, "_MAX_BROADCAST_TASKS", 0)
+
+    scheduled = subscription_service.fire_post_broadcast(
+        db_session_factory,
+        secret_key=SECRET,
+        post_path="posts/rejected/index.md",
+        post_title="Rejected",
+        post_html="<p>b</p>",
+        post_url="u",
+        trigger="manual",
+        enforce_once_guard=False,
+    )
+
+    assert scheduled is False
+
+
 async def _enable(session: AsyncSession, monkeypatch: pytest.MonkeyPatch) -> None:
     async def fake_segment(**kwargs: str) -> str:
         return "seg_auto"
@@ -273,6 +294,7 @@ async def _enable(session: AsyncSession, monkeypatch: pytest.MonkeyPatch) -> Non
         secret_key=SECRET,
         enabled=True,
         api_key="re_x",
+        webhook_secret="whsec_test",
         from_email="a@b.com",
         from_name="Jane",
         controller_name="Jane Blog",

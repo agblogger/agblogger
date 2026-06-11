@@ -69,6 +69,7 @@ async def enable_subscriptions(client: AsyncClient, monkeypatch: pytest.MonkeyPa
             secret_key=secret_key,
             enabled=True,
             api_key="re_test_key",
+            webhook_secret="whsec_test",
             from_email="blog@example.com",
             from_name="Test Blog",
             controller_name="Test Controller",

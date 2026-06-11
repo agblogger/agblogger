@@ -77,6 +77,7 @@ async def enable_subscriptions(client: AsyncClient, monkeypatch: pytest.MonkeyPa
             secret_key=secret_key,
             enabled=True,
             api_key="re_test_key",
+            webhook_secret="whsec_test",
             from_email="blog@example.com",
             from_name="Test Blog",
             controller_name="Test Controller",
@@ -284,8 +285,9 @@ async def test_trigger_broadcast_success(
     """A valid published post triggers a manual broadcast (202) without the once-guard."""
     calls: list[dict[str, object]] = []
 
-    def fake_fire(*args: object, **kwargs: object) -> None:
+    def fake_fire(*args: object, **kwargs: object) -> bool:
         calls.append(kwargs)
+        return True
 
     monkeypatch.setattr(subscription_service, "fire_post_broadcast", fake_fire)
 
@@ -307,6 +309,25 @@ async def test_trigger_broadcast_success(
     assert recorded["trigger"] == "manual"
     assert recorded["enforce_once_guard"] is False
     assert recorded["post_path"] == file_path
+
+
+@pytest.mark.asyncio
+async def test_trigger_broadcast_reports_capacity_rejection(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch, enable_subscriptions: None
+) -> None:
+    monkeypatch.setattr(subscription_service, "fire_post_broadcast", lambda *args, **kwargs: False)
+    file_path = "posts/capacity-rejected/index.md"
+    await _seed_published_post(client, file_path)
+    token = await _get_admin_token(client)
+
+    resp = await client.post(
+        "/api/admin/subscriptions/broadcasts",
+        json={"post_path": file_path},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert resp.status_code == 503
+    assert "capacity" in resp.json()["detail"].lower()
 
 
 _WEBHOOK_SECRET_BYTES = b"w" * 32
@@ -338,6 +359,7 @@ async def enable_webhook_secret(client: AsyncClient) -> None:
         await subscription_service.update_settings(
             session,
             secret_key=secret_key,
+            api_key="re_test_key",
             webhook_secret=_TEST_WEBHOOK_SECRET,
         )
 
@@ -387,19 +409,18 @@ async def test_webhook_bad_signature_returns_400(
 
 
 @pytest.mark.asyncio
-async def test_webhook_no_secret_configured_returns_200(client: AsyncClient) -> None:
-    # No webhook secret set — endpoint returns 200 and does nothing.
+async def test_webhook_no_secret_configured_returns_retryable_error(client: AsyncClient) -> None:
     payload = b'{"type": "contact.unsubscribed", "data": {}}'
     resp = await client.post(
         "/api/webhooks/resend",
         content=payload,
         headers={"content-type": "application/json"},
     )
-    assert resp.status_code == 200
+    assert resp.status_code == 503
 
 
 @pytest.mark.asyncio
-async def test_webhook_resend_api_failure_still_returns_200(
+async def test_webhook_resend_api_failure_returns_retryable_error(
     client: AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
     enable_webhook_secret: None,
@@ -420,7 +441,7 @@ async def test_webhook_resend_api_failure_still_returns_200(
         content=payload,
         headers={**_svix_headers(payload), "content-type": "application/json"},
     )
-    assert resp.status_code == 200
+    assert resp.status_code == 503
 
 
 @pytest.mark.asyncio
@@ -449,7 +470,7 @@ async def test_webhook_unknown_event_type_returns_200(
 
 
 @pytest.mark.asyncio
-async def test_webhook_missing_contact_id_returns_200(
+async def test_webhook_missing_contact_id_returns_retryable_error(
     client: AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
     enable_webhook_secret: None,
@@ -469,5 +490,5 @@ async def test_webhook_missing_contact_id_returns_200(
         content=payload,
         headers={**_svix_headers(payload), "content-type": "application/json"},
     )
-    assert resp.status_code == 200
+    assert resp.status_code == 503
     assert delete_calls == []

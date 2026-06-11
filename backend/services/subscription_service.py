@@ -33,9 +33,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _SEGMENT_NAME = "AgBlogger subscribers"
-# Only from_email is required to enable; compliance fields are optional and
-# control which parts of the GDPR notice are shown on the subscribe page.
-_REQUIRED_TO_ENABLE = ("from_email",)
+# Compliance fields are optional and control which parts of the GDPR notice
+# are shown. The webhook secret is mandatory so unsubscribe events delete data.
+_REQUIRED_TO_ENABLE = ("from_email", "resend_webhook_secret_encrypted")
 
 
 class _Unset:
@@ -64,6 +64,10 @@ class SubscriptionsDisabledError(Exception):
     """Subscriptions are disabled or not fully configured."""
 
 
+class WebhookProcessingError(Exception):
+    """A verified webhook could not be processed and should be retried."""
+
+
 async def _get_row(session: AsyncSession) -> SubscriptionSettings | None:
     result = await session.execute(select(SubscriptionSettings).limit(1))
     return result.scalar_one_or_none()
@@ -72,7 +76,7 @@ async def _get_row(session: AsyncSession) -> SubscriptionSettings | None:
 async def is_enabled(session: AsyncSession) -> bool:
     """True iff subscriptions are configured and enabled."""
     row = await _get_row(session)
-    return bool(row and row.enabled)
+    return bool(row and row.enabled and row.resend_webhook_secret_encrypted)
 
 
 async def get_public_compliance(
@@ -84,7 +88,7 @@ async def get_public_compliance(
     part of the GDPR notice conditionally.
     """
     row = await _get_row(session)
-    if row is None or not row.enabled:
+    if row is None or not row.enabled or not row.resend_webhook_secret_encrypted:
         return None
     return PublicSubscriptionCompliance(
         controller_name=row.controller_name or None,
@@ -170,7 +174,13 @@ async def _prepare_enable(
         raise EnablePreconditionError("A Resend API key is required to enable subscriptions.")
     missing = [f for f in _REQUIRED_TO_ENABLE if not getattr(row, f)]
     if missing:
-        raise EnablePreconditionError("Set these before enabling: " + ", ".join(missing))
+        labels = {
+            "from_email": "from_email",
+            "resend_webhook_secret_encrypted": "webhook secret",
+        }
+        raise EnablePreconditionError(
+            "Set these before enabling: " + ", ".join(labels[field] for field in missing)
+        )
     api_key = decrypt_api_key(row, secret_key)
     if api_key is None:
         raise EnablePreconditionError("A Resend API key is required to enable subscriptions.")
@@ -241,7 +251,7 @@ def _from_header(row: SubscriptionSettings) -> str:
 async def subscribe(session: AsyncSession, *, secret_key: str, email: str, base_url: str) -> None:
     """Send a confirmation email. Persists nothing. Raises if not configured/enabled."""
     row = await _get_row(session)
-    if row is None or not row.enabled:
+    if row is None or not row.enabled or not row.resend_webhook_secret_encrypted:
         raise SubscriptionsDisabledError()
     api_key = decrypt_api_key(row, secret_key)
     from_email = row.from_email
@@ -292,7 +302,7 @@ async def confirm(session: AsyncSession, *, secret_key: str, token: str) -> bool
     if email is None:
         return False
     row = await _get_row(session)
-    if row is None or not row.enabled:
+    if row is None or not row.enabled or not row.resend_webhook_secret_encrypted:
         return False
     segment_id = row.resend_segment_id
     if not segment_id:
@@ -344,7 +354,12 @@ async def send_broadcast(
         error=None,
     )
     try:
-        if row is None or not row.enabled or not row.resend_segment_id:
+        if (
+            row is None
+            or not row.enabled
+            or not row.resend_webhook_secret_encrypted
+            or not row.resend_segment_id
+        ):
             record.error = "Subscriptions not configured"
         else:
             api_key = decrypt_api_key(row, secret_key)
@@ -392,11 +407,11 @@ def fire_post_broadcast(
     post_url: str,
     trigger: str,
     enforce_once_guard: bool,
-) -> None:
+) -> bool:
     """Schedule a fire-and-forget broadcast. Used by the publish hook + manual trigger."""
     if len(_broadcast_tasks) >= _MAX_BROADCAST_TASKS:
         logger.warning("Dropping broadcast for %s: task limit reached", post_path)
-        return
+        return False
 
     async def _run() -> None:
         try:
@@ -421,6 +436,7 @@ def fire_post_broadcast(
     task = asyncio.create_task(_run())
     _broadcast_tasks.add(task)
     task.add_done_callback(_broadcast_tasks.discard)
+    return True
 
 
 async def handle_resend_webhook(
@@ -433,18 +449,16 @@ async def handle_resend_webhook(
     """Verify Resend webhook signature and process the event.
 
     Raises WebhookVerificationError on bad signature — caller maps this to 400.
-    All other failures (missing config, Resend API errors, malformed payload)
-    are logged and swallowed so the caller can return 200.
+    Processing failures raise WebhookProcessingError or ResendError so the
+    endpoint can return a retryable response.
     """
     row = await _get_row(session)
     if row is None or not row.resend_webhook_secret_encrypted:
-        logger.warning("Resend webhook received but no webhook secret is configured; ignoring")
-        return
+        raise WebhookProcessingError("Resend webhook secret is not configured")
 
     webhook_secret = decrypt_webhook_secret(row, secret_key)
     if webhook_secret is None:
-        logger.warning("Resend webhook: failed to decrypt webhook secret; ignoring")
-        return
+        raise WebhookProcessingError("Resend webhook secret could not be decrypted")
 
     # Raises WebhookVerificationError on bad/expired signature — propagated to caller.
     Webhook(webhook_secret).verify(raw_body, headers)
@@ -452,8 +466,7 @@ async def handle_resend_webhook(
     try:
         payload = json.loads(raw_body)
     except ValueError, UnicodeDecodeError:
-        logger.warning("Resend webhook: malformed JSON body")
-        return
+        raise WebhookProcessingError("Resend webhook body is malformed") from None
 
     if payload.get("type") != "contact.unsubscribed":
         return
@@ -464,15 +477,11 @@ async def handle_resend_webhook(
     audience_id = data.get("audience_id")
 
     if not contact_id or not audience_id:
-        logger.warning("Resend webhook: contact.unsubscribed missing contact id or audience_id")
-        return
+        raise WebhookProcessingError("contact.unsubscribed missing contact id or audience_id")
 
     api_key = decrypt_api_key(row, secret_key)
     if api_key is None:
-        logger.warning(
-            "Resend webhook: API key not configured; cannot delete contact %s", contact_id
-        )
-        return
+        raise WebhookProcessingError("Resend API key is not configured")
 
     try:
         await resend_client.delete_contact(
@@ -486,6 +495,7 @@ async def handle_resend_webhook(
             audience_id,
             exc,
         )
+        raise
 
 
 async def close_broadcast_tasks() -> None:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from html import escape
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -35,16 +36,16 @@ def _privacy_policy_page(compliance: PublicSubscriptionCompliance | None) -> Pag
     if compliance is not None:
         if compliance.controller_name:
             contact_part = (
-                f", contact: {compliance.controller_contact}"
+                f", contact: {escape(compliance.controller_contact)}"
                 if compliance.controller_contact
                 else ""
             )
             controller_html = (
-                f"<h2>Data controller</h2><p>{compliance.controller_name}{contact_part}</p>"
+                f"<h2>Data controller</h2><p>{escape(compliance.controller_name)}{contact_part}</p>"
             )
         elif compliance.controller_contact:
             controller_html = (
-                f"<h2>Data controller contact</h2><p>{compliance.controller_contact}</p>"
+                f"<h2>Data controller contact</h2><p>{escape(compliance.controller_contact)}</p>"
             )
 
     html = (

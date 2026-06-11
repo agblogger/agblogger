@@ -69,6 +69,7 @@ async def test_site_config_reports_enabled_with_full_compliance(
             secret_key=secret_key,
             enabled=True,
             api_key="re_x",
+            webhook_secret="whsec_test",
             from_email="a@b.com",
             controller_name="J",
             controller_contact="j@b.com",
@@ -106,6 +107,7 @@ async def test_site_config_reports_enabled_with_partial_compliance(
             secret_key=secret_key,
             enabled=True,
             api_key="re_x",
+            webhook_secret="whsec_test",
             from_email="a@b.com",
         )
 

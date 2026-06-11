@@ -70,6 +70,7 @@ describe('fetchSubscriptionSettings', () => {
       privacy_policy_url: null,
       postal_address: null,
       key_configured: true,
+      webhook_secret_configured: true,
       segment_configured: false,
       subscriber_count: 42,
     }
@@ -99,6 +100,7 @@ describe('updateSubscriptionSettings', () => {
       privacy_policy_url: null,
       postal_address: null,
       key_configured: false,
+      webhook_secret_configured: false,
       segment_configured: false,
       subscriber_count: null,
     }

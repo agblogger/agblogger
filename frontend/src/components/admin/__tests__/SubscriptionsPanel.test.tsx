@@ -28,6 +28,7 @@ const FULL_SETTINGS = {
   privacy_policy_url: 'https://b/p',
   postal_address: 'x',
   key_configured: true,
+  webhook_secret_configured: true,
   segment_configured: true,
   subscriber_count: 42,
 }
@@ -89,7 +90,7 @@ describe('SubscriptionsPanel', () => {
   it('shows subscriber count and key status', async () => {
     renderPanel()
     expect(await screen.findByText(/42/)).toBeInTheDocument()
-    await waitFor(() => expect(screen.getByText(/configured/i)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getAllByText(/configured/i)).toHaveLength(2))
   })
 
   it('shows loading state initially, then content', async () => {
@@ -105,6 +106,17 @@ describe('SubscriptionsPanel', () => {
 
   it('enable toggle is DISABLED when api key or from_email is missing', async () => {
     vi.mocked(apiMod.fetchSubscriptionSettings).mockResolvedValue(INCOMPLETE_SETTINGS)
+    renderPanel()
+    const toggle = await screen.findByRole('switch', { name: /enable subscriptions/i })
+    expect(toggle).toBeDisabled()
+  })
+
+  it('enable toggle is DISABLED when webhook secret is missing', async () => {
+    vi.mocked(apiMod.fetchSubscriptionSettings).mockResolvedValue({
+      ...FULL_SETTINGS,
+      enabled: false,
+      webhook_secret_configured: false,
+    })
     renderPanel()
     const toggle = await screen.findByRole('switch', { name: /enable subscriptions/i })
     expect(toggle).toBeDisabled()
@@ -168,7 +180,7 @@ describe('SubscriptionsPanel', () => {
     })
     renderPanel()
     await screen.findByText(/42/)
-    const keyInput = screen.getByPlaceholderText(/configured|not set/i)
+    const keyInput = screen.getByLabelText(/resend api key/i)
     await user.type(keyInput, 'test-api-key')
     const saveBtn = screen.getByRole('button', { name: /save settings/i })
     await user.click(saveBtn)
@@ -179,12 +191,26 @@ describe('SubscriptionsPanel', () => {
     )
   })
 
+  it('save includes webhook_secret when input is filled', async () => {
+    const user = userEvent.setup()
+    vi.mocked(apiMod.updateSubscriptionSettings).mockResolvedValue(FULL_SETTINGS)
+    renderPanel()
+    await screen.findByText(/42/)
+    await user.type(screen.getByLabelText(/webhook signing secret/i), 'whsec_new')
+    await user.click(screen.getByRole('button', { name: /save settings/i }))
+    await waitFor(() =>
+      expect(apiMod.updateSubscriptionSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ webhook_secret: 'whsec_new' }),
+      ),
+    )
+  })
+
   it('api_key input is cleared after successful save', async () => {
     const user = userEvent.setup()
     vi.mocked(apiMod.updateSubscriptionSettings).mockResolvedValue(FULL_SETTINGS)
     renderPanel()
     await screen.findByText(/42/)
-    const keyInput = screen.getByPlaceholderText(/configured|not set/i)
+    const keyInput = screen.getByLabelText(/resend api key/i)
     await user.type(keyInput, 'test-key')
     await user.click(screen.getByRole('button', { name: /save settings/i }))
     await waitFor(() => expect(keyInput).toHaveValue(''))
@@ -266,6 +292,36 @@ describe('SubscriptionsPanel', () => {
     await waitFor(() =>
       expect(apiMod.triggerBroadcast).toHaveBeenCalledWith('posts/hello'),
     )
+  })
+
+  it('polls until the triggered broadcast appears in history', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.mocked(apiMod.triggerBroadcast).mockResolvedValue({ message: 'Broadcast started' })
+    let fetchCount = 0
+    vi.mocked(apiMod.fetchBroadcasts).mockImplementation(async () => {
+      fetchCount += 1
+      return fetchCount < 3 ? { broadcasts: [] } : {
+        broadcasts: [{
+          id: 7,
+          post_path: 'posts/hello',
+          post_title: 'Hello World',
+          resend_broadcast_id: null,
+          trigger: 'manual',
+          status: 'failed',
+          sent_at: '2024-01-01T12:00:00Z',
+          error: 'Delivery failed',
+        }],
+      }
+    })
+    mockPostsWithOnePublished()
+    renderPanel()
+    await screen.findByText(/42/)
+    await user.selectOptions(screen.getByRole('combobox', { name: /select post/i }), 'posts/hello')
+    await user.click(screen.getByRole('button', { name: /send broadcast/i }))
+
+    expect(await screen.findByText('Delivery failed', {}, { timeout: 3000 })).toBeInTheDocument()
+    expect(fetchCount).toBeGreaterThanOrEqual(3)
   })
 
   it('does NOT call triggerBroadcast when confirm is cancelled', async () => {
@@ -394,6 +450,20 @@ describe('SubscriptionsPanel', () => {
     vi.mocked(apiMod.triggerBroadcast).mockReturnValue(
       new Promise<{ message: string }>((r) => { resolveTrigger = r }),
     )
+    vi.mocked(apiMod.fetchBroadcasts)
+      .mockResolvedValueOnce({ broadcasts: [] })
+      .mockResolvedValueOnce({
+        broadcasts: [{
+          id: 8,
+          post_path: 'posts/hello',
+          post_title: 'Hello World',
+          resend_broadcast_id: 'br_8',
+          trigger: 'manual',
+          status: 'sent',
+          sent_at: '2024-01-01T12:00:00Z',
+          error: null,
+        }],
+      })
     const onBusyChange = vi.fn()
     const user = userEvent.setup()
     renderPanel({ onBusyChange })

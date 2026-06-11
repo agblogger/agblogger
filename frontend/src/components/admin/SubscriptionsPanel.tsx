@@ -26,7 +26,14 @@ const INPUT_CLASS =
   'w-full rounded-lg border border-border bg-paper px-3 py-2 text-sm text-ink placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent/40 disabled:opacity-50 disabled:cursor-not-allowed'
 
 function isEnableAllowed(s: SubscriptionSettings): boolean {
-  return s.key_configured && Boolean(s.from_email)
+  return s.key_configured && s.webhook_secret_configured && Boolean(s.from_email)
+}
+
+const BROADCAST_POLL_ATTEMPTS = 10
+const BROADCAST_POLL_INTERVAL_MS = 250
+
+function wait(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => { window.setTimeout(resolve, milliseconds) })
 }
 
 async function fetchAllPublishedPosts(): Promise<PostSummary[]> {
@@ -51,6 +58,7 @@ export default function SubscriptionsPanel({ busy, onBusyChange }: Props) {
 
   // Settings form state
   const [apiKey, setApiKey] = useState('')
+  const [webhookSecret, setWebhookSecret] = useState('')
   const [fromEmail, setFromEmail] = useState('')
   const [fromName, setFromName] = useState('')
   const [controllerName, setControllerName] = useState('')
@@ -142,9 +150,13 @@ export default function SubscriptionsPanel({ busy, onBusyChange }: Props) {
       if (apiKey.length > 0) {
         patch.api_key = apiKey
       }
+      if (webhookSecret.length > 0) {
+        patch.webhook_secret = webhookSecret
+      }
       const updated = await updateSubscriptionSettings(patch)
       setSettings(updated)
       setApiKey('')
+      setWebhookSecret('')
       setSettingsSuccess('Settings saved.')
     } catch (err) {
       setSettingsError(await extractErrorDetail(err, 'Failed to save settings. Please try again.'))
@@ -164,10 +176,19 @@ export default function SubscriptionsPanel({ busy, onBusyChange }: Props) {
     setBroadcastError(null)
     setBroadcastSuccess(null)
     try {
+      const previousMaxId = broadcasts.reduce((maxId, broadcast) => Math.max(maxId, broadcast.id), 0)
       const result = await triggerBroadcast(selectedPostPath)
       setBroadcastSuccess(result.message)
-      const b = await fetchBroadcasts()
-      setBroadcasts(b.broadcasts)
+      for (let attempt = 0; attempt < BROADCAST_POLL_ATTEMPTS; attempt += 1) {
+        const response = await fetchBroadcasts()
+        setBroadcasts(response.broadcasts)
+        if (response.broadcasts.some(
+          (broadcast) => broadcast.id > previousMaxId && broadcast.post_path === selectedPostPath,
+        )) {
+          break
+        }
+        await wait(BROADCAST_POLL_INTERVAL_MS)
+      }
     } catch (err) {
       setBroadcastError(await extractErrorDetail(err, 'Failed to send broadcast. Please try again.'))
     } finally {
@@ -259,6 +280,28 @@ export default function SubscriptionsPanel({ busy, onBusyChange }: Props) {
               settings?.key_configured === true
                 ? 'configured — enter to replace'
                 : 'not set — paste API key here'
+            }
+            className={INPUT_CLASS}
+          />
+        </div>
+
+        <div className="sm:col-span-2">
+          <label className="block text-sm text-muted mb-1" htmlFor="webhook-secret">
+            Resend webhook signing secret{' '}
+            <span className={settings?.webhook_secret_configured === true ? 'text-green-600 dark:text-green-400' : 'text-muted'}>
+              {settings?.webhook_secret_configured === true ? '(configured)' : '(required)'}
+            </span>
+          </label>
+          <input
+            id="webhook-secret"
+            type="password"
+            value={webhookSecret}
+            disabled={allBusy}
+            onChange={(e) => setWebhookSecret(e.target.value)}
+            placeholder={
+              settings?.webhook_secret_configured === true
+                ? 'configured - enter to replace'
+                : 'required - paste webhook signing secret here'
             }
             className={INPUT_CLASS}
           />

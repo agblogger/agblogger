@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 SECRET = "s" * 48
+WEBHOOK_SECRET = "whsec_test"
 
 
 @pytest.fixture
@@ -47,19 +48,30 @@ async def test_key_encrypted_and_never_returned(session: AsyncSession) -> None:
 
 
 @pytest.mark.asyncio
-async def test_enable_requires_only_key_and_from_email(session: AsyncSession, monkeypatch) -> None:
+async def test_enable_requires_key_from_email_and_webhook_secret(
+    session: AsyncSession, monkeypatch
+) -> None:
     monkeypatch.setattr(resend_client, "create_segment", _fake_create_segment)
     # Missing from_email -> enabling must fail.
     with pytest.raises(subscription_service.EnablePreconditionError):
         await subscription_service.update_settings(
             session, secret_key=SECRET, enabled=True, api_key="re_x"
         )
-    # API key + from_email is sufficient — compliance fields are optional.
+    with pytest.raises(subscription_service.EnablePreconditionError, match="webhook"):
+        await subscription_service.update_settings(
+            session,
+            secret_key=SECRET,
+            enabled=True,
+            api_key="re_x",
+            from_email="a@b.com",
+        )
+    # Compliance fields remain optional once deletion webhook handling is configured.
     await subscription_service.update_settings(
         session,
         secret_key=SECRET,
         enabled=True,
         api_key="re_x",
+        webhook_secret="whsec_test",
         from_email="a@b.com",
     )
     row = await subscription_service._get_row(session)
@@ -110,6 +122,7 @@ async def test_enabled_settings_reject_clearing_from_email(
         secret_key=SECRET,
         enabled=True,
         api_key="re_x",
+        webhook_secret=WEBHOOK_SECRET,
         from_email="a@b.com",
     )
 
@@ -142,6 +155,7 @@ async def test_build_settings_response_never_contains_key(
         session,
         secret_key=SECRET,
         api_key="re_topSecret",
+        webhook_secret=WEBHOOK_SECRET,
         from_email="news@example.com",
         enabled=True,
     )
@@ -170,6 +184,7 @@ async def test_build_settings_response_resend_error_gives_none_count(
         session,
         secret_key=SECRET,
         api_key="re_x",
+        webhook_secret=WEBHOOK_SECRET,
         from_email="news@example.com",
         enabled=True,
     )
@@ -213,6 +228,7 @@ async def test_enable_resend_error_leaves_nothing_persisted(
             secret_key=SECRET,
             enabled=True,
             api_key="re_x",
+            webhook_secret=WEBHOOK_SECRET,
             from_email="a@b.com",
         )
     assert await subscription_service._get_row(session) is None
@@ -234,6 +250,7 @@ async def test_enable_twice_creates_segment_once(session: AsyncSession, monkeypa
 
     full_kwargs = {
         "api_key": "re_x",
+        "webhook_secret": WEBHOOK_SECRET,
         "from_email": "a@b.com",
     }
     await subscription_service.update_settings(
@@ -267,11 +284,21 @@ async def test_enable_with_valid_segment_does_not_recreate(
     monkeypatch.setattr(resend_client, "check_segment_exists", _exists_true)
 
     await subscription_service.update_settings(
-        session, secret_key=SECRET, enabled=True, api_key="re_x", from_email="a@b.com"
+        session,
+        secret_key=SECRET,
+        enabled=True,
+        api_key="re_x",
+        webhook_secret=WEBHOOK_SECRET,
+        from_email="a@b.com",
     )
     # Enable a second time — segment still exists, no re-creation.
     await subscription_service.update_settings(
-        session, secret_key=SECRET, enabled=True, api_key="re_x", from_email="a@b.com"
+        session,
+        secret_key=SECRET,
+        enabled=True,
+        api_key="re_x",
+        webhook_secret=WEBHOOK_SECRET,
+        from_email="a@b.com",
     )
     assert len(create_calls) == 1
     row = await subscription_service._get_row(session)
@@ -295,11 +322,21 @@ async def test_enable_with_stale_segment_recreates(session: AsyncSession, monkey
     monkeypatch.setattr(resend_client, "check_segment_exists", _exists_false)
 
     await subscription_service.update_settings(
-        session, secret_key=SECRET, enabled=True, api_key="re_x", from_email="a@b.com"
+        session,
+        secret_key=SECRET,
+        enabled=True,
+        api_key="re_x",
+        webhook_secret=WEBHOOK_SECRET,
+        from_email="a@b.com",
     )
     # Enable again — segment probe says it's gone, so a new one is created.
     await subscription_service.update_settings(
-        session, secret_key=SECRET, enabled=True, api_key="re_x", from_email="a@b.com"
+        session,
+        secret_key=SECRET,
+        enabled=True,
+        api_key="re_x",
+        webhook_secret=WEBHOOK_SECRET,
+        from_email="a@b.com",
     )
     assert len(create_calls) == 2
     row = await subscription_service._get_row(session)
@@ -327,14 +364,24 @@ async def test_check_segment_exists_error_during_reenable_propagates(
 
     monkeypatch.setattr(resend_client, "check_segment_exists", _check_ok)
     await subscription_service.update_settings(
-        session, secret_key=SECRET, enabled=True, api_key="re_x", from_email="a@b.com"
+        session,
+        secret_key=SECRET,
+        enabled=True,
+        api_key="re_x",
+        webhook_secret=WEBHOOK_SECRET,
+        from_email="a@b.com",
     )
 
     # Second enable — segment is stored, check_segment_exists raises.
     monkeypatch.setattr(resend_client, "check_segment_exists", _check_raises)
     with pytest.raises(resend_client.ResendError, match="auth failure"):
         await subscription_service.update_settings(
-            session, secret_key=SECRET, enabled=True, api_key="re_x", from_email="a@b.com"
+            session,
+            secret_key=SECRET,
+            enabled=True,
+            api_key="re_x",
+            webhook_secret=WEBHOOK_SECRET,
+            from_email="a@b.com",
         )
 
     # Row should still be enabled with the original segment (rollback preserved state).
@@ -356,7 +403,12 @@ async def test_first_enable_does_not_call_check_segment_exists(
 
     # First enable with no stored segment — check_segment_exists must not be invoked.
     await subscription_service.update_settings(
-        session, secret_key=SECRET, enabled=True, api_key="re_x", from_email="a@b.com"
+        session,
+        secret_key=SECRET,
+        enabled=True,
+        api_key="re_x",
+        webhook_secret=WEBHOOK_SECRET,
+        from_email="a@b.com",
     )
     row = await subscription_service._get_row(session)
     assert row is not None

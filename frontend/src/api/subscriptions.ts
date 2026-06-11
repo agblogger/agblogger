@@ -13,6 +13,7 @@ export interface SubscriptionSettings {
   privacy_policy_url: string | null
   postal_address: string | null
   key_configured: boolean
+  webhook_secret_configured: boolean
   segment_configured: boolean
   subscriber_count: number | null
 }
@@ -20,6 +21,7 @@ export interface SubscriptionSettings {
 export interface SubscriptionSettingsUpdate {
   enabled?: boolean
   api_key?: string
+  webhook_secret?: string
   from_email?: string | null
   from_name?: string | null
   controller_name?: string | null

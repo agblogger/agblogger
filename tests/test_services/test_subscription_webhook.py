@@ -113,20 +113,20 @@ async def test_handle_webhook_ignores_unknown_event_type(
 
 
 @pytest.mark.asyncio
-async def test_handle_webhook_no_secret_configured_returns_without_raising(
+async def test_handle_webhook_no_secret_configured_requests_retry(
     session: AsyncSession,
 ) -> None:
-    # No settings row at all — must return silently (no exception).
-    await subscription_service.handle_resend_webhook(
-        session,
-        raw_body=b"{}",
-        headers={},
-        secret_key=SECRET,
-    )
+    with pytest.raises(subscription_service.WebhookProcessingError):
+        await subscription_service.handle_resend_webhook(
+            session,
+            raw_body=b"{}",
+            headers={},
+            secret_key=SECRET,
+        )
 
 
 @pytest.mark.asyncio
-async def test_handle_webhook_resend_error_does_not_raise(
+async def test_handle_webhook_resend_error_raises_for_provider_retry(
     session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     async def fake_delete(**kwargs: object) -> None:
@@ -145,17 +145,17 @@ async def test_handle_webhook_resend_error_does_not_raise(
         }
     ).encode()
 
-    # Must not raise — errors are logged and swallowed
-    await subscription_service.handle_resend_webhook(
-        session,
-        raw_body=payload,
-        headers=_svix_headers(payload),
-        secret_key=SECRET,
-    )
+    with pytest.raises(resend_client.ResendError, match="network failure"):
+        await subscription_service.handle_resend_webhook(
+            session,
+            raw_body=payload,
+            headers=_svix_headers(payload),
+            secret_key=SECRET,
+        )
 
 
 @pytest.mark.asyncio
-async def test_handle_webhook_missing_contact_id_does_not_raise(
+async def test_handle_webhook_missing_contact_id_requests_retry(
     session: AsyncSession,
 ) -> None:
     await _configure_webhook_secret(session)
@@ -167,12 +167,13 @@ async def test_handle_webhook_missing_contact_id_does_not_raise(
         }
     ).encode()
 
-    await subscription_service.handle_resend_webhook(
-        session,
-        raw_body=payload,
-        headers=_svix_headers(payload),
-        secret_key=SECRET,
-    )
+    with pytest.raises(subscription_service.WebhookProcessingError):
+        await subscription_service.handle_resend_webhook(
+            session,
+            raw_body=payload,
+            headers=_svix_headers(payload),
+            secret_key=SECRET,
+        )
 
 
 @pytest.mark.asyncio

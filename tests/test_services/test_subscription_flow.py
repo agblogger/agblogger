@@ -164,6 +164,7 @@ async def _enable(session: AsyncSession, monkeypatch: pytest.MonkeyPatch) -> Non
         secret_key=SECRET,
         enabled=True,
         api_key="re_x",
+        webhook_secret="whsec_test",
         from_email="a@b.com",
         from_name="Jane",
         controller_name="Jane Blog",
