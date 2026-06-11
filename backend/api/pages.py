@@ -62,12 +62,11 @@ def _privacy_policy_page(compliance: PublicSubscriptionCompliance | None) -> Pag
         " DPA).</p>"
         "<h2>Retention</h2>"
         "<p>Your email address is deleted from our email service provider when you unsubscribe."
-        " Every email includes an unsubscribe link.</p>"
+        " Every email we send includes an unsubscribe link.</p>"
         "<h2>Your rights</h2>"
         "<p>Under applicable data protection law you have the right to access, rectify,"
         " erase, and port your data, to restrict or object to processing, and to withdraw"
-        " consent at any time. You may also lodge a complaint with a supervisory"
-        " authority.</p>" + controller_html
+        " consent at any time.</p>" + controller_html
     )
     return PageResponse(id="privacy", title="Privacy Policy", rendered_html=html)
 
