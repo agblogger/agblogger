@@ -40,6 +40,7 @@ Each target is fail-fast, and the default full gate `just check` runs `check-sta
 - Resolves the virtualenv's `site-packages` directory through `.venv/bin/python`, audits the installed environment with `pip-audit --path`, and reports vulnerabilities belonging to production dependencies exported from the lockfile.
   - Audits the locked runtime dependency union for all Python workspace packages, including the backend and standalone CLI, not the dev toolchain.
   - The export omits dev dependencies and editable workspace projects, so the audit reflects shipped third-party runtime dependencies from `uv.lock`.
+  - `cli/runtime_dependency_audit.py` validates audit output and falls back from PyPI to OSV when PyPI is unavailable or returns an invalid report. The gate fails closed if neither service returns a trustworthy report.
 
 ## Frontend (`check-frontend-static`)
 
