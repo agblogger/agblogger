@@ -34,6 +34,9 @@ _UNSUBSCRIBE_HREF = "{{{RESEND_UNSUBSCRIBE_URL}}}"
 # does on the web. Pandoc emits math as ``<span class="math …">`` carrying the
 # raw (HTML-escaped) TeX; for email we rewrite those spans into images rendered
 # by an external LaTeX service so the formulas display in Gmail and elsewhere.
+# Privacy/availability tradeoff: each image request leaks the reader's IP to
+# latex.codecogs.com and can act as an open-tracking signal; rendering depends
+# on the third-party service being reachable. No local alternative exists.
 _MATH_IMAGE_BASE_URL = "https://latex.codecogs.com/png.image?"
 _MATH_IMAGE_DPI = r"\dpi{120} "
 _MATH_SPAN_RE = re.compile(r'<span class="math (inline|display)">(.*?)</span>', re.DOTALL)

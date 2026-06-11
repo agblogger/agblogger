@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time as _time_module
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -16,7 +17,11 @@ from svix.webhooks import Webhook
 from svix.webhooks import WebhookVerificationError as WebhookVerificationError
 
 from backend.models.subscription import SubscriptionBroadcast, SubscriptionSettings
-from backend.schemas.subscription import SubscriptionSettingsResponse
+from backend.schemas.subscription import (
+    BroadcastStatus,
+    BroadcastTrigger,
+    SubscriptionSettingsResponse,
+)
 from backend.services import resend_client
 from backend.services.crypto_service import decrypt_value, encrypt_value
 from backend.services.subscription_email import build_broadcast_email, build_confirmation_email
@@ -33,6 +38,18 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _SEGMENT_NAME = "AgBlogger subscribers"
+# Short-lived in-memory cache for the Resend contact count, keyed by segment id.
+# Avoids walking all contact pages on every admin GET /settings poll.
+# TTL of 30 s is short enough to reflect real changes quickly, long enough to
+# avoid hammering the Resend API under aggressive polling.
+_COUNT_CACHE_TTL = 30.0  # seconds
+_count_cache: dict[str, tuple[float, int]] = {}
+
+
+def _time() -> float:
+    return _time_module.monotonic()
+
+
 # Compliance fields are optional and control which parts of the GDPR notice
 # are shown. The webhook secret is mandatory so unsubscribe events delete data.
 _REQUIRED_TO_ENABLE = ("from_email", "resend_webhook_secret_encrypted")
@@ -123,7 +140,8 @@ async def update_settings(
     privacy_policy_url: _StringUpdate = _UNSET,
     postal_address: _StringUpdate = _UNSET,
 ) -> SubscriptionSettings:
-    """Create/update the singleton, encrypting the key and enforcing the enable gate."""
+    """Create/update the singleton, encrypting the API key and webhook secret and enforcing
+    the enable gate."""
     row = await _get_row(session)
     if row is None:
         row = SubscriptionSettings(id=1)
@@ -168,7 +186,8 @@ async def update_settings(
 async def _prepare_enable(
     session: AsyncSession, row: SubscriptionSettings, secret_key: str
 ) -> None:
-    """Validate compliance config and ensure a live Resend segment exists before enabling."""
+    """Validate required config (API key, from_email, webhook secret) and ensure a live
+    Resend segment exists before enabling."""
     if not row.resend_api_key_encrypted:
         # Fast path: avoids the decryption call when no key is configured at all.
         raise EnablePreconditionError("A Resend API key is required to enable subscriptions.")
@@ -220,12 +239,24 @@ async def build_settings_response(
     count: int | None = None
     api_key = decrypt_api_key(row, secret_key)
     if api_key and row.resend_segment_id:
-        try:
-            count = await resend_client.count_contacts(
-                api_key=api_key, segment_id=row.resend_segment_id
-            )
-        except resend_client.ResendError:
-            count = None
+        cached = _count_cache.get(row.resend_segment_id)
+        if cached is not None:
+            ts, cached_count = cached
+            if _time() - ts < _COUNT_CACHE_TTL:
+                count = cached_count
+        if count is None:
+            try:
+                count = await resend_client.count_contacts(
+                    api_key=api_key, segment_id=row.resend_segment_id
+                )
+                _count_cache[row.resend_segment_id] = (_time(), count)
+            except resend_client.ResendError:
+                logger.warning(
+                    "Failed to count Resend contacts for segment %s",
+                    row.resend_segment_id,
+                    exc_info=True,
+                )
+                count = None
     return SubscriptionSettingsResponse(
         enabled=row.enabled,
         from_email=row.from_email,
@@ -326,7 +357,7 @@ async def already_broadcast(session: AsyncSession, post_path: str) -> bool:
         select(SubscriptionBroadcast)
         .where(
             SubscriptionBroadcast.post_path == post_path,
-            SubscriptionBroadcast.status == "sent",
+            SubscriptionBroadcast.status == BroadcastStatus.SENT,
         )
         .limit(1)
     )
@@ -341,7 +372,7 @@ async def send_broadcast(
     post_title: str,
     post_html: str,
     post_url: str,
-    trigger: str,
+    trigger: BroadcastTrigger,
 ) -> None:
     """Send one broadcast via Resend and record a ledger row. Never raises."""
     row = await _get_row(session)
@@ -349,7 +380,7 @@ async def send_broadcast(
         post_path=post_path,
         post_title=post_title,
         trigger=trigger,
-        status="failed",
+        status=BroadcastStatus.FAILED,
         sent_at=now_utc().isoformat(),
         error=None,
     )
@@ -378,16 +409,30 @@ async def send_broadcast(
                         controller_name=row.controller_name or from_email,
                         postal_address=row.postal_address or "",
                     )
-                    broadcast_id = await resend_client.create_and_send_broadcast(
-                        api_key=api_key,
-                        segment_id=segment_id,
-                        from_=_from_header(row),
-                        subject=post_title,
-                        html=html,
-                        text=text,
-                    )
+                    try:
+                        broadcast_id = await resend_client.create_and_send_broadcast(
+                            api_key=api_key,
+                            segment_id=segment_id,
+                            from_=_from_header(row),
+                            subject=post_title,
+                            html=html,
+                            text=text,
+                        )
+                    except resend_client.BroadcastSendError as exc:
+                        # Create succeeded but send failed — record the broadcast id so
+                        # it can be found in Resend for manual cleanup/retry.
+                        # NOTE: manual retrigger may double-send if the original broadcast
+                        # was already delivered before the send-POST error occurred.
+                        record.resend_broadcast_id = exc.broadcast_id
+                        logger.warning(
+                            "Broadcast %s created but send failed for %s",
+                            exc.broadcast_id,
+                            post_path,
+                            exc_info=True,
+                        )
+                        raise
                     record.resend_broadcast_id = broadcast_id
-                    record.status = "sent"
+                    record.status = BroadcastStatus.SENT
     except resend_client.ResendError as exc:
         record.error = str(exc)
     except Exception:  # never let a broadcast crash the caller
@@ -405,7 +450,7 @@ def fire_post_broadcast(
     post_title: str,
     post_html: str,
     post_url: str,
-    trigger: str,
+    trigger: BroadcastTrigger,
     enforce_once_guard: bool,
 ) -> bool:
     """Schedule a fire-and-forget broadcast. Used by the publish hook + manual trigger."""
@@ -461,7 +506,15 @@ async def handle_resend_webhook(
         raise WebhookProcessingError("Resend webhook secret could not be decrypted")
 
     # Raises WebhookVerificationError on bad/expired signature — propagated to caller.
-    Webhook(webhook_secret).verify(raw_body, headers)
+    # The Svix library also parses JSON inside verify; JSONDecodeError (a ValueError
+    # subclass) from malformed bodies is caught here and re-raised as a retryable
+    # WebhookProcessingError so the caller can return 503 rather than 500.
+    try:
+        Webhook(webhook_secret).verify(raw_body, headers)
+    except WebhookVerificationError:
+        raise
+    except ValueError, UnicodeDecodeError:
+        raise WebhookProcessingError("Resend webhook body is malformed") from None
 
     try:
         payload = json.loads(raw_body)

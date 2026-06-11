@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import jwt
+from hypothesis import given
+from hypothesis import strategies as st
 
 from backend.services.key_derivation import derive_subscribe_confirm_key
 from backend.services.subscription_tokens import (
     create_confirm_token,
+    normalize_email,
     verify_confirm_token,
 )
 
@@ -44,3 +47,14 @@ def test_missing_type_claim_rejected() -> None:
     key = derive_subscribe_confirm_key(SECRET)
     token = jwt.encode({"email": "a@b.com"}, key, algorithm="HS256")
     assert verify_confirm_token(token, SECRET) is None
+
+
+# ── Task 9: Property-based round-trip ─────────────────────────────────────────
+
+
+@given(st.emails())
+def test_round_trip_hypothesis(email: str) -> None:
+    """create_confirm_token → verify_confirm_token returns normalized email."""
+    token = create_confirm_token(email, SECRET)
+    result = verify_confirm_token(token, SECRET)
+    assert result == normalize_email(email)

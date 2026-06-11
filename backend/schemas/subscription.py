@@ -2,7 +2,19 @@
 
 from __future__ import annotations
 
+from enum import StrEnum
+
 from pydantic import BaseModel, EmailStr, Field, model_validator
+
+
+class BroadcastStatus(StrEnum):
+    SENT = "sent"
+    FAILED = "failed"
+
+
+class BroadcastTrigger(StrEnum):
+    AUTO = "auto"
+    MANUAL = "manual"
 
 
 class SubscribeRequest(BaseModel):
@@ -59,8 +71,8 @@ class BroadcastSummary(BaseModel):
     post_path: str
     post_title: str
     resend_broadcast_id: str | None
-    trigger: str
-    status: str
+    trigger: BroadcastTrigger
+    status: BroadcastStatus
     sent_at: str
     error: str | None
 

@@ -50,6 +50,7 @@ from backend.schemas.post import (
     PostSave,
     SearchResult,
 )
+from backend.schemas.subscription import BroadcastTrigger
 from backend.services import subscription_service
 from backend.services.analytics_service import fire_background_hit
 from backend.services.git_service import GitService
@@ -92,7 +93,7 @@ def _fire_subscription_broadcast(
         post_title=post_title,
         post_html=post_html,
         post_url=f"{base_url}/post/{file_path_to_slug(post_path)}",
-        trigger="auto",
+        trigger=BroadcastTrigger.AUTO,
         enforce_once_guard=True,
     )
 

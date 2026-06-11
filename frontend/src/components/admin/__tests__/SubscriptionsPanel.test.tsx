@@ -104,6 +104,13 @@ describe('SubscriptionsPanel', () => {
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument())
   })
 
+  it('shows hint text including webhook secret when enable is not allowed', async () => {
+    vi.mocked(apiMod.fetchSubscriptionSettings).mockResolvedValue(INCOMPLETE_SETTINGS)
+    renderPanel()
+    await screen.findByRole('switch', { name: /enable subscriptions/i })
+    expect(screen.getByText(/requires api key \+ webhook secret \+ from email/i)).toBeInTheDocument()
+  })
+
   it('enable toggle is DISABLED when api key or from_email is missing', async () => {
     vi.mocked(apiMod.fetchSubscriptionSettings).mockResolvedValue(INCOMPLETE_SETTINGS)
     renderPanel()
@@ -278,6 +285,40 @@ describe('SubscriptionsPanel', () => {
     )
   })
 
+  it('shows error banner (not success) when the polled ledger row has status=failed', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.mocked(apiMod.triggerBroadcast).mockResolvedValue({ message: 'Broadcast started' })
+    vi.mocked(apiMod.fetchBroadcasts)
+      .mockResolvedValueOnce({ broadcasts: [] })
+      .mockResolvedValue({
+        broadcasts: [{
+          id: 99,
+          post_path: 'posts/hello',
+          post_title: 'Hello World',
+          resend_broadcast_id: null,
+          trigger: 'manual' as const,
+          status: 'failed' as const,
+          sent_at: '2024-01-01T12:00:00Z',
+          error: 'Resend API unavailable',
+        }],
+      })
+    mockPostsWithOnePublished()
+    renderPanel()
+    await screen.findByText(/42/)
+    await user.selectOptions(screen.getByRole('combobox', { name: /select post/i }), 'posts/hello')
+    await user.click(screen.getByRole('button', { name: /send broadcast/i }))
+
+    // Error banner should contain the error text (may also appear in table)
+    await waitFor(() => {
+      const allMatches = screen.getAllByText(/resend api unavailable/i)
+      const errorBanner = allMatches.find((el) => el.className.includes('red'))
+      expect(errorBanner).toBeInTheDocument()
+    })
+    // No success banner should remain
+    expect(screen.queryByText(/broadcast started/i)).not.toBeInTheDocument()
+  })
+
   it('send broadcast calls triggerBroadcast after confirm', async () => {
     const user = userEvent.setup()
     vi.spyOn(window, 'confirm').mockReturnValue(true)
@@ -320,7 +361,8 @@ describe('SubscriptionsPanel', () => {
     await user.selectOptions(screen.getByRole('combobox', { name: /select post/i }), 'posts/hello')
     await user.click(screen.getByRole('button', { name: /send broadcast/i }))
 
-    expect(await screen.findByText('Delivery failed', {}, { timeout: 3000 })).toBeInTheDocument()
+    const matches = await screen.findAllByText('Delivery failed', {}, { timeout: 3000 })
+    expect(matches.length).toBeGreaterThanOrEqual(1)
     expect(fetchCount).toBeGreaterThanOrEqual(3)
   })
 

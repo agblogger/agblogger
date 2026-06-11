@@ -30,13 +30,16 @@ export interface SubscriptionSettingsUpdate {
   postal_address?: string | null
 }
 
+export type BroadcastStatus = 'sent' | 'failed'
+export type BroadcastTrigger = 'auto' | 'manual'
+
 export interface BroadcastSummary {
   id: number
   post_path: string
   post_title: string
   resend_broadcast_id: string | null
-  trigger: string
-  status: string
+  trigger: BroadcastTrigger
+  status: BroadcastStatus
   sent_at: string
   error: string | null
 }

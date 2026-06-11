@@ -19,7 +19,36 @@ class ResendError(Exception):
     """A Resend API call failed. Message is safe to show to the admin."""
 
 
+class BroadcastSendError(ResendError):
+    """Broadcast was created in Resend but the send POST failed.
+
+    Carries the broadcast id so callers can record it in the ledger for
+    manual recovery — without the id the orphan broadcast is unrecoverable.
+
+    NOTE: If a manual retry is triggered after this error, there is a risk of
+    double-sending: the original broadcast may have been delivered by Resend
+    before the send-POST error was observed.  Operators should check the Resend
+    dashboard for the broadcast_id before retrying.
+    """
+
+    def __init__(self, message: str, broadcast_id: str) -> None:
+        super().__init__(message)
+        self.broadcast_id = broadcast_id
+
+
 def _get_client() -> httpx.AsyncClient:
+    """Return the shared AsyncClient, creating it on first call.
+
+    The lazy init is race-free only because every caller runs as a coroutine on
+    the single event loop: this function has no ``await`` between the ``None``
+    check and the assignment, so cooperative scheduling cannot interleave two
+    invocations there. This is NOT a general "asyncio is single-threaded"
+    guarantee -- sync (``def``) routes and ``run_in_executor`` run in a thread
+    pool, where the check-then-set would race. If any caller is ever moved off
+    the event loop, guard this with an ``asyncio.Lock`` (or a thread lock).
+    The global is reset to None only by close_resend_client(), which runs at
+    shutdown after all in-flight tasks have completed.
+    """
     global _client_instance
     if _client_instance is None:
         _client_instance = httpx.AsyncClient(timeout=_TIMEOUT)
@@ -154,7 +183,12 @@ async def check_segment_exists(*, api_key: str, segment_id: str) -> bool:
 async def create_and_send_broadcast(
     *, api_key: str, segment_id: str, from_: str, subject: str, html: str, text: str
 ) -> str:
-    """Create a broadcast to the segment and send it now. Returns the broadcast id."""
+    """Create a broadcast to the segment and send it now. Returns the broadcast id.
+
+    If the create POST succeeds but the send POST fails, raises BroadcastSendError
+    (a subclass of ResendError) carrying the broadcast_id so callers can record it
+    in the ledger for manual recovery.
+    """
     created = await _post(
         api_key,
         "/broadcasts",
@@ -169,7 +203,10 @@ async def create_and_send_broadcast(
     broadcast_id = str(created.get("id", ""))
     if not broadcast_id:
         raise ResendError("Resend did not return a broadcast id")
-    await _post(api_key, f"/broadcasts/{broadcast_id}/send", {})
+    try:
+        await _post(api_key, f"/broadcasts/{broadcast_id}/send", {})
+    except ResendError as exc:
+        raise BroadcastSendError(str(exc), broadcast_id=broadcast_id) from exc
     return broadcast_id
 
 

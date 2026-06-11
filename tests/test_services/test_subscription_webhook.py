@@ -198,3 +198,25 @@ async def test_handle_webhook_bad_signature_raises_verification_error(
             headers=bad_headers,
             secret_key=SECRET,
         )
+
+
+# ── Task 8: Malformed JSON webhook ────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_handle_webhook_malformed_json_raises_processing_error(
+    session: AsyncSession,
+) -> None:
+    """Valid signature but body is not valid JSON → raises WebhookProcessingError."""
+    await _configure_webhook_secret(session)
+
+    payload = b"not-json"
+    valid_headers = _svix_headers(payload)
+
+    with pytest.raises(subscription_service.WebhookProcessingError):
+        await subscription_service.handle_resend_webhook(
+            session,
+            raw_body=payload,
+            headers=valid_headers,
+            secret_key=SECRET,
+        )

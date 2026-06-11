@@ -182,9 +182,14 @@ export default function SubscriptionsPanel({ busy, onBusyChange }: Props) {
       for (let attempt = 0; attempt < BROADCAST_POLL_ATTEMPTS; attempt += 1) {
         const response = await fetchBroadcasts()
         setBroadcasts(response.broadcasts)
-        if (response.broadcasts.some(
+        const newRow = response.broadcasts.find(
           (broadcast) => broadcast.id > previousMaxId && broadcast.post_path === selectedPostPath,
-        )) {
+        )
+        if (newRow !== undefined) {
+          if (newRow.status === 'failed') {
+            setBroadcastSuccess(null)
+            setBroadcastError(newRow.error ?? 'Broadcast failed to send.')
+          }
           break
         }
         await wait(BROADCAST_POLL_INTERVAL_MS)
@@ -242,7 +247,7 @@ export default function SubscriptionsPanel({ busy, onBusyChange }: Props) {
           onChange={(value) => void handleToggleEnabled(value)}
         />
         {!enableAllowed && (
-          <span className="text-xs text-muted">Requires API key + from email.</span>
+          <span className="text-xs text-muted">Requires API key + webhook secret + from email.</span>
         )}
         <div className="ml-auto flex items-center gap-2 text-sm text-muted">
           <span className="text-xs uppercase tracking-wide">Subscribers</span>
@@ -494,9 +499,7 @@ export default function SubscriptionsPanel({ busy, onBusyChange }: Props) {
                         className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
                           b.status === 'sent'
                             ? 'bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400'
-                            : b.status === 'failed'
-                              ? 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400'
-                              : 'bg-surface text-muted'
+                            : 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400'
                         }`}
                       >
                         {b.status}

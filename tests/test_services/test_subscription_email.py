@@ -182,3 +182,65 @@ def test_broadcast_email_does_not_turn_prose_into_math_image() -> None:
     html = _broadcast("<p>No math here, just text.</p>")
     assert "latex.codecogs.com" not in html
     assert "No math here, just text." in html
+
+
+# ── Task 9: Property-based URL invariants ─────────────────────────────────────
+
+
+_SLUG_ALPHABET = st.characters(whitelist_categories=("Lu", "Ll", "Nd"), min_codepoint=32)
+
+
+@given(st.text(alphabet=_SLUG_ALPHABET, min_size=1, max_size=50))
+def test_absolute_post_urls_root_relative_becomes_absolute(slug: str) -> None:
+    """Root-relative /foo URL in post HTML → made absolute in broadcast email."""
+    path = f"/{slug}"
+    html, _text = build_broadcast_email(
+        post_url="https://blog.example/post/test",
+        post_title="Test",
+        post_html=f'<p><a href="{path}">link</a></p>',
+        controller_name="Blog",
+        postal_address="1 St",
+    )
+    # The root-relative link must be made absolute
+    assert f'href="{path}"' not in html or f'href="https://blog.example{path}"' in html
+
+
+def test_absolute_post_urls_protocol_relative_untouched() -> None:
+    """Protocol-relative //foo URL → untouched in broadcast email."""
+    html, _text = build_broadcast_email(
+        post_url="https://blog.example/post/test",
+        post_title="Test",
+        post_html='<p><a href="//cdn.example.com/file.js">link</a></p>',
+        controller_name="Blog",
+        postal_address="1 St",
+    )
+    # Protocol-relative URLs should pass through unchanged
+    assert 'href="//cdn.example.com/file.js"' in html
+
+
+def test_absolute_post_urls_already_absolute_untouched() -> None:
+    """Already-absolute https:// URL → untouched in broadcast email."""
+    html, _text = build_broadcast_email(
+        post_url="https://blog.example/post/test",
+        post_title="Test",
+        post_html='<p><a href="https://external.example.com/page">link</a></p>',
+        controller_name="Blog",
+        postal_address="1 St",
+    )
+    assert 'href="https://external.example.com/page"' in html
+
+
+@given(st.text(min_size=0, max_size=200))
+def test_build_broadcast_email_no_math_spans_survive(content: str) -> None:
+    """No <span class="math ..."> should appear in the broadcast email output."""
+    # Wrap arbitrary text in a paragraph — this is the expected input shape
+    post_html = f"<p>{_html.escape(content)}</p>"
+    html, _text = build_broadcast_email(
+        post_url="https://blog.example/post/test",
+        post_title="Test",
+        post_html=post_html,
+        controller_name="Blog",
+        postal_address="1 St",
+    )
+    assert 'class="math inline"' not in html
+    assert 'class="math display"' not in html

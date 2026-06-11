@@ -492,3 +492,352 @@ async def test_webhook_missing_contact_id_returns_retryable_error(
     )
     assert resp.status_code == 503
     assert delete_calls == []
+
+
+# ── Task 1: confirm endpoint error handling ───────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_confirm_bad_token_returns_400(client: AsyncClient) -> None:
+    """An explicit bad/expired token → 400 with 'invalid or has expired' in body."""
+    resp = await client.get("/subscribe/confirm?token=this_is_a_bad_token")
+    assert resp.status_code == 400
+    assert "invalid or has expired" in resp.text.lower()
+
+
+@pytest.mark.asyncio
+async def test_confirm_resend_error_returns_503(
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+    enable_subscriptions: None,
+    app_settings: Settings,
+) -> None:
+    """Valid token but create_contact raises ResendError → 503 retryable, no detail leaked."""
+    from backend.services.subscription_tokens import create_confirm_token
+
+    error_detail = "Internal Resend API failure detail xyz"
+
+    async def fake_create_contact(**kwargs: str) -> None:
+        raise resend_client.ResendError(error_detail)
+
+    monkeypatch.setattr(resend_client, "create_contact", fake_create_contact)
+
+    token = create_confirm_token("r@x.com", app_settings.secret_key)
+    resp = await client.get(f"/subscribe/confirm?token={token}")
+    # Must be 503 (retryable), NOT 400 (bad token)
+    assert resp.status_code == 503
+    # Must NOT contain "invalid or has expired" — that message is for bad tokens
+    assert "invalid or has expired" not in resp.text.lower()
+    # Must NOT leak the internal Resend error detail
+    assert error_detail not in resp.text
+
+
+@pytest.mark.asyncio
+async def test_confirm_internal_server_error_returns_503(
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+    enable_subscriptions: None,
+    app_settings: Settings,
+) -> None:
+    """Valid token but create_contact raises InternalServerError → 503, no detail leaked."""
+    from backend.exceptions import InternalServerError
+    from backend.services.subscription_tokens import create_confirm_token
+
+    secret_internal_detail = "Decryption failed with key abc123"
+
+    async def fake_create_contact(**kwargs: str) -> None:
+        raise InternalServerError(secret_internal_detail)
+
+    monkeypatch.setattr(resend_client, "create_contact", fake_create_contact)
+
+    token = create_confirm_token("r@x.com", app_settings.secret_key)
+    resp = await client.get(f"/subscribe/confirm?token={token}")
+    assert resp.status_code == 503
+    assert secret_internal_detail not in resp.text
+
+
+# ── Task 8: Security-relevant test gaps ──────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_subscribe_resend_error_returns_503_without_leaked_detail(
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+    enable_subscriptions: None,
+) -> None:
+    """ResendError during subscribe → 503, internal error string must NOT appear in body."""
+    internal_detail = "Internal Resend API failure detail LEAKED"
+
+    async def fake_send(**kwargs: str) -> str:
+        raise resend_client.ResendError(internal_detail)
+
+    monkeypatch.setattr(resend_client, "send_email", fake_send)
+    resp = await client.post("/api/subscribe", json={"email": "r@x.com"})
+    assert resp.status_code == 503
+    assert internal_detail not in resp.text
+
+
+@pytest.mark.asyncio
+async def test_x_forwarded_for_spoofed_by_untrusted_client_uses_peer_ip(
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+    enable_subscriptions: None,
+) -> None:
+    """Untrusted client spoofing X-Forwarded-For → rate limit uses real peer IP, not spoofed."""
+    used_ips: list[str] = []
+    original_is_limited = None
+
+    async def fake_send(**kwargs: str) -> str:
+        return "ok"
+
+    monkeypatch.setattr(resend_client, "send_email", fake_send)
+
+    transport = client._transport
+    app = getattr(transport, "app", None)
+    assert app is not None
+    limiter = app.state.rate_limiter
+    original_is_limited = limiter.is_limited
+
+    def capturing_is_limited(key: str, limit: int, window: int) -> tuple[bool, int]:
+        # Extract IP from key pattern "subscribe:<window>:<ip>"
+        parts = key.split(":")
+        if len(parts) >= 3:
+            used_ips.append(parts[2])
+        return original_is_limited(key, limit, window)
+
+    limiter.is_limited = capturing_is_limited
+
+    # Send with a spoofed X-Forwarded-For header
+    resp = await client.post(
+        "/api/subscribe",
+        json={"email": "victim@x.com"},
+        headers={"X-Forwarded-For": "1.2.3.4"},
+    )
+    # Should succeed (not 429), and the rate-limit key should NOT be the spoofed IP
+    assert resp.status_code in (200, 503)  # either way, spoofed IP should not be used
+    # The rate limit key must use the real peer IP (testclient uses 127.0.0.1 or similar)
+    # — it must NOT be the spoofed "1.2.3.4"
+    for ip in used_ips:
+        assert ip != "1.2.3.4", f"Spoofed IP was used for rate limiting: {ip}"
+
+
+@pytest.mark.asyncio
+async def test_x_forwarded_for_trusted_proxy_uses_forwarded_ip(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_content_dir: Path,
+    tmp_path: Path,
+) -> None:
+    """Trusted proxy sends X-Forwarded-For → first forwarded IP used for rate limiting."""
+    from tests.conftest import create_test_client
+
+    used_ips: list[str] = []
+
+    async def fake_send(**kwargs: str) -> str:
+        return "ok"
+
+    db_path = tmp_path / "trusted_test.db"
+    trusted_settings = Settings(
+        secret_key="test-secret-key-with-at-least-32-characters",
+        debug=True,
+        database_url=f"sqlite+aiosqlite:///{db_path}",
+        content_dir=tmp_content_dir,
+        frontend_dir=tmp_path / "frontend",
+        admin_username="admin",
+        admin_password="admin123",
+        trusted_proxy_ips=["127.0.0.1"],
+    )
+
+    async with create_test_client(trusted_settings) as trusted_client:
+        trusted_transport = trusted_client._transport
+        trusted_app = getattr(trusted_transport, "app", None)
+        assert trusted_app is not None
+        trusted_limiter = trusted_app.state.rate_limiter
+        original_is_limited = trusted_limiter.is_limited
+
+        def capturing_is_limited(key: str, limit: int, window: int) -> tuple[bool, int]:
+            parts = key.split(":")
+            if len(parts) >= 3:
+                used_ips.append(parts[2])
+            return original_is_limited(key, limit, window)
+
+        trusted_limiter.is_limited = capturing_is_limited
+
+        import backend.services.resend_client as rc_mod
+
+        monkeypatch.setattr(rc_mod, "send_email", fake_send)
+
+        session_factory = trusted_app.state.session_factory
+        secret_key: str = trusted_app.state.settings.secret_key
+
+        async def fake_create_segment(**kwargs: str) -> str:
+            return "seg_trusted"
+
+        monkeypatch.setattr(rc_mod, "create_segment", fake_create_segment)
+
+        async with session_factory() as session:
+            from backend.services import subscription_service as ss
+
+            await ss.update_settings(
+                session,
+                secret_key=secret_key,
+                enabled=True,
+                api_key="re_trusted",
+                webhook_secret="whsec_trusted",
+                from_email="trusted@example.com",
+                from_name="Trusted Blog",
+                controller_name="Trusted",
+                controller_contact="p@t.com",
+                privacy_policy_url="https://t.com/privacy",
+                postal_address="1 Trust St",
+            )
+
+        resp = await trusted_client.post(
+            "/api/subscribe",
+            json={"email": "user@example.com"},
+            headers={"X-Forwarded-For": "5.6.7.8"},
+        )
+        assert resp.status_code in (200, 503)
+        # The rate limit must use the forwarded IP "5.6.7.8"
+        assert any(ip == "5.6.7.8" for ip in used_ips), (
+            f"Expected '5.6.7.8' in used IPs but got: {used_ips}"
+        )
+
+
+@pytest.mark.asyncio
+async def test_admin_test_endpoint_success(
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+    enable_subscriptions: None,
+) -> None:
+    """Admin POST /api/admin/subscriptions/test → 200 with message."""
+
+    async def fake_send(**kwargs: str) -> str:
+        return "email_id"
+
+    monkeypatch.setattr(resend_client, "send_email", fake_send)
+    token = await _get_admin_token(client)
+    resp = await client.post(
+        "/api/admin/subscriptions/test",
+        json={"email": "admin@example.com"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["message"] == "Test email sent"
+
+
+@pytest.mark.asyncio
+async def test_admin_test_endpoint_disabled_returns_400(
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """SubscriptionsDisabledError → 400."""
+    token = await _get_admin_token(client)
+    # No enable_subscriptions fixture — subscriptions not configured
+    resp = await client.post(
+        "/api/admin/subscriptions/test",
+        json={"email": "admin@example.com"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_admin_test_endpoint_resend_error_returns_502(
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+    enable_subscriptions: None,
+) -> None:
+    """ResendError during test email → 502."""
+
+    async def fake_send(**kwargs: str) -> str:
+        raise resend_client.ResendError("Resend API failure")
+
+    monkeypatch.setattr(resend_client, "send_email", fake_send)
+    token = await _get_admin_token(client)
+    resp = await client.post(
+        "/api/admin/subscriptions/test",
+        json={"email": "admin@example.com"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 502
+
+
+@pytest.mark.asyncio
+async def test_privacy_page_returns_generated_policy_when_no_file(
+    client: AsyncClient,
+    enable_subscriptions: None,
+) -> None:
+    """GET /api/pages/privacy → 200 with privacy policy content when no privacy.md exists."""
+    resp = await client.get("/api/pages/privacy")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["id"] == "privacy"
+    # The generated policy contains recognizable content
+    assert "email" in body["rendered_html"].lower() or "privacy" in body["title"].lower()
+
+
+@pytest.fixture
+def app_settings_with_privacy(tmp_path: Path) -> Settings:
+    """Settings for an app that has a user-authored privacy.md pre-created."""
+    content = tmp_path / "content_with_privacy"
+    content.mkdir()
+    (content / "posts").mkdir()
+    (content / "assets").mkdir()
+    (content / "index.toml").write_text(
+        '[site]\ntitle = "Test Blog"\ntimezone = "UTC"\n\n'
+        '[[pages]]\nid = "timeline"\ntitle = "Posts"\n\n'
+        '[[pages]]\nid = "privacy"\ntitle = "Privacy Policy"\nfile = "pages/privacy.md"\n'
+    )
+    (content / "labels.toml").write_text("[labels]\n")
+    pages_dir = content / "pages"
+    pages_dir.mkdir()
+    (pages_dir / "privacy.md").write_text(
+        "---\ntitle: My Privacy Page\n---\n\nCustom user-authored privacy content here."
+    )
+    db_path = tmp_path / "privacy_test.db"
+    return Settings(
+        secret_key="test-secret-key-with-at-least-32-characters",
+        debug=True,
+        database_url=f"sqlite+aiosqlite:///{db_path}",
+        content_dir=content,
+        frontend_dir=tmp_path / "frontend_privacy",
+        admin_username="admin",
+        admin_password="admin123",
+    )
+
+
+@pytest.fixture
+async def client_with_privacy(
+    app_settings_with_privacy: Settings,
+) -> AsyncGenerator[AsyncClient]:
+    async with create_test_client(app_settings_with_privacy) as ac:
+        yield ac
+
+
+@pytest.mark.asyncio
+async def test_privacy_page_user_authored_overrides_builtin(
+    client_with_privacy: AsyncClient,
+) -> None:
+    """When content/pages/privacy.md exists → user content returned, not generated policy."""
+    resp = await client_with_privacy.get("/api/pages/privacy")
+    assert resp.status_code == 200
+    body = resp.json()
+    # The user-authored content should override the generated policy
+    assert "Custom user-authored privacy content here" in body["rendered_html"] or (
+        body["title"] == "My Privacy Page"
+    )
+
+
+@pytest.mark.asyncio
+async def test_webhook_malformed_json_returns_503(
+    client: AsyncClient,
+    enable_webhook_secret: None,
+) -> None:
+    """Valid signature but body is not valid JSON → 503."""
+    payload = b"this-is-not-json"
+    resp = await client.post(
+        "/api/webhooks/resend",
+        content=payload,
+        headers={**_svix_headers(payload), "content-type": "application/json"},
+    )
+    assert resp.status_code == 503

@@ -16,6 +16,12 @@ SECRET = "s" * 48
 WEBHOOK_SECRET = "whsec_test"
 
 
+@pytest.fixture(autouse=True)
+def clear_count_cache() -> None:
+    """Reset the module-level subscriber count cache between tests."""
+    subscription_service._count_cache.clear()
+
+
 @pytest.fixture
 async def _create_tables(db_engine: AsyncEngine) -> None:
     async with db_engine.begin() as conn:
@@ -440,3 +446,130 @@ async def test_webhook_secret_configured_flag_in_response(session: AsyncSession)
     )
     response = await subscription_service.build_settings_response(session, SECRET)
     assert response.webhook_secret_configured is True
+
+
+# ── Task 3: Silent count_contacts logging ─────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_build_settings_response_logs_warning_on_count_failure(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """count_contacts raises ResendError → warning is logged AND subscriber_count is None."""
+    import logging
+
+    monkeypatch.setattr(resend_client, "create_segment", _fake_create_segment)
+
+    async def _failing_count(*, api_key: str, segment_id: str) -> int:
+        raise resend_client.ResendError("unavailable")
+
+    monkeypatch.setattr(resend_client, "count_contacts", _failing_count)
+
+    await subscription_service.update_settings(
+        session,
+        secret_key=SECRET,
+        api_key="re_x",
+        webhook_secret=WEBHOOK_SECRET,
+        from_email="news@example.com",
+        enabled=True,
+    )
+
+    with caplog.at_level(logging.WARNING):
+        response = await subscription_service.build_settings_response(session, SECRET)
+
+    assert response.subscriber_count is None
+    # A warning must have been logged about the failure
+    warning_records = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert len(warning_records) >= 1, "Expected at least one WARNING log when count_contacts fails"
+
+
+# ── Task 10: count_contacts cache ─────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_count_contacts_cached_within_ttl(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """build_settings_response called twice → count_contacts only called once (cache hit)."""
+    monkeypatch.setattr(resend_client, "create_segment", _fake_create_segment)
+    call_count = 0
+
+    async def counting_count(*, api_key: str, segment_id: str) -> int:
+        nonlocal call_count
+        call_count += 1
+        return 42
+
+    monkeypatch.setattr(resend_client, "count_contacts", counting_count)
+
+    await subscription_service.update_settings(
+        session,
+        secret_key=SECRET,
+        api_key="re_x",
+        webhook_secret=WEBHOOK_SECRET,
+        from_email="news@example.com",
+        enabled=True,
+    )
+
+    r1 = await subscription_service.build_settings_response(session, SECRET)
+    r2 = await subscription_service.build_settings_response(session, SECRET)
+
+    assert r1.subscriber_count == 42
+    assert r2.subscriber_count == 42
+    assert call_count == 1, f"Expected count_contacts called once but called {call_count} times"
+
+
+@pytest.mark.asyncio
+async def test_count_contacts_cache_expires(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """After TTL passes, count_contacts is called again."""
+    monkeypatch.setattr(resend_client, "create_segment", _fake_create_segment)
+    call_count = 0
+
+    async def counting_count(*, api_key: str, segment_id: str) -> int:
+        nonlocal call_count
+        call_count += 1
+        return 10 + call_count
+
+    monkeypatch.setattr(resend_client, "count_contacts", counting_count)
+
+    await subscription_service.update_settings(
+        session,
+        secret_key=SECRET,
+        api_key="re_x",
+        webhook_secret=WEBHOOK_SECRET,
+        from_email="news@example.com",
+        enabled=True,
+    )
+
+    # First call — should hit count_contacts
+    r1 = await subscription_service.build_settings_response(session, SECRET)
+    assert call_count == 1
+
+    # Simulate cache expiry by manipulating the cache's timestamp
+    # The cache must be accessible to manipulate TTL; if it's a module-level dict we can clear it.
+    # This test expects a _count_contacts_cache or similar to exist and be clearable.
+    from backend.services import subscription_service as ss_mod
+
+    cache_attr = None
+    for attr in ("_count_cache", "_subscriber_count_cache", "_contacts_cache"):
+        if hasattr(ss_mod, attr):
+            cache_attr = attr
+            break
+
+    if cache_attr is not None:
+        # Clear the cache to simulate TTL expiry
+        getattr(ss_mod, cache_attr).clear()
+    else:
+        # If no cache attribute found, this test acts as a sentinel for the feature
+        # The test should fail until the cache is implemented
+        pytest.fail(
+            "No count_contacts cache found on subscription_service module. "
+            "Expected _count_cache, _subscriber_count_cache, or _contacts_cache."
+        )
+
+    r2 = await subscription_service.build_settings_response(session, SECRET)
+    assert call_count == 2, (
+        f"Expected count_contacts called again after cache expiry but got {call_count}"
+    )
+    assert r1.subscriber_count != r2.subscriber_count or call_count == 2

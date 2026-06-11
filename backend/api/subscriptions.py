@@ -18,6 +18,7 @@ from backend.api.deps import (
     require_admin,
 )
 from backend.config import Settings
+from backend.exceptions import InternalServerError
 from backend.models.post import PostCache
 from backend.models.subscription import SubscriptionBroadcast
 from backend.models.user import AdminUser
@@ -25,6 +26,7 @@ from backend.net_utils import is_trusted_proxy
 from backend.schemas.subscription import (
     BroadcastListResponse,
     BroadcastSummary,
+    BroadcastTrigger,
     SendTestEmailRequest,
     SubscribeRequest,
     SubscribeResponse,
@@ -105,6 +107,12 @@ async def subscribe_endpoint(
     return SubscribeResponse()
 
 
+_CONFIRM_RETRY_MESSAGE = (
+    "We couldn't complete your subscription right now. "
+    "Please click the link again in a few minutes."
+)
+
+
 @page_router.get("/subscribe/confirm", response_class=HTMLResponse)
 async def confirm_endpoint(
     token: str,
@@ -112,12 +120,30 @@ async def confirm_endpoint(
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> HTMLResponse:
     ok = False
+    retryable = False
     try:
         ok = await subscription_service.confirm(
             session, secret_key=settings.secret_key, token=token
         )
     except resend_client.ResendError:
-        logger.warning("Confirm contact creation failed", exc_info=True)
+        logger.warning("Confirm contact creation failed (Resend transient error)", exc_info=True)
+        retryable = True
+    except InternalServerError:
+        # Raised by decrypt_value on SECRET_KEY rotation; do not leak details.
+        logger.error("Confirm contact creation failed (internal error)", exc_info=True)
+        retryable = True
+
+    if retryable:
+        html = (
+            "<!doctype html><html><head><meta charset='utf-8'>"
+            "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+            "<title>Subscription</title></head>"
+            "<body style='font-family:system-ui,Arial,sans-serif;max-width:480px;margin:64px auto;"
+            f"text-align:center'><p>{_CONFIRM_RETRY_MESSAGE}</p>"
+            "<p><a href='/'>Back to the blog</a></p></body></html>"
+        )
+        return HTMLResponse(content=html, status_code=503)
+
     message = (
         "You're subscribed! Thanks for confirming."
         if ok
@@ -231,7 +257,7 @@ async def trigger_broadcast_endpoint(
         post_title=post.title,
         post_html=post.rendered_html or "",
         post_url=post_url,
-        trigger="manual",
+        trigger=BroadcastTrigger.MANUAL,
         enforce_once_guard=False,
     )
     if not scheduled:

@@ -10,6 +10,7 @@ from sqlalchemy import select
 
 from backend.models.base import DurableBase
 from backend.models.subscription import SubscriptionBroadcast
+from backend.schemas.subscription import BroadcastStatus, BroadcastTrigger
 from backend.services import resend_client, subscription_service
 
 if TYPE_CHECKING:
@@ -49,7 +50,7 @@ async def test_send_broadcast_records_sent(
         post_title="Hello",
         post_html="<p>b</p>",
         post_url="https://blog.example/post/hello",
-        trigger="manual",
+        trigger=BroadcastTrigger.MANUAL,
     )
     rows = (await session.execute(select(SubscriptionBroadcast))).scalars().all()
     assert len(rows) == 1 and rows[0].status == "sent"
@@ -74,7 +75,7 @@ async def test_resend_failure_records_failed_not_raised(
         post_title="t",
         post_html="<p>b</p>",
         post_url="u",
-        trigger="auto",
+        trigger=BroadcastTrigger.AUTO,
     )
     rows = (await session.execute(select(SubscriptionBroadcast))).scalars().all()
     assert rows[0].status == "failed" and rows[0].error
@@ -98,7 +99,7 @@ async def test_once_guard_blocks_second_auto_send(
         post_title="x",
         post_html="<p>b</p>",
         post_url="u",
-        trigger="auto",
+        trigger=BroadcastTrigger.AUTO,
     )
     assert await subscription_service.already_broadcast(session, "posts/x/index.md") is True
 
@@ -120,7 +121,7 @@ async def test_send_broadcast_unexpected_error_records_internal_error(
         post_title="Err",
         post_html="<p>x</p>",
         post_url="https://blog.example/post/err",
-        trigger="manual",
+        trigger=BroadcastTrigger.MANUAL,
     )
     rows = (await session.execute(select(SubscriptionBroadcast))).scalars().all()
     assert len(rows) == 1
@@ -141,7 +142,7 @@ async def test_send_broadcast_not_configured_records_failed(
         post_title="Unconfigured",
         post_html="<p>x</p>",
         post_url="https://blog.example/post/unconfigured",
-        trigger="manual",
+        trigger=BroadcastTrigger.MANUAL,
     )
     rows = (await session.execute(select(SubscriptionBroadcast))).scalars().all()
     assert len(rows) == 1
@@ -170,7 +171,7 @@ async def test_fire_post_broadcast_runs_in_background(
         post_title="Y",
         post_html="<p>b</p>",
         post_url="u",
-        trigger="auto",
+        trigger=BroadcastTrigger.AUTO,
         enforce_once_guard=True,
     )
     assert scheduled is True
@@ -201,7 +202,7 @@ async def test_failed_attempt_does_not_block_retry(
         post_title="Retry",
         post_html="<p>b</p>",
         post_url="u",
-        trigger="auto",
+        trigger=BroadcastTrigger.AUTO,
     )
     # A failed attempt must NOT engage the once-guard.
     assert await subscription_service.already_broadcast(session, post_path) is False
@@ -217,7 +218,7 @@ async def test_failed_attempt_does_not_block_retry(
         post_title="Retry",
         post_html="<p>b</p>",
         post_url="u",
-        trigger="auto",
+        trigger=BroadcastTrigger.AUTO,
     )
     assert await subscription_service.already_broadcast(session, post_path) is True
     rows = (
@@ -253,7 +254,7 @@ async def test_close_broadcast_tasks_drains_inflight(
         post_title="Drain",
         post_html="<p>b</p>",
         post_url="u",
-        trigger="manual",
+        trigger=BroadcastTrigger.MANUAL,
         enforce_once_guard=False,
     )
 
@@ -277,7 +278,7 @@ def test_fire_post_broadcast_reports_capacity_rejection(
         post_title="Rejected",
         post_html="<p>b</p>",
         post_url="u",
-        trigger="manual",
+        trigger=BroadcastTrigger.MANUAL,
         enforce_once_guard=False,
     )
 
@@ -302,3 +303,49 @@ async def _enable(session: AsyncSession, monkeypatch: pytest.MonkeyPatch) -> Non
         privacy_policy_url="https://b.com/privacy",
         postal_address="1 Main St",
     )
+
+
+# ── Task 2: BroadcastSendError records broadcast_id on partial failure ────────
+
+
+@pytest.mark.asyncio
+async def test_send_broadcast_partial_failure_records_resend_broadcast_id(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """BroadcastSendError with broadcast_id → ledger row has status=failed AND the id."""
+    from backend.services.resend_client import BroadcastSendError
+
+    async def boom_with_id(**kwargs: str) -> str:
+        raise BroadcastSendError("send failed", broadcast_id="bcast_partial")
+
+    monkeypatch.setattr(resend_client, "create_and_send_broadcast", boom_with_id)
+    await _enable(session, monkeypatch)
+
+    await subscription_service.send_broadcast(
+        session,
+        secret_key=SECRET,
+        post_path="posts/partial/index.md",
+        post_title="Partial",
+        post_html="<p>b</p>",
+        post_url="https://blog.example/post/partial",
+        trigger=BroadcastTrigger.MANUAL,
+    )
+    rows = (await session.execute(select(SubscriptionBroadcast))).scalars().all()
+    assert len(rows) == 1
+    assert rows[0].status == "failed"
+    assert rows[0].resend_broadcast_id == "bcast_partial"
+
+
+# ── Task 4: BroadcastStatus/BroadcastTrigger StrEnum ─────────────────────────
+
+
+def test_broadcast_status_and_trigger_are_str_enums() -> None:
+    """BroadcastStatus and BroadcastTrigger are StrEnums with the expected values."""
+    # StrEnum.value gives the underlying string; StrEnum is also a str subclass.
+    assert BroadcastStatus.SENT.value == "sent"
+    assert BroadcastStatus.FAILED.value == "failed"
+    assert BroadcastTrigger.AUTO.value == "auto"
+    assert BroadcastTrigger.MANUAL.value == "manual"
+    # They are actual str subclasses (StrEnum inherits from str).
+    assert isinstance(BroadcastStatus.SENT, str)
+    assert isinstance(BroadcastTrigger.AUTO, str)

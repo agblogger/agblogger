@@ -28,11 +28,13 @@ When a post transitions from draft to published (or is created as published), th
 
 A once-guard keyed on the ledger prevents a second automatic send per post; the admin's manual trigger bypasses it. Background broadcast work is bounded and drained on graceful shutdown so in-flight sends complete, mirroring the analytics shutdown pattern. Manual triggers receive a retryable error when background-task capacity is full, and the admin UI polls the ledger until the resulting attempt is visible.
 
+The broadcast is created and sent in two sequential Resend API calls. If create succeeds but the send call fails, a `BroadcastSendError` (carrying the broadcast id) is raised and the ledger row records the id alongside the failed status — preventing the orphan from being unrecoverable. Manual retrigger after this partial failure carries a double-send risk; operators should verify the Resend dashboard before retrying.
+
 ## Email Rendering
 
 Broadcast email construction wraps the rendered post HTML for delivery only — it never affects stored HTML or the web render path. The email layout is a header bar (view-online link and unsubscribe), the post title, the post body, and a compliance footer. Root-relative links and assets are rewritten to absolute URLs against the public post origin.
 
-Because email clients run no JavaScript, KaTeX cannot render client-side as it does on the web (see [editor.md](editor.md)); math spans are instead rewritten into images served by an external LaTeX rendering service, with the raw TeX as alt text so blocked images still read.
+Because email clients run no JavaScript, KaTeX cannot render client-side as it does on the web (see [editor.md](editor.md)); math spans are instead rewritten into images served by an external LaTeX rendering service (`latex.codecogs.com`), with the raw TeX as alt text so blocked images still read. This involves a tradeoff: the image request leaks the reader's IP to the third-party service and acts as an open-tracking signal; availability depends on the external service. No alternative local rendering path exists.
 
 ## Enable Precondition
 

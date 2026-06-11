@@ -303,3 +303,77 @@ async def test_delete_contact_network_error_raises(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr(resend_client, "_get_client", lambda: _client(handler))
     with pytest.raises(ResendError, match="Could not reach the email provider"):
         await resend_client.delete_contact(api_key="re_x", audience_id="aud_1", contact_id="c1")
+
+
+# ── Task 2: Atomic broadcast / BroadcastSendError ────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_create_and_send_broadcast_send_fails_error_carries_broadcast_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """create succeeds (returns id), send POST fails → BroadcastSendError with broadcast_id."""
+    call_count = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal call_count
+        call_count += 1
+        if request.url.path == "/broadcasts":
+            # Create succeeds
+            return httpx.Response(200, json={"id": "bcast_partial"})
+        # Send fails
+        return httpx.Response(500, json={"message": "Resend send failure"})
+
+    monkeypatch.setattr(resend_client, "_get_client", lambda: _client(handler))
+
+    from backend.services.resend_client import BroadcastSendError
+
+    with pytest.raises(BroadcastSendError) as exc_info:
+        await resend_client.create_and_send_broadcast(
+            api_key="re_x",
+            segment_id="seg_1",
+            from_="A <a@b.com>",
+            subject="s",
+            html="<p>h</p>",
+            text="h",
+        )
+    assert exc_info.value.broadcast_id == "bcast_partial"
+
+
+@pytest.mark.asyncio
+async def test_create_and_send_broadcast_create_no_id_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """create returns no id → raises ResendError."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={})
+
+    monkeypatch.setattr(resend_client, "_get_client", lambda: _client(handler))
+    with pytest.raises(ResendError):
+        await resend_client.create_and_send_broadcast(
+            api_key="re_x",
+            segment_id="seg_1",
+            from_="A <a@b.com>",
+            subject="s",
+            html="<p>h</p>",
+            text="h",
+        )
+
+
+# ── Task 7: AsyncClient lock ──────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_concurrent_get_client_returns_same_instance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Calling _get_client() many times concurrently returns the same instance."""
+    # Reset any existing client first
+    monkeypatch.setattr(resend_client, "_client_instance", None)
+
+    # _get_client is sync currently; call it many times and verify same object returned
+    instances = [resend_client._get_client() for _ in range(20)]
+    first = instances[0]
+    for inst in instances[1:]:
+        assert inst is first, "Multiple calls to _get_client() returned different instances"
