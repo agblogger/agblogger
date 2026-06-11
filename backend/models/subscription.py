@@ -17,6 +17,7 @@ class SubscriptionSettings(DurableBase):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     resend_api_key_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    resend_webhook_secret_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
     resend_segment_id: Mapped[str | None] = mapped_column(String, nullable=True)
     from_email: Mapped[str | None] = mapped_column(String, nullable=True)
     from_name: Mapped[str | None] = mapped_column(String, nullable=True)
