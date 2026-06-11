@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from cli.runtime_dependency_audit import AuditServiceError, run_audit
+from tools.runtime_dependency_audit import AuditServiceError, run_audit
 
 if TYPE_CHECKING:
     from collections.abc import Sequence

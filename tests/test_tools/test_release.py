@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from cli.release import (
+from tools.release import (
     ReleaseError,
     bump_version,
     read_repo_version,
@@ -26,7 +26,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 def _write_release_fixture(root: Path) -> None:
     (root / "packaging" / "server").mkdir(parents=True)
-    (root / "agblogger_cli").mkdir()
+    (root / "cli").mkdir()
     (root / "frontend").mkdir()
     (root / "backend").mkdir()
 
@@ -40,7 +40,7 @@ def _write_release_fixture(root: Path) -> None:
         '[project]\nname = "agblogger-server"\nversion = "0.1.0"\n',
         encoding="utf-8",
     )
-    (root / "agblogger_cli" / "pyproject.toml").write_text(
+    (root / "cli" / "pyproject.toml").write_text(
         '[project]\nname = "agblogger-cli"\nversion = "0.1.0"\n',
         encoding="utf-8",
     )
@@ -90,7 +90,7 @@ def test_update_version_files_updates_all_release_surfaces(tmp_path: Path) -> No
 
     assert sorted(path.as_posix() for path in updated_paths) == [
         "VERSION",
-        "agblogger_cli/pyproject.toml",
+        "cli/pyproject.toml",
         "frontend/package-lock.json",
         "frontend/package.json",
         "packaging/server/pyproject.toml",
@@ -141,8 +141,8 @@ def test_run_release_updates_versions_and_invokes_git_and_github(
             return SimpleNamespace(returncode=0, stdout="", stderr="")
         return SimpleNamespace(returncode=0)
 
-    monkeypatch.setattr("cli.release.subprocess.run", fake_run)
-    monkeypatch.setattr("cli.release.shutil.which", lambda _name: f"/usr/bin/{_name}")
+    monkeypatch.setattr("tools.release.subprocess.run", fake_run)
+    monkeypatch.setattr("tools.release.shutil.which", lambda _name: f"/usr/bin/{_name}")
 
     result = run_release(tmp_path, "patch")
 
@@ -163,7 +163,7 @@ def test_run_release_updates_versions_and_invokes_git_and_github(
                 "VERSION",
                 "pyproject.toml",
                 "packaging/server/pyproject.toml",
-                "agblogger_cli/pyproject.toml",
+                "cli/pyproject.toml",
                 "frontend/package.json",
                 "frontend/package-lock.json",
                 "uv.lock",
@@ -218,8 +218,8 @@ def test_run_release_rejects_dirty_worktree(monkeypatch: MonkeyPatch, tmp_path: 
             return SimpleNamespace(returncode=0, stdout=" M pyproject.toml\n", stderr="")
         raise AssertionError(f"unexpected command: {command}")
 
-    monkeypatch.setattr("cli.release.subprocess.run", fake_run)
-    monkeypatch.setattr("cli.release.shutil.which", lambda _name: f"/usr/bin/{_name}")
+    monkeypatch.setattr("tools.release.subprocess.run", fake_run)
+    monkeypatch.setattr("tools.release.shutil.which", lambda _name: f"/usr/bin/{_name}")
 
     with pytest.raises(ReleaseError, match="clean git worktree"):
         run_release(tmp_path, "patch")
@@ -229,7 +229,7 @@ def test_run_release_rejects_dirty_worktree(monkeypatch: MonkeyPatch, tmp_path: 
 
 
 def test_ensure_tag_absent_raises_when_tag_exists(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
-    from cli.release import _ensure_tag_absent
+    from tools.release import _ensure_tag_absent
 
     def fake_run(
         command: list[str],
@@ -242,7 +242,7 @@ def test_ensure_tag_absent_raises_when_tag_exists(monkeypatch: MonkeyPatch, tmp_
         del cwd, check, capture_output, text
         return SimpleNamespace(returncode=0, stdout="abc123\n", stderr="")
 
-    monkeypatch.setattr("cli.release.subprocess.run", fake_run)
+    monkeypatch.setattr("tools.release.subprocess.run", fake_run)
 
     with pytest.raises(ReleaseError, match="already exists"):
         _ensure_tag_absent(tmp_path, "v1.0.0")
@@ -251,7 +251,7 @@ def test_ensure_tag_absent_raises_when_tag_exists(monkeypatch: MonkeyPatch, tmp_
 def test_ensure_release_absent_raises_when_release_exists(
     monkeypatch: MonkeyPatch, tmp_path: Path
 ) -> None:
-    from cli.release import _ensure_release_absent
+    from tools.release import _ensure_release_absent
 
     def fake_run(
         command: list[str],
@@ -264,16 +264,16 @@ def test_ensure_release_absent_raises_when_release_exists(
         del cwd, check, capture_output, text
         return SimpleNamespace(returncode=0, stdout="release info\n", stderr="")
 
-    monkeypatch.setattr("cli.release.subprocess.run", fake_run)
+    monkeypatch.setattr("tools.release.subprocess.run", fake_run)
 
     with pytest.raises(ReleaseError, match="already exists"):
         _ensure_release_absent(tmp_path, "v1.0.0")
 
 
 def test_require_tool_raises_when_missing(monkeypatch: MonkeyPatch) -> None:
-    from cli.release import _require_tool
+    from tools.release import _require_tool
 
-    monkeypatch.setattr("cli.release.shutil.which", lambda _name: None)
+    monkeypatch.setattr("tools.release.shutil.which", lambda _name: None)
 
     with pytest.raises(ReleaseError, match="not installed"):
         _require_tool("nonexistent-tool")
@@ -308,11 +308,11 @@ def test_release_cli_workflow_uses_sync_specific_asset_names() -> None:
 def test_main_handles_release_error(
     monkeypatch: MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from cli.release import main
+    from tools.release import main
 
-    monkeypatch.setattr("sys.argv", ["agblogger-release", "patch"])
+    monkeypatch.setattr("sys.argv", ["tools.release", "patch"])
     monkeypatch.setattr(
-        "cli.release.run_release",
+        "tools.release.run_release",
         lambda *args, **kwargs: (_ for _ in ()).throw(ReleaseError("tag already exists")),
     )
 
@@ -328,14 +328,14 @@ def test_main_handles_subprocess_error(
 ) -> None:
     import subprocess
 
-    from cli.release import main
+    from tools.release import main
 
-    monkeypatch.setattr("sys.argv", ["agblogger-release", "patch"])
+    monkeypatch.setattr("sys.argv", ["tools.release", "patch"])
 
     def raise_subprocess_error(*args: object, **kwargs: object) -> None:
         raise subprocess.CalledProcessError(1, "git push")
 
-    monkeypatch.setattr("cli.release.run_release", raise_subprocess_error)
+    monkeypatch.setattr("tools.release.run_release", raise_subprocess_error)
 
     with pytest.raises(SystemExit) as exc_info:
         main()

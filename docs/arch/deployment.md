@@ -60,8 +60,7 @@ The project also supports a packaged local deployment profile for deployment-sty
 ## Code Entry Points
 
 - `Dockerfile` defines the production image.
-- `docker-compose.yml` defines the checked-in reference topology for the bundled-Caddy stack; `cli/deploy_production.py` can generate alternate local compose files such as `docker-compose.caddy.yml` when the requested deployment omits GoatCounter.
+- `docker-compose.yml` defines the checked-in reference topology for the bundled-Caddy stack; `tools/deploy_production.py` can generate alternate local compose files such as `docker-compose.caddy.yml` when the requested deployment omits GoatCounter.
 - `goatcounter/entrypoint.sh` is the GoatCounter container's idempotent provisioning and startup script, including token-permission repair for reused token volumes.
-- `cli/deploy_production.py` contains the deployment helper, configuration generation, and `setup.sh` script generation workflow.
-- `cli/release.py` contains release workflow tooling.
-- `tests/test_cli/test_deploy_production.py` covers the deployment helper behavior.
+- `tools/deploy_production.py` contains the deployment helper, configuration generation, and `setup.sh` script generation workflow.
+- `tools/release.py` contains release workflow tooling.

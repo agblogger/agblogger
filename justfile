@@ -158,23 +158,23 @@ mutation-backend:
     if [ "{{ mutation_keep_artifacts }}" = "true" ]; then args+=(--keep-artifacts); fi
     if [ -n "{{ mutation_max_children }}" ]; then args+=(--max-children "{{ mutation_max_children }}"); fi
     if [ "${#args[@]}" -eq 0 ]; then
-        uv run --extra dev --with "mutmut=={{ mutmut_version }}" python -m cli.mutation_backend backend
+        uv run --extra dev --with "mutmut=={{ mutmut_version }}" python -m tools.mutation_backend backend
     else
-        uv run --extra dev --with "mutmut=={{ mutmut_version }}" python -m cli.mutation_backend backend "${args[@]}"
+        uv run --extra dev --with "mutmut=={{ mutmut_version }}" python -m tools.mutation_backend backend "${args[@]}"
     fi
 
-# Full backend+cli mutation sweep (nightly/full run)
+# Full backend, CLI, and repository-tools mutation sweep (nightly/full run)
 mutation-backend-full:
     #!/usr/bin/env bash
     set -euo pipefail
-    echo "\n── Backend mutation testing (full backend+cli sweep) ──"
+    echo "\n── Backend mutation testing (full backend, CLI, and tools sweep) ──"
     args=()
     if [ "{{ mutation_keep_artifacts }}" = "true" ]; then args+=(--keep-artifacts); fi
     if [ -n "{{ mutation_max_children }}" ]; then args+=(--max-children "{{ mutation_max_children }}"); fi
     if [ "${#args[@]}" -eq 0 ]; then
-        uv run --extra dev --with "mutmut=={{ mutmut_version }}" python -m cli.mutation_backend backend-full
+        uv run --extra dev --with "mutmut=={{ mutmut_version }}" python -m tools.mutation_backend backend-full
     else
-        uv run --extra dev --with "mutmut=={{ mutmut_version }}" python -m cli.mutation_backend backend-full "${args[@]}"
+        uv run --extra dev --with "mutmut=={{ mutmut_version }}" python -m tools.mutation_backend backend-full "${args[@]}"
     fi
 
 # Targeted frontend mutation gate on high-impact flows
@@ -224,25 +224,26 @@ check-backend-static:
             fi
         fi
     }
-    run_step "── Backend: type checking ──" uv run mypy backend/ cli/ agblogger_cli/agblogger_cli/ tests/
-    run_step $'\n── Backend: pyright type checking ──' uv run basedpyright backend/ cli/ agblogger_cli/agblogger_cli/
+    run_step "── Backend: type checking ──" uv run mypy backend/ tools/ cli/agblogger_cli/ tests/
+    run_step $'\n── Backend: pyright type checking ──' uv run basedpyright backend/ tools/ cli/agblogger_cli/
     run_step $'\n── Backend: dependency hygiene ──' uv run deptry .
+    run_step $'\n── CLI: dependency hygiene ──' uv run --directory cli --project .. deptry .
     run_step $'\n── Backend: import contracts ──' uv run lint-imports
-    run_step $'\n── Backend: linting ──' uv run ruff check backend/ cli/ agblogger_cli/ tests/
-    run_step $'\n── Backend: format check ──' uv run ruff format --check backend/ cli/ agblogger_cli/ tests/
+    run_step $'\n── Backend: linting ──' uv run ruff check backend/ tools/ cli/ tests/
+    run_step $'\n── Backend: format check ──' uv run ruff format --check backend/ tools/ cli/ tests/
     _prod_file="$(mktemp)"
     trap 'rm -f "$_out" "$_prod_file"' EXIT
     uv export --all-packages --format requirements.txt --no-dev --no-emit-workspace --frozen 2>/dev/null \
         | grep -vE '^(#|-|$)' | sed 's/[=><\[].*//' | tr '[:upper:]' '[:lower:]' | tr '_' '-' > "$_prod_file"
     _site_packages="$(.venv/bin/python -c 'import sysconfig; print(sysconfig.get_path("purelib"))')"
-    run_step $'\n── Backend: vulnerability audit ──' uv run python -m cli.runtime_dependency_audit "$_site_packages" "$_prod_file"
+    run_step $'\n── Backend: vulnerability audit ──' uv run python -m tools.runtime_dependency_audit "$_site_packages" "$_prod_file"
     echo "✓ Backend static checks passed"
 
 # Backend tests with coverage.
 test-backend:
     #!/usr/bin/env bash
     set -euo pipefail
-    cmd=(uv run pytest tests/ -n auto --cov=backend --cov=cli --cov-report=term-missing)
+    cmd=(uv run pytest tests/ -n auto --cov=backend --cov=tools --cov=cli/agblogger_cli --cov-report=term-missing)
     if [ -n "{{ v }}" ]; then
         printf '\n── Backend: tests ──\n'
         "${cmd[@]}" -v
@@ -316,29 +317,29 @@ test-frontend:
 # Frontend full gate (static + tests)
 check-frontend: check-frontend-static test-frontend
 
-# Dead-code analysis (Vulture), scoped to runtime Python code only.
+# Dead-code analysis (Vulture), scoped to maintained Python source.
 check-vulture:
     #!/usr/bin/env bash
     set -euo pipefail
     _out="$(mktemp)"
     trap 'rm -f "$_out"' EXIT
     if [ -n "{{ v }}" ]; then
-        echo "── Runtime dead-code analysis (Vulture) ──"
-        uv run vulture backend cli agblogger_cli/agblogger_cli --exclude "backend/migrations" --min-confidence 80 --ignore-names "readline"
+        echo "── Python dead-code analysis (Vulture) ──"
+        uv run vulture backend tools cli/agblogger_cli --exclude "backend/migrations" --min-confidence 80 --ignore-names "readline"
     else
         rc=0
-        uv run vulture backend cli agblogger_cli/agblogger_cli --exclude "backend/migrations" --min-confidence 80 --ignore-names "readline" > "$_out" 2>&1 || rc=$?
+        uv run vulture backend tools cli/agblogger_cli --exclude "backend/migrations" --min-confidence 80 --ignore-names "readline" > "$_out" 2>&1 || rc=$?
         if [ $rc -ne 0 ]; then
-            echo "── Runtime dead-code analysis (Vulture) ──"
+            echo "── Python dead-code analysis (Vulture) ──"
             cat "$_out"
             exit $rc
         fi
     fi
     echo "✓ Vulture passed"
 
-# Runtime security-focused static analysis (Semgrep)
+# Security-focused static analysis (Semgrep)
 check-semgrep:
-    @echo "── Runtime static security analysis (Semgrep) ──"
+    @echo "── Static security analysis (Semgrep) ──"
     uv run semgrep scan \
         --config p/ci \
         --config p/security-audit \
@@ -354,7 +355,7 @@ check-semgrep:
         --config .semgrep.yml \
         --error \
         --quiet \
-        backend/ cli/ frontend/src/ Dockerfile docker-compose.yml \
+        backend/ tools/ cli/agblogger_cli/ frontend/src/ Dockerfile docker-compose.yml \
         --exclude tests \
         --exclude "frontend/src/**/__tests__" \
         --exclude "frontend/src/**/*.test.ts" \
@@ -395,7 +396,7 @@ _zap mode env_minutes minutes:
         --caddy-port "{{ zap_caddy_port }}"
     )
     if [ -n "$minutes_value" ]; then args+=(--minutes "$minutes_value"); fi
-    python3 -m cli.zap_scan {{ mode }} "${args[@]}"
+    python3 -m tools.zap_scan {{ mode }} "${args[@]}"
 
 # OWASP ZAP baseline DAST scan against the local Caddy-served build.
 zap-baseline minutes="": (_zap "baseline" zap_baseline_minutes minutes)
@@ -466,11 +467,11 @@ build-cli: stamp-build
         --exclude-module sqlite3 \
         --add-data "{{ justfile_directory() }}/VERSION:." \
         --add-data "{{ justfile_directory() }}/BUILD:." \
-        agblogger_cli/agblogger_cli/sync_client.py
+        cli/agblogger_cli/sync_client.py
 
-# Install the CLI client via uv tool install (minimal deps: httpx only)
+# Install the CLI client via uv tool install (minimal deps: httpx + platformdirs)
 install-uv prefix="$HOME/.local":
-    UV_TOOL_BIN_DIR="{{ prefix }}/bin" uv tool install --reinstall agblogger_cli/
+    UV_TOOL_BIN_DIR="{{ prefix }}/bin" uv tool install --reinstall cli/
     @echo "✓ Installed agblogger CLI"
 
 # Install the CLI client via PyInstaller binary (standalone, no Python runtime needed)
@@ -481,10 +482,10 @@ install prefix="$HOME/.local": build-cli
 # ── Deployment ──────────────────────────────────────────────
 
 deploy: stamp-build
-    uv run agblogger-deploy
+    uv run python -m tools.deploy_production
 
 release level: stamp-build
-    uv run agblogger-release "{{ level }}"
+    uv run python -m tools.release "{{ level }}"
 
 # ── Development server ──────────────────────────────────────────────
 
@@ -494,27 +495,27 @@ localdir := justfile_directory() / ".local"
 
 # Start backend and frontend in the background (override ports: just start backend_port=9000 frontend_port=9173)
 start: setup
-    python3 -m cli.dev_server start --localdir "{{ localdir }}" --backend-port "{{ backend_port }}" --frontend-port "{{ frontend_port }}"
+    python3 -m tools.dev_server start --localdir "{{ localdir }}" --backend-port "{{ backend_port }}" --frontend-port "{{ frontend_port }}"
 
 # Stop the running dev server
 stop:
-    python3 -m cli.dev_server stop --localdir "{{ localdir }}"
+    python3 -m tools.dev_server stop --localdir "{{ localdir }}"
 
 # Check if the dev server is healthy (backend API responds, frontend serves pages)
 health:
-    python3 -m cli.dev_server health --localdir "{{ localdir }}" --backend-port "{{ backend_port }}" --frontend-port "{{ frontend_port }}"
+    python3 -m tools.dev_server health --localdir "{{ localdir }}" --backend-port "{{ backend_port }}" --frontend-port "{{ frontend_port }}"
 
 # Start the local Caddy-backed packaged app profile in the background
 start-caddy-local:
-    python3 -m cli.local_caddy start --localdir "{{ localdir }}" --caddy-port "{{ local_caddy_port }}"
+    python3 -m tools.local_caddy start --localdir "{{ localdir }}" --caddy-port "{{ local_caddy_port }}"
 
 # Stop the local Caddy-backed packaged app profile
 stop-caddy-local:
-    python3 -m cli.local_caddy stop --localdir "{{ localdir }}"
+    python3 -m tools.local_caddy stop --localdir "{{ localdir }}"
 
 # Check if the local Caddy-backed packaged app profile is healthy
 health-caddy-local:
-    python3 -m cli.local_caddy health --caddy-port "{{ local_caddy_port }}"
+    python3 -m tools.local_caddy health --caddy-port "{{ local_caddy_port }}"
 
 # ── Developer commands (do not use unless you're human) ──────────────────────────────────────────
 
@@ -523,7 +524,7 @@ cloc:
     @echo "                              Source LOC count"
     @echo "********************************************************************************"
     @echo
-    cloc --exclude-dir=__tests__ backend/ frontend/src/ cli/
+    cloc --exclude-dir=__tests__ backend/ frontend/src/ cli/agblogger_cli/ tools/
     @echo
     @echo
     @echo "********************************************************************************"

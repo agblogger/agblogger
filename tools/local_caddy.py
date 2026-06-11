@@ -6,9 +6,9 @@ import argparse
 import sys
 from pathlib import Path
 
-from cli import repo_root
-from cli.dev_server import validate_port
-from cli.zap_scan import (
+from tools import repo_root
+from tools.dev_server import validate_port
+from tools.zap_scan import (
     DEFAULT_LOCAL_CADDY_PORT,
     ZapScanError,
     check_prerequisites,

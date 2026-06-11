@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
-from cli import repo_root
+from tools import repo_root
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -49,6 +49,7 @@ _FAILURE_STATUSES: Final[frozenset[str]] = frozenset(
 )
 _STAGED_ENTRIES: Final[tuple[str, ...]] = (
     "backend",
+    "tools",
     "cli",
     "tests",
     "pyproject.toml",
@@ -130,14 +131,16 @@ PROFILE_BACKEND = BackendMutationProfile(
 
 PROFILE_BACKEND_FULL = BackendMutationProfile(
     key="backend-full",
-    description="Full backend+CLI mutation sweep",
+    description="Full backend, CLI, and repository-tools mutation sweep",
     paths_to_mutate=(
         "backend",
-        "cli",
+        "tools",
+        "cli/agblogger_cli",
     ),
     tests=(
         "tests/test_services",
         "tests/test_cli",
+        "tests/test_tools",
         "tests/test_sync",
         "tests/test_labels",
         "tests/test_rendering",
@@ -245,7 +248,7 @@ def render_setup_cfg(profile: BackendMutationProfile) -> str:
             if profile.do_not_mutate
             else []
         ),
-        render_multiline("also_copy", ("backend", "cli", "tests")),
+        render_multiline("also_copy", ("backend", "tools", "cli", "tests")),
         render_multiline("tests_dir", profile.tests),
         render_multiline("pytest_add_cli_args", pytest_add_cli_args),
         f"mutate_only_covered_lines = {'true' if profile.mutate_only_covered_lines else 'false'}",

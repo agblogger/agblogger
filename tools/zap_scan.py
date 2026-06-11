@@ -13,8 +13,8 @@ from pathlib import Path, PurePosixPath
 from typing import Literal
 from urllib.parse import urlsplit
 
-from cli import repo_root
-from cli.dev_server import validate_port
+from tools import repo_root
+from tools.dev_server import validate_port
 
 DEFAULT_ZAP_IMAGE = "ghcr.io/zaproxy/zaproxy:stable"
 DEFAULT_LOCAL_CADDY_PORT = 8080
@@ -22,7 +22,7 @@ LOCAL_CADDY_PROJECT_NAME = "agblogger-caddy-local"
 LOCAL_CADDY_ENV_FILENAME = "caddy-local.env"
 LOCAL_CADDY_COMPOSE_OVERRIDE = "docker-compose.caddy-local.yml"
 LOCAL_CADDY_STARTUP_TIMEOUT_SECONDS = 120.0
-ZAP_HOOK_PATH = PurePosixPath("cli") / "zap_hooks.py"
+ZAP_HOOK_PATH = PurePosixPath("tools") / "zap_hooks.py"
 
 ScanMode = Literal["baseline", "full"]
 _ZAP_DUMMY_INFIX = "key"  # part of the dummy secret, split out to avoid Semgrep match

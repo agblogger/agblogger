@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from cli.deploy_production import (
+from tools.deploy_production import (
     SHARED_MANAGED_BEGIN_MARKER,
     SHARED_MANAGED_END_MARKER,
     SHARED_MANAGED_FOOTER_HINT,

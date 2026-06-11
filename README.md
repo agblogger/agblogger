@@ -47,7 +47,8 @@ The `content/` directory is the source of truth — back it up to preserve your 
 ```
 backend/          Python FastAPI application (API, services, models, sync engine)
 frontend/         React + TypeScript SPA (Vite, TailwindCSS)
-cli/              Sync and deployment CLIs
+cli/              Standalone sync CLI package and binary source
+tools/            Repository-internal development, release, and operations tooling
 tests/            pytest test suite
 content/          Sample blog content (markdown, TOML, assets)
 docs/             Architecture and design documentation

@@ -328,7 +328,7 @@ def stop_services(services: list[RunningService]) -> None:
 
 
 def _repo_root() -> Path:
-    from cli import repo_root
+    from tools import repo_root
 
     return repo_root()
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any, cast
 
-from cli.zap_hooks import _disable_unstable_active_scanners, _off_target_regexes
+from tools.zap_hooks import _disable_unstable_active_scanners, _off_target_regexes
 
 
 class _FakeAscan:

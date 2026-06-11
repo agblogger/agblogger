@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from cli.zap_scan import (
+from tools.zap_scan import (
     DEFAULT_ZAP_IMAGE,
     ZapScanError,
     build_docker_command,
@@ -33,7 +33,7 @@ def test_build_docker_command_for_baseline_scan_on_macos(tmp_path: Path) -> None
     assert "zap-baseline.py" in command
     assert "--autooff" in command
     assert "--hook" in command
-    assert command[command.index("--hook") + 1] == "cli/zap_hooks.py"
+    assert command[command.index("--hook") + 1] == "tools/zap_hooks.py"
     assert "-j" in command
     assert "-I" in command
     assert command[command.index("-t") + 1] == "http://host.docker.internal:8080/"
@@ -60,7 +60,7 @@ def test_build_docker_command_for_full_scan_on_linux_adds_host_gateway(
     assert "zap-full-scan.py" in command
     assert "--autooff" not in command
     assert "--hook" in command
-    assert command[command.index("--hook") + 1] == "cli/zap_hooks.py"
+    assert command[command.index("--hook") + 1] == "tools/zap_hooks.py"
     assert command[command.index("-m") + 1] == "4"
     assert "reports/zap/full/report.html" in command
     assert "reports/zap/full/report.md" in command
@@ -71,9 +71,9 @@ def test_build_docker_command_for_full_scan_on_linux_adds_host_gateway(
 class TestRunZapScan:
     @pytest.fixture(autouse=True)
     def _stub_prerequisites(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("cli.zap_scan.check_prerequisites", lambda _project_dir: None)
+        monkeypatch.setattr("tools.zap_scan.check_prerequisites", lambda _project_dir: None)
         monkeypatch.setattr(
-            "cli.zap_scan.write_local_caddy_env",
+            "tools.zap_scan.write_local_caddy_env",
             lambda localdir: localdir / "zap-caddy.env",
         )
 
@@ -87,7 +87,7 @@ class TestRunZapScan:
         lifecycle_calls: list[str] = []
 
         monkeypatch.setattr(
-            "cli.zap_scan.local_caddy_profile_health",
+            "tools.zap_scan.local_caddy_profile_health",
             lambda _caddy_port: False,
         )
 
@@ -106,12 +106,12 @@ class TestRunZapScan:
             lifecycle_calls.append("stop")
 
         monkeypatch.setattr(
-            "cli.zap_scan.start_local_caddy_profile",
+            "tools.zap_scan.start_local_caddy_profile",
             fake_start_local_caddy_profile,
         )
-        monkeypatch.setattr("cli.zap_scan.run_command", fake_run_command)
+        monkeypatch.setattr("tools.zap_scan.run_command", fake_run_command)
         monkeypatch.setattr(
-            "cli.zap_scan.stop_local_caddy_profile",
+            "tools.zap_scan.stop_local_caddy_profile",
             fake_stop_local_caddy_profile,
         )
 
@@ -141,16 +141,16 @@ class TestRunZapScan:
             (report_dir / name).write_text("stale", encoding="utf-8")
 
         monkeypatch.setattr(
-            "cli.zap_scan.local_caddy_profile_health",
+            "tools.zap_scan.local_caddy_profile_health",
             lambda _caddy_port: True,
         )
-        monkeypatch.setattr("cli.zap_scan.run_command", lambda _command, _cwd: 0)
+        monkeypatch.setattr("tools.zap_scan.run_command", lambda _command, _cwd: 0)
         monkeypatch.setattr(
-            "cli.zap_scan.start_local_caddy_profile",
+            "tools.zap_scan.start_local_caddy_profile",
             lambda *_args, **_kwargs: pytest.fail("start_local_caddy_profile should not be called"),
         )
         monkeypatch.setattr(
-            "cli.zap_scan.stop_local_caddy_profile",
+            "tools.zap_scan.stop_local_caddy_profile",
             lambda *_args, **_kwargs: pytest.fail("stop_local_caddy_profile should not be called"),
         )
 
@@ -173,15 +173,15 @@ class TestRunZapScan:
         calls: list[str] = []
 
         monkeypatch.setattr(
-            "cli.zap_scan.local_caddy_profile_health",
+            "tools.zap_scan.local_caddy_profile_health",
             lambda _caddy_port: True,
         )
         monkeypatch.setattr(
-            "cli.zap_scan.start_local_caddy_profile",
+            "tools.zap_scan.start_local_caddy_profile",
             lambda *_args, **_kwargs: pytest.fail("start_local_caddy_profile should not be called"),
         )
         monkeypatch.setattr(
-            "cli.zap_scan.stop_local_caddy_profile",
+            "tools.zap_scan.stop_local_caddy_profile",
             lambda *_args, **_kwargs: pytest.fail("stop_local_caddy_profile should not be called"),
         )
 
@@ -191,7 +191,7 @@ class TestRunZapScan:
             assert cwd == tmp_path
             return 2
 
-        monkeypatch.setattr("cli.zap_scan.run_command", fake_run_command)
+        monkeypatch.setattr("tools.zap_scan.run_command", fake_run_command)
 
         exit_code = run_zap_scan(
             scan_mode="full",
@@ -213,22 +213,22 @@ class TestRunZapScan:
         lifecycle_calls: list[str] = []
 
         monkeypatch.setattr(
-            "cli.zap_scan.local_caddy_profile_health",
+            "tools.zap_scan.local_caddy_profile_health",
             lambda _caddy_port: False,
         )
         monkeypatch.setattr(
-            "cli.zap_scan.start_local_caddy_profile",
+            "tools.zap_scan.start_local_caddy_profile",
             lambda _project_dir, _env_file, _caddy_port: lifecycle_calls.append("start"),
         )
         monkeypatch.setattr(
-            "cli.zap_scan.stop_local_caddy_profile",
+            "tools.zap_scan.stop_local_caddy_profile",
             lambda _project_dir, _env_file: lifecycle_calls.append("stop"),
         )
 
         def fake_run_command(_command: list[str], _cwd: Path) -> int:
             raise RuntimeError("zap failed")
 
-        monkeypatch.setattr("cli.zap_scan.run_command", fake_run_command)
+        monkeypatch.setattr("tools.zap_scan.run_command", fake_run_command)
 
         with pytest.raises(RuntimeError, match="zap failed"):
             run_zap_scan(
@@ -250,23 +250,23 @@ class TestRunZapScan:
         localdir = tmp_path / ".local"
 
         monkeypatch.setattr(
-            "cli.zap_scan.local_caddy_profile_health",
+            "tools.zap_scan.local_caddy_profile_health",
             lambda _caddy_port: False,
         )
         monkeypatch.setattr(
-            "cli.zap_scan.start_local_caddy_profile",
+            "tools.zap_scan.start_local_caddy_profile",
             lambda _project_dir, _env_file, _caddy_port: None,
         )
 
         def failing_stop(_project_dir: Path, _env_file: Path) -> None:
             raise ZapScanError("cleanup failed")
 
-        monkeypatch.setattr("cli.zap_scan.stop_local_caddy_profile", failing_stop)
+        monkeypatch.setattr("tools.zap_scan.stop_local_caddy_profile", failing_stop)
 
         def fake_run_command(_command: list[str], _cwd: Path) -> int:
             raise RuntimeError("scan crashed")
 
-        monkeypatch.setattr("cli.zap_scan.run_command", fake_run_command)
+        monkeypatch.setattr("tools.zap_scan.run_command", fake_run_command)
 
         with pytest.raises(RuntimeError, match="scan crashed"):
             run_zap_scan(

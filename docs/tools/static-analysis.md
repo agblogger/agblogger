@@ -13,16 +13,18 @@ Each target is fail-fast, and the default full gate `just check` runs `check-sta
 
 `check-backend-static` runs these commands:
 
-- `uv run mypy backend/ cli/ tests/`
+- `uv run mypy backend/ tools/ cli/agblogger_cli/ tests/`
   - Strict Python type checking driven by `[tool.mypy]` in `pyproject.toml`.
-  - Scope: backend, CLI, and tests.
-- `uv run basedpyright backend/ cli/`
+  - Scope: backend, repository tools, standalone CLI, and tests.
+- `uv run basedpyright backend/ tools/ cli/agblogger_cli/`
   - Second type-checking pass using BasedPyright.
-  - Scope: backend and CLI runtime code only.
+  - Scope: backend, repository tools, and standalone CLI runtime code.
   - Config: `[tool.basedpyright]` in `pyproject.toml` uses `typeCheckingMode = "standard"` and excludes `.venv` plus `backend/migrations`.
 - `uv run deptry .`
   - Dependency declaration hygiene for the Python project.
   - Config: `[tool.deptry]` and `[tool.deptry.per_rule_ignores]` in `pyproject.toml`.
+- `uv run --directory cli --project .. deptry .`
+  - Enforces that the standalone CLI declares only dependencies imported by the CLI binary.
 - `uv run lint-imports`
   - Import-boundary enforcement via `.importlinter`.
   - Current contracts:
@@ -32,15 +34,15 @@ Each target is fail-fast, and the default full gate `just check` runs `check-sta
     - `backend.models` must not import `backend.services`, `backend.filesystem`, or `backend.pandoc`.
     - `backend.pandoc` must not import `backend.services`, `backend.filesystem`, `backend.models`, `backend.schemas`, `backend.crosspost`, or `backend.sync`.
     - `backend.crosspost` must not import `backend.services`, `backend.filesystem`, `backend.models`, `backend.schemas`, `backend.pandoc`, or `backend.sync`.
-- `uv run ruff check backend/ cli/ tests/`
+- `uv run ruff check backend/ tools/ cli/ tests/`
   - Python linting and security/style checks.
   - Config: `[tool.ruff]` and `[tool.ruff.lint]` in `pyproject.toml`.
-- `uv run ruff format --check backend/ cli/ tests/`
+- `uv run ruff format --check backend/ tools/ cli/ tests/`
   - Formatting compliance check for Python code.
 - Resolves the virtualenv's `site-packages` directory through `.venv/bin/python`, audits the installed environment with `pip-audit --path`, and reports vulnerabilities belonging to production dependencies exported from the lockfile.
   - Audits the locked runtime dependency union for all Python workspace packages, including the backend and standalone CLI, not the dev toolchain.
   - The export omits dev dependencies and editable workspace projects, so the audit reflects shipped third-party runtime dependencies from `uv.lock`.
-  - `cli/runtime_dependency_audit.py` validates audit output and falls back from PyPI to OSV when PyPI is unavailable or returns an invalid report. The gate fails closed if neither service returns a trustworthy report.
+  - `tools/runtime_dependency_audit.py` validates audit output and falls back from PyPI to OSV when PyPI is unavailable or returns an invalid report. The gate fails closed if neither service returns a trustworthy report.
 
 ## Frontend (`check-frontend-static`)
 
@@ -63,10 +65,10 @@ Each target is fail-fast, and the default full gate `just check` runs `check-sta
 
 ## Dead-Code Analysis (`check-vulture`)
 
-- Command: `uv run vulture backend cli --exclude "backend/migrations" --min-confidence 80 --ignore-names "readline"`
+- Command: `uv run vulture backend tools cli/agblogger_cli --exclude "backend/migrations" --min-confidence 80 --ignore-names "readline"`
 - Purpose: detect likely unused Python runtime code.
-- Scope: `backend/` and `cli/`, excluding migrations.
-- Note: `readline` is explicitly ignored because the deployment CLI imports it for side effects.
+- Scope: `backend/`, `tools/`, and the standalone CLI package, excluding migrations.
+- Note: `readline` is explicitly ignored because the deployment tool imports it for side effects.
 
 ## Trivy Repository Scan (`check-trivy`)
 
@@ -105,7 +107,7 @@ These checks are intentionally outside `just check-static` and `just check`:
   - Rebuilds and analyzes CodeQL databases for Python and JavaScript/TypeScript.
 - `just check-semgrep`
   - Runs `uv run semgrep scan` with remote rulesets `p/ci`, `p/security-audit`, `p/secrets`, `p/owasp-top-ten`, `p/python`, `p/react`, `p/typescript`, `p/dockerfile`, `p/docker-compose`, `p/supply-chain`, `p/trailofbits`, plus the local `.semgrep.yml`.
-  - Scope: `backend/`, `cli/`, `frontend/src/`, `Dockerfile`, and `docker-compose.yml`.
+  - Scope: `backend/`, `tools/`, the standalone CLI package, `frontend/src/`, `Dockerfile`, and `docker-compose.yml`.
   - Exclusions: `tests`, frontend `__tests__`, and frontend `*.test.ts(x)` files.
 - `just check-snyk-deps`
   - Runs `snyk test frontend` for frontend dependency scanning.

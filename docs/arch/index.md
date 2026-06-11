@@ -11,7 +11,7 @@ The system has four primary architectural parts:
 - **Content layer**: canonical content under `content/` — markdown posts with YAML front matter and TOML site metadata
 - **Application layer**: a FastAPI backend that owns API boundaries, rendering, authorization, and content orchestration
 - **Presentation layer**: a React single-page app for browsing, editing, and administration
-- **Integration layer**: CLI tooling, bidirectional sync, and cross-posting adapters that extend the core content system
+- **Integration layer**: the standalone sync CLI and cross-posting adapters that extend the core content system
 
 The backend serves both the JSON API and the built frontend, so browser clients and automation clients share the same application boundary.
 
@@ -21,8 +21,8 @@ The backend serves both the JSON API and the built frontend, so browser clients 
 - **SQLite as a derived cache**: the database accelerates queries and search but is rebuilt from canonical files on startup and refreshed incrementally on writes. The database also holds durable state that has no filesystem backing: admin account and credentials, auth tokens (refresh tokens), connected social accounts (encrypted OAuth credentials), and cross-post history.
 - **Backend-owned mutation boundary**: rendering, sanitization, authorization, and write coordination are enforced on the server. Content-changing operations share coordinated write handling so filesystem updates, cache refreshes, and versioning stay consistent.
 - **Long-lived Pandoc renderer**: markdown rendering runs through a shared Pandoc server process rather than spawning per-request subprocesses.
-- **Adapters at the edges**: sync, cross-posting, and CLI tooling extend the core content model instead of redefining it.
-- **Deployment and security**: self-hosted container-oriented runtime with layered security controls
+- **Adapters at the edges**: sync, cross-posting, and the standalone CLI extend the core content model instead of redefining it.
+- **Deployment and security**: self-hosted container-oriented runtime with layered security controls.
 
 ## What To Read Next
 
@@ -45,5 +45,5 @@ The backend serves both the JSON API and the built frontend, so browser clients 
 - `backend/filesystem/` contains the filesystem-backed content model, including markdown front matter and TOML configuration handling.
 - `backend/services/` contains the main orchestration logic for content, auth, sync, rendering, and integrations.
 - `frontend/src/App.tsx` is the SPA entry point, with route-level UI in `frontend/src/pages/`.
-- `cli/` contains the sync and deployment companions that sit on top of the core application architecture.
-- `backend/api/subscriptions.py` and `backend/services/subscription_service.py` are the entry points for the email-subscription feature.
+- `cli/agblogger_cli/` contains the standalone sync CLI.
+- `tools/` contains repository-internal development, deployment, release, and quality-gate helpers that are not shipped in the application or CLI binary.

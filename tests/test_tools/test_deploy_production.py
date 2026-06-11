@@ -16,7 +16,7 @@ from hypothesis import strategies as st
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-from cli.deploy_production import (
+from tools.deploy_production import (
     AGBLOGGER_STATIC_IP,
     CADDY_MODE_BUNDLED,
     CADDY_MODE_EXTERNAL,
@@ -164,15 +164,15 @@ def _stub_subprocess(monkeypatch: pytest.MonkeyPatch) -> list[tuple[list[str], P
             output_path.write_bytes(b"fake-image-data")
         return ns
 
-    monkeypatch.setattr("cli.deploy_production.subprocess.run", fake_run)
-    monkeypatch.setattr("cli.deploy_production._wait_for_healthy", lambda *_a, **_kw: None)
+    monkeypatch.setattr("tools.deploy_production.subprocess.run", fake_run)
+    monkeypatch.setattr("tools.deploy_production._wait_for_healthy", lambda *_a, **_kw: None)
     return commands
 
 
 def _stub_no_trivy(monkeypatch: pytest.MonkeyPatch) -> None:
     """Stub shutil.which to report Trivy unavailable."""
     monkeypatch.setattr(
-        "cli.deploy_production.shutil.which",
+        "tools.deploy_production.shutil.which",
         lambda name: None if name == "trivy" else "/usr/bin/docker",
     )
 
@@ -180,21 +180,21 @@ def _stub_no_trivy(monkeypatch: pytest.MonkeyPatch) -> None:
 def _stub_with_trivy(monkeypatch: pytest.MonkeyPatch) -> None:
     """Stub shutil.which to report Trivy available."""
     monkeypatch.setattr(
-        "cli.deploy_production.shutil.which",
+        "tools.deploy_production.shutil.which",
         lambda name: "/usr/bin/trivy" if name == "trivy" else "/usr/bin/docker",
     )
 
 
 def _stub_docker_inspect_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     """Stub _is_container_running to return False."""
-    monkeypatch.setattr("cli.deploy_production._is_container_running", lambda _name: False)
-    monkeypatch.setattr("cli.deploy_production._container_exists", lambda _name: False)
+    monkeypatch.setattr("tools.deploy_production._is_container_running", lambda _name: False)
+    monkeypatch.setattr("tools.deploy_production._container_exists", lambda _name: False)
 
 
 def _stub_docker_inspect_running(monkeypatch: pytest.MonkeyPatch) -> None:
     """Stub _is_container_running to return True."""
-    monkeypatch.setattr("cli.deploy_production._is_container_running", lambda _name: True)
-    monkeypatch.setattr("cli.deploy_production._container_exists", lambda _name: True)
+    monkeypatch.setattr("tools.deploy_production._is_container_running", lambda _name: True)
+    monkeypatch.setattr("tools.deploy_production._container_exists", lambda _name: True)
 
 
 # ── parse_csv_list ───────────────────────────────────────────────────
@@ -531,7 +531,7 @@ def test_check_prerequisites_checks_docker_and_compose(
 ) -> None:
     (tmp_path / "docker-compose.yml").write_text("services: {}\n", encoding="utf-8")
     (tmp_path / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
-    monkeypatch.setattr("cli.deploy_production.shutil.which", lambda _name: "/usr/bin/docker")
+    monkeypatch.setattr("tools.deploy_production.shutil.which", lambda _name: "/usr/bin/docker")
     commands = _stub_subprocess(monkeypatch)
 
     check_prerequisites(tmp_path)
@@ -850,7 +850,7 @@ def test_check_prerequisites_requires_docker_compose_file_for_local_mode(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     (tmp_path / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
-    monkeypatch.setattr("cli.deploy_production.shutil.which", lambda _name: "/usr/bin/docker")
+    monkeypatch.setattr("tools.deploy_production.shutil.which", lambda _name: "/usr/bin/docker")
     with pytest.raises(DeployError, match=r"docker compose file"):
         check_prerequisites(tmp_path, DEPLOY_MODE_LOCAL)
 
@@ -967,7 +967,7 @@ def test_scan_image_reports_findings_as_warning(
     import json
 
     monkeypatch.setattr(
-        "cli.deploy_production.subprocess.run",
+        "tools.deploy_production.subprocess.run",
         lambda *_a, **_kw: SimpleNamespace(
             returncode=1,
             stdout=json.dumps(trivy_output).encode(),
@@ -999,7 +999,7 @@ def test_scan_image_no_findings(
 ) -> None:
     """scan_image prints a success message when no vulnerabilities are found."""
     monkeypatch.setattr(
-        "cli.deploy_production.subprocess.run",
+        "tools.deploy_production.subprocess.run",
         lambda *_a, **_kw: SimpleNamespace(
             returncode=0,
             stdout=b'{"Results":[]}',
@@ -1023,7 +1023,7 @@ def test_scan_image_tolerates_trivy_failure(
     import subprocess as _sp
 
     monkeypatch.setattr(
-        "cli.deploy_production.subprocess.run",
+        "tools.deploy_production.subprocess.run",
         lambda *_a, **_kw: (_ for _ in ()).throw(_sp.TimeoutExpired(["trivy"], 30)),
     )
 
@@ -1568,7 +1568,7 @@ def test_validate_config_rejects_wildcard_trusted_host() -> None:
     )
 
     with pytest.raises(DeployError, match="Invalid trusted host"):
-        from cli.deploy_production import _validate_config
+        from tools.deploy_production import _validate_config
 
         _validate_config(config)
 
@@ -1588,7 +1588,7 @@ def test_validate_config_accepts_subdomain_wildcard() -> None:
         deployment_mode=DEPLOY_MODE_LOCAL,
     )
 
-    from cli.deploy_production import _validate_config
+    from tools.deploy_production import _validate_config
 
     _validate_config(config)
 
@@ -1704,7 +1704,7 @@ def test_caddy_service_section_uses_service_healthy_condition() -> None:
 
 
 def test_docker_compose_yml_caddy_depends_on_healthy() -> None:
-    from cli.deploy_production import _caddy_service_section
+    from tools.deploy_production import _caddy_service_section
 
     section = _caddy_service_section()
     assert "condition: service_healthy" in section
@@ -1731,7 +1731,7 @@ def test_main_checks_docker_before_config_collection(
     tmp_path: Path,
 ) -> None:
     """Issue 2: Docker check should run before interactive config collection."""
-    from cli.deploy_production import main
+    from tools.deploy_production import main
 
     monkeypatch.setattr(
         "sys.argv",
@@ -1748,12 +1748,12 @@ def test_main_checks_docker_before_config_collection(
             "example.com",
         ],
     )
-    monkeypatch.setattr("cli.deploy_production.shutil.which", lambda _name: None)
+    monkeypatch.setattr("tools.deploy_production.shutil.which", lambda _name: None)
 
     def _must_not_be_called(_args: object) -> None:
         raise AssertionError("config_from_args should not be called when Docker is missing")
 
-    monkeypatch.setattr("cli.deploy_production.config_from_args", _must_not_be_called)
+    monkeypatch.setattr("tools.deploy_production.config_from_args", _must_not_be_called)
 
     with pytest.raises(SystemExit, match="1"):
         main()
@@ -1769,7 +1769,7 @@ def test_main_subprocess_error_includes_command(
 ) -> None:
     import subprocess as sp
 
-    from cli.deploy_production import main
+    from tools.deploy_production import main
 
     monkeypatch.setattr(
         "sys.argv",
@@ -1790,7 +1790,7 @@ def test_main_subprocess_error_includes_command(
     )
     (tmp_path / "docker-compose.yml").write_text("services: {}\n", encoding="utf-8")
     (tmp_path / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
-    monkeypatch.setattr("cli.deploy_production.shutil.which", lambda _name: "/usr/bin/docker")
+    monkeypatch.setattr("tools.deploy_production.shutil.which", lambda _name: "/usr/bin/docker")
 
     def fake_run(command: list[str], **_kwargs: object) -> SimpleNamespace:
         # Let the daemon check pass, fail on subsequent commands
@@ -1798,7 +1798,7 @@ def test_main_subprocess_error_includes_command(
             return SimpleNamespace(returncode=0)
         raise sp.CalledProcessError(returncode=1, cmd=command)
 
-    monkeypatch.setattr("cli.deploy_production.subprocess.run", fake_run)
+    monkeypatch.setattr("tools.deploy_production.subprocess.run", fake_run)
 
     with pytest.raises(SystemExit, match="1"):
         main()
@@ -1813,13 +1813,13 @@ def test_main_subprocess_error_includes_command(
 
 def test_quote_env_value_escapes_dollar_signs() -> None:
     """Dollar signs must be escaped to prevent Docker Compose variable expansion."""
-    from cli.deploy_production import _quote_env_value
+    from tools.deploy_production import _quote_env_value
 
     assert _quote_env_value("my$ecret") == '"my\\$ecret"'
 
 
 def test_quote_env_value_escapes_backslash_dollar_combination() -> None:
-    from cli.deploy_production import _quote_env_value
+    from tools.deploy_production import _quote_env_value
 
     assert _quote_env_value("a\\$b") == '"a\\\\\\$b"'
 
@@ -1859,7 +1859,7 @@ def test_build_lifecycle_commands_includes_logs() -> None:
 
 
 def test_validate_config_rejects_ipv4_as_caddy_domain() -> None:
-    from cli.deploy_production import _validate_config
+    from tools.deploy_production import _validate_config
 
     config = _make_config(
         caddy_config=CaddyConfig(domain="127.0.0.1", email=None),
@@ -1871,7 +1871,7 @@ def test_validate_config_rejects_ipv4_as_caddy_domain() -> None:
 
 
 def test_validate_config_rejects_public_ipv4_as_caddy_domain() -> None:
-    from cli.deploy_production import _validate_config
+    from tools.deploy_production import _validate_config
 
     config = _make_config(
         caddy_config=CaddyConfig(domain="93.184.216.34", email=None),
@@ -1899,7 +1899,7 @@ def test_validate_config_rejects_public_ipv4_as_caddy_domain() -> None:
     ],
 )
 def test_validate_config_rejects_invalid_caddy_domains(domain: str) -> None:
-    from cli.deploy_production import _validate_config
+    from tools.deploy_production import _validate_config
 
     config = _make_config(
         caddy_config=CaddyConfig(domain=domain, email=None),
@@ -1920,7 +1920,7 @@ def test_validate_config_rejects_invalid_caddy_domains(domain: str) -> None:
     ],
 )
 def test_validate_config_accepts_valid_caddy_domains(domain: str) -> None:
-    from cli.deploy_production import _validate_config
+    from tools.deploy_production import _validate_config
 
     config = _make_config(
         caddy_config=CaddyConfig(domain=domain, email=None),
@@ -1933,7 +1933,7 @@ def test_validate_config_accepts_valid_caddy_domains(domain: str) -> None:
 
 
 def test_remote_readme_includes_logs_command() -> None:
-    from cli.deploy_production import _build_remote_readme_content
+    from tools.deploy_production import _build_remote_readme_content
 
     config = _make_config(
         caddy_config=CaddyConfig(domain="blog.example.com", email=None),
@@ -1959,7 +1959,7 @@ def test_remote_readme_includes_logs_command() -> None:
 def test_wait_for_healthy_returns_when_service_healthy(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    from cli.deploy_production import _wait_for_healthy
+    from tools.deploy_production import _wait_for_healthy
 
     call_count = 0
 
@@ -1968,8 +1968,8 @@ def test_wait_for_healthy_returns_when_service_healthy(
         call_count += 1
         return SimpleNamespace(returncode=0, stdout="agblogger: Up 10 seconds (healthy)\n")
 
-    monkeypatch.setattr("cli.deploy_production.subprocess.run", fake_run)
-    monkeypatch.setattr("cli.deploy_production.time.sleep", lambda _s: None)
+    monkeypatch.setattr("tools.deploy_production.subprocess.run", fake_run)
+    monkeypatch.setattr("tools.deploy_production.time.sleep", lambda _s: None)
 
     config = _make_config()
     _wait_for_healthy(config, tmp_path, timeout=30, interval=1)
@@ -1980,7 +1980,7 @@ def test_wait_for_healthy_returns_when_service_healthy(
 def test_wait_for_healthy_warns_on_timeout(
     capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    from cli.deploy_production import _wait_for_healthy
+    from tools.deploy_production import _wait_for_healthy
 
     # Simulate time passing quickly so the poll times out
     call_counter = 0
@@ -1993,9 +1993,9 @@ def test_wait_for_healthy_warns_on_timeout(
     def fake_run(command: list[str], **_kwargs: object) -> SimpleNamespace:
         return SimpleNamespace(returncode=0, stdout="agblogger: Up 3 seconds (starting)\n")
 
-    monkeypatch.setattr("cli.deploy_production.subprocess.run", fake_run)
-    monkeypatch.setattr("cli.deploy_production.time.sleep", lambda _s: None)
-    monkeypatch.setattr("cli.deploy_production.time.monotonic", fake_monotonic)
+    monkeypatch.setattr("tools.deploy_production.subprocess.run", fake_run)
+    monkeypatch.setattr("tools.deploy_production.time.sleep", lambda _s: None)
+    monkeypatch.setattr("tools.deploy_production.time.monotonic", fake_monotonic)
 
     config = _make_config()
     with pytest.raises(DeployError, match="timed out"):
@@ -2058,7 +2058,7 @@ class TestWaitForHealthyVacuousTruth:
     def test_raises_deploy_error_when_health_check_times_out(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        from cli.deploy_production import _wait_for_healthy
+        from tools.deploy_production import _wait_for_healthy
 
         def fake_monotonic() -> float:
             fake_monotonic.counter += 1  # type: ignore[attr-defined]
@@ -2069,9 +2069,9 @@ class TestWaitForHealthyVacuousTruth:
         def fake_run(command: list[str], **_kwargs: object) -> SimpleNamespace:
             return SimpleNamespace(returncode=0, stdout="caddy: Up 10 seconds\n")
 
-        monkeypatch.setattr("cli.deploy_production.subprocess.run", fake_run)
-        monkeypatch.setattr("cli.deploy_production.time.sleep", lambda _s: None)
-        monkeypatch.setattr("cli.deploy_production.time.monotonic", fake_monotonic)
+        monkeypatch.setattr("tools.deploy_production.subprocess.run", fake_run)
+        monkeypatch.setattr("tools.deploy_production.time.sleep", lambda _s: None)
+        monkeypatch.setattr("tools.deploy_production.time.monotonic", fake_monotonic)
 
         config = _make_config()
         with pytest.raises(DeployError, match="timed out"):
@@ -2080,7 +2080,7 @@ class TestWaitForHealthyVacuousTruth:
     def test_reports_healthy_when_agblogger_present_and_healthy(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        from cli.deploy_production import _wait_for_healthy
+        from tools.deploy_production import _wait_for_healthy
 
         def fake_run(command: list[str], **_kwargs: object) -> SimpleNamespace:
             return SimpleNamespace(
@@ -2088,8 +2088,8 @@ class TestWaitForHealthyVacuousTruth:
                 stdout="agblogger: Up 10 seconds (healthy)\ncaddy: Up 10 seconds\n",
             )
 
-        monkeypatch.setattr("cli.deploy_production.subprocess.run", fake_run)
-        monkeypatch.setattr("cli.deploy_production.time.sleep", lambda _s: None)
+        monkeypatch.setattr("tools.deploy_production.subprocess.run", fake_run)
+        monkeypatch.setattr("tools.deploy_production.time.sleep", lambda _s: None)
 
         config = _make_config()
         _wait_for_healthy(config, tmp_path, timeout=30, interval=1)
@@ -2186,7 +2186,7 @@ class TestCommandTimeout:
     def test_run_command_passes_timeout(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        from cli.deploy_production import COMMAND_TIMEOUT_SECONDS, _run_command
+        from tools.deploy_production import COMMAND_TIMEOUT_SECONDS, _run_command
 
         captured_kwargs: dict[str, object] = {}
 
@@ -2194,14 +2194,14 @@ class TestCommandTimeout:
             captured_kwargs.update(kwargs)
             return SimpleNamespace(returncode=0)
 
-        monkeypatch.setattr("cli.deploy_production.subprocess.run", fake_run)
+        monkeypatch.setattr("tools.deploy_production.subprocess.run", fake_run)
         _run_command(["echo", "hello"], tmp_path)
         assert captured_kwargs["timeout"] == COMMAND_TIMEOUT_SECONDS
 
     def test_run_command_accepts_custom_timeout(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        from cli.deploy_production import _run_command
+        from tools.deploy_production import _run_command
 
         captured_kwargs: dict[str, object] = {}
 
@@ -2209,7 +2209,7 @@ class TestCommandTimeout:
             captured_kwargs.update(kwargs)
             return SimpleNamespace(returncode=0)
 
-        monkeypatch.setattr("cli.deploy_production.subprocess.run", fake_run)
+        monkeypatch.setattr("tools.deploy_production.subprocess.run", fake_run)
         _run_command(["echo", "hello"], tmp_path, timeout=42)
         assert captured_kwargs["timeout"] == 42
 
@@ -2220,7 +2220,7 @@ class TestWaitForHealthyWithCaddy:
     def test_waits_for_caddy_when_caddy_enabled(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        from cli.deploy_production import _wait_for_healthy
+        from tools.deploy_production import _wait_for_healthy
 
         call_count = 0
 
@@ -2238,8 +2238,8 @@ class TestWaitForHealthyWithCaddy:
                 stdout="agblogger: Up 15 seconds (healthy)\ncaddy: Up 8 seconds\n",
             )
 
-        monkeypatch.setattr("cli.deploy_production.subprocess.run", fake_run)
-        monkeypatch.setattr("cli.deploy_production.time.sleep", lambda _s: None)
+        monkeypatch.setattr("tools.deploy_production.subprocess.run", fake_run)
+        monkeypatch.setattr("tools.deploy_production.time.sleep", lambda _s: None)
 
         config = _make_config(
             caddy_config=CaddyConfig(domain="blog.example.com", email=None),
@@ -2254,7 +2254,7 @@ class TestWaitForHealthyWithCaddy:
     def test_times_out_when_caddy_fails(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        from cli.deploy_production import _wait_for_healthy
+        from tools.deploy_production import _wait_for_healthy
 
         call_counter = 0
 
@@ -2269,9 +2269,9 @@ class TestWaitForHealthyWithCaddy:
                 stdout="agblogger: Up 10 seconds (healthy)\n",
             )
 
-        monkeypatch.setattr("cli.deploy_production.subprocess.run", fake_run)
-        monkeypatch.setattr("cli.deploy_production.time.sleep", lambda _s: None)
-        monkeypatch.setattr("cli.deploy_production.time.monotonic", fake_monotonic)
+        monkeypatch.setattr("tools.deploy_production.subprocess.run", fake_run)
+        monkeypatch.setattr("tools.deploy_production.time.sleep", lambda _s: None)
+        monkeypatch.setattr("tools.deploy_production.time.monotonic", fake_monotonic)
 
         config = _make_config(
             caddy_config=CaddyConfig(domain="blog.example.com", email=None),
@@ -2283,7 +2283,7 @@ class TestWaitForHealthyWithCaddy:
     def test_skips_caddy_check_when_caddy_disabled(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        from cli.deploy_production import _wait_for_healthy
+        from tools.deploy_production import _wait_for_healthy
 
         def fake_run(command: list[str], **_kwargs: object) -> SimpleNamespace:
             return SimpleNamespace(
@@ -2291,8 +2291,8 @@ class TestWaitForHealthyWithCaddy:
                 stdout="agblogger: Up 10 seconds (healthy)\n",
             )
 
-        monkeypatch.setattr("cli.deploy_production.subprocess.run", fake_run)
-        monkeypatch.setattr("cli.deploy_production.time.sleep", lambda _s: None)
+        monkeypatch.setattr("tools.deploy_production.subprocess.run", fake_run)
+        monkeypatch.setattr("tools.deploy_production.time.sleep", lambda _s: None)
 
         config = _make_config()
         _wait_for_healthy(config, tmp_path, timeout=30, interval=1)
@@ -2393,7 +2393,7 @@ class TestDeployRemoteModeWithoutComposeYml:
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         (tmp_path / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
-        monkeypatch.setattr("cli.deploy_production.shutil.which", lambda _name: "/usr/bin/docker")
+        monkeypatch.setattr("tools.deploy_production.shutil.which", lambda _name: "/usr/bin/docker")
 
         with pytest.raises(DeployError, match=r"docker compose file"):
             check_prerequisites(tmp_path, DEPLOY_MODE_LOCAL)
@@ -2405,7 +2405,7 @@ class TestHealthPollProgress:
     def test_prints_elapsed_time_during_poll(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        from cli.deploy_production import _wait_for_healthy
+        from tools.deploy_production import _wait_for_healthy
 
         call_count = 0
         timestamps = [0.0, 5.0, 10.0, 200.0]  # last one triggers timeout
@@ -2422,9 +2422,9 @@ class TestHealthPollProgress:
                 stdout="agblogger: Up 5 seconds\n",
             )
 
-        monkeypatch.setattr("cli.deploy_production.subprocess.run", fake_run)
-        monkeypatch.setattr("cli.deploy_production.time.sleep", lambda _s: None)
-        monkeypatch.setattr("cli.deploy_production.time.monotonic", fake_monotonic)
+        monkeypatch.setattr("tools.deploy_production.subprocess.run", fake_run)
+        monkeypatch.setattr("tools.deploy_production.time.sleep", lambda _s: None)
+        monkeypatch.setattr("tools.deploy_production.time.monotonic", fake_monotonic)
 
         config = _make_config()
         with pytest.raises(DeployError, match="timed out"):
@@ -2439,13 +2439,13 @@ class TestIpv4DetectionSharedHelper:
     """IPv4 detection should use a single shared helper."""
 
     def test_is_ipv4_like_detects_ipv4(self) -> None:
-        from cli.deploy_production import _is_ipv4_like
+        from tools.deploy_production import _is_ipv4_like
 
         assert _is_ipv4_like("127.0.0.1")
         assert _is_ipv4_like("93.184.216.34")
 
     def test_is_ipv4_like_rejects_non_ipv4(self) -> None:
-        from cli.deploy_production import _is_ipv4_like
+        from tools.deploy_production import _is_ipv4_like
 
         assert not _is_ipv4_like("blog.example.com")
         assert not _is_ipv4_like("single")
@@ -2503,7 +2503,7 @@ class TestWaitForHealthyHandlesSubprocessErrors:
     def test_prints_error_status_on_compose_ps_failure(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        from cli.deploy_production import _wait_for_healthy
+        from tools.deploy_production import _wait_for_healthy
 
         call_counter = 0
         # First two calls within timeout, third exceeds it to break the loop
@@ -2518,9 +2518,9 @@ class TestWaitForHealthyHandlesSubprocessErrors:
         def fake_run(command: list[str], **_kwargs: object) -> SimpleNamespace:
             return SimpleNamespace(returncode=1, stdout="", stderr="daemon error")
 
-        monkeypatch.setattr("cli.deploy_production.subprocess.run", fake_run)
-        monkeypatch.setattr("cli.deploy_production.time.sleep", lambda _s: None)
-        monkeypatch.setattr("cli.deploy_production.time.monotonic", fake_monotonic)
+        monkeypatch.setattr("tools.deploy_production.subprocess.run", fake_run)
+        monkeypatch.setattr("tools.deploy_production.time.sleep", lambda _s: None)
+        monkeypatch.setattr("tools.deploy_production.time.monotonic", fake_monotonic)
 
         config = _make_config()
         with pytest.raises(DeployError, match="timed out"):
@@ -2538,7 +2538,7 @@ class TestValidateImageRef:
     """Image references should be validated beyond whitespace checks."""
 
     def test_rejects_empty_tag_after_colon(self) -> None:
-        from cli.deploy_production import _validate_config
+        from tools.deploy_production import _validate_config
 
         config = _make_config(
             deployment_mode=DEPLOY_MODE_REGISTRY,
@@ -2548,7 +2548,7 @@ class TestValidateImageRef:
             _validate_config(config)
 
     def test_rejects_bare_colon(self) -> None:
-        from cli.deploy_production import _validate_config
+        from tools.deploy_production import _validate_config
 
         config = _make_config(
             deployment_mode=DEPLOY_MODE_REGISTRY,
@@ -2558,7 +2558,7 @@ class TestValidateImageRef:
             _validate_config(config)
 
     def test_rejects_empty_image_ref(self) -> None:
-        from cli.deploy_production import _validate_config
+        from tools.deploy_production import _validate_config
 
         config = _make_config(
             deployment_mode=DEPLOY_MODE_REGISTRY,
@@ -2568,7 +2568,7 @@ class TestValidateImageRef:
             _validate_config(config)
 
     def test_accepts_valid_registry_image_ref(self) -> None:
-        from cli.deploy_production import _validate_config
+        from tools.deploy_production import _validate_config
 
         config = _make_config(
             deployment_mode=DEPLOY_MODE_REGISTRY,
@@ -2577,7 +2577,7 @@ class TestValidateImageRef:
         _validate_config(config)
 
     def test_accepts_valid_local_image_ref(self) -> None:
-        from cli.deploy_production import _validate_config
+        from tools.deploy_production import _validate_config
 
         config = _make_config(
             deployment_mode=DEPLOY_MODE_TARBALL,
@@ -2593,7 +2593,7 @@ class TestTrustedHostsPromptMentionsCaddyDomain:
     """Interactive prompt should inform users that the Caddy domain is auto-included."""
 
     def test_prompt_mentions_auto_include(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        from cli.deploy_production import _prompt_trusted_hosts
+        from tools.deploy_production import _prompt_trusted_hosts
 
         inputs = iter(["api.example.com"])
         monkeypatch.setattr("builtins.input", lambda _prompt: next(inputs))
@@ -2955,14 +2955,14 @@ class TestTrustedHostsPromptWithCaddy:
     """Trusted hosts prompt should be simpler when Caddy domain is set."""
 
     def test_caddy_domain_only_when_input_empty(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        from cli.deploy_production import _prompt_trusted_hosts
+        from tools.deploy_production import _prompt_trusted_hosts
 
         monkeypatch.setattr("builtins.input", lambda _prompt: "")
         result = _prompt_trusted_hosts("blog.example.com")
         assert result == ["blog.example.com"]
 
     def test_caddy_domain_plus_extras(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        from cli.deploy_production import _prompt_trusted_hosts
+        from tools.deploy_production import _prompt_trusted_hosts
 
         monkeypatch.setattr("builtins.input", lambda _prompt: "api.example.com")
         result = _prompt_trusted_hosts("blog.example.com")
@@ -2979,7 +2979,7 @@ class TestCollectConfigReusesExistingSecrets:
     def test_reuses_secrets_when_user_accepts(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        from cli.deploy_production import collect_config
+        from tools.deploy_production import collect_config
 
         _stub_no_trivy(monkeypatch)
 
@@ -2992,7 +2992,7 @@ class TestCollectConfigReusesExistingSecrets:
         # port=8000, trusted hosts=example.com, proxy ips=(none), expose docs=no
         inputs = iter(["y", "local", "none", "n", "", "example.com", "", "n", "", "y"])
         monkeypatch.setattr("builtins.input", lambda _prompt: next(inputs))
-        monkeypatch.setattr("cli.deploy_production.getpass.getpass", lambda _prompt: "")
+        monkeypatch.setattr("tools.deploy_production.getpass.getpass", lambda _prompt: "")
 
         config = collect_config(tmp_path)
 
@@ -3003,7 +3003,7 @@ class TestCollectConfigReusesExistingSecrets:
     def test_prompts_new_secrets_when_no_existing_env(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        from cli.deploy_production import collect_config
+        from tools.deploy_production import collect_config
 
         _stub_no_trivy(monkeypatch)
 
@@ -3015,7 +3015,7 @@ class TestCollectConfigReusesExistingSecrets:
         passwords = iter(["", "strongpass123", "strongpass123"])
         monkeypatch.setattr("builtins.input", lambda _prompt: next(inputs))
         monkeypatch.setattr(
-            "cli.deploy_production.getpass.getpass", lambda _prompt: next(passwords)
+            "tools.deploy_production.getpass.getpass", lambda _prompt: next(passwords)
         )
 
         config = collect_config(tmp_path)
@@ -3038,7 +3038,7 @@ class TestBlueskyClientUrlForwarding:
     """BLUESKY_CLIENT_URL must be in compose environment so the container receives it."""
 
     def test_compose_env_section_includes_bluesky_client_url(self) -> None:
-        from cli.deploy_production import _agblogger_env_section
+        from tools.deploy_production import _agblogger_env_section
 
         section = _agblogger_env_section()
         assert "BLUESKY_CLIENT_URL=${BLUESKY_CLIENT_URL:-}" in section
@@ -3391,7 +3391,7 @@ class TestHealthTimeoutLogsCommand:
     def test_health_timeout_error_includes_logs_command(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        from cli.deploy_production import _wait_for_healthy
+        from tools.deploy_production import _wait_for_healthy
 
         call_counter = 0
 
@@ -3403,9 +3403,9 @@ class TestHealthTimeoutLogsCommand:
         def fake_run(command: list[str], **_kwargs: object) -> SimpleNamespace:
             return SimpleNamespace(returncode=0, stdout="agblogger: Up 3 seconds (starting)\n")
 
-        monkeypatch.setattr("cli.deploy_production.subprocess.run", fake_run)
-        monkeypatch.setattr("cli.deploy_production.time.sleep", lambda _s: None)
-        monkeypatch.setattr("cli.deploy_production.time.monotonic", fake_monotonic)
+        monkeypatch.setattr("tools.deploy_production.subprocess.run", fake_run)
+        monkeypatch.setattr("tools.deploy_production.time.sleep", lambda _s: None)
+        monkeypatch.setattr("tools.deploy_production.time.monotonic", fake_monotonic)
 
         config = _make_config()
         with pytest.raises(DeployError, match=r"docker compose.*logs"):
@@ -3423,7 +3423,7 @@ class TestCheckPrerequisitesDockerfile:
     ) -> None:
         (tmp_path / "docker-compose.yml").write_text("services: {}\n", encoding="utf-8")
         # No Dockerfile present
-        monkeypatch.setattr("cli.deploy_production.shutil.which", lambda _name: "/usr/bin/docker")
+        monkeypatch.setattr("tools.deploy_production.shutil.which", lambda _name: "/usr/bin/docker")
         _stub_subprocess(monkeypatch)
 
         with pytest.raises(DeployError, match="Dockerfile"):
@@ -3434,7 +3434,7 @@ class TestCheckPrerequisitesDockerfile:
     ) -> None:
         (tmp_path / "docker-compose.yml").write_text("services: {}\n", encoding="utf-8")
         (tmp_path / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
-        monkeypatch.setattr("cli.deploy_production.shutil.which", lambda _name: "/usr/bin/docker")
+        monkeypatch.setattr("tools.deploy_production.shutil.which", lambda _name: "/usr/bin/docker")
         commands = _stub_subprocess(monkeypatch)
 
         check_prerequisites(tmp_path, DEPLOY_MODE_LOCAL)
@@ -3457,7 +3457,7 @@ class TestDnsInfoMessage:
         tmp_path: Path,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
-        from cli.deploy_production import collect_config
+        from tools.deploy_production import collect_config
 
         _stub_no_trivy(monkeypatch)
 
@@ -3485,7 +3485,7 @@ class TestDnsInfoMessage:
 
         monkeypatch.setattr("builtins.input", lambda _prompt: next(inputs))
         monkeypatch.setattr(
-            "cli.deploy_production.getpass.getpass", lambda _prompt: next(passwords)
+            "tools.deploy_production.getpass.getpass", lambda _prompt: next(passwords)
         )
 
         config = collect_config(tmp_path)
@@ -3522,7 +3522,7 @@ class TestDockerDaemonCheck:
     ) -> None:
         import subprocess as sp
 
-        from cli.deploy_production import main
+        from tools.deploy_production import main
 
         monkeypatch.setattr(
             "sys.argv",
@@ -3539,19 +3539,19 @@ class TestDockerDaemonCheck:
                 "example.com",
             ],
         )
-        monkeypatch.setattr("cli.deploy_production.shutil.which", lambda _name: "/usr/bin/docker")
+        monkeypatch.setattr("tools.deploy_production.shutil.which", lambda _name: "/usr/bin/docker")
 
         def fake_run(command: list[str], **kwargs: object) -> SimpleNamespace:
             if command == ["docker", "info"]:
                 raise sp.CalledProcessError(1, command)
             return SimpleNamespace(returncode=0)
 
-        monkeypatch.setattr("cli.deploy_production.subprocess.run", fake_run)
+        monkeypatch.setattr("tools.deploy_production.subprocess.run", fake_run)
 
         def _must_not_be_called(_args: object) -> None:
             raise AssertionError("config_from_args should not be called when daemon is down")
 
-        monkeypatch.setattr("cli.deploy_production.config_from_args", _must_not_be_called)
+        monkeypatch.setattr("tools.deploy_production.config_from_args", _must_not_be_called)
 
         with pytest.raises(SystemExit, match="1"):
             main()
@@ -3565,7 +3565,7 @@ class TestDockerDaemonCheck:
         tmp_path: Path,
     ) -> None:
         """dry-run should not check Docker daemon since it only prints config."""
-        from cli.deploy_production import main
+        from tools.deploy_production import main
 
         monkeypatch.setattr(
             "sys.argv",
@@ -3586,7 +3586,7 @@ class TestDockerDaemonCheck:
             ],
         )
         # Docker binary not even present — should still succeed for dry-run
-        monkeypatch.setattr("cli.deploy_production.shutil.which", lambda _name: None)
+        monkeypatch.setattr("tools.deploy_production.shutil.which", lambda _name: None)
 
         # Should not raise
         main()
@@ -3761,7 +3761,7 @@ class TestCollectConfigBundleDirReuse:
     def test_reuses_secrets_from_bundle_dir(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        from cli.deploy_production import collect_config
+        from tools.deploy_production import collect_config
 
         _stub_no_trivy(monkeypatch)
 
@@ -3776,7 +3776,7 @@ class TestCollectConfigBundleDirReuse:
         # port=8000, trusted hosts, proxy ips, docs=no
         inputs = iter(["y", "local", "none", "n", "", "example.com", "", "n", "", "y"])
         monkeypatch.setattr("builtins.input", lambda _prompt: next(inputs))
-        monkeypatch.setattr("cli.deploy_production.getpass.getpass", lambda _prompt: "")
+        monkeypatch.setattr("tools.deploy_production.getpass.getpass", lambda _prompt: "")
 
         config = collect_config(tmp_path)
 
@@ -3787,7 +3787,7 @@ class TestCollectConfigBundleDirReuse:
     def test_prefers_project_root_over_bundle_dir(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        from cli.deploy_production import collect_config
+        from tools.deploy_production import collect_config
 
         _stub_no_trivy(monkeypatch)
 
@@ -3818,7 +3818,7 @@ class TestCollectConfigBundleDirReuse:
         # port=8000, trusted hosts, proxy ips, docs=no
         inputs = iter(["y", "local", "none", "n", "", "example.com", "", "n", "", "y"])
         monkeypatch.setattr("builtins.input", lambda _prompt: next(inputs))
-        monkeypatch.setattr("cli.deploy_production.getpass.getpass", lambda _prompt: "")
+        monkeypatch.setattr("tools.deploy_production.getpass.getpass", lambda _prompt: "")
 
         config = collect_config(tmp_path)
 
@@ -3833,7 +3833,7 @@ class TestCollectConfigExternalCaddy:
     def test_external_caddy_collects_shared_config(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        from cli.deploy_production import collect_config
+        from tools.deploy_production import collect_config
 
         _stub_no_trivy(monkeypatch)
 
@@ -3867,7 +3867,7 @@ class TestCollectConfigExternalCaddy:
         )
         monkeypatch.setattr("builtins.input", lambda _prompt: next(inputs))
         monkeypatch.setattr(
-            "cli.deploy_production.getpass.getpass",
+            "tools.deploy_production.getpass.getpass",
             lambda _prompt: next(getpass_inputs),
         )
 
@@ -3884,7 +3884,7 @@ class TestCollectConfigExternalCaddy:
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         """For remote deploy modes, caddy_dir with ~ must not be expanded to local home."""
-        from cli.deploy_production import collect_config
+        from tools.deploy_production import collect_config
 
         _stub_no_trivy(monkeypatch)
 
@@ -3916,7 +3916,7 @@ class TestCollectConfigExternalCaddy:
         )
         monkeypatch.setattr("builtins.input", lambda _prompt: next(inputs))
         monkeypatch.setattr(
-            "cli.deploy_production.getpass.getpass",
+            "tools.deploy_production.getpass.getpass",
             lambda _prompt: next(getpass_inputs),
         )
 
@@ -3936,7 +3936,7 @@ class TestHealthTimeoutMessage:
     def test_timeout_message_mentions_logs(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        from cli.deploy_production import _wait_for_healthy
+        from tools.deploy_production import _wait_for_healthy
 
         config = _make_config()
 
@@ -3944,8 +3944,8 @@ class TestHealthTimeoutMessage:
         def fake_run(*_args: object, **_kwargs: object) -> SimpleNamespace:
             return SimpleNamespace(returncode=1, stdout="", stderr="")
 
-        monkeypatch.setattr("cli.deploy_production.subprocess.run", fake_run)
-        monkeypatch.setattr("cli.deploy_production.time.sleep", lambda _: None)
+        monkeypatch.setattr("tools.deploy_production.subprocess.run", fake_run)
+        monkeypatch.setattr("tools.deploy_production.time.sleep", lambda _: None)
 
         with pytest.raises(DeployError, match=r"docker compose.*logs"):
             _wait_for_healthy(config, tmp_path, timeout=1, interval=0)
@@ -4001,24 +4001,26 @@ class TestVersionBanner:
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
     ) -> None:
-        from cli.deploy_production import main
+        from tools.deploy_production import main
 
         monkeypatch.setattr(
             "sys.argv",
             ["deploy", "--project-dir", str(tmp_path)],
         )
-        monkeypatch.setattr("cli.deploy_production.shutil.which", lambda _name: "/usr/bin/docker")
+        monkeypatch.setattr("tools.deploy_production.shutil.which", lambda _name: "/usr/bin/docker")
 
         # Stub docker info to succeed
         def fake_subprocess_run(command: list[str], **kwargs: object) -> SimpleNamespace:
             return SimpleNamespace(returncode=0)
 
-        monkeypatch.setattr("cli.deploy_production.subprocess.run", fake_subprocess_run)
+        monkeypatch.setattr("tools.deploy_production.subprocess.run", fake_subprocess_run)
 
         # Stub collect_config to return a config, then cancel at confirmation
         config = _make_config()
-        monkeypatch.setattr("cli.deploy_production.collect_config", lambda _dir: config)
-        monkeypatch.setattr("cli.deploy_production._prompt_yes_no", lambda _prompt, default: False)
+        monkeypatch.setattr("tools.deploy_production.collect_config", lambda _dir: config)
+        monkeypatch.setattr(
+            "tools.deploy_production._prompt_yes_no", lambda _prompt, default: False
+        )
 
         main()
 
@@ -4071,7 +4073,7 @@ def test_shared_caddy_runtime_dir_keeps_home_scoped_default(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     home_dir = Path("/home/deploy")
-    monkeypatch.setattr("cli.deploy_production._docker_is_snap_install", lambda: True)
+    monkeypatch.setattr("tools.deploy_production._docker_is_snap_install", lambda: True)
     runtime_dir = _shared_caddy_runtime_dir(
         Path(DEFAULT_SHARED_CADDY_DIR),
         home_dir=home_dir,
@@ -4083,7 +4085,7 @@ def test_shared_caddy_runtime_dir_falls_back_from_opt_on_snap(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     home_dir = Path("/home/deploy")
-    monkeypatch.setattr("cli.deploy_production._docker_is_snap_install", lambda: True)
+    monkeypatch.setattr("tools.deploy_production._docker_is_snap_install", lambda: True)
     runtime_dir = _shared_caddy_runtime_dir(
         Path("/opt/caddy"),
         home_dir=home_dir,
@@ -4439,7 +4441,7 @@ def test_reload_shared_caddy_runs_docker_exec(monkeypatch: pytest.MonkeyPatch) -
         calls.append(command)
         return SimpleNamespace(returncode=0)
 
-    monkeypatch.setattr("cli.deploy_production.subprocess.run", fake_run)
+    monkeypatch.setattr("tools.deploy_production.subprocess.run", fake_run)
     reload_shared_caddy()
     assert calls == [
         [
@@ -4462,14 +4464,14 @@ class TestReloadSharedCaddyFailure:
     ) -> None:
         import subprocess as sp
 
-        from cli.deploy_production import DeployError, reload_shared_caddy
+        from tools.deploy_production import DeployError, reload_shared_caddy
 
         def fake_run(*_args, **kwargs):
             exc = sp.CalledProcessError(1, ["docker", "exec", "caddy", "caddy", "reload"])
             exc.stderr = "adapt: syntax error"
             raise exc
 
-        monkeypatch.setattr("cli.deploy_production.subprocess.run", fake_run)
+        monkeypatch.setattr("tools.deploy_production.subprocess.run", fake_run)
 
         with pytest.raises(DeployError, match="Failed to reload shared Caddy"):
             reload_shared_caddy()
@@ -4530,7 +4532,7 @@ def test_deploy_external_caddy_local_bootstraps_and_writes_snippet(
         host_bind_ip=LOCALHOST_BIND_IP,
         shared_caddy_config=SharedCaddyConfig(caddy_dir=caddy_dir, acme_email="ops@example.com"),
     )
-    monkeypatch.setattr("cli.deploy_production.reload_shared_caddy", lambda: None)
+    monkeypatch.setattr("tools.deploy_production.reload_shared_caddy", lambda: None)
     result = deploy(config=config, project_dir=tmp_path)
     # Shared Caddy bootstrapped
     assert (caddy_dir / "sites").is_dir()
@@ -4551,9 +4553,9 @@ def test_deploy_external_caddy_local_replaces_proxy_subnet_placeholder(
     _stub_subprocess(monkeypatch)
     _stub_no_trivy(monkeypatch)
     _stub_docker_inspect_missing(monkeypatch)
-    monkeypatch.setattr("cli.deploy_production.reload_shared_caddy", lambda: None)
+    monkeypatch.setattr("tools.deploy_production.reload_shared_caddy", lambda: None)
     monkeypatch.setattr(
-        "cli.deploy_production._detect_external_caddy_subnet",
+        "tools.deploy_production._detect_external_caddy_subnet",
         lambda _project_dir: "172.31.0.0/16",
     )
 
@@ -4582,7 +4584,7 @@ def test_wait_for_healthy_skips_caddy_check_in_external_mode(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """In external Caddy mode, _wait_for_healthy should only check agblogger, not caddy."""
-    from cli.deploy_production import _wait_for_healthy
+    from tools.deploy_production import _wait_for_healthy
 
     config = _make_config(
         caddy_mode=CADDY_MODE_EXTERNAL,
@@ -4602,8 +4604,8 @@ def test_wait_for_healthy_skips_caddy_check_in_external_mode(
             )
         return SimpleNamespace(returncode=0)
 
-    monkeypatch.setattr("cli.deploy_production.subprocess.run", fake_run)
-    monkeypatch.setattr("cli.deploy_production.time.sleep", lambda _: None)
+    monkeypatch.setattr("tools.deploy_production.subprocess.run", fake_run)
+    monkeypatch.setattr("tools.deploy_production.time.sleep", lambda _: None)
 
     # Should NOT raise even though there's no caddy container in output
     _wait_for_healthy(config, tmp_path, timeout=10, interval=1)
@@ -4618,7 +4620,7 @@ def test_deploy_external_caddy_full_flow(monkeypatch: pytest.MonkeyPatch, tmp_pa
     commands = _stub_subprocess(monkeypatch)
     _stub_no_trivy(monkeypatch)
     _stub_docker_inspect_missing(monkeypatch)
-    monkeypatch.setattr("cli.deploy_production.reload_shared_caddy", lambda: None)
+    monkeypatch.setattr("tools.deploy_production.reload_shared_caddy", lambda: None)
 
     caddy_dir = tmp_path / "shared-caddy"
     config = DeployConfig(
@@ -5049,7 +5051,7 @@ class TestBuildSetupScript:
         deployments. The helper replaces only the marker-delimited region, so
         operator customizations outside the markers survive across deploys.
         """
-        from cli.deploy_production import (
+        from tools.deploy_production import (
             SHARED_MANAGED_BEGIN_MARKER,
             SHARED_MANAGED_END_MARKER,
         )
@@ -5868,7 +5870,7 @@ def test_scan_image_prints_summary_even_when_report_write_fails(
     }
 
     monkeypatch.setattr(
-        "cli.deploy_production.subprocess.run",
+        "tools.deploy_production.subprocess.run",
         lambda *_a, **_kw: SimpleNamespace(
             returncode=1,
             stdout=json.dumps(trivy_output).encode(),
@@ -5921,7 +5923,7 @@ def test_scan_image_warns_when_report_write_fails(
     }
 
     monkeypatch.setattr(
-        "cli.deploy_production.subprocess.run",
+        "tools.deploy_production.subprocess.run",
         lambda *_a, **_kw: SimpleNamespace(
             returncode=1,
             stdout=json.dumps(trivy_output).encode(),
@@ -6144,7 +6146,7 @@ def test_write_bundle_files_fails_gracefully_when_entrypoint_missing(
 
     with (
         patch(
-            "cli.deploy_production.Path.resolve",
+            "tools.deploy_production.Path.resolve",
             return_value=tmp_path / "fake_repo" / "cli" / "deploy_production.py",
         ),
         pytest.raises(SystemExit),

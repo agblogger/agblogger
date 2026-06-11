@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from cli.local_caddy import main
+from tools.local_caddy import main
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -21,19 +21,19 @@ def test_main_start_starts_local_caddy_profile_when_unhealthy(
     localdir = tmp_path / ".local"
     calls: list[object] = []
 
-    monkeypatch.setattr("cli.local_caddy.check_prerequisites", lambda _project_dir: None)
+    monkeypatch.setattr("tools.local_caddy.check_prerequisites", lambda _project_dir: None)
     monkeypatch.setattr(
-        "cli.local_caddy.write_local_caddy_env",
+        "tools.local_caddy.write_local_caddy_env",
         lambda given_localdir: given_localdir / "caddy-local.env",
     )
-    monkeypatch.setattr("cli.local_caddy.local_caddy_profile_health", lambda _port: False)
+    monkeypatch.setattr("tools.local_caddy.local_caddy_profile_health", lambda _port: False)
 
     def fake_start(project_dir: Path, env_file: Path, caddy_port: int) -> None:
         calls.append((project_dir, env_file, caddy_port))
 
-    monkeypatch.setattr("cli.local_caddy.start_local_caddy_profile", fake_start)
+    monkeypatch.setattr("tools.local_caddy.start_local_caddy_profile", fake_start)
     monkeypatch.setattr(
-        "cli.local_caddy.stop_local_caddy_profile",
+        "tools.local_caddy.stop_local_caddy_profile",
         lambda *_args: pytest.fail("stop_local_caddy_profile should not be called"),
     )
 
@@ -63,14 +63,14 @@ def test_main_start_reuses_existing_healthy_profile(
     monkeypatch: MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    monkeypatch.setattr("cli.local_caddy.check_prerequisites", lambda _project_dir: None)
+    monkeypatch.setattr("tools.local_caddy.check_prerequisites", lambda _project_dir: None)
     monkeypatch.setattr(
-        "cli.local_caddy.write_local_caddy_env",
+        "tools.local_caddy.write_local_caddy_env",
         lambda given_localdir: given_localdir / "caddy-local.env",
     )
-    monkeypatch.setattr("cli.local_caddy.local_caddy_profile_health", lambda _port: True)
+    monkeypatch.setattr("tools.local_caddy.local_caddy_profile_health", lambda _port: True)
     monkeypatch.setattr(
-        "cli.local_caddy.start_local_caddy_profile",
+        "tools.local_caddy.start_local_caddy_profile",
         lambda *_args: pytest.fail("start_local_caddy_profile should not be called"),
     )
 
@@ -92,7 +92,7 @@ def test_main_start_reuses_existing_healthy_profile(
 def test_main_health_returns_nonzero_when_profile_is_unhealthy(
     monkeypatch: MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("cli.local_caddy.local_caddy_profile_health", lambda _port: False)
+    monkeypatch.setattr("tools.local_caddy.local_caddy_profile_health", lambda _port: False)
 
     exit_code = main(["health", "--caddy-port", "8080"])
 
@@ -106,16 +106,16 @@ def test_main_stop_stops_local_caddy_profile(
     localdir = tmp_path / ".local"
     calls: list[tuple[Path, Path]] = []
 
-    monkeypatch.setattr("cli.local_caddy.check_prerequisites", lambda _project_dir: None)
+    monkeypatch.setattr("tools.local_caddy.check_prerequisites", lambda _project_dir: None)
     monkeypatch.setattr(
-        "cli.local_caddy.write_local_caddy_env",
+        "tools.local_caddy.write_local_caddy_env",
         lambda given_localdir: given_localdir / "caddy-local.env",
     )
 
     def fake_stop(project_dir: Path, env_file: Path) -> None:
         calls.append((project_dir, env_file))
 
-    monkeypatch.setattr("cli.local_caddy.stop_local_caddy_profile", fake_stop)
+    monkeypatch.setattr("tools.local_caddy.stop_local_caddy_profile", fake_stop)
 
     exit_code = main(
         [

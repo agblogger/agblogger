@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from cli.dev_server import (
+from tools.dev_server import (
     DevServerState,
     find_free_port,
     is_process_alive,

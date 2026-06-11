@@ -23,7 +23,7 @@ The wizard walks through all configuration choices interactively, shows a summar
 All configuration can be passed via CLI flags for automation:
 
 ```bash
-uv run agblogger-deploy --non-interactive \
+uv run python -m tools.deploy_production --non-interactive \
   --admin-username admin \
   --admin-password 'your-password' \
   --trusted-hosts blog.example.com \
@@ -37,13 +37,13 @@ uv run agblogger-deploy --non-interactive \
 Preview the generated configuration files without writing anything:
 
 ```bash
-uv run agblogger-deploy --dry-run
+uv run python -m tools.deploy_production --dry-run
 ```
 
 In non-interactive mode:
 
 ```bash
-uv run agblogger-deploy --dry-run --non-interactive \
+uv run python -m tools.deploy_production --dry-run --non-interactive \
   --admin-username admin --admin-password pass --trusted-hosts blog.example.com
 ```
 
@@ -267,7 +267,7 @@ just deploy
 Choose `local` deployment mode and `bundled` Caddy (or `none` for simplicity). For local testing without a real domain, choose Caddy mode `none`:
 
 ```bash
-uv run agblogger-deploy --non-interactive \
+uv run python -m tools.deploy_production --non-interactive \
   --deployment-mode local \
   --admin-username admin \
   --admin-password 'testpassword' \
@@ -309,10 +309,10 @@ The generated `.env.production` contains:
 - **Caddy**: TLS certificates and configuration state stored in `caddy-data` and `caddy-config` Docker volumes (only when using bundled Caddy mode).
 - All persistent volumes and the content bind mount must be preserved during upgrades. Schema migrations run automatically on startup.
 
-## CLI Reference
+## Deployment Tool Reference
 
 ```
-uv run agblogger-deploy [OPTIONS]
+uv run python -m tools.deploy_production [OPTIONS]
 
 Options:
   --version                   Show version and exit

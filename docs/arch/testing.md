@@ -7,7 +7,8 @@ AgBlogger’s testing architecture mirrors the application architecture:
 - API-level tests validate behavior at the HTTP boundary
 - service-level tests validate business logic and failure handling
 - content and rendering tests validate the markdown pipeline
-- CLI tests validate operational tooling
+- CLI tests validate the standalone sync CLI
+- tool tests validate repository-internal development, deployment, release, and quality-gate helpers
 - frontend tests validate route behavior, state management, and user workflows
 
 The focus is boundary behavior, not only narrow implementation-level unit tests.
@@ -36,5 +37,6 @@ Where the codebase has deterministic, high-invariant logic, tests favor property
 - `tests/test_api/` covers HTTP-level backend behavior.
 - `tests/test_services/`, `tests/test_rendering/`, `tests/test_labels/`, and `tests/test_sync/` cover core backend subsystems.
 - `frontend/src/**/__tests__/` and `frontend/src/**/*.test.ts*` cover the SPA.
-- `tests/test_cli/` covers operational tooling, including quality-gate helper CLIs such as the locked runtime dependency audit.
+- `tests/test_cli/` covers the standalone sync CLI.
+- `tests/test_tools/` covers repository-internal tooling, including the locked runtime dependency audit.
 - `justfile` defines the repository-level validation gates.

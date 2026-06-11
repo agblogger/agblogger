@@ -94,13 +94,12 @@ The goal is to preserve content, preserve service availability where possible, a
 
 - `backend/main.py` is the main runtime entry point.
 - `backend/api/` contains the HTTP-facing modules grouped by feature area.
-- `backend/services/` contains the orchestration and business-logic layer, including services for page retrieval, page cache population, rendering, posts CRUD operations, authentication, cross-posting, sync, analytics, admin panel business logic, storage quota tracking, and SEO enrichment.
+- `backend/services/` contains the orchestration and business-logic layer, including services for page retrieval, page cache population, rendering, posts CRUD operations, authentication, cross-posting, sync, analytics, admin panel business logic, Resend integration, storage quota tracking, and SEO enrichment.
 - `backend/models/` contains SQLAlchemy ORM models for both durable tables (admin users, admin refresh tokens, social accounts, cross-posts, analytics settings, subscription settings, subscription broadcast ledger) and cache tables (posts, pages, labels, sync manifest).
 - `backend/schemas/` contains Pydantic request/response schemas that define the API contracts.
 - `backend/filesystem/` contains the canonical content model.
 - `backend/pandoc/server.py` manages the long-lived Pandoc server process used by the application.
 - `backend/pandoc/renderer.py` exposes the shared markdown-rendering boundary used across backend features.
 - `backend/migrations/` contains Alembic migration scripts for durable table schema changes.
-- `backend/services/resend_client.py` is the shared async HTTP boundary over the Resend API; it holds a single long-lived `httpx.AsyncClient` and is closed on app shutdown alongside other background services.
 - `backend/utils/slug.py` provides canonical post path validation and slug extraction used across API, filesystem, sync, and rendering modules.
 - `backend/utils/datetime.py` provides shared datetime parsing and formatting helpers.

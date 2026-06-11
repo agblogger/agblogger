@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from cli.mutation_backend import (
+from tools.mutation_backend import (
     PROFILE_BACKEND,
     PROFILE_BACKEND_FULL,
     BackendMutationProfile,

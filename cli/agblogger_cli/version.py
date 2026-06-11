@@ -13,7 +13,7 @@ def _base_dir() -> Path:
     """Return the directory containing VERSION and BUILD files.
 
     In a PyInstaller bundle, data files are extracted to ``sys._MEIPASS``.
-    Otherwise, resolve relative to this file (agblogger_cli/agblogger_cli/ -> repo root).
+    Otherwise, resolve relative to this file (cli/agblogger_cli/ -> repo root).
     """
     meipass = getattr(sys, "_MEIPASS", None)
     if meipass is not None:
