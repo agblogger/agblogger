@@ -5,12 +5,14 @@ Stores no subscriber PII. Resend is the system of record for contacts."""
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
+from svix.webhooks import Webhook, WebhookVerificationError as WebhookVerificationError
 
 from backend.models.subscription import SubscriptionBroadcast, SubscriptionSettings
 from backend.schemas.subscription import SubscriptionSettingsResponse
@@ -418,6 +420,75 @@ def fire_post_broadcast(
     task = asyncio.create_task(_run())
     _broadcast_tasks.add(task)
     task.add_done_callback(_broadcast_tasks.discard)
+
+
+async def handle_resend_webhook(
+    session: AsyncSession,
+    *,
+    raw_body: bytes,
+    headers: dict[str, str],
+    secret_key: str,
+) -> None:
+    """Verify Resend webhook signature and process the event.
+
+    Raises WebhookVerificationError on bad signature — caller maps this to 400.
+    All other failures (missing config, Resend API errors, malformed payload)
+    are logged and swallowed so the caller can return 200.
+    """
+    row = await _get_row(session)
+    if row is None or not row.resend_webhook_secret_encrypted:
+        logger.warning("Resend webhook received but no webhook secret is configured; ignoring")
+        return
+
+    webhook_secret = decrypt_webhook_secret(row, secret_key)
+    if webhook_secret is None:
+        logger.warning("Resend webhook: failed to decrypt webhook secret; ignoring")
+        return
+
+    # Raises WebhookVerificationError on bad/expired signature — propagated to caller.
+    Webhook(webhook_secret).verify(raw_body, headers)
+
+    try:
+        payload = json.loads(raw_body)
+    except (ValueError, UnicodeDecodeError):
+        logger.warning("Resend webhook: malformed JSON body")
+        return
+
+    if payload.get("type") != "contact.unsubscribed":
+        return
+
+    data = payload.get("data") or {}
+    contact = data.get("contact") or {}
+    contact_id = contact.get("id")
+    audience_id = data.get("audience_id")
+
+    if not contact_id or not audience_id:
+        logger.warning(
+            "Resend webhook: contact.unsubscribed missing contact id or audience_id"
+        )
+        return
+
+    api_key = decrypt_api_key(row, secret_key)
+    if api_key is None:
+        logger.warning(
+            "Resend webhook: API key not configured; cannot delete contact %s", contact_id
+        )
+        return
+
+    try:
+        await resend_client.delete_contact(
+            api_key=api_key, audience_id=audience_id, contact_id=contact_id
+        )
+        logger.info(
+            "Deleted unsubscribed contact %s from audience %s", contact_id, audience_id
+        )
+    except resend_client.ResendError as exc:
+        logger.warning(
+            "Resend webhook: failed to delete contact %s from audience %s: %s",
+            contact_id,
+            audience_id,
+            exc,
+        )
 
 
 async def close_broadcast_tasks() -> None:
