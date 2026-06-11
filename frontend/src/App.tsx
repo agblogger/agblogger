@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect } from "react";
 import {
   createBrowserRouter,
+  Link,
   RouterProvider,
   useLocation,
   Outlet,
@@ -45,6 +46,7 @@ function Layout() {
 
   const fetchConfig = useSiteStore((s) => s.fetchConfig);
   const siteTitle = useSiteStore((s) => s.config?.title);
+  const subscriptionsEnabled = useSiteStore((s) => s.config?.subscriptions_enabled ?? false);
   const checkAuth = useAuthStore((s) => s.checkAuth);
   const initTheme = useThemeStore((s) => s.init);
 
@@ -72,7 +74,7 @@ function Layout() {
         </main>
 
         <footer className="border-t border-border mt-16">
-          <div className="max-w-3xl mx-auto px-6 py-8">
+          <div className="max-w-3xl mx-auto px-6 py-8 flex flex-col items-center gap-2">
             <p className="text-xs text-muted text-center font-mono tracking-wide">
               Powered by{" "}
               <a
@@ -84,6 +86,14 @@ function Layout() {
                 AgBlogger
               </a>
             </p>
+            {subscriptionsEnabled && (
+              <Link
+                to="/page/privacy"
+                className="text-xs text-muted/60 hover:text-muted transition-colors"
+              >
+                Privacy Policy
+              </Link>
+            )}
           </div>
         </footer>
       </div>

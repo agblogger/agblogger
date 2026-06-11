@@ -22,10 +22,54 @@ from backend.schemas.page import PageResponse, SiteConfigResponse, SubscriptionC
 from backend.services import subscription_service
 from backend.services.analytics_service import fire_background_hit
 from backend.services.page_service import get_page, get_site_config
+from backend.services.subscription_service import PublicSubscriptionCompliance
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/pages", tags=["pages"])
+
+
+def _privacy_policy_page(compliance: PublicSubscriptionCompliance | None) -> PageResponse:
+    """Generate a fallback privacy policy page for the email subscription feature."""
+    controller_html = ""
+    if compliance is not None:
+        if compliance.controller_name:
+            contact_part = (
+                f", contact: {compliance.controller_contact}"
+                if compliance.controller_contact
+                else ""
+            )
+            controller_html = (
+                f"<h2>Data controller</h2><p>{compliance.controller_name}{contact_part}</p>"
+            )
+        elif compliance.controller_contact:
+            controller_html = (
+                f"<h2>Data controller contact</h2><p>{compliance.controller_contact}</p>"
+            )
+
+    html = (
+        "<p>This policy explains how this blog handles your personal data when you subscribe"
+        " to email notifications.</p>"
+        "<h2>What we collect</h2>"
+        "<p>When you subscribe, we collect your email address.</p>"
+        "<h2>How we use it</h2>"
+        "<p>Your email address is used only to notify you of new posts, based on your"
+        " consent (GDPR Art. 6(1)(a)).</p>"
+        "<h2>Data processor</h2>"
+        "<p>Emails are delivered by <strong>Resend</strong> (Plus Five Five, Inc., USA) as our data"
+        " processor. Your address is stored and managed by Resend. This involves a transfer"
+        " of personal data outside the EEA under appropriate safeguards (Resend&rsquo;s"
+        " DPA).</p>"
+        "<h2>Retention</h2>"
+        "<p>We keep your email address until you unsubscribe. Every email includes an"
+        " unsubscribe link.</p>"
+        "<h2>Your rights</h2>"
+        "<p>Under applicable data protection law you have the right to access, rectify,"
+        " erase, and port your data, to restrict or object to processing, and to withdraw"
+        " consent at any time. You may also lodge a complaint with a supervisory"
+        " authority.</p>" + controller_html
+    )
+    return PageResponse(id="privacy", title="Privacy Policy", rendered_html=html)
 
 
 @router.get("", response_model=SiteConfigResponse)
@@ -53,6 +97,7 @@ async def site_config(
 async def get_page_endpoint(
     page_id: str,
     request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
     session_factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
     user: Annotated[AdminUser | None, Depends(get_current_admin)],
     content_manager: Annotated[ContentManager, Depends(get_content_manager)],
@@ -65,6 +110,9 @@ async def get_page_endpoint(
     except SQLAlchemyError:
         logger.exception("DB error loading page %s", page_id)
         raise HTTPException(status_code=503, detail="Page temporarily unavailable") from None
+    if page is None and page_id == "privacy":
+        compliance = await subscription_service.get_public_compliance(session)
+        page = _privacy_policy_page(compliance)
     if page is None:
         raise HTTPException(status_code=404, detail="Page not found")
     fire_background_hit(

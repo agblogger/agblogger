@@ -214,9 +214,9 @@ export interface SiteConfigResponse {
   pages: PageConfig[]
   subscriptions_enabled: boolean
   subscription_compliance?: {
-    controller_name: string
-    controller_contact: string
-    privacy_policy_url: string
+    controller_name: string | null
+    controller_contact: string | null
+    privacy_policy_url: string | null
   } | null
 }
 

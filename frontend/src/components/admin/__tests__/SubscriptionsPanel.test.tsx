@@ -103,11 +103,24 @@ describe('SubscriptionsPanel', () => {
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument())
   })
 
-  it('enable toggle is DISABLED when compliance fields are missing', async () => {
+  it('enable toggle is DISABLED when api key or from_email is missing', async () => {
     vi.mocked(apiMod.fetchSubscriptionSettings).mockResolvedValue(INCOMPLETE_SETTINGS)
     renderPanel()
     const toggle = await screen.findByRole('switch', { name: /enable subscriptions/i })
     expect(toggle).toBeDisabled()
+  })
+
+  it('enable toggle is ENABLED when key and from_email are configured, even without compliance fields', async () => {
+    vi.mocked(apiMod.fetchSubscriptionSettings).mockResolvedValue({
+      ...FULL_SETTINGS,
+      controller_name: null,
+      controller_contact: null,
+      privacy_policy_url: null,
+      postal_address: null,
+    })
+    renderPanel()
+    const toggle = await screen.findByRole('switch', { name: /enable subscriptions/i })
+    expect(toggle).toBeEnabled()
   })
 
   it('enable toggle is ENABLED when all compliance fields and key are configured', async () => {

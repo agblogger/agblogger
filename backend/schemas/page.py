@@ -6,9 +6,9 @@ from pydantic import BaseModel
 
 
 class SubscriptionCompliance(BaseModel):
-    controller_name: str
-    controller_contact: str
-    privacy_policy_url: str
+    controller_name: str | None = None
+    controller_contact: str | None = None
+    privacy_policy_url: str | None = None
 
 
 class PageConfig(BaseModel):

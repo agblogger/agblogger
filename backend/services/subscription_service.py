@@ -30,15 +30,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _SEGMENT_NAME = "AgBlogger subscribers"
-# from_name is intentionally NOT here: it is a display-name only, not a
-# GDPR-compliance field, so it is optional even when enabling subscriptions.
-_REQUIRED_TO_ENABLE = (
-    "from_email",
-    "controller_name",
-    "controller_contact",
-    "privacy_policy_url",
-    "postal_address",
-)
+# Only from_email is required to enable; compliance fields are optional and
+# control which parts of the GDPR notice are shown on the subscribe page.
+_REQUIRED_TO_ENABLE = ("from_email",)
 
 
 class _Unset:
@@ -51,9 +45,9 @@ _StringUpdate = str | None | _Unset
 
 @dataclass(frozen=True)
 class PublicSubscriptionCompliance:
-    controller_name: str
-    controller_contact: str
-    privacy_policy_url: str
+    controller_name: str | None
+    controller_contact: str | None
+    privacy_policy_url: str | None
 
 
 class EnablePreconditionError(Exception):
@@ -81,20 +75,18 @@ async def is_enabled(session: AsyncSession) -> bool:
 async def get_public_compliance(
     session: AsyncSession,
 ) -> PublicSubscriptionCompliance | None:
-    """Return configured public compliance details only while subscriptions are enabled."""
+    """Return compliance details when subscriptions are enabled; None otherwise.
+
+    Fields may be None when not configured — the subscribe page renders each
+    part of the GDPR notice conditionally.
+    """
     row = await _get_row(session)
-    if (
-        row is None
-        or not row.enabled
-        or not row.controller_name
-        or not row.controller_contact
-        or not row.privacy_policy_url
-    ):
+    if row is None or not row.enabled:
         return None
     return PublicSubscriptionCompliance(
-        controller_name=row.controller_name,
-        controller_contact=row.controller_contact,
-        privacy_policy_url=row.privacy_policy_url,
+        controller_name=row.controller_name or None,
+        controller_contact=row.controller_contact or None,
+        privacy_policy_url=row.privacy_policy_url or None,
     )
 
 

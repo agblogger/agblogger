@@ -199,13 +199,13 @@ async def test_confirm_page_success(
 
 @pytest.mark.asyncio
 async def test_put_settings_precondition_returns_400(client: AsyncClient) -> None:
-    """Enabling without the required compliance fields returns 400 (EnablePreconditionError)."""
+    """Enabling without from_email returns 400 (EnablePreconditionError)."""
     token = await _get_admin_token(client)
     headers = {"Authorization": f"Bearer {token}"}
 
     resp = await client.put(
         "/api/admin/subscriptions/settings",
-        json={"enabled": True, "api_key": "re_x", "from_email": "a@b.com"},
+        json={"enabled": True, "api_key": "re_x"},
         headers=headers,
     )
     assert resp.status_code == 400

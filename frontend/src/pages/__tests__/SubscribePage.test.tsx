@@ -63,6 +63,51 @@ describe('SubscribePage', () => {
     )
   })
 
+  it('omits controller sentence when compliance fields are absent', () => {
+    useSiteStore.setState({
+      config: {
+        title: 'Blog',
+        description: '',
+        pages: [],
+        subscriptions_enabled: true,
+        subscription_compliance: {
+          controller_name: null,
+          controller_contact: null,
+          privacy_policy_url: null,
+        },
+      },
+      isLoading: false,
+      error: null,
+    })
+    renderPage()
+    expect(screen.queryByText(/data controller/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /privacy policy/i })).toHaveAttribute(
+      'href',
+      '/page/privacy',
+    )
+  })
+
+  it('shows controller name without contact when only name is set', () => {
+    useSiteStore.setState({
+      config: {
+        title: 'Blog',
+        description: '',
+        pages: [],
+        subscriptions_enabled: true,
+        subscription_compliance: {
+          controller_name: 'Acme Corp',
+          controller_contact: null,
+          privacy_policy_url: null,
+        },
+      },
+      isLoading: false,
+      error: null,
+    })
+    renderPage()
+    expect(screen.getByText(/Acme Corp is the data controller/i)).toBeInTheDocument()
+    expect(screen.queryByText(/Acme Corp \(/i)).not.toBeInTheDocument()
+  })
+
   it('disables the submit button and input while submitting', async () => {
     let resolveSubscribe!: (v: { message: string }) => void
     const promise = new Promise<{ message: string }>((res) => { resolveSubscribe = res })

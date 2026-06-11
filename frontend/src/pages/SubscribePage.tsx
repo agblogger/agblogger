@@ -81,11 +81,11 @@ export default function SubscribePage() {
       </form>
 
       <p className="text-xs text-muted mt-6 leading-relaxed">
-        {compliance !== null && compliance !== undefined
-          ? `${compliance.controller_name} (${compliance.controller_contact}) is the data controller. `
+        {compliance?.controller_name != null && compliance.controller_name !== ''
+          ? `${compliance.controller_name}${compliance.controller_contact != null && compliance.controller_contact !== '' ? ` (${compliance.controller_contact})` : ''} is the data controller. `
           : ''}
         We use your email only to notify you of new posts, based on your consent. Email is
-        delivered by Resend (Resend Inc., USA) as our processor; this involves a transfer
+        delivered by Resend (Plus Five Five, Inc., USA) as our processor; this involves a transfer
         outside the EEA under appropriate safeguards. We keep your address until you
         unsubscribe (a link is in every email). You can withdraw consent at any time and
         lodge a complaint with a supervisory authority. See our{' '}

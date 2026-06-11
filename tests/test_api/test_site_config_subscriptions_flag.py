@@ -49,10 +49,9 @@ async def test_site_config_reports_subscriptions_disabled_by_default(
 
 
 @pytest.mark.asyncio
-async def test_site_config_reports_enabled(
+async def test_site_config_reports_enabled_with_full_compliance(
     client: AsyncClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # Access the app's own session factory so we write to the same DB the app reads from.
     transport = client._transport
     app = getattr(transport, "app", None)
     assert app is not None, "Test client must use ASGITransport"
@@ -71,11 +70,9 @@ async def test_site_config_reports_enabled(
             enabled=True,
             api_key="re_x",
             from_email="a@b.com",
-            from_name="J",
             controller_name="J",
             controller_contact="j@b.com",
             privacy_policy_url="https://b/p",
-            postal_address="x",
         )
 
     resp = await client.get("/api/pages")
@@ -85,3 +82,36 @@ async def test_site_config_reports_enabled(
         "controller_contact": "j@b.com",
         "privacy_policy_url": "https://b/p",
     }
+
+
+@pytest.mark.asyncio
+async def test_site_config_reports_enabled_with_partial_compliance(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Subscriptions can be enabled without compliance fields; partial fields are exposed."""
+    transport = client._transport
+    app = getattr(transport, "app", None)
+    assert app is not None, "Test client must use ASGITransport"
+    session_factory = app.state.session_factory
+    secret_key: str = app.state.settings.secret_key
+
+    async def fake_segment(**kwargs: str) -> str:
+        return "seg_auto"
+
+    monkeypatch.setattr(resend_client, "create_segment", fake_segment)
+
+    async with session_factory() as session:
+        await subscription_service.update_settings(
+            session,
+            secret_key=secret_key,
+            enabled=True,
+            api_key="re_x",
+            from_email="a@b.com",
+        )
+
+    resp = await client.get("/api/pages")
+    assert resp.json()["subscriptions_enabled"] is True
+    compliance = resp.json()["subscription_compliance"]
+    assert compliance["controller_name"] is None
+    assert compliance["controller_contact"] is None
+    assert compliance["privacy_policy_url"] is None

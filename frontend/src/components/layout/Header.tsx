@@ -1,5 +1,5 @@
 import { Link, useLocation, useMatch, useNavigate } from 'react-router-dom'
-import { Search, LogIn, LogOut, PenLine, Settings, Menu, X, Sun, Moon, Filter } from 'lucide-react'
+import { Search, LogIn, LogOut, PenLine, Settings, Menu, X, Sun, Moon, Filter, Mail } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSiteStore } from '@/stores/siteStore'
 import { useAuthStore } from '@/stores/authStore'
@@ -17,6 +17,7 @@ export default function Header() {
   const location = useLocation()
   const navigate = useNavigate()
   const config = useSiteStore((s) => s.config)
+  const subscriptionsEnabled = useSiteStore((s) => s.config?.subscriptions_enabled === true)
   const user = useAuthStore((s) => s.user)
   const userId = useAuthStore((s) => s.user?.id ?? null)
   const isAuthInitialized = useAuthStore((s) => s.isInitialized)
@@ -347,6 +348,17 @@ export default function Header() {
               <ThemeIcon size={18} />
             </button>
 
+            {subscriptionsEnabled && !searchOpen && (
+              <Link
+                to="/subscribe"
+                className="p-2 text-muted hover:text-ink transition-colors rounded-lg hover:bg-paper-warm"
+                aria-label="Subscribe"
+                title="Subscribe to new posts"
+              >
+                <Mail size={18} />
+              </Link>
+            )}
+
             <div className="hidden md:flex items-center gap-3">
               {user ? (
                 <>
@@ -428,18 +440,6 @@ export default function Header() {
               </Link>
             )
           })}
-          {config?.subscriptions_enabled === true && (
-            <Link
-              to="/subscribe"
-              className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-                location.pathname === '/subscribe'
-                  ? 'border-accent text-accent'
-                  : 'border-transparent text-muted hover:text-ink hover:border-border-dark'
-              }`}
-            >
-              Subscribe
-            </Link>
-          )}
         </nav>
       </div>
 
@@ -477,19 +477,6 @@ export default function Header() {
                 </Link>
               )
             })}
-            {config?.subscriptions_enabled === true && (
-              <Link
-                to="/subscribe"
-                onClick={closeMobileMenu}
-                className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-                  location.pathname === '/subscribe'
-                    ? 'bg-accent/10 text-accent'
-                    : 'text-muted hover:text-ink hover:bg-paper-warm'
-                }`}
-              >
-                Subscribe
-              </Link>
-            )}
           </nav>
 
           <div className="flex items-center gap-3 pt-2 border-t border-border/50">

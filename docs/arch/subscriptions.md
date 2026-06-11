@@ -29,7 +29,11 @@ An `already_broadcast` once-guard (keyed on a prior `sent` ledger row for the po
 
 ## Enable Precondition
 
-Enabling subscriptions requires: a Resend API key, `from_email`, and the full GDPR compliance config (controller name, controller contact, privacy policy URL, postal address). The first enable lazily auto-creates the Resend segment. Every settings update that leaves subscriptions enabled revalidates the resulting configuration, so required fields cannot be cleared while the public feature remains active. Explicit `null` values clear string settings, while omitted fields remain unchanged. `EnablePreconditionError` is raised if any required field is missing and mapped to HTTP 400 by the API layer.
+Enabling subscriptions requires only a Resend API key and `from_email`. GDPR compliance fields (controller name, controller contact, privacy policy URL, postal address) are optional — the subscribe page renders each part of the GDPR notice conditionally based on what is configured. The first enable lazily auto-creates the Resend segment. Every settings update that leaves subscriptions enabled revalidates the resulting configuration, so `from_email` cannot be cleared while the feature is active. `EnablePreconditionError` is raised and mapped to HTTP 400 if required fields are missing; Resend API errors during settings updates also return HTTP 400 so the admin UI can surface a useful message.
+
+## Built-in Privacy Policy
+
+When no user-created `content/pages/privacy.md` exists, `GET /api/pages/privacy` returns a dynamically generated privacy policy page covering the email subscription data-processing practices (Resend as processor, consent lawful basis, EEA transfer, retention, user rights). Controller name and contact are injected from subscription settings if configured. The frontend shows a discreet "Privacy Policy" link in the footer whenever subscriptions are enabled.
 
 ## Security Model
 
@@ -50,7 +54,7 @@ Enabling subscriptions requires: a Resend API key, `from_email`, and the full GD
 - `GET /api/admin/subscriptions/broadcasts` — broadcast ledger (last 100 attempts).
 - `POST /api/admin/subscriptions/broadcasts` — manual broadcast trigger → 202 Accepted.
 
-The public `GET /api/pages` site-config response exposes the configured controller name, controller contact, and privacy-policy URL only while subscriptions are enabled. The subscribe page renders this payload in its compliance notice. Broadcast email HTML rewrites root-relative post links and asset URLs to absolute URLs using the public post origin.
+The public `GET /api/pages` site-config response exposes the subscription compliance object (with optional fields) when subscriptions are enabled; fields are null when not configured. The subscribe page renders each part of the GDPR notice conditionally. Broadcast email HTML rewrites root-relative post links and asset URLs to absolute URLs using the public post origin.
 
 ## Code Entry Points
 

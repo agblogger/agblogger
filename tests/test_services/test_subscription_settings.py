@@ -47,25 +47,20 @@ async def test_key_encrypted_and_never_returned(session: AsyncSession) -> None:
 
 
 @pytest.mark.asyncio
-async def test_enable_requires_full_compliance_config(session: AsyncSession, monkeypatch) -> None:
+async def test_enable_requires_only_key_and_from_email(session: AsyncSession, monkeypatch) -> None:
     monkeypatch.setattr(resend_client, "create_segment", _fake_create_segment)
-    # Missing controller fields -> enabling must fail.
+    # Missing from_email -> enabling must fail.
     with pytest.raises(subscription_service.EnablePreconditionError):
         await subscription_service.update_settings(
-            session, secret_key=SECRET, enabled=True, api_key="re_x", from_email="a@b.com"
+            session, secret_key=SECRET, enabled=True, api_key="re_x"
         )
-    # With everything set, enabling succeeds and a segment is auto-created.
+    # API key + from_email is sufficient — compliance fields are optional.
     await subscription_service.update_settings(
         session,
         secret_key=SECRET,
         enabled=True,
         api_key="re_x",
         from_email="a@b.com",
-        from_name="Jane",
-        controller_name="Jane Blog",
-        controller_contact="jane@b.com",
-        privacy_policy_url="https://b.com/privacy",
-        postal_address="1 Main St",
     )
     row = await subscription_service._get_row(session)
     assert row is not None
@@ -106,7 +101,7 @@ async def test_explicit_none_clears_optional_field(session: AsyncSession) -> Non
 
 
 @pytest.mark.asyncio
-async def test_enabled_settings_reject_clearing_required_field(
+async def test_enabled_settings_reject_clearing_from_email(
     session: AsyncSession, monkeypatch
 ) -> None:
     monkeypatch.setattr(resend_client, "create_segment", _fake_create_segment)
@@ -116,21 +111,15 @@ async def test_enabled_settings_reject_clearing_required_field(
         enabled=True,
         api_key="re_x",
         from_email="a@b.com",
-        controller_name="Jane Blog",
-        controller_contact="jane@b.com",
-        privacy_policy_url="https://b.com/privacy",
-        postal_address="1 Main St",
     )
 
     with pytest.raises(subscription_service.EnablePreconditionError):
-        await subscription_service.update_settings(
-            session, secret_key=SECRET, controller_contact=""
-        )
+        await subscription_service.update_settings(session, secret_key=SECRET, from_email="")
 
     row = await subscription_service._get_row(session)
     assert row is not None
     assert row.enabled is True
-    assert row.controller_contact == "jane@b.com"
+    assert row.from_email == "a@b.com"
 
 
 @pytest.mark.asyncio
@@ -154,11 +143,6 @@ async def test_build_settings_response_never_contains_key(
         secret_key=SECRET,
         api_key="re_topSecret",
         from_email="news@example.com",
-        from_name="Blog",
-        controller_name="Blog Owner",
-        controller_contact="owner@example.com",
-        privacy_policy_url="https://example.com/privacy",
-        postal_address="1 Main St",
         enabled=True,
     )
     response = await subscription_service.build_settings_response(session, SECRET)
@@ -187,11 +171,6 @@ async def test_build_settings_response_resend_error_gives_none_count(
         secret_key=SECRET,
         api_key="re_x",
         from_email="news@example.com",
-        from_name="Blog",
-        controller_name="Blog Owner",
-        controller_contact="owner@example.com",
-        privacy_policy_url="https://example.com/privacy",
-        postal_address="1 Main St",
         enabled=True,
     )
     response = await subscription_service.build_settings_response(session, SECRET)
@@ -211,11 +190,10 @@ async def test_disable_does_not_require_compliance(session: AsyncSession) -> Non
 
 @pytest.mark.asyncio
 async def test_failed_enable_persists_nothing(session: AsyncSession) -> None:
-    # First-ever call with enable but missing compliance fields must roll back
-    # entirely, leaving no singleton row behind.
+    # First-ever call with enable but missing from_email must roll back entirely.
     with pytest.raises(subscription_service.EnablePreconditionError):
         await subscription_service.update_settings(
-            session, secret_key=SECRET, enabled=True, api_key="re_x", from_email="a@b.com"
+            session, secret_key=SECRET, enabled=True, api_key="re_x"
         )
     assert await subscription_service._get_row(session) is None
 
@@ -236,11 +214,6 @@ async def test_enable_resend_error_leaves_nothing_persisted(
             enabled=True,
             api_key="re_x",
             from_email="a@b.com",
-            from_name="J",
-            controller_name="J",
-            controller_contact="j@b.com",
-            privacy_policy_url="https://b/p",
-            postal_address="x",
         )
     assert await subscription_service._get_row(session) is None
 
@@ -258,11 +231,6 @@ async def test_enable_twice_creates_segment_once(session: AsyncSession, monkeypa
     full_kwargs = {
         "api_key": "re_x",
         "from_email": "a@b.com",
-        "from_name": "J",
-        "controller_name": "J",
-        "controller_contact": "j@b.com",
-        "privacy_policy_url": "https://b/p",
-        "postal_address": "x",
     }
     await subscription_service.update_settings(
         session, secret_key=SECRET, enabled=True, **full_kwargs

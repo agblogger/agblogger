@@ -156,7 +156,8 @@ async def update_settings_endpoint(
     except EnablePreconditionError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except resend_client.ResendError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        # Use 400 so the error detail (e.g. "Invalid API key") reaches the admin UI.
+        raise HTTPException(status_code=400, detail=f"Resend error: {exc}") from exc
     return await subscription_service.build_settings_response(session, settings.secret_key)
 
 
