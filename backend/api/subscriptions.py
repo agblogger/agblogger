@@ -36,6 +36,7 @@ from backend.services.subscription_service import (
     EnablePreconditionError,
     SubscriptionsDisabledError,
 )
+from svix.webhooks import WebhookVerificationError
 from backend.utils.slug import file_path_to_slug
 
 logger = logging.getLogger(__name__)
@@ -43,6 +44,7 @@ logger = logging.getLogger(__name__)
 public_router = APIRouter(prefix="/api", tags=["subscriptions"])
 page_router = APIRouter(tags=["subscriptions"])  # backend-served HTML (no /api prefix)
 admin_router = APIRouter(prefix="/api/admin/subscriptions", tags=["subscriptions-admin"])
+webhook_router = APIRouter(prefix="/api/webhooks", tags=["webhooks"])
 
 _SUBSCRIBE_BURST = (3, 60)  # 3 / minute
 _SUBSCRIBE_SUSTAINED = (10, 3600)  # 10 / hour
@@ -232,3 +234,24 @@ async def trigger_broadcast_endpoint(
         enforce_once_guard=False,
     )
     return {"message": "Broadcast started"}
+
+
+@webhook_router.post("/resend")
+async def resend_webhook_endpoint(
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> dict[str, str]:
+    raw_body = await request.body()
+    try:
+        await subscription_service.handle_resend_webhook(
+            session,
+            raw_body=raw_body,
+            headers=dict(request.headers),
+            secret_key=settings.secret_key,
+        )
+    except WebhookVerificationError:
+        raise HTTPException(status_code=400, detail="Invalid webhook signature")
+    except Exception:
+        logger.warning("Resend webhook processing error", exc_info=True)
+    return {}

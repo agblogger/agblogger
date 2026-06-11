@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
+import json
+import time
 from typing import TYPE_CHECKING
 
 import pytest
@@ -302,3 +307,117 @@ async def test_trigger_broadcast_success(
     assert recorded["trigger"] == "manual"
     assert recorded["enforce_once_guard"] is False
     assert recorded["post_path"] == file_path
+
+
+_WEBHOOK_SECRET_BYTES = b"w" * 32
+_TEST_WEBHOOK_SECRET = "whsec_" + base64.b64encode(_WEBHOOK_SECRET_BYTES).decode()
+
+
+def _svix_headers(payload: bytes, msg_id: str = "msg_test_api") -> dict[str, str]:
+    ts = str(int(time.time()))
+    to_sign = f"{msg_id}.{ts}.".encode() + payload
+    sig = base64.b64encode(
+        hmac.new(_WEBHOOK_SECRET_BYTES, to_sign, hashlib.sha256).digest()
+    ).decode()
+    return {
+        "svix-id": msg_id,
+        "svix-timestamp": ts,
+        "svix-signature": f"v1,{sig}",
+    }
+
+
+@pytest.fixture
+async def enable_webhook_secret(client: AsyncClient) -> None:
+    """Configure the webhook secret via the app's session factory."""
+    transport = client._transport
+    app = getattr(transport, "app", None)
+    assert app is not None
+    session_factory = app.state.session_factory
+    secret_key: str = app.state.settings.secret_key
+    async with session_factory() as session:
+        await subscription_service.update_settings(
+            session,
+            secret_key=secret_key,
+            webhook_secret=_TEST_WEBHOOK_SECRET,
+        )
+
+
+@pytest.mark.asyncio
+async def test_webhook_valid_signature_returns_200(
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+    enable_webhook_secret: None,
+) -> None:
+    async def fake_delete(*, api_key: str, audience_id: str, contact_id: str) -> None:
+        pass
+
+    monkeypatch.setattr(resend_client, "delete_contact", fake_delete)
+
+    payload = json.dumps(
+        {
+            "type": "contact.unsubscribed",
+            "data": {"audience_id": "aud_1", "contact": {"id": "c1"}},
+        }
+    ).encode()
+    resp = await client.post(
+        "/api/webhooks/resend",
+        content=payload,
+        headers={**_svix_headers(payload), "content-type": "application/json"},
+    )
+    assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_webhook_bad_signature_returns_400(
+    client: AsyncClient,
+    enable_webhook_secret: None,
+) -> None:
+    payload = b'{"type": "contact.unsubscribed", "data": {}}'
+    resp = await client.post(
+        "/api/webhooks/resend",
+        content=payload,
+        headers={
+            "svix-id": "msg_test",
+            "svix-timestamp": str(int(time.time())),
+            "svix-signature": "v1,invalidsig==",
+            "content-type": "application/json",
+        },
+    )
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_webhook_no_secret_configured_returns_200(client: AsyncClient) -> None:
+    # No webhook secret set — endpoint returns 200 and does nothing.
+    payload = b'{"type": "contact.unsubscribed", "data": {}}'
+    resp = await client.post(
+        "/api/webhooks/resend",
+        content=payload,
+        headers={"content-type": "application/json"},
+    )
+    assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_webhook_resend_api_failure_still_returns_200(
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+    enable_webhook_secret: None,
+) -> None:
+    async def fake_delete(*, api_key: str, audience_id: str, contact_id: str) -> None:
+        raise resend_client.ResendError("network down")
+
+    monkeypatch.setattr(resend_client, "delete_contact", fake_delete)
+
+    payload = json.dumps(
+        {
+            "type": "contact.unsubscribed",
+            "data": {"audience_id": "aud_1", "contact": {"id": "c1"}},
+        }
+    ).encode()
+    resp = await client.post(
+        "/api/webhooks/resend",
+        content=payload,
+        headers={**_svix_headers(payload), "content-type": "application/json"},
+    )
+    assert resp.status_code == 200

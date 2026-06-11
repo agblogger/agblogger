@@ -40,6 +40,7 @@ from backend.api.render import router as render_router
 from backend.api.subscriptions import admin_router as subscriptions_admin_router
 from backend.api.subscriptions import page_router as subscriptions_page_router
 from backend.api.subscriptions import public_router as subscriptions_public_router
+from backend.api.subscriptions import webhook_router as subscriptions_webhook_router
 from backend.api.sync import router as sync_router
 from backend.config import Settings, sqlite_database_path
 from backend.database import create_engine
@@ -1018,6 +1019,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(crosspost_router)
     app.include_router(subscriptions_public_router)
     app.include_router(subscriptions_admin_router)
+    app.include_router(subscriptions_webhook_router)
     # page_router serves /subscribe/confirm as backend HTML — must be registered
     # before the StaticFiles/SPA catch-all so it is not shadowed.
     app.include_router(subscriptions_page_router)
