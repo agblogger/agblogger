@@ -226,7 +226,11 @@ async def test_enable_twice_creates_segment_once(session: AsyncSession, monkeypa
         calls.append(1)
         return "seg_auto"
 
+    async def _fake_check_segment_exists(*, api_key: str, segment_id: str) -> bool:
+        return True
+
     monkeypatch.setattr(resend_client, "create_segment", _counting_create_segment)
+    monkeypatch.setattr(resend_client, "check_segment_exists", _fake_check_segment_exists)
 
     full_kwargs = {
         "api_key": "re_x",
@@ -243,3 +247,63 @@ async def test_enable_twice_creates_segment_once(session: AsyncSession, monkeypa
     row = await subscription_service._get_row(session)
     assert row is not None
     assert row.resend_segment_id == "seg_auto"
+
+
+@pytest.mark.asyncio
+async def test_enable_with_valid_segment_does_not_recreate(
+    session: AsyncSession, monkeypatch
+) -> None:
+    create_calls: list[int] = []
+
+    async def _counting_create(*, api_key: str, name: str) -> str:
+        create_calls.append(1)
+        return "seg_original"
+
+    async def _exists_true(*, api_key: str, segment_id: str) -> bool:
+        assert segment_id == "seg_original"
+        return True
+
+    monkeypatch.setattr(resend_client, "create_segment", _counting_create)
+    monkeypatch.setattr(resend_client, "check_segment_exists", _exists_true)
+
+    await subscription_service.update_settings(
+        session, secret_key=SECRET, enabled=True, api_key="re_x", from_email="a@b.com"
+    )
+    # Enable a second time — segment still exists, no re-creation.
+    await subscription_service.update_settings(
+        session, secret_key=SECRET, enabled=True, api_key="re_x", from_email="a@b.com"
+    )
+    assert len(create_calls) == 1
+    row = await subscription_service._get_row(session)
+    assert row is not None
+    assert row.resend_segment_id == "seg_original"
+
+
+@pytest.mark.asyncio
+async def test_enable_with_stale_segment_recreates(
+    session: AsyncSession, monkeypatch
+) -> None:
+    create_calls: list[str] = []
+
+    async def _counting_create(*, api_key: str, name: str) -> str:
+        seg_id = f"seg_{len(create_calls) + 1}"
+        create_calls.append(seg_id)
+        return seg_id
+
+    async def _exists_false(*, api_key: str, segment_id: str) -> bool:
+        return False
+
+    monkeypatch.setattr(resend_client, "create_segment", _counting_create)
+    monkeypatch.setattr(resend_client, "check_segment_exists", _exists_false)
+
+    await subscription_service.update_settings(
+        session, secret_key=SECRET, enabled=True, api_key="re_x", from_email="a@b.com"
+    )
+    # Enable again — segment probe says it's gone, so a new one is created.
+    await subscription_service.update_settings(
+        session, secret_key=SECRET, enabled=True, api_key="re_x", from_email="a@b.com"
+    )
+    assert len(create_calls) == 2
+    row = await subscription_service._get_row(session)
+    assert row is not None
+    assert row.resend_segment_id == "seg_2"

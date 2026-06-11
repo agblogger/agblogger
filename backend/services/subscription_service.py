@@ -152,16 +152,22 @@ async def update_settings(
 async def _prepare_enable(
     session: AsyncSession, row: SubscriptionSettings, secret_key: str
 ) -> None:
-    """Validate compliance config and ensure a Resend segment exists before enabling."""
+    """Validate compliance config and ensure a live Resend segment exists before enabling."""
     if not row.resend_api_key_encrypted:
         raise EnablePreconditionError("A Resend API key is required to enable subscriptions.")
     missing = [f for f in _REQUIRED_TO_ENABLE if not getattr(row, f)]
     if missing:
         raise EnablePreconditionError("Set these before enabling: " + ", ".join(missing))
+    api_key = decrypt_api_key(row, secret_key)
+    if api_key is None:
+        raise EnablePreconditionError("A Resend API key is required to enable subscriptions.")
+    if row.resend_segment_id:
+        exists = await resend_client.check_segment_exists(
+            api_key=api_key, segment_id=row.resend_segment_id
+        )
+        if not exists:
+            row.resend_segment_id = None
     if not row.resend_segment_id:
-        api_key = decrypt_api_key(row, secret_key)
-        if api_key is None:
-            raise EnablePreconditionError("A Resend API key is required to enable subscriptions.")
         # Accepted tradeoff: if the commit fails after this succeeds, the created
         # Resend segment is orphaned. Acceptable for this admin-only path (no data
         # loss / security impact).
