@@ -225,9 +225,15 @@ export default function SubscriptionsPanel({ busy, onBusyChange }: Props) {
         )}
         <div className="ml-auto flex items-center gap-2 text-sm text-muted">
           <span className="text-xs uppercase tracking-wide">Subscribers</span>
-          <span className="font-semibold text-ink text-base">
-            {(settings?.subscriber_count ?? 0).toLocaleString()}
-          </span>
+          {settings?.enabled === true && settings.subscriber_count === null ? (
+            <span className="text-xs text-amber-600 dark:text-amber-400">
+              Segment unreachable — disable then re-enable to recover.
+            </span>
+          ) : (
+            <span className="font-semibold text-ink text-base">
+              {(settings?.subscriber_count ?? 0).toLocaleString()}
+            </span>
+          )}
         </div>
       </div>
 
