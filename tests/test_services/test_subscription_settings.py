@@ -361,3 +361,28 @@ async def test_first_enable_does_not_call_check_segment_exists(
     row = await subscription_service._get_row(session)
     assert row is not None
     assert row.resend_segment_id == "seg_auto"
+
+
+@pytest.mark.asyncio
+async def test_webhook_secret_encrypted_and_flag_set(session: AsyncSession) -> None:
+    from backend.services.crypto_service import decrypt_value
+
+    await subscription_service.update_settings(
+        session, secret_key=SECRET, webhook_secret="whsec_test123"
+    )
+    row = await subscription_service._get_row(session)
+    assert row is not None
+    assert row.resend_webhook_secret_encrypted not in (None, "whsec_test123")
+    assert decrypt_value(row.resend_webhook_secret_encrypted, SECRET) == "whsec_test123"
+
+
+@pytest.mark.asyncio
+async def test_webhook_secret_configured_flag_in_response(session: AsyncSession) -> None:
+    response = await subscription_service.build_settings_response(session, SECRET)
+    assert response.webhook_secret_configured is False
+
+    await subscription_service.update_settings(
+        session, secret_key=SECRET, webhook_secret="whsec_test"
+    )
+    response = await subscription_service.build_settings_response(session, SECRET)
+    assert response.webhook_secret_configured is True

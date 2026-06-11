@@ -96,12 +96,19 @@ def decrypt_api_key(row: SubscriptionSettings, secret_key: str) -> str | None:
     return decrypt_value(row.resend_api_key_encrypted, secret_key)
 
 
+def decrypt_webhook_secret(row: SubscriptionSettings, secret_key: str) -> str | None:
+    if not row.resend_webhook_secret_encrypted:
+        return None
+    return decrypt_value(row.resend_webhook_secret_encrypted, secret_key)
+
+
 async def update_settings(
     session: AsyncSession,
     *,
     secret_key: str,
     enabled: bool | None = None,
     api_key: str | None = None,
+    webhook_secret: str | None = None,
     from_email: _StringUpdate = _UNSET,
     from_name: _StringUpdate = _UNSET,
     controller_name: _StringUpdate = _UNSET,
@@ -123,6 +130,8 @@ async def update_settings(
 
     if api_key is not None and api_key != "":
         row.resend_api_key_encrypted = encrypt_value(api_key, secret_key)
+    if webhook_secret is not None and webhook_secret != "":
+        row.resend_webhook_secret_encrypted = encrypt_value(webhook_secret, secret_key)
     for field, value in (
         ("from_email", from_email),
         ("from_name", from_name),
@@ -191,6 +200,7 @@ async def build_settings_response(
             privacy_policy_url=None,
             postal_address=None,
             key_configured=False,
+            webhook_secret_configured=False,
             segment_configured=False,
             subscriber_count=None,
         )
@@ -212,6 +222,7 @@ async def build_settings_response(
         privacy_policy_url=row.privacy_policy_url,
         postal_address=row.postal_address,
         key_configured=bool(row.resend_api_key_encrypted),
+        webhook_secret_configured=bool(row.resend_webhook_secret_encrypted),
         segment_configured=bool(row.resend_segment_id),
         subscriber_count=count,
     )
