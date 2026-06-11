@@ -280,9 +280,7 @@ async def test_enable_with_valid_segment_does_not_recreate(
 
 
 @pytest.mark.asyncio
-async def test_enable_with_stale_segment_recreates(
-    session: AsyncSession, monkeypatch
-) -> None:
+async def test_enable_with_stale_segment_recreates(session: AsyncSession, monkeypatch) -> None:
     create_calls: list[str] = []
 
     async def _counting_create(*, api_key: str, name: str) -> str:

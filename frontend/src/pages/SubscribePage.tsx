@@ -87,7 +87,20 @@ export default function SubscribePage() {
 
       <p className="text-xs text-muted mt-6 leading-relaxed">
         We use your email only to notify you of new posts. Resend is the data
-        processor. See our{" "}
+        processor; your data may be transferred outside the EEA. You may
+        withdraw consent at any time by unsubscribing. You also have the right
+        to lodge a complaint with a supervisory authority.
+        {compliance?.controller_name != null && (
+          <>
+            {" "}
+            {compliance.controller_name} is the data controller
+            {compliance.controller_contact != null
+              ? ` (${compliance.controller_contact})`
+              : ""}
+            .
+          </>
+        )}{" "}
+        See our{" "}
         <a
           href={compliance?.privacy_policy_url ?? "/page/privacy"}
           className="underline hover:text-ink transition-colors"
