@@ -20,7 +20,7 @@ The HTTP surface follows the same split: a public rate-limited subscribe endpoin
 
 Subscribing creates no server-side pending row. Instead, the backend signs a short-lived confirmation token carrying the normalized email address and emails a confirm link to the subscriber. The confirm endpoint verifies the token and, if valid, creates a Resend contact in the segment. A valid confirmation link may be reused until it expires; reopening it is treated as renewed consent.
 
-Unsubscribing is delegated to Resend: every broadcast email embeds Resend's unsubscribe link, and Resend notifies AgBlogger through a signed webhook, upon which the backend deletes the contact from Resend.
+Unsubscribing is delegated to Resend: every broadcast email embeds Resend's unsubscribe link. When the optional signed webhook is configured, Resend also notifies AgBlogger so the backend can permanently delete the unsubscribed contact from Resend.
 
 ## Publish → Broadcast Flow
 
@@ -38,9 +38,9 @@ Because email clients run no JavaScript, KaTeX cannot render client-side as it d
 
 ## Enable Precondition
 
-Enabling subscriptions requires only a Resend API key and sender address from the operator. On first enable, AgBlogger automatically registers its `contact.unsubscribed` endpoint through the Resend API and encrypts the provider-generated signing secret with the application secret. Resend generates the signing secret because Resend signs webhook requests; it cannot be independently derived by AgBlogger. The webhook is mandatory because unsubscribe events must delete the contact from Resend, and webhook processing failures return a retryable non-success response instead of acknowledging deletion. GDPR compliance fields (controller name, controller contact, privacy policy URL, postal address) are optional — the subscribe page renders each part of the GDPR notice conditionally based on what is configured, and the public site config exposes the compliance object only while subscriptions are enabled.
+Enabling subscriptions requires only a Resend API key and sender address from the operator. AgBlogger attempts to register its `contact.unsubscribed` endpoint through the Resend API and encrypts the provider-generated signing secret with the application secret. Resend generates the signing secret because Resend signs webhook requests; it cannot be independently derived by AgBlogger. Webhook setup is best-effort because Resend requires a public HTTPS endpoint: localhost and temporary provider failures do not block subscribing, confirmation, test emails, or broadcasts. While the webhook is missing, the admin panel warns that unsubscribed contacts will not be automatically deleted from Resend. GDPR compliance fields (controller name, controller contact, privacy policy URL, postal address) are optional — the subscribe page renders each part of the GDPR notice conditionally based on what is configured, and the public site config exposes the compliance object only while subscriptions are enabled.
 
-The first enable lazily auto-creates the Resend segment and unsubscribe webhook. Every settings update that leaves subscriptions enabled revalidates the resulting configuration, so required fields cannot be cleared while the feature is active. Missing-field and Resend API errors during settings updates surface as client errors so the admin UI can show a useful message.
+The first enable lazily auto-creates the Resend segment and attempts to create the unsubscribe webhook. If the current URL is not HTTPS, webhook registration is skipped without calling Resend. If registration fails or was skipped, every later settings update that leaves subscriptions enabled retries when the request uses HTTPS. Every enabled settings update also revalidates the required API key and sender address, so those fields cannot be cleared while the feature is active. Missing-field and required Resend-resource errors surface as client errors so the admin UI can show a useful message.
 
 ## Built-in Privacy Policy
 
@@ -49,7 +49,7 @@ When no user-created `content/pages/privacy.md` exists, the pages API serves a d
 ## Security Model
 
 - **No PII at rest**: subscriber emails are never stored locally; Resend is the sole custodian while subscribed.
-- **Deletion on unsubscribe**: enabling requires a signed Resend webhook, and unsubscribe processing deletes the Resend contact.
+- **Deletion on unsubscribe**: when the signed Resend webhook is configured, unsubscribe processing permanently deletes the Resend contact; the admin sees a warning while this cleanup is unavailable.
 - **Provider credentials encrypted at rest**: the Resend API key and provider-generated webhook signing secret are encrypted with a key derived from the app secret and are never returned by any API endpoint or logged — responses expose only whether each value is configured.
 - **Confirm token signing**: confirmation tokens are signed with a key derived from the app secret; an expired or tampered token returns a generic failure page with no information leak.
 - **No enumeration**: the public subscribe endpoint does not reveal whether an address is already subscribed — new and existing addresses receive the same confirmation response.

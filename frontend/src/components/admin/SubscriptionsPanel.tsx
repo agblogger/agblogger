@@ -279,6 +279,14 @@ export default function SubscriptionsPanel({ busy, onBusyChange }: Props) {
 
       {settingsError !== null && <AlertBanner variant="error">{settingsError}</AlertBanner>}
       {settingsSuccess !== null && <AlertBanner variant="success">{settingsSuccess}</AlertBanner>}
+      {settings?.enabled === true && !settings.webhook_secret_configured && (
+        <AlertBanner variant="warning">
+          Webhook registration was skipped or failed. Everything else works, but unsubscribed
+          contacts will not be automatically deleted from Resend until the webhook is registered.
+          Resend requires a public HTTPS URL for webhooks. AgBlogger will retry the next time
+          subscription settings are saved or subscriptions are enabled through HTTPS.
+        </AlertBanner>
+      )}
 
       {/* ── Settings form ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

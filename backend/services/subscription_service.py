@@ -10,6 +10,7 @@ import logging
 import time as _time_module
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
+from urllib.parse import urlsplit
 
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
@@ -95,7 +96,7 @@ async def _get_row(session: AsyncSession) -> SubscriptionSettings | None:
 async def is_enabled(session: AsyncSession) -> bool:
     """True iff subscriptions are configured and enabled."""
     row = await _get_row(session)
-    return bool(row and row.enabled and row.resend_webhook_secret_encrypted)
+    return bool(row and row.enabled)
 
 
 async def get_public_compliance(
@@ -107,7 +108,7 @@ async def get_public_compliance(
     part of the GDPR notice conditionally.
     """
     row = await _get_row(session)
-    if row is None or not row.enabled or not row.resend_webhook_secret_encrypted:
+    if row is None or not row.enabled:
         return None
     return PublicSubscriptionCompliance(
         controller_name=row.controller_name or None,
@@ -222,16 +223,35 @@ async def _prepare_enable(
             api_key=api_key, name=_SEGMENT_NAME
         )
     if not row.resend_webhook_secret_encrypted:
-        if not webhook_url:
-            raise EnablePreconditionError(
-                "A public webhook URL is required to enable subscriptions."
-            )
+        await _try_provision_webhook(row, api_key, secret_key, webhook_url)
+
+
+async def _try_provision_webhook(
+    row: SubscriptionSettings,
+    api_key: str,
+    secret_key: str,
+    webhook_url: str | None,
+) -> None:
+    """Best-effort webhook setup; retries on each enabled settings update."""
+    if not webhook_url or urlsplit(webhook_url).scheme != "https":
+        logger.info(
+            "Skipping Resend webhook setup because the current site URL is not public HTTPS"
+        )
+        return
+    try:
         signing_secret = await resend_client.create_webhook(
             api_key=api_key,
             endpoint=webhook_url,
             events=_WEBHOOK_EVENTS,
         )
-        row.resend_webhook_secret_encrypted = encrypt_value(signing_secret, secret_key)
+    except resend_client.ResendError:
+        logger.warning(
+            "Could not configure Resend unsubscribe webhook; will retry on the next "
+            "enabled subscription settings update",
+            exc_info=True,
+        )
+        return
+    row.resend_webhook_secret_encrypted = encrypt_value(signing_secret, secret_key)
 
 
 async def build_settings_response(
@@ -298,7 +318,7 @@ def _from_header(row: SubscriptionSettings) -> str:
 async def subscribe(session: AsyncSession, *, secret_key: str, email: str, base_url: str) -> None:
     """Send a confirmation email. Persists nothing. Raises if not configured/enabled."""
     row = await _get_row(session)
-    if row is None or not row.enabled or not row.resend_webhook_secret_encrypted:
+    if row is None or not row.enabled:
         raise SubscriptionsDisabledError()
     api_key = decrypt_api_key(row, secret_key)
     from_email = row.from_email
@@ -349,7 +369,7 @@ async def confirm(session: AsyncSession, *, secret_key: str, token: str) -> bool
     if email is None:
         return False
     row = await _get_row(session)
-    if row is None or not row.enabled or not row.resend_webhook_secret_encrypted:
+    if row is None or not row.enabled:
         return False
     segment_id = row.resend_segment_id
     if not segment_id:
@@ -432,12 +452,7 @@ async def send_broadcast(
         error=None,
     )
     try:
-        if (
-            row is None
-            or not row.enabled
-            or not row.resend_webhook_secret_encrypted
-            or not row.resend_segment_id
-        ):
+        if row is None or not row.enabled or not row.resend_segment_id:
             record.error = "Subscriptions not configured"
         else:
             api_key = decrypt_api_key(row, secret_key)

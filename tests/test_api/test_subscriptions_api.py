@@ -230,13 +230,17 @@ async def test_enabling_subscriptions_automatically_registers_webhook(
         webhook_calls.append({"api_key": api_key, "endpoint": endpoint, "events": events})
         return "whsec_generated"
 
+    async def fake_count_contacts(**kwargs: str) -> int:
+        return 0
+
     monkeypatch.setattr(resend_client, "create_segment", fake_create_segment)
     monkeypatch.setattr(resend_client, "create_webhook", fake_create_webhook)
+    monkeypatch.setattr(resend_client, "count_contacts", fake_count_contacts)
     token = await _get_admin_token(client)
     headers = {"Authorization": f"Bearer {token}"}
 
     resp = await client.put(
-        "/api/admin/subscriptions/settings",
+        "https://test/api/admin/subscriptions/settings",
         json={"enabled": True, "api_key": "re_x", "from_email": "blog@example.com"},
         headers=headers,
     )
@@ -246,10 +250,47 @@ async def test_enabling_subscriptions_automatically_registers_webhook(
     assert webhook_calls == [
         {
             "api_key": "re_x",
-            "endpoint": "http://test/api/webhooks/resend",
+            "endpoint": "https://test/api/webhooks/resend",
             "events": ["contact.unsubscribed"],
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_localhost_webhook_failure_does_not_block_enabling(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def fake_create_segment(**kwargs: str) -> str:
+        return "seg_auto"
+
+    async def failing_create_webhook(**kwargs: object) -> str:
+        raise resend_client.ResendError("Endpoint URL scheme must be https")
+
+    async def fake_count_contacts(**kwargs: str) -> int:
+        return 0
+
+    monkeypatch.setattr(resend_client, "create_segment", fake_create_segment)
+    monkeypatch.setattr(resend_client, "create_webhook", failing_create_webhook)
+    monkeypatch.setattr(resend_client, "count_contacts", fake_count_contacts)
+    token = await _get_admin_token(client)
+
+    resp = await client.put(
+        "/api/admin/subscriptions/settings",
+        json={"enabled": True, "api_key": "re_x", "from_email": "blog@example.com"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["enabled"] is True
+    assert resp.json()["webhook_secret_configured"] is False
+    assert "Endpoint URL scheme" not in resp.text
+
+    async def fake_send(**kwargs: str) -> str:
+        return "email_1"
+
+    monkeypatch.setattr(resend_client, "send_email", fake_send)
+    subscribe = await client.post("/api/subscribe", json={"email": "reader@example.com"})
+    assert subscribe.status_code == 200
 
 
 @pytest.mark.asyncio

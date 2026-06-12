@@ -131,6 +131,21 @@ describe('SubscriptionsPanel', () => {
     expect(toggle).toBeEnabled()
   })
 
+  it('explains missing webhook setup and retry timing', async () => {
+    vi.mocked(apiMod.fetchSubscriptionSettings).mockResolvedValue({
+      ...FULL_SETTINGS,
+      webhook_secret_configured: false,
+    })
+    renderPanel()
+    expect(
+      await screen.findByText(/resend requires a public https url/i),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/unsubscribed contacts will not be automatically deleted from resend/i),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/retry.*next time.*settings.*saved/i)).toBeInTheDocument()
+  })
+
   it('enable toggle is ENABLED when key and from_email are configured, even without compliance fields', async () => {
     vi.mocked(apiMod.fetchSubscriptionSettings).mockResolvedValue({
       ...FULL_SETTINGS,

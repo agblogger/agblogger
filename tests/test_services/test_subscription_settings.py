@@ -76,6 +76,74 @@ async def test_enable_automatically_provisions_webhook(
 
 
 @pytest.mark.asyncio
+async def test_enable_continues_when_webhook_provisioning_fails(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def failing_create_webhook(*, api_key: str, endpoint: str, events: list[str]) -> str:
+        raise resend_client.ResendError("Endpoint URL scheme must be https")
+
+    monkeypatch.setattr(resend_client, "create_segment", _fake_create_segment)
+    monkeypatch.setattr(resend_client, "create_webhook", failing_create_webhook)
+
+    await subscription_service.update_settings(
+        session,
+        secret_key=SECRET,
+        enabled=True,
+        api_key="re_x",
+        from_email="a@b.com",
+        webhook_url="https://blog.example/api/webhooks/resend",
+    )
+
+    row = await subscription_service._get_row(session)
+    assert row is not None
+    assert row.enabled is True
+    assert row.resend_segment_id == "seg_auto"
+    assert row.resend_webhook_secret_encrypted is None
+    assert await subscription_service.is_enabled(session) is True
+
+
+@pytest.mark.asyncio
+async def test_enabled_settings_retry_missing_webhook_on_next_update(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    attempts = 0
+
+    async def create_webhook(*, api_key: str, endpoint: str, events: list[str]) -> str:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise resend_client.ResendError("Endpoint URL scheme must be https")
+        return "whsec_retry_succeeded"
+
+    async def segment_exists(*, api_key: str, segment_id: str) -> bool:
+        return True
+
+    monkeypatch.setattr(resend_client, "create_segment", _fake_create_segment)
+    monkeypatch.setattr(resend_client, "create_webhook", create_webhook)
+    monkeypatch.setattr(resend_client, "check_segment_exists", segment_exists)
+
+    await subscription_service.update_settings(
+        session,
+        secret_key=SECRET,
+        enabled=True,
+        api_key="re_x",
+        from_email="a@b.com",
+        webhook_url="https://blog.example/api/webhooks/resend",
+    )
+    await subscription_service.update_settings(
+        session,
+        secret_key=SECRET,
+        from_name="Blog",
+        webhook_url="https://blog.example/api/webhooks/resend",
+    )
+
+    row = await subscription_service._get_row(session)
+    assert row is not None
+    assert attempts == 2
+    assert subscription_service.decrypt_webhook_secret(row, SECRET) == "whsec_retry_succeeded"
+
+
+@pytest.mark.asyncio
 async def test_key_encrypted_and_never_returned(session: AsyncSession) -> None:
     await subscription_service.update_settings(
         session, secret_key=SECRET, api_key="re_secret", from_email="a@b.com"
@@ -88,36 +156,26 @@ async def test_key_encrypted_and_never_returned(session: AsyncSession) -> None:
 
 
 @pytest.mark.asyncio
-async def test_enable_requires_key_from_email_and_webhook_secret(
-    session: AsyncSession, monkeypatch
-) -> None:
+async def test_enable_requires_key_and_from_email(session: AsyncSession, monkeypatch) -> None:
     monkeypatch.setattr(resend_client, "create_segment", _fake_create_segment)
     # Missing from_email -> enabling must fail.
     with pytest.raises(subscription_service.EnablePreconditionError):
         await subscription_service.update_settings(
             session, secret_key=SECRET, enabled=True, api_key="re_x"
         )
-    with pytest.raises(subscription_service.EnablePreconditionError, match="webhook"):
-        await subscription_service.update_settings(
-            session,
-            secret_key=SECRET,
-            enabled=True,
-            api_key="re_x",
-            from_email="a@b.com",
-        )
-    # Compliance fields remain optional once deletion webhook handling is configured.
+    # Compliance fields and webhook setup remain optional.
     await subscription_service.update_settings(
         session,
         secret_key=SECRET,
         enabled=True,
         api_key="re_x",
-        webhook_secret="whsec_test",
         from_email="a@b.com",
     )
     row = await subscription_service._get_row(session)
     assert row is not None
     assert row.enabled is True
     assert row.resend_segment_id == "seg_auto"
+    assert row.resend_webhook_secret_encrypted is None
 
 
 @pytest.mark.asyncio
