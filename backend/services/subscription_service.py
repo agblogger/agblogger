@@ -52,8 +52,9 @@ def _time() -> float:
 
 
 # Compliance fields are optional and control which parts of the GDPR notice
-# are shown. The webhook secret is mandatory so unsubscribe events delete data.
-_REQUIRED_TO_ENABLE = ("from_email", "resend_webhook_secret_encrypted")
+# are shown. The webhook is provisioned automatically while enabling.
+_REQUIRED_TO_ENABLE = ("from_email",)
+_WEBHOOK_EVENTS = ["contact.unsubscribed"]
 
 
 class _Unset:
@@ -134,6 +135,7 @@ async def update_settings(
     enabled: bool | None = None,
     api_key: str | None = None,
     webhook_secret: str | None = None,
+    webhook_url: str | None = None,
     from_email: _StringUpdate = _UNSET,
     from_name: _StringUpdate = _UNSET,
     controller_name: _StringUpdate = _UNSET,
@@ -141,8 +143,11 @@ async def update_settings(
     privacy_policy_url: _StringUpdate = _UNSET,
     postal_address: _StringUpdate = _UNSET,
 ) -> SubscriptionSettings:
-    """Create/update the singleton, encrypting the API key and webhook secret and enforcing
-    the enable gate."""
+    """Create/update the singleton and enforce the enable gate.
+
+    ``webhook_secret`` is an internal setup/testing escape hatch. The admin API
+    provisions the Resend webhook automatically and never accepts this value.
+    """
     row = await _get_row(session)
     if row is None:
         row = SubscriptionSettings(id=1)
@@ -172,7 +177,7 @@ async def update_settings(
     target_enabled = row.enabled if enabled is None else enabled
     if target_enabled:
         try:
-            await _prepare_enable(session, row, secret_key)
+            await _prepare_enable(session, row, secret_key, webhook_url)
         except Exception:
             await session.rollback()
             raise
@@ -185,19 +190,18 @@ async def update_settings(
 
 
 async def _prepare_enable(
-    session: AsyncSession, row: SubscriptionSettings, secret_key: str
+    session: AsyncSession,
+    row: SubscriptionSettings,
+    secret_key: str,
+    webhook_url: str | None,
 ) -> None:
-    """Validate required config (API key, from_email, webhook secret) and ensure a live
-    Resend segment exists before enabling."""
+    """Validate required config and ensure the Resend resources exist before enabling."""
     if not row.resend_api_key_encrypted:
         # Fast path: avoids the decryption call when no key is configured at all.
         raise EnablePreconditionError("A Resend API key is required to enable subscriptions.")
     missing = [f for f in _REQUIRED_TO_ENABLE if not getattr(row, f)]
     if missing:
-        labels = {
-            "from_email": "from_email",
-            "resend_webhook_secret_encrypted": "webhook secret",
-        }
+        labels = {"from_email": "from_email"}
         raise EnablePreconditionError(
             "Set these before enabling: " + ", ".join(labels[field] for field in missing)
         )
@@ -217,6 +221,17 @@ async def _prepare_enable(
         row.resend_segment_id = await resend_client.create_segment(
             api_key=api_key, name=_SEGMENT_NAME
         )
+    if not row.resend_webhook_secret_encrypted:
+        if not webhook_url:
+            raise EnablePreconditionError(
+                "A public webhook URL is required to enable subscriptions."
+            )
+        signing_secret = await resend_client.create_webhook(
+            api_key=api_key,
+            endpoint=webhook_url,
+            events=_WEBHOOK_EVENTS,
+        )
+        row.resend_webhook_secret_encrypted = encrypt_value(signing_secret, secret_key)
 
 
 async def build_settings_response(

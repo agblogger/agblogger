@@ -218,6 +218,41 @@ async def test_put_settings_precondition_returns_400(client: AsyncClient) -> Non
 
 
 @pytest.mark.asyncio
+async def test_enabling_subscriptions_automatically_registers_webhook(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    webhook_calls: list[dict[str, object]] = []
+
+    async def fake_create_segment(**kwargs: str) -> str:
+        return "seg_auto"
+
+    async def fake_create_webhook(*, api_key: str, endpoint: str, events: list[str]) -> str:
+        webhook_calls.append({"api_key": api_key, "endpoint": endpoint, "events": events})
+        return "whsec_generated"
+
+    monkeypatch.setattr(resend_client, "create_segment", fake_create_segment)
+    monkeypatch.setattr(resend_client, "create_webhook", fake_create_webhook)
+    token = await _get_admin_token(client)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    resp = await client.put(
+        "/api/admin/subscriptions/settings",
+        json={"enabled": True, "api_key": "re_x", "from_email": "blog@example.com"},
+        headers=headers,
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["webhook_secret_configured"] is True
+    assert webhook_calls == [
+        {
+            "api_key": "re_x",
+            "endpoint": "http://test/api/webhooks/resend",
+            "events": ["contact.unsubscribed"],
+        }
+    ]
+
+
+@pytest.mark.asyncio
 async def test_put_settings_explicit_null_clears_optional_field(client: AsyncClient) -> None:
     token = await _get_admin_token(client)
     headers = {"Authorization": f"Bearer {token}"}

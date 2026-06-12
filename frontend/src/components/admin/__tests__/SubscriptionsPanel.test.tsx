@@ -88,10 +88,11 @@ describe('SubscriptionsPanel', () => {
     setupDefaults()
   })
 
-  it('shows subscriber count and key status', async () => {
+  it('shows subscriber count and API key status', async () => {
     renderPanel()
     expect(await screen.findByText(/42/)).toBeInTheDocument()
-    await waitFor(() => expect(screen.getAllByText(/configured/i)).toHaveLength(2))
+    await waitFor(() => expect(screen.getAllByText(/configured/i)).toHaveLength(1))
+    expect(screen.queryByLabelText(/webhook signing secret/i)).not.toBeInTheDocument()
   })
 
   it('shows loading state initially, then content', async () => {
@@ -105,11 +106,11 @@ describe('SubscriptionsPanel', () => {
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument())
   })
 
-  it('shows hint text including webhook secret when enable is not allowed', async () => {
+  it('shows the required user-provided settings when enable is not allowed', async () => {
     vi.mocked(apiMod.fetchSubscriptionSettings).mockResolvedValue(INCOMPLETE_SETTINGS)
     renderPanel()
     await screen.findByRole('switch', { name: /enable subscriptions/i })
-    expect(screen.getByText(/requires api key \+ webhook secret \+ from email/i)).toBeInTheDocument()
+    expect(screen.getByText(/requires api key \+ from email/i)).toBeInTheDocument()
   })
 
   it('enable toggle is DISABLED when api key or from_email is missing', async () => {
@@ -119,7 +120,7 @@ describe('SubscriptionsPanel', () => {
     expect(toggle).toBeDisabled()
   })
 
-  it('enable toggle is DISABLED when webhook secret is missing', async () => {
+  it('enable toggle is ENABLED when webhook secret has not been provisioned yet', async () => {
     vi.mocked(apiMod.fetchSubscriptionSettings).mockResolvedValue({
       ...FULL_SETTINGS,
       enabled: false,
@@ -127,7 +128,7 @@ describe('SubscriptionsPanel', () => {
     })
     renderPanel()
     const toggle = await screen.findByRole('switch', { name: /enable subscriptions/i })
-    expect(toggle).toBeDisabled()
+    expect(toggle).toBeEnabled()
   })
 
   it('enable toggle is ENABLED when key and from_email are configured, even without compliance fields', async () => {
@@ -195,20 +196,6 @@ describe('SubscriptionsPanel', () => {
     await waitFor(() =>
       expect(apiMod.updateSubscriptionSettings).toHaveBeenCalledWith(
         expect.objectContaining({ api_key: 'test-api-key' }),
-      ),
-    )
-  })
-
-  it('save includes webhook_secret when input is filled', async () => {
-    const user = userEvent.setup()
-    vi.mocked(apiMod.updateSubscriptionSettings).mockResolvedValue(FULL_SETTINGS)
-    renderPanel()
-    await screen.findByText(/42/)
-    await user.type(screen.getByLabelText(/webhook signing secret/i), 'whsec_new')
-    await user.click(screen.getByRole('button', { name: /save settings/i }))
-    await waitFor(() =>
-      expect(apiMod.updateSubscriptionSettings).toHaveBeenCalledWith(
-        expect.objectContaining({ webhook_secret: 'whsec_new' }),
       ),
     )
   })

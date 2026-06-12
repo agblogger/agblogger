@@ -158,6 +158,7 @@ async def get_settings_endpoint(
 @admin_router.put("/settings", response_model=SubscriptionSettingsResponse)
 async def update_settings_endpoint(
     body: SubscriptionSettingsUpdate,
+    request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
     settings: Annotated[Settings, Depends(get_settings)],
     _user: Annotated[AdminUser, Depends(require_admin)],
@@ -167,6 +168,7 @@ async def update_settings_endpoint(
         await subscription_service.update_settings(
             session,
             secret_key=settings.secret_key,
+            webhook_url=f"{_base_url(request)}/api/webhooks/resend",
             **updates,
         )
     except EnablePreconditionError as exc:

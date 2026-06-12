@@ -157,6 +157,15 @@ async def create_segment(*, api_key: str, name: str) -> str:
     return segment_id
 
 
+async def create_webhook(*, api_key: str, endpoint: str, events: list[str]) -> str:
+    """Create a webhook and return its provider-generated signing secret."""
+    data = await _post(api_key, "/webhooks", {"endpoint": endpoint, "events": events})
+    signing_secret = str(data.get("signing_secret", ""))
+    if not signing_secret:
+        raise ResendError("Resend did not return a webhook signing secret")
+    return signing_secret
+
+
 async def check_segment_exists(*, api_key: str, segment_id: str) -> bool:
     """Return True if the segment exists in Resend, False if it has been deleted.
 

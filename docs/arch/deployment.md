@@ -29,7 +29,7 @@ Database schema migrations run programmatically during application startup, befo
 
 ## Email Subscriptions
 
-To use the email subscription feature, the operator must own a domain verified in Resend and sign Resend's Data Processing Agreement (Resend acts as a processor; the operator retains GDPR controllership). The `SECRET_KEY` now also protects the Resend API key (Fernet-encrypted at rest) and signs subscribe confirmation tokens — rotating or losing `SECRET_KEY` invalidates the stored encrypted key and all outstanding confirmation links. Post broadcasts and confirmation/test emails draw on different Resend quotas (marketing vs. transactional), so confirmation-email volume is the transactional-quota-limited path; consult Resend's pricing page for current limits.
+To use the email subscription feature, the operator must own a domain verified in Resend and sign Resend's Data Processing Agreement (Resend acts as a processor; the operator retains GDPR controllership). The `SECRET_KEY` now also protects the Resend API key and automatically provisioned webhook signing secret (Fernet-encrypted at rest) and signs subscribe confirmation tokens — rotating or losing `SECRET_KEY` invalidates the stored encrypted credentials and all outstanding confirmation links. Post broadcasts and confirmation/test emails draw on different Resend quotas (marketing vs. transactional), so confirmation-email volume is the transactional-quota-limited path; consult Resend's pricing page for current limits.
 
 ## Deployment Workflows
 

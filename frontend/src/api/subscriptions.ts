@@ -21,7 +21,6 @@ export interface SubscriptionSettings {
 export interface SubscriptionSettingsUpdate {
   enabled?: boolean
   api_key?: string
-  webhook_secret?: string
   from_email?: string | null
   from_name?: string | null
   controller_name?: string | null

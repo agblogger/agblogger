@@ -27,7 +27,7 @@ const INPUT_CLASS =
   'w-full rounded-lg border border-border bg-paper px-3 py-2 text-sm text-ink placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent/40 disabled:opacity-50 disabled:cursor-not-allowed'
 
 function isEnableAllowed(s: SubscriptionSettings): boolean {
-  return s.key_configured && s.webhook_secret_configured && Boolean(s.from_email)
+  return s.key_configured && Boolean(s.from_email)
 }
 
 const BROADCAST_POLL_ATTEMPTS = 10
@@ -66,7 +66,6 @@ export default function SubscriptionsPanel({ busy, onBusyChange }: Props) {
 
   // Settings form state
   const [apiKey, setApiKey] = useState('')
-  const [webhookSecret, setWebhookSecret] = useState('')
   const [fromEmail, setFromEmail] = useState('')
   const [fromName, setFromName] = useState('')
   const [controllerName, setControllerName] = useState('')
@@ -158,13 +157,9 @@ export default function SubscriptionsPanel({ busy, onBusyChange }: Props) {
       if (apiKey.length > 0) {
         patch.api_key = apiKey
       }
-      if (webhookSecret.length > 0) {
-        patch.webhook_secret = webhookSecret
-      }
       const updated = await updateSubscriptionSettings(patch)
       setSettings(updated)
       setApiKey('')
-      setWebhookSecret('')
       setSettingsSuccess('Settings saved.')
     } catch (err) {
       setSettingsError(await extractErrorDetail(err, 'Failed to save settings. Please try again.'))
@@ -266,7 +261,7 @@ export default function SubscriptionsPanel({ busy, onBusyChange }: Props) {
           onChange={(value) => void handleToggleEnabled(value)}
         />
         {!enableAllowed && (
-          <span className="text-xs text-muted">Requires API key + webhook secret + from email.</span>
+          <span className="text-xs text-muted">Requires API key + from email.</span>
         )}
         <div className="ml-auto flex items-center gap-2 text-sm text-muted">
           <span className="text-xs uppercase tracking-wide">Subscribers</span>
@@ -304,28 +299,6 @@ export default function SubscriptionsPanel({ busy, onBusyChange }: Props) {
               settings?.key_configured === true
                 ? 'configured — enter to replace'
                 : 'not set — paste API key here'
-            }
-            className={INPUT_CLASS}
-          />
-        </div>
-
-        <div className="sm:col-span-2">
-          <label className="block text-sm text-muted mb-1" htmlFor="webhook-secret">
-            Resend webhook signing secret{' '}
-            <span className={settings?.webhook_secret_configured === true ? 'text-green-600 dark:text-green-400' : 'text-muted'}>
-              {settings?.webhook_secret_configured === true ? '(configured)' : '(required)'}
-            </span>
-          </label>
-          <input
-            id="webhook-secret"
-            type="password"
-            value={webhookSecret}
-            disabled={allBusy}
-            onChange={(e) => setWebhookSecret(e.target.value)}
-            placeholder={
-              settings?.webhook_secret_configured === true
-                ? 'configured - enter to replace'
-                : 'required - paste webhook signing secret here'
             }
             className={INPUT_CLASS}
           />

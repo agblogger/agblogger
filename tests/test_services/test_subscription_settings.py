@@ -42,6 +42,40 @@ async def _fake_count_contacts(*, api_key: str, segment_id: str) -> int:
 
 
 @pytest.mark.asyncio
+async def test_enable_automatically_provisions_webhook(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    webhook_calls: list[dict[str, object]] = []
+
+    async def fake_create_webhook(*, api_key: str, endpoint: str, events: list[str]) -> str:
+        webhook_calls.append({"api_key": api_key, "endpoint": endpoint, "events": events})
+        return "whsec_generated"
+
+    monkeypatch.setattr(resend_client, "create_segment", _fake_create_segment)
+    monkeypatch.setattr(resend_client, "create_webhook", fake_create_webhook)
+
+    await subscription_service.update_settings(
+        session,
+        secret_key=SECRET,
+        enabled=True,
+        api_key="re_x",
+        from_email="a@b.com",
+        webhook_url="https://blog.example/api/webhooks/resend",
+    )
+
+    row = await subscription_service._get_row(session)
+    assert row is not None
+    assert subscription_service.decrypt_webhook_secret(row, SECRET) == "whsec_generated"
+    assert webhook_calls == [
+        {
+            "api_key": "re_x",
+            "endpoint": "https://blog.example/api/webhooks/resend",
+            "events": ["contact.unsubscribed"],
+        }
+    ]
+
+
+@pytest.mark.asyncio
 async def test_key_encrypted_and_never_returned(session: AsyncSession) -> None:
     await subscription_service.update_settings(
         session, secret_key=SECRET, api_key="re_secret", from_email="a@b.com"

@@ -210,6 +210,45 @@ async def test_create_segment_raises_when_no_id(monkeypatch: pytest.MonkeyPatch)
 
 
 @pytest.mark.asyncio
+async def test_create_webhook_returns_signing_secret(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["path"] = request.url.path
+        seen["body"] = request.read().decode()
+        return httpx.Response(201, json={"id": "webhook_1", "signing_secret": "whsec_generated"})
+
+    monkeypatch.setattr(resend_client, "_get_client", lambda: _client(handler))
+
+    secret = await resend_client.create_webhook(
+        api_key="re_x",
+        endpoint="https://blog.example/api/webhooks/resend",
+        events=["contact.unsubscribed"],
+    )
+
+    assert secret == "whsec_generated"
+    assert seen["path"] == "/webhooks"
+    assert '"contact.unsubscribed"' in str(seen["body"])
+
+
+@pytest.mark.asyncio
+async def test_create_webhook_raises_when_no_signing_secret(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(201, json={"id": "webhook_1"})
+
+    monkeypatch.setattr(resend_client, "_get_client", lambda: _client(handler))
+
+    with pytest.raises(ResendError, match="webhook signing secret"):
+        await resend_client.create_webhook(
+            api_key="re_x",
+            endpoint="https://blog.example/api/webhooks/resend",
+            events=["contact.unsubscribed"],
+        )
+
+
+@pytest.mark.asyncio
 async def test_check_segment_exists_returns_true_on_2xx(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

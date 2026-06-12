@@ -45,7 +45,6 @@ class SubscriptionSettingsResponse(BaseModel):
 class SubscriptionSettingsUpdate(BaseModel):
     enabled: bool | None = None
     api_key: str | None = None  # write-only
-    webhook_secret: str | None = None  # write-only
     from_email: str | None = None
     from_name: str | None = None
     controller_name: str | None = None
