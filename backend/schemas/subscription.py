@@ -67,6 +67,7 @@ class BroadcastSummary(BaseModel):
     """One broadcast attempt as shown to the admin (no recipient data)."""
 
     id: int
+    request_id: str | None
     post_path: str
     post_title: str
     resend_broadcast_id: str | None
@@ -82,3 +83,8 @@ class BroadcastListResponse(BaseModel):
 
 class TriggerBroadcastRequest(BaseModel):
     post_path: str = Field(min_length=1, max_length=400)
+
+
+class TriggerBroadcastResponse(BaseModel):
+    message: str
+    request_id: str

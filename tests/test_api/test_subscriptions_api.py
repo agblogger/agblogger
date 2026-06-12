@@ -379,12 +379,15 @@ async def test_trigger_broadcast_success(
         headers=headers,
     )
     assert resp.status_code == 202
-    assert "message" in resp.json()
+    payload = resp.json()
+    assert payload["message"] == "Broadcast queued"
+    assert len(payload["request_id"]) == 36
     assert len(calls) == 1
     recorded = calls[0]
     assert recorded["trigger"] == "manual"
     assert recorded["enforce_once_guard"] is False
     assert recorded["post_path"] == file_path
+    assert recorded["request_id"] == payload["request_id"]
 
 
 @pytest.mark.asyncio

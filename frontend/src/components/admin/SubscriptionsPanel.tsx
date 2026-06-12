@@ -232,19 +232,13 @@ export default function SubscriptionsPanel({ busy, onBusyChange }: Props) {
       broadcastSuccessTimer.current = null;
     }
     try {
-      const previousMaxId = broadcasts.reduce(
-        (maxId, broadcast) => Math.max(maxId, broadcast.id),
-        0,
-      );
-      await triggerBroadcast(selectedPostPath);
+      const triggerResult = await triggerBroadcast(selectedPostPath);
       let completed = false;
       for (let attempt = 0; attempt < BROADCAST_POLL_ATTEMPTS; attempt += 1) {
         const response = await fetchBroadcasts();
         setBroadcasts(response.broadcasts);
         const newRow = response.broadcasts.find(
-          (broadcast) =>
-            broadcast.id > previousMaxId &&
-            broadcast.post_path === selectedPostPath,
+          (broadcast) => broadcast.request_id === triggerResult.request_id,
         );
         if (newRow !== undefined) {
           completed = true;

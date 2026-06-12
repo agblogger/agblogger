@@ -157,6 +157,9 @@ describe("SubscriptionsPanel", () => {
       webhook_secret_configured: false,
     });
     renderPanel();
+    expect(
+      await screen.findByText(/webhook unavailable/i),
+    ).toBeInTheDocument();
   });
 
   it("enable toggle is ENABLED when key and from_email are configured, even without compliance fields", async () => {
@@ -324,6 +327,7 @@ describe("SubscriptionsPanel", () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     vi.mocked(apiMod.triggerBroadcast).mockResolvedValue({
       message: "Broadcast started",
+      request_id: "request-failed",
     });
     vi.mocked(apiMod.fetchBroadcasts)
       .mockResolvedValueOnce({ broadcasts: [] })
@@ -331,6 +335,7 @@ describe("SubscriptionsPanel", () => {
         broadcasts: [
           {
             id: 99,
+            request_id: "request-failed",
             post_path: "posts/hello",
             post_title: "Hello World",
             resend_broadcast_id: null,
@@ -363,7 +368,10 @@ describe("SubscriptionsPanel", () => {
   it("send broadcast calls triggerBroadcast after confirm", async () => {
     const user = userEvent.setup();
     vi.spyOn(window, "confirm").mockReturnValue(true);
-    vi.mocked(apiMod.triggerBroadcast).mockResolvedValue({ message: "ok" });
+    vi.mocked(apiMod.triggerBroadcast).mockResolvedValue({
+      message: "ok",
+      request_id: "request-call",
+    });
     mockPostsWithOnePublished();
     renderPanel();
     await screen.findByText(/42/);
@@ -385,6 +393,7 @@ describe("SubscriptionsPanel", () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     vi.mocked(apiMod.triggerBroadcast).mockResolvedValue({
       message: "Broadcast started",
+      request_id: "request-polled",
     });
     let fetchCount = 0;
     vi.mocked(apiMod.fetchBroadcasts).mockImplementation(async () => {
@@ -395,6 +404,7 @@ describe("SubscriptionsPanel", () => {
             broadcasts: [
               {
                 id: 7,
+                request_id: "request-polled",
                 post_path: "posts/hello",
                 post_title: "Hello World",
                 resend_broadcast_id: null,
@@ -424,18 +434,78 @@ describe("SubscriptionsPanel", () => {
     expect(fetchCount).toBeGreaterThanOrEqual(3);
   });
 
+  it("ignores another broadcast while polling for the triggered request", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    vi.mocked(apiMod.triggerBroadcast).mockResolvedValue({
+      message: "Broadcast queued",
+      request_id: "request-current",
+    });
+    let fetchCount = 0;
+    vi.mocked(apiMod.fetchBroadcasts).mockImplementation(async () => {
+      fetchCount += 1;
+      if (fetchCount === 1) return { broadcasts: [] };
+      if (fetchCount === 2) {
+        return {
+          broadcasts: [
+            {
+              id: 8,
+              request_id: "request-other",
+              post_path: "posts/hello",
+              post_title: "Hello World",
+              resend_broadcast_id: "br_other",
+              trigger: "manual",
+              status: "sent",
+              sent_at: "2024-01-01T12:00:00Z",
+              error: null,
+            },
+          ],
+        };
+      }
+      return {
+        broadcasts: [
+          {
+            id: 9,
+            request_id: "request-current",
+            post_path: "posts/hello",
+            post_title: "Hello World",
+            resend_broadcast_id: null,
+            trigger: "manual",
+            status: "failed",
+            sent_at: "2024-01-01T12:01:00Z",
+            error: "Current request failed",
+          },
+        ],
+      };
+    });
+    mockPostsWithOnePublished();
+    renderPanel();
+    await screen.findByText(/42/);
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: /select post/i }),
+      "posts/hello",
+    );
+    await user.click(screen.getByRole("button", { name: /send broadcast/i }));
+
+    expect(
+      (await screen.findAllByText("Current request failed")).length,
+    ).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText("Broadcast sent.")).not.toBeInTheDocument();
+    expect(fetchCount).toBeGreaterThanOrEqual(3);
+  });
+
   it("shows completed status only after the ledger reports sent", async () => {
     const user = userEvent.setup();
     vi.spyOn(window, "confirm").mockReturnValue(true);
     vi.mocked(apiMod.triggerBroadcast).mockResolvedValue({
       message: "Broadcast queued",
+      request_id: "request-sent",
     });
-    vi.mocked(apiMod.fetchBroadcasts)
-      .mockResolvedValueOnce({ broadcasts: [] })
-      .mockResolvedValueOnce({
+    vi.mocked(apiMod.fetchBroadcasts).mockResolvedValue({
         broadcasts: [
           {
             id: 7,
+            request_id: "request-sent",
             post_path: "posts/hello",
             post_title: "Hello World",
             resend_broadcast_id: "br_7",
@@ -464,7 +534,10 @@ describe("SubscriptionsPanel", () => {
   it("does NOT call triggerBroadcast when confirm is cancelled", async () => {
     const user = userEvent.setup();
     vi.spyOn(window, "confirm").mockReturnValue(false);
-    vi.mocked(apiMod.triggerBroadcast).mockResolvedValue({ message: "ok" });
+    vi.mocked(apiMod.triggerBroadcast).mockResolvedValue({
+      message: "ok",
+      request_id: "request-cancelled",
+    });
     mockPostsWithOnePublished();
     renderPanel();
     await screen.findByText(/42/);
@@ -626,28 +699,27 @@ describe("SubscriptionsPanel", () => {
   it("calls onBusyChange(true/false) around a confirmed broadcast", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     mockPostsWithOnePublished();
-    let resolveTrigger!: (v: { message: string }) => void;
+    let resolveTrigger!: (v: { message: string; request_id: string }) => void;
     vi.mocked(apiMod.triggerBroadcast).mockReturnValue(
-      new Promise<{ message: string }>((r) => {
+      new Promise<{ message: string; request_id: string }>((r) => {
         resolveTrigger = r;
       }),
     );
-    vi.mocked(apiMod.fetchBroadcasts)
-      .mockResolvedValueOnce({ broadcasts: [] })
-      .mockResolvedValueOnce({
-        broadcasts: [
-          {
-            id: 8,
-            post_path: "posts/hello",
-            post_title: "Hello World",
-            resend_broadcast_id: "br_8",
-            trigger: "manual",
-            status: "sent",
-            sent_at: "2024-01-01T12:00:00Z",
-            error: null,
-          },
-        ],
-      });
+    vi.mocked(apiMod.fetchBroadcasts).mockResolvedValue({
+      broadcasts: [
+        {
+          id: 8,
+          request_id: "request-busy",
+          post_path: "posts/hello",
+          post_title: "Hello World",
+          resend_broadcast_id: "br_8",
+          trigger: "manual",
+          status: "sent",
+          sent_at: "2024-01-01T12:00:00Z",
+          error: null,
+        },
+      ],
+    });
     const onBusyChange = vi.fn();
     const user = userEvent.setup();
     renderPanel({ onBusyChange });
@@ -658,7 +730,7 @@ describe("SubscriptionsPanel", () => {
     await user.selectOptions(select, "posts/hello");
     await user.click(screen.getByRole("button", { name: /send broadcast/i }));
     await waitFor(() => expect(onBusyChange).toHaveBeenCalledWith(true));
-    resolveTrigger({ message: "ok" });
+    resolveTrigger({ message: "ok", request_id: "request-busy" });
     await waitFor(() => expect(onBusyChange).toHaveBeenCalledWith(false));
   });
 

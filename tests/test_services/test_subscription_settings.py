@@ -144,6 +144,40 @@ async def test_enabled_settings_retry_missing_webhook_on_next_update(
 
 
 @pytest.mark.asyncio
+async def test_enabled_settings_reprovision_webhook_when_api_key_changes(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    webhook_keys: list[str] = []
+
+    async def create_webhook(*, api_key: str, endpoint: str, events: list[str]) -> str:
+        webhook_keys.append(api_key)
+        return f"whsec_{api_key}"
+
+    monkeypatch.setattr(resend_client, "create_segment", _fake_create_segment)
+    monkeypatch.setattr(resend_client, "create_webhook", create_webhook)
+
+    await subscription_service.update_settings(
+        session,
+        secret_key=SECRET,
+        enabled=True,
+        api_key="re_old",
+        from_email="a@b.com",
+        webhook_url="https://blog.example/api/webhooks/resend",
+    )
+    await subscription_service.update_settings(
+        session,
+        secret_key=SECRET,
+        api_key="re_new",
+        webhook_url="https://blog.example/api/webhooks/resend",
+    )
+
+    row = await subscription_service._get_row(session)
+    assert row is not None
+    assert webhook_keys == ["re_old", "re_new"]
+    assert subscription_service.decrypt_webhook_secret(row, SECRET) == "whsec_re_new"
+
+
+@pytest.mark.asyncio
 async def test_key_encrypted_and_never_returned(session: AsyncSession) -> None:
     await subscription_service.update_settings(
         session, secret_key=SECRET, api_key="re_secret", from_email="a@b.com"

@@ -34,6 +34,7 @@ export type BroadcastTrigger = 'auto' | 'manual'
 
 export interface BroadcastSummary {
   id: number
+  request_id?: string | null
   post_path: string
   post_title: string
   resend_broadcast_id: string | null
@@ -65,8 +66,10 @@ export async function fetchBroadcasts(): Promise<{ broadcasts: BroadcastSummary[
   return api.get('admin/subscriptions/broadcasts').json<{ broadcasts: BroadcastSummary[] }>()
 }
 
-export async function triggerBroadcast(postPath: string): Promise<{ message: string }> {
+export async function triggerBroadcast(
+  postPath: string,
+): Promise<{ message: string; request_id: string }> {
   return api
     .post('admin/subscriptions/broadcasts', { json: { post_path: postPath } })
-    .json<{ message: string }>()
+    .json<{ message: string; request_id: string }>()
 }

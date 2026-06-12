@@ -11,6 +11,7 @@ import time as _time_module
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
+from uuid import uuid4
 
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
@@ -160,6 +161,12 @@ async def update_settings(
             result = await session.execute(select(SubscriptionSettings).limit(1))
             row = result.scalar_one()
 
+    api_key_changed = (
+        api_key is not None and api_key != "" and api_key != decrypt_api_key(row, secret_key)
+    )
+    if api_key_changed:
+        row.resend_segment_id = None
+        row.resend_webhook_secret_encrypted = None
     if api_key is not None and api_key != "":
         row.resend_api_key_encrypted = encrypt_value(api_key, secret_key)
     if webhook_secret is not None and webhook_secret != "":
@@ -395,6 +402,7 @@ async def list_broadcasts(session: AsyncSession, *, limit: int = 100) -> list[Br
     return [
         BroadcastSummary(
             id=r.id,
+            request_id=r.request_id,
             post_path=r.post_path,
             post_title=r.post_title,
             resend_broadcast_id=r.resend_broadcast_id,
@@ -440,10 +448,12 @@ async def send_broadcast(
     post_html: str,
     post_url: str,
     trigger: BroadcastTrigger,
+    request_id: str | None = None,
 ) -> None:
     """Send one broadcast via Resend and record a ledger row. Never raises."""
     row = await _get_row(session)
     record = SubscriptionBroadcast(
+        request_id=request_id or str(uuid4()),
         post_path=post_path,
         post_title=post_title,
         trigger=trigger,
@@ -511,11 +521,14 @@ def fire_post_broadcast(
     post_url: str,
     trigger: BroadcastTrigger,
     enforce_once_guard: bool,
+    request_id: str | None = None,
 ) -> bool:
     """Schedule a fire-and-forget broadcast. Used by the publish hook + manual trigger."""
     if len(_broadcast_tasks) >= _MAX_BROADCAST_TASKS:
         logger.warning("Dropping broadcast for %s: task limit reached", post_path)
         return False
+
+    resolved_request_id = request_id or str(uuid4())
 
     async def _run() -> None:
         try:
@@ -533,6 +546,7 @@ def fire_post_broadcast(
                     post_html=post_html,
                     post_url=post_url,
                     trigger=trigger,
+                    request_id=resolved_request_id,
                 )
         except Exception:
             logger.error("Background broadcast failed for %s", post_path, exc_info=True)

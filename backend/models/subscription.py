@@ -41,6 +41,9 @@ class SubscriptionBroadcast(DurableBase):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    request_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True, unique=True, index=True
+    )
     post_path: Mapped[str] = mapped_column(Text, nullable=False)
     post_title: Mapped[str] = mapped_column(Text, nullable=False, default="")
     resend_broadcast_id: Mapped[str | None] = mapped_column(String, nullable=True)

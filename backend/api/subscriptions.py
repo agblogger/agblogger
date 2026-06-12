@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from typing import Annotated
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse
@@ -32,6 +33,7 @@ from backend.schemas.subscription import (
     SubscriptionSettingsResponse,
     SubscriptionSettingsUpdate,
     TriggerBroadcastRequest,
+    TriggerBroadcastResponse,
 )
 from backend.services import resend_client, subscription_service
 from backend.services.subscription_service import (
@@ -207,7 +209,11 @@ async def list_broadcasts_endpoint(
     return BroadcastListResponse(broadcasts=await subscription_service.list_broadcasts(session))
 
 
-@admin_router.post("/broadcasts", status_code=status.HTTP_202_ACCEPTED)
+@admin_router.post(
+    "/broadcasts",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=TriggerBroadcastResponse,
+)
 async def trigger_broadcast_endpoint(
     body: TriggerBroadcastRequest,
     request: Request,
@@ -215,12 +221,13 @@ async def trigger_broadcast_endpoint(
     session_factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
     settings: Annotated[Settings, Depends(get_settings)],
     _user: Annotated[AdminUser, Depends(require_admin)],
-) -> dict[str, str]:
+) -> TriggerBroadcastResponse:
     result = await session.execute(select(PostCache).where(PostCache.file_path == body.post_path))
     post = result.scalar_one_or_none()
     if post is None or post.is_draft:
         raise HTTPException(status_code=404, detail="Published post not found")
     post_url = f"{_base_url(request)}/post/{file_path_to_slug(post.file_path)}"
+    request_id = str(uuid4())
     scheduled = subscription_service.fire_post_broadcast(
         session_factory,
         secret_key=settings.secret_key,
@@ -230,13 +237,14 @@ async def trigger_broadcast_endpoint(
         post_url=post_url,
         trigger=BroadcastTrigger.MANUAL,
         enforce_once_guard=False,
+        request_id=request_id,
     )
     if not scheduled:
         raise HTTPException(
             status_code=503,
             detail="Broadcast capacity is temporarily unavailable. Please try again.",
         )
-    return {"message": "Broadcast queued"}
+    return TriggerBroadcastResponse(message="Broadcast queued", request_id=request_id)
 
 
 @webhook_router.post("/resend")

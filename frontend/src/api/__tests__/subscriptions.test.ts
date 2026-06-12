@@ -121,7 +121,7 @@ describe('triggerBroadcast', () => {
   })
 
   it('posts to admin/subscriptions/broadcasts with post_path', async () => {
-    mockPost.mockReturnValue(mockJsonResponse({ message: 'queued' }))
+    mockPost.mockReturnValue(mockJsonResponse({ message: 'queued', request_id: 'request-1' }))
 
     const res = await triggerBroadcast('posts/x/index.md')
 
@@ -129,6 +129,7 @@ describe('triggerBroadcast', () => {
       json: { post_path: 'posts/x/index.md' },
     })
     expect(res.message).toBe('queued')
+    expect(res.request_id).toBe('request-1')
   })
 })
 
