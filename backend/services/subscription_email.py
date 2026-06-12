@@ -132,11 +132,11 @@ def _render_math_images(post_html: str) -> str:
                 f'<img src="{safe_src}" alt="{safe_alt}" '
                 f'style="display:block;margin:18px auto;max-width:100%;height:auto">'
             )
-        # Pin inline math to the text line height (downsampling the high-DPI
-        # source) so it matches surrounding text instead of rendering oversized.
+        # Pin inline math to the text size (downsampling the high-DPI source)
+        # so it matches surrounding text instead of rendering oversized.
         return (
             f'<img src="{safe_src}" alt="{safe_alt}" '
-            f'style="vertical-align:middle;height:1.2em;width:auto">'
+            f'style="vertical-align:middle;height:1em;width:auto">'
         )
 
     return _MATH_SPAN_RE.sub(_replace, post_html)

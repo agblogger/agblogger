@@ -188,10 +188,10 @@ def test_broadcast_email_renders_math_at_high_resolution() -> None:
 
 
 def test_broadcast_email_inline_math_image_is_sized_to_text() -> None:
-    # The high-DPI source is downsampled to the text line height so inline math
+    # The high-DPI source is downsampled to the text size so inline math
     # matches surrounding text instead of rendering oversized.
     html = _broadcast('<p>Euler: <span class="math inline">e^{i\\pi}+1=0</span>.</p>')
-    assert "height:1.2em" in html
+    assert "height:1em" in html
     assert "width:auto" in html
 
 
