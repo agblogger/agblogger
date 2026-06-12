@@ -32,7 +32,7 @@ The broadcast is created and sent in two sequential Resend API calls. If create 
 
 ## Email Rendering
 
-Broadcast email construction wraps the rendered post HTML for delivery only — it never affects stored HTML or the web render path. The email layout is a header bar (view-online link and unsubscribe), the post title, the post body, and a compliance footer. Root-relative links and assets are rewritten to absolute URLs against the public post origin.
+Broadcast email construction wraps the rendered post HTML for delivery only — it never affects stored HTML or the web render path. The email layout is a header bar (view-online link and unsubscribe), the post title, the post body, and a compliance footer. Root-relative links and assets are rewritten to absolute URLs against the public post origin. Fragment links, including footnote references and backlinks, are rewritten to the online post URL because email clients do not reliably support links within an email document.
 
 Because email clients run no JavaScript, KaTeX cannot render client-side as it does on the web (see [editor.md](editor.md)); math spans are instead rewritten into images served by an external LaTeX rendering service (`latex.codecogs.com`), with the raw TeX as alt text so blocked images still read. This involves a tradeoff: the image request leaks the reader's IP to the third-party service and acts as an open-tracking signal; availability depends on the external service. No alternative local rendering path exists.
 

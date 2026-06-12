@@ -63,7 +63,11 @@ class _AbsolutePostUrlParser(HTMLParser):
             if value is None:
                 rendered.append(name)
                 continue
-            if name in {"href", "src"} and value.startswith("/") and not value.startswith("//"):
+            is_fragment_link = name == "href" and value.startswith("#")
+            is_root_relative_url = (
+                name in {"href", "src"} and value.startswith("/") and not value.startswith("//")
+            )
+            if is_fragment_link or is_root_relative_url:
                 value = urljoin(self.post_url, value)
             rendered.append(f'{name}="{_html.escape(value, quote=True)}"')
         return f" {' '.join(rendered)}" if rendered else ""

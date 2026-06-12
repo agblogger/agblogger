@@ -69,6 +69,23 @@ def test_broadcast_email_converts_root_relative_post_urls_to_absolute() -> None:
     assert 'href="https://blog.example/page/about"' in html
 
 
+def test_broadcast_email_converts_fragment_links_to_online_post() -> None:
+    html, _text = build_broadcast_email(
+        post_url="https://blog.example/post/hello",
+        post_title="Hello",
+        post_html=(
+            '<p>Claim<a href="#fn1" id="fnref1">1</a></p>'
+            '<aside id="fn1">Footnote <a href="#fnref1">back</a></aside>'
+        ),
+        controller_name="Jane Blog",
+        postal_address="1 Main St, Town",
+    )
+    assert 'href="https://blog.example/post/hello#fn1"' in html
+    assert 'href="https://blog.example/post/hello#fnref1"' in html
+    assert 'id="fnref1"' in html
+    assert 'id="fn1"' in html
+
+
 def test_broadcast_email_escapes_title_in_html() -> None:
     html, _text = build_broadcast_email(
         post_url="https://blog.example/post/hello",
