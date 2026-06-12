@@ -38,7 +38,10 @@ _UNSUBSCRIBE_HREF = "{{{RESEND_UNSUBSCRIBE_URL}}}"
 # latex.codecogs.com and can act as an open-tracking signal; rendering depends
 # on the third-party service being reachable. No local alternative exists.
 _MATH_IMAGE_BASE_URL = "https://latex.codecogs.com/png.image?"
-_MATH_IMAGE_DPI = r"\dpi{120} "
+# Render at a high DPI and downsample with CSS (see _render_math_images) so math
+# stays sharp on the high-density screens — phones, Retina — where most email is
+# read. A low-DPI raster shown 1:1 gets upscaled by the device and looks blurry.
+_MATH_IMAGE_DPI = r"\dpi{300} "
 _MATH_SPAN_RE = re.compile(r'<span class="math (inline|display)">(.*?)</span>', re.DOTALL)
 
 _ALLOWED_URL_SCHEMES = ("https://", "http://", "/")
@@ -123,11 +126,18 @@ def _render_math_images(post_html: str) -> str:
             # Block + auto margins centers the image while staying valid phrasing
             # content (Pandoc wraps display math in a <p>, where a block <div>
             # would be invalid and render erratically in some email clients).
+            # max-width caps wide equations to the email body; height:auto keeps
+            # the aspect ratio so the high-DPI source downsamples crisply.
             return (
                 f'<img src="{safe_src}" alt="{safe_alt}" '
-                f'style="display:block;margin:18px auto;max-width:100%">'
+                f'style="display:block;margin:18px auto;max-width:100%;height:auto">'
             )
-        return f'<img src="{safe_src}" alt="{safe_alt}" style="vertical-align:middle">'
+        # Pin inline math to the text line height (downsampling the high-DPI
+        # source) so it matches surrounding text instead of rendering oversized.
+        return (
+            f'<img src="{safe_src}" alt="{safe_alt}" '
+            f'style="vertical-align:middle;height:1.2em;width:auto">'
+        )
 
     return _MATH_SPAN_RE.sub(_replace, post_html)
 

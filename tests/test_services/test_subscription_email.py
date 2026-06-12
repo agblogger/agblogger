@@ -177,6 +177,31 @@ def test_broadcast_email_math_url_encodes_decoded_tex() -> None:
     assert "%3C" in html  # URL-encoded "<" appears in the image src
 
 
+def test_broadcast_email_renders_math_at_high_resolution() -> None:
+    # Math images are requested at a high DPI so they stay sharp on the
+    # high-density screens (phones, Retina) where most email is read. The DPI
+    # directive is URL-encoded into the image src: "\dpi{300} " -> "%5Cdpi%7B300%7D".
+    inline = _broadcast('<span class="math inline">e^{i\\pi}+1=0</span>')
+    display = _broadcast('<span class="math display">\\int_0^1 x^2\\,dx</span>')
+    assert "%5Cdpi%7B300%7D" in inline
+    assert "%5Cdpi%7B300%7D" in display
+
+
+def test_broadcast_email_inline_math_image_is_sized_to_text() -> None:
+    # The high-DPI source is downsampled to the text line height so inline math
+    # matches surrounding text instead of rendering oversized.
+    html = _broadcast('<p>Euler: <span class="math inline">e^{i\\pi}+1=0</span>.</p>')
+    assert "height:1.2em" in html
+    assert "width:auto" in html
+
+
+def test_broadcast_email_display_math_image_scales_height() -> None:
+    # Display math keeps its aspect ratio when max-width caps a wide equation,
+    # so its height tracks the downsampled width.
+    html = _broadcast('<p><span class="math display">\\int_0^1 x^2\\,dx</span></p>')
+    assert "height:auto" in html
+
+
 def test_broadcast_email_header_precedes_title_and_content() -> None:
     html = _broadcast("<p>Body</p>", title="My Post")
     header_pos = html.index("View this post online")
