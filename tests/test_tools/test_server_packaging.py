@@ -36,6 +36,7 @@ def test_server_wheel_manifest_builds_backend_only() -> None:
     assert manifest["project"]["name"] == "agblogger-server"
     assert manifest["project"]["scripts"] == {"agblogger-server": "backend.__main__:main"}
     assert "crawlerdetect>=0.3" in manifest["project"]["dependencies"]
+    assert "svix>=1.0" in manifest["project"]["dependencies"]
     # The server depends on the shared post-path library; its wheel is built and
     # installed alongside the server wheel in the Docker image.
     assert "agblogger-core>=0.1.3" in manifest["project"]["dependencies"]

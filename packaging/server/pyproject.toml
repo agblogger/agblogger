@@ -26,6 +26,7 @@ dependencies = [
     "crawlerdetect>=0.3",
     "python-multipart>=0.0.20",
     "grapheme>=0.6.0",
+    "svix>=1.0",
     # Shared post-filesystem path/slug utilities; wheel built+installed in the Docker image.
     "agblogger-core>=0.1.3",
 ]

@@ -116,6 +116,9 @@ def run_audit(
             report_path.unlink(missing_ok=True)
             try:
                 return_code = run_service(service, site_packages, report_path)
+            except TimeoutError:
+                errors.append(f"{service}: audit command timed out")
+                continue
             except (OSError, subprocess.SubprocessError) as exc:
                 errors.append(f"{service}: audit command failed ({exc})")
                 continue

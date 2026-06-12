@@ -1157,6 +1157,11 @@ async def update_post_endpoint(
             post_data.file_path = new_file_path
             existing.rendered_excerpt = new_rendered_excerpt
             existing.rendered_html = new_rendered_html
+            await subscription_service.update_broadcast_post_path(
+                session,
+                old_post_path=file_path,
+                new_post_path=new_file_path,
+            )
 
         commit_failed = False
         try:

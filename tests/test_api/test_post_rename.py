@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import shutil
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pytest
+from httpx import ASGITransport
 
 from backend.config import Settings
+from backend.models.subscription import SubscriptionBroadcast
+from backend.schemas.subscription import BroadcastStatus, BroadcastTrigger
+from backend.services import subscription_service
 from tests.conftest import create_test_client
 
 if TYPE_CHECKING:
@@ -15,6 +19,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from httpx import AsyncClient
+    from sqlalchemy.ext.asyncio import async_sessionmaker
 
 
 @pytest.fixture
@@ -63,6 +68,16 @@ async def _create_post(client: AsyncClient, token: str, title: str) -> dict[str,
     )
     assert resp.status_code == 201
     return resp.json()
+
+
+def _get_session_factory(client: AsyncClient) -> async_sessionmaker[Any]:
+    transport = client._transport
+    assert isinstance(transport, ASGITransport)
+    app = transport.app
+    state = getattr(app, "state", None)
+    assert state is not None
+    factory: async_sessionmaker[Any] = state.session_factory
+    return factory
 
 
 class TestPostRename:
@@ -147,6 +162,41 @@ class TestPostRename:
         # Verify the new file exists on disk
         new_full = app_settings.content_dir / new_path
         assert new_full.exists()
+
+    @pytest.mark.asyncio
+    async def test_rename_preserves_broadcast_once_guard(self, client: AsyncClient) -> None:
+        token = await _login(client)
+        data = await _create_post(client, token, "Broadcast Original")
+        original_path = data["file_path"]
+        session_factory = _get_session_factory(client)
+
+        async with session_factory() as session:
+            session.add(
+                SubscriptionBroadcast(
+                    post_path=original_path,
+                    post_title="Broadcast Original",
+                    trigger=BroadcastTrigger.AUTO,
+                    status=BroadcastStatus.SENT,
+                    sent_at="2026-06-12T00:00:00+00:00",
+                )
+            )
+            await session.commit()
+
+        resp = await client.put(
+            f"/api/posts/{original_path}",
+            json={
+                "title": "Broadcast Renamed",
+                "body": "Some content here.\n",
+                "labels": [],
+                "is_draft": False,
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert resp.status_code == 200
+        new_path = resp.json()["file_path"]
+        async with session_factory() as session:
+            assert await subscription_service.already_broadcast(session, new_path) is True
 
     @pytest.mark.asyncio
     async def test_rename_creates_symlink(

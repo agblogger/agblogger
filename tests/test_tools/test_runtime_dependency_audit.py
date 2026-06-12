@@ -73,6 +73,29 @@ def test_run_audit_reports_production_vulnerabilities_from_fallback(tmp_path: Pa
     assert vulnerabilities == ("fastapi==1.0:CVE-2099-0001",)
 
 
+def test_run_audit_falls_back_after_service_timeout(tmp_path: Path) -> None:
+    services: list[str] = []
+
+    def fake_run(service: str, _site_packages: Path, report_path: Path) -> int:
+        services.append(service)
+        if service == "pypi":
+            raise TimeoutError
+        _write_report(
+            report_path,
+            [{"name": "fastapi", "version": "1.0", "vulns": []}],
+        )
+        return 0
+
+    vulnerabilities = run_audit(
+        tmp_path / "site-packages",
+        frozenset({"fastapi"}),
+        run_service=fake_run,
+    )
+
+    assert vulnerabilities == ()
+    assert services == ["pypi", "osv"]
+
+
 def test_run_audit_fails_closed_when_all_services_return_invalid_reports(tmp_path: Path) -> None:
     def fake_run(_service: str, _site_packages: Path, report_path: Path) -> int:
         report_path.write_text("", encoding="utf-8")

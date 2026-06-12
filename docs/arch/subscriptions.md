@@ -26,7 +26,7 @@ Unsubscribing is delegated to Resend: every broadcast email embeds Resend's unsu
 
 When a post transitions from draft to published (or is created as published), the publish path fires a background broadcast task, gated on subscriptions being enabled. The task builds the post's email from the already-sanitized rendered HTML and creates and sends a Resend broadcast to the segment.
 
-A once-guard keyed on the ledger prevents a second automatic send per post; the admin's manual trigger bypasses it. Background broadcast work is bounded and drained on graceful shutdown so in-flight sends complete, mirroring the analytics shutdown pattern. Manual triggers receive a retryable error when background-task capacity is full, and the admin UI polls the ledger until the resulting attempt is visible.
+A once-guard keyed on the ledger prevents a second automatic send per post; post renames update ledger references so the guard survives path changes, while the admin's manual trigger bypasses it. Background broadcast work is bounded and drained on graceful shutdown so in-flight sends complete, mirroring the analytics shutdown pattern. Manual triggers receive a retryable error when background-task capacity is full, and the admin UI polls the ledger until the resulting attempt is visible.
 
 The broadcast is created and sent in two sequential Resend API calls. If create succeeds but the send call fails, a `BroadcastSendError` (carrying the broadcast id) is raised and the ledger row records the id alongside the failed status — preventing the orphan from being unrecoverable. Manual retrigger after this partial failure carries a double-send risk; operators should verify the Resend dashboard before retrying.
 

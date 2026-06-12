@@ -11,7 +11,7 @@ import time as _time_module
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from svix.webhooks import Webhook
 from svix.webhooks import WebhookVerificationError as WebhookVerificationError
@@ -383,6 +383,17 @@ async def already_broadcast(session: AsyncSession, post_path: str) -> bool:
         .limit(1)
     )
     return result.scalar_one_or_none() is not None
+
+
+async def update_broadcast_post_path(
+    session: AsyncSession, *, old_post_path: str, new_post_path: str
+) -> None:
+    """Keep broadcast ledger references aligned when a post is renamed."""
+    await session.execute(
+        update(SubscriptionBroadcast)
+        .where(SubscriptionBroadcast.post_path == old_post_path)
+        .values(post_path=new_post_path)
+    )
 
 
 async def send_broadcast(
