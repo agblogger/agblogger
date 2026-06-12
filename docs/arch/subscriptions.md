@@ -56,7 +56,7 @@ When no user-created `content/pages/privacy.md` exists, the pages API serves a d
 - **Confirm token signing**: confirmation tokens are signed with a key derived from the app secret; an expired or tampered token returns a generic failure page with no information leak.
 - **No enumeration**: the public subscribe endpoint does not reveal whether an address is already subscribed — new and existing addresses receive the same confirmation response.
 - **Rate limiting**: the public subscribe endpoint is rate-limited per IP to protect against confirmation-email abuse and Resend quota exhaustion.
-- **Controllership retained**: Resend acts as a data processor; the operator remains the GDPR data controller and must sign Resend's DPA.
+- **Controllership retained**: Resend acts as a data processor; the operator remains the GDPR data controller.
 
 ## Code Entry Points
 
