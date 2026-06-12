@@ -294,25 +294,30 @@ async def search_posts(
     if not terms:
         return []
     safe_query = " ".join('"' + t.replace('"', '""') + '"*' for t in terms if t)
+    # Weight title hits above subtitle, and subtitle above body, so a query that
+    # appears in a post's title surfaces ahead of one that only mentions it in
+    # the body. bm25() returns lower (more negative) scores for better matches,
+    # so ORDER BY ascending puts the most relevant result first. Ties fall back
+    # to created_at DESC for deterministic, recency-preferring ordering.
     if include_drafts:
         stmt = text("""
             SELECT p.id, p.file_path, p.title, p.subtitle, p.rendered_excerpt, p.created_at,
-                   rank
+                   bm25(posts_fts, 10.0, 5.0, 1.0) AS rank
             FROM posts_fts fts
             JOIN posts_cache p ON fts.rowid = p.id
             WHERE posts_fts MATCH :query
-            ORDER BY rank
+            ORDER BY bm25(posts_fts, 10.0, 5.0, 1.0), p.created_at DESC
             LIMIT :limit
         """)
     else:
         stmt = text("""
             SELECT p.id, p.file_path, p.title, p.subtitle, p.rendered_excerpt, p.created_at,
-                   rank
+                   bm25(posts_fts, 10.0, 5.0, 1.0) AS rank
             FROM posts_fts fts
             JOIN posts_cache p ON fts.rowid = p.id
             WHERE posts_fts MATCH :query
             AND p.is_draft = 0
-            ORDER BY rank
+            ORDER BY bm25(posts_fts, 10.0, 5.0, 1.0), p.created_at DESC
             LIMIT :limit
         """)
     result = await session.execute(stmt, {"query": safe_query, "limit": limit})
