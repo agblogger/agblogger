@@ -1,8 +1,8 @@
-"""Shared sync path validation rules used by the server and CLI."""
+"""Shared sync path validation rules used by the server and the sync CLI."""
 
 from __future__ import annotations
 
-from backend.utils.slug import is_directory_post_path
+from agblogger_core.slug import is_directory_post_path
 
 _SYNC_ALLOWED_TOP_LEVEL_FILES = frozenset({"index.toml", "labels.toml"})
 

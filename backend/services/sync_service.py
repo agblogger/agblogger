@@ -18,11 +18,11 @@ import tomli_w
 import yaml
 from sqlalchemy import delete, select
 
+from agblogger_core import is_directory_post_path
+from agblogger_core import is_sync_managed_path as is_sync_managed_path
 from backend.filesystem.frontmatter import RECOGNIZED_FIELDS, extract_title, strip_leading_heading
 from backend.models.sync import SyncManifest
-from backend.sync_paths import is_sync_managed_path as is_sync_managed_path
 from backend.utils.datetime import format_datetime, format_iso, now_utc, parse_datetime
-from backend.utils.slug import is_directory_post_path
 
 logger = logging.getLogger(__name__)
 

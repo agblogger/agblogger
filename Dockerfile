@@ -6,10 +6,12 @@ RUN npm ci --production=false
 COPY frontend/ ./
 RUN npm run build
 
-# ── Stage 2: Build server wheel ──────────────────────────────────────
+# ── Stage 2: Build wheels (shared core + server) ─────────────────────
 FROM python:3.14-slim AS server-wheel-build
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 WORKDIR /app
+COPY packages/agblogger-core/ /app/core-src/
+RUN uv build --wheel /app/core-src --out-dir /tmp/dist
 COPY packaging/server/pyproject.toml /app/server-src/pyproject.toml
 COPY backend/ /app/server-src/backend/
 RUN uv build --wheel /app/server-src --out-dir /tmp/dist
@@ -50,9 +52,10 @@ RUN adduser -D -s /bin/sh agblogger
 
 WORKDIR /app
 
-# Install server wheel (uv is removed after install – it is not needed at runtime)
+# Install the server wheel together with its bundled agblogger-core dependency
+# (both built locally above). uv is removed after install – not needed at runtime.
 COPY --from=server-wheel-build /tmp/dist/ /tmp/dist/
-RUN uv pip install --system /tmp/dist/agblogger_server-*.whl \
+RUN uv pip install --system /tmp/dist/agblogger_core-*.whl /tmp/dist/agblogger_server-*.whl \
     && rm -rf /tmp/dist \
     && rm /usr/local/bin/uv
 

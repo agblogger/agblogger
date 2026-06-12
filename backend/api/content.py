@@ -12,11 +12,11 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from agblogger_core import is_directory_post_path
 from backend.api.deps import get_current_admin, get_session, get_settings
 from backend.config import Settings
 from backend.models.post import PostCache
 from backend.models.user import AdminUser
-from backend.utils.slug import is_directory_post_path
 
 router = APIRouter(prefix="/api/content", tags=["content"])
 

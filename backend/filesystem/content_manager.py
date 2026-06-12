@@ -13,6 +13,7 @@ import yaml
 if TYPE_CHECKING:
     from pathlib import Path
 
+from agblogger_core import is_directory_post_path
 from backend.filesystem.frontmatter import PostData, generate_markdown_excerpt, parse_post
 from backend.filesystem.toml_manager import (
     LabelDef,
@@ -20,7 +21,6 @@ from backend.filesystem.toml_manager import (
     parse_labels_config,
     parse_site_config,
 )
-from backend.utils.slug import is_directory_post_path
 
 logger = logging.getLogger(__name__)
 

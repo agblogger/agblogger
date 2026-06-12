@@ -182,6 +182,7 @@ def update_version_files(project_dir: Path, current_version: str, new_version: s
         (Path("pyproject.toml"), PROJECT_VERSION_RE),
         (Path("packaging/server/pyproject.toml"), PROJECT_VERSION_RE),
         (Path("cli/pyproject.toml"), PROJECT_VERSION_RE),
+        (Path("packages/agblogger-core/pyproject.toml"), PROJECT_VERSION_RE),
     ]
     for rel_path, pattern in regex_files:
         _replace_with_regex(project_dir / rel_path, pattern, current_version, new_version)

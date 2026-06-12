@@ -12,7 +12,7 @@ from urllib.parse import urlparse as _urlparse
 
 import httpx
 
-from backend.utils.slug import is_directory_post_path as _is_directory_post_path
+from agblogger_core import is_directory_post_path as _is_directory_post_path
 
 if TYPE_CHECKING:
     from collections.abc import Callable

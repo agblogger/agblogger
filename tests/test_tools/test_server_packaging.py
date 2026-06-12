@@ -19,7 +19,14 @@ def test_cli_manifest_contains_only_direct_binary_dependencies() -> None:
     manifest = tomllib.loads((PROJECT_ROOT / "cli" / "pyproject.toml").read_text(encoding="utf-8"))
 
     assert manifest["project"]["scripts"] == {"agblogger": "agblogger_cli.sync_client:main"}
-    assert manifest["project"]["dependencies"] == ["httpx>=0.28", "platformdirs>=4.0"]
+    # agblogger-core is the shared post-path library (bundled into the PyInstaller
+    # binary and resolved from the workspace for uv tool installs).
+    assert manifest["project"]["dependencies"] == [
+        "httpx>=0.28",
+        "platformdirs>=4.0",
+        "agblogger-core",
+    ]
+    assert manifest["tool"]["uv"]["sources"]["agblogger-core"] == {"workspace": True}
 
 
 def test_server_wheel_manifest_builds_backend_only() -> None:
@@ -29,6 +36,9 @@ def test_server_wheel_manifest_builds_backend_only() -> None:
     assert manifest["project"]["name"] == "agblogger-server"
     assert manifest["project"]["scripts"] == {"agblogger-server": "backend.__main__:main"}
     assert "crawlerdetect>=0.3" in manifest["project"]["dependencies"]
+    # The server depends on the shared post-path library; its wheel is built and
+    # installed alongside the server wheel in the Docker image.
+    assert "agblogger-core>=0.1.3" in manifest["project"]["dependencies"]
     assert manifest["tool"]["hatch"]["build"]["targets"]["wheel"]["packages"] == ["backend"]
 
 
@@ -48,7 +58,13 @@ def test_dockerfile_installs_server_wheel_without_copying_tool_or_cli_sources() 
     assert "COPY packaging/server/pyproject.toml /app/server-src/pyproject.toml" in dockerfile
     assert "COPY backend/ /app/server-src/backend/" in dockerfile
     assert "RUN uv build --wheel /app/server-src --out-dir /tmp/dist" in dockerfile
-    assert "RUN uv pip install --system /tmp/dist/agblogger_server-*.whl" in dockerfile
+    # Shared agblogger-core wheel is built and installed together with the server wheel.
+    assert "COPY packages/agblogger-core/ /app/core-src/" in dockerfile
+    assert "RUN uv build --wheel /app/core-src --out-dir /tmp/dist" in dockerfile
+    assert (
+        "RUN uv pip install --system "
+        "/tmp/dist/agblogger_core-*.whl /tmp/dist/agblogger_server-*.whl" in dockerfile
+    )
     assert 'CMD ["agblogger-server"]' in dockerfile
     assert "COPY cli/ ./cli/" not in dockerfile
     assert "COPY tools/ ./tools/" not in dockerfile

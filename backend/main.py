@@ -26,6 +26,7 @@ from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
 from sqlalchemy.orm import selectinload
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from agblogger_core import file_path_to_slug
 from backend.api.admin import router as admin_router
 from backend.api.analytics import admin_router as analytics_admin_router
 from backend.api.analytics import public_router as analytics_public_router
@@ -56,7 +57,6 @@ from backend.services.upload_limits import (
     get_multipart_body_limit,
 )
 from backend.utils.image_probe import probe_image_file
-from backend.utils.slug import file_path_to_slug
 from backend.version import get_version
 
 if TYPE_CHECKING:
@@ -1478,9 +1478,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         content={"detail": exc.detail},
                     )
 
+        from agblogger_core import resolve_slug_candidates
         from backend.api.posts import _resolve_symlink_redirect
         from backend.models.post import PostCache
-        from backend.utils.slug import resolve_slug_candidates
 
         route_content_manager: ContentManager = request.app.state.content_manager
         redirected_post: PostCache | None = None

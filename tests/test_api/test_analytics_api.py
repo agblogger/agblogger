@@ -9,6 +9,7 @@ import pytest
 from pydantic import ValidationError
 from sqlalchemy import text
 
+from agblogger_core import file_path_to_slug
 from backend.api.analytics import _resolve_public_post_slug
 from backend.config import Settings
 from backend.models.base import CacheBase
@@ -20,7 +21,6 @@ from backend.schemas.analytics import (
     PathReferrersResponse,
     TotalStatsResponse,
 )
-from backend.utils.slug import file_path_to_slug
 from tests.conftest import create_test_client
 
 if TYPE_CHECKING:

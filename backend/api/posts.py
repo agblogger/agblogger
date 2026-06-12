@@ -17,6 +17,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from agblogger_core import file_path_to_slug, resolve_slug_candidates
 from backend.api.deps import (
     AsyncWriteLock,
     get_content_manager,
@@ -65,7 +66,6 @@ from backend.services.post_service import (
 from backend.services.slug_service import date_slug_prefix, generate_post_path, generate_post_slug
 from backend.services.storage_quota import ContentSizeTracker
 from backend.utils.datetime import format_iso, now_utc
-from backend.utils.slug import file_path_to_slug, resolve_slug_candidates
 from backend.utils.text import count_words
 
 logger = logging.getLogger(__name__)

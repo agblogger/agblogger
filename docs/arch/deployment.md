@@ -59,7 +59,7 @@ The project also supports a packaged local deployment profile for deployment-sty
 
 ## Code Entry Points
 
-- `Dockerfile` defines the production image.
+- `Dockerfile` defines the production image, building and installing the backend server wheel together with the shared `agblogger-core` library wheel it depends on.
 - `docker-compose.yml` defines the checked-in reference topology for the bundled-Caddy stack; `tools/deploy_production.py` can generate alternate local compose files such as `docker-compose.caddy.yml` when the requested deployment omits GoatCounter.
 - `goatcounter/entrypoint.sh` is the GoatCounter container's idempotent provisioning and startup script, including token-permission repair for reused token volumes.
 - `tools/deploy_production.py` contains the deployment helper, configuration generation, and `setup.sh` script generation workflow.

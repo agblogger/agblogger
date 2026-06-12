@@ -6,7 +6,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from backend.utils.slug import (
+from agblogger_core import (
     CanonicalPostPath,
     file_path_to_slug,
     is_directory_post_path,

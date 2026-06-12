@@ -46,4 +46,5 @@ The backend serves both the JSON API and the built frontend, so browser clients 
 - `backend/services/` contains the main orchestration logic for content, auth, sync, rendering, and integrations.
 - `frontend/src/App.tsx` is the SPA entry point, with route-level UI in `frontend/src/pages/`.
 - `cli/agblogger_cli/` contains the standalone sync CLI.
+- `packages/agblogger-core/` is a shared workspace library (`agblogger_core`) of canonical post-path/slug and sync-path rules, depended on by both the backend and the CLI so both apply identical path validation.
 - `tools/` contains repository-internal development, deployment, release, and quality-gate helpers that are not shipped in the application or CLI binary.

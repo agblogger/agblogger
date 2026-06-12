@@ -22,8 +22,8 @@ from agblogger_cli.credentials import (
     revoke_session,
     save_credentials,
 )
-from agblogger_cli.sync_paths import is_sync_managed_path
 from agblogger_cli.version import get_cli_version
+from agblogger_core import is_sync_managed_path
 
 try:
     import httpx

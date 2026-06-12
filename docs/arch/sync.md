@@ -44,3 +44,4 @@ The sync client is a separate CLI companion that uses the same authenticated API
 - `backend/services/sync_service.py` contains sync planning, merge, and commit orchestration.
 - `backend/models/sync.py` contains the sync manifest model (`SyncManifest`, a `DurableBase` table) and `backend/api/sync.py` defines sync-specific request/response schemas inline.
 - `cli/agblogger_cli/sync_client.py` implements the local companion client shipped as the standalone `agblogger` CLI.
+- `agblogger_core.sync_paths` (the shared `packages/agblogger-core/` workspace package) defines the managed-sync-path rules, applied identically by the server and the CLI so both agree on which files are in the sync surface.

@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from agblogger_core import file_path_to_slug, is_directory_post_path, resolve_slug_candidates
 from backend.api.deps import get_session, require_admin
 from backend.models.post import PostCache
 from backend.models.user import AdminUser
@@ -31,7 +32,6 @@ from backend.services.analytics_service import (
     update_analytics_settings,
 )
 from backend.utils.datetime import parse_datetime
-from backend.utils.slug import file_path_to_slug, is_directory_post_path, resolve_slug_candidates
 
 logger = logging.getLogger(__name__)
 

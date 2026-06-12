@@ -19,6 +19,7 @@ from svix.webhooks import WebhookVerificationError as WebhookVerificationError
 from backend.models.subscription import SubscriptionBroadcast, SubscriptionSettings
 from backend.schemas.subscription import (
     BroadcastStatus,
+    BroadcastSummary,
     BroadcastTrigger,
     SubscriptionSettingsResponse,
 )
@@ -351,6 +352,26 @@ _broadcast_tasks: set[asyncio.Task[None]] = set()
 _MAX_BROADCAST_TASKS = 16
 
 
+async def list_broadcasts(session: AsyncSession, *, limit: int = 100) -> list[BroadcastSummary]:
+    """Return recent broadcast ledger rows (most recent first) for the admin view."""
+    result = await session.execute(
+        select(SubscriptionBroadcast).order_by(SubscriptionBroadcast.id.desc()).limit(limit)
+    )
+    return [
+        BroadcastSummary(
+            id=r.id,
+            post_path=r.post_path,
+            post_title=r.post_title,
+            resend_broadcast_id=r.resend_broadcast_id,
+            trigger=r.trigger,
+            status=r.status,
+            sent_at=r.sent_at,
+            error=r.error,
+        )
+        for r in result.scalars().all()
+    ]
+
+
 async def already_broadcast(session: AsyncSession, post_path: str) -> bool:
     """Return True if a successful broadcast was already sent for this post."""
     result = await session.execute(
@@ -395,44 +416,41 @@ async def send_broadcast(
         else:
             api_key = decrypt_api_key(row, secret_key)
             from_email = row.from_email
-            if api_key is None or not from_email:
+            segment_id = row.resend_segment_id
+            if api_key is None or not from_email or not segment_id:
                 record.error = "Subscriptions not configured"
             else:
-                segment_id = row.resend_segment_id
-                if not segment_id:
-                    record.error = "Subscriptions not configured"
-                else:
-                    html, text = build_broadcast_email(
-                        post_url=post_url,
-                        post_title=post_title,
-                        post_html=post_html,
-                        controller_name=row.controller_name or from_email,
-                        postal_address=row.postal_address or "",
+                html, text = build_broadcast_email(
+                    post_url=post_url,
+                    post_title=post_title,
+                    post_html=post_html,
+                    controller_name=row.controller_name or from_email,
+                    postal_address=row.postal_address or "",
+                )
+                try:
+                    broadcast_id = await resend_client.create_and_send_broadcast(
+                        api_key=api_key,
+                        segment_id=segment_id,
+                        from_=_from_header(row),
+                        subject=post_title,
+                        html=html,
+                        text=text,
                     )
-                    try:
-                        broadcast_id = await resend_client.create_and_send_broadcast(
-                            api_key=api_key,
-                            segment_id=segment_id,
-                            from_=_from_header(row),
-                            subject=post_title,
-                            html=html,
-                            text=text,
-                        )
-                    except resend_client.BroadcastSendError as exc:
-                        # Create succeeded but send failed — record the broadcast id so
-                        # it can be found in Resend for manual cleanup/retry.
-                        # NOTE: manual retrigger may double-send if the original broadcast
-                        # was already delivered before the send-POST error occurred.
-                        record.resend_broadcast_id = exc.broadcast_id
-                        logger.warning(
-                            "Broadcast %s created but send failed for %s",
-                            exc.broadcast_id,
-                            post_path,
-                            exc_info=True,
-                        )
-                        raise
-                    record.resend_broadcast_id = broadcast_id
-                    record.status = BroadcastStatus.SENT
+                except resend_client.BroadcastSendError as exc:
+                    # Create succeeded but send failed — record the broadcast id so
+                    # it can be found in Resend for manual cleanup/retry.
+                    # NOTE: manual retrigger may double-send if the original broadcast
+                    # was already delivered before the send-POST error occurred.
+                    record.resend_broadcast_id = exc.broadcast_id
+                    logger.warning(
+                        "Broadcast %s created but send failed for %s",
+                        exc.broadcast_id,
+                        post_path,
+                        exc_info=True,
+                    )
+                    raise
+                record.resend_broadcast_id = broadcast_id
+                record.status = BroadcastStatus.SENT
     except resend_client.ResendError as exc:
         record.error = str(exc)
     except Exception:  # never let a broadcast crash the caller

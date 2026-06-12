@@ -101,5 +101,5 @@ The goal is to preserve content, preserve service availability where possible, a
 - `backend/pandoc/server.py` manages the long-lived Pandoc server process used by the application.
 - `backend/pandoc/renderer.py` exposes the shared markdown-rendering boundary used across backend features.
 - `backend/migrations/` contains Alembic migration scripts for durable table schema changes.
-- `backend/utils/slug.py` provides canonical post path validation and slug extraction used across API, filesystem, sync, and rendering modules.
+- `agblogger_core` (the shared `packages/agblogger-core/` workspace package) provides canonical post-path validation, slug extraction, and the managed sync-path rules, used across API, filesystem, sync, and rendering modules and shared with the standalone CLI as a single source of truth.
 - `backend/utils/datetime.py` provides shared datetime parsing and formatting helpers.

@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from agblogger_core import is_directory_post_path, is_sync_managed_path
 from backend.api.deps import (
     AsyncWriteLock,
     get_content_manager,
@@ -38,8 +39,6 @@ from backend.services.sync_service import (
     scan_content_files,
     update_server_manifest,
 )
-from backend.sync_paths import is_sync_managed_path
-from backend.utils.slug import is_directory_post_path
 
 if TYPE_CHECKING:
     from pathlib import Path

@@ -224,13 +224,13 @@ check-backend-static:
             fi
         fi
     }
-    run_step "── Backend: type checking ──" uv run mypy backend/ tools/ cli/agblogger_cli/ tests/
-    run_step $'\n── Backend: pyright type checking ──' uv run basedpyright backend/ tools/ cli/agblogger_cli/
+    run_step "── Backend: type checking ──" uv run mypy backend/ tools/ cli/agblogger_cli/ packages/agblogger-core/agblogger_core/ tests/
+    run_step $'\n── Backend: pyright type checking ──' uv run basedpyright backend/ tools/ cli/agblogger_cli/ packages/agblogger-core/agblogger_core/
     run_step $'\n── Backend: dependency hygiene ──' uv run deptry .
     run_step $'\n── CLI: dependency hygiene ──' uv run --directory cli --project .. deptry .
     run_step $'\n── Backend: import contracts ──' uv run lint-imports
-    run_step $'\n── Backend: linting ──' uv run ruff check backend/ tools/ cli/ tests/
-    run_step $'\n── Backend: format check ──' uv run ruff format --check backend/ tools/ cli/ tests/
+    run_step $'\n── Backend: linting ──' uv run ruff check backend/ tools/ cli/ packages/agblogger-core/ tests/
+    run_step $'\n── Backend: format check ──' uv run ruff format --check backend/ tools/ cli/ packages/agblogger-core/ tests/
     _prod_file="$(mktemp)"
     trap 'rm -f "$_out" "$_prod_file"' EXIT
     uv export --all-packages --format requirements.txt --no-dev --no-emit-workspace --frozen 2>/dev/null \
@@ -243,7 +243,7 @@ check-backend-static:
 test-backend:
     #!/usr/bin/env bash
     set -euo pipefail
-    cmd=(uv run pytest tests/ -n auto --cov=backend --cov=tools --cov=cli/agblogger_cli --cov-report=term-missing)
+    cmd=(uv run pytest tests/ -n auto --cov=backend --cov=tools --cov=cli/agblogger_cli --cov=packages/agblogger-core/agblogger_core --cov-report=term-missing)
     if [ -n "{{ v }}" ]; then
         printf '\n── Backend: tests ──\n'
         "${cmd[@]}" -v
@@ -325,10 +325,10 @@ check-vulture:
     trap 'rm -f "$_out"' EXIT
     if [ -n "{{ v }}" ]; then
         echo "── Python dead-code analysis (Vulture) ──"
-        uv run vulture backend tools cli/agblogger_cli --exclude "backend/migrations" --min-confidence 80 --ignore-names "readline"
+        uv run vulture backend tools cli/agblogger_cli packages/agblogger-core/agblogger_core --exclude "backend/migrations" --min-confidence 80 --ignore-names "readline"
     else
         rc=0
-        uv run vulture backend tools cli/agblogger_cli --exclude "backend/migrations" --min-confidence 80 --ignore-names "readline" > "$_out" 2>&1 || rc=$?
+        uv run vulture backend tools cli/agblogger_cli packages/agblogger-core/agblogger_core --exclude "backend/migrations" --min-confidence 80 --ignore-names "readline" > "$_out" 2>&1 || rc=$?
         if [ $rc -ne 0 ]; then
             echo "── Python dead-code analysis (Vulture) ──"
             cat "$_out"
@@ -355,7 +355,7 @@ check-semgrep:
         --config .semgrep.yml \
         --error \
         --quiet \
-        backend/ tools/ cli/agblogger_cli/ frontend/src/ Dockerfile docker-compose.yml \
+        backend/ tools/ cli/agblogger_cli/ packages/agblogger-core/agblogger_core/ frontend/src/ Dockerfile docker-compose.yml \
         --exclude tests \
         --exclude "frontend/src/**/__tests__" \
         --exclude "frontend/src/**/*.test.ts" \

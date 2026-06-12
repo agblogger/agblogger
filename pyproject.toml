@@ -39,6 +39,8 @@ dependencies = [
     # Multipart file uploads
     "python-multipart>=0.0.26",
     "grapheme>=0.6.0",
+    # Shared post-filesystem path/slug utilities (workspace package, also used by the CLI)
+    "agblogger-core",
 ]
 
 [project.optional-dependencies]
@@ -74,17 +76,18 @@ constraint-dependencies = [
 ]
 
 [tool.uv.workspace]
-members = ["cli"]
+members = ["cli", "packages/agblogger-core"]
 
 [tool.uv.sources]
 agblogger-cli = { workspace = true }
+agblogger-core = { workspace = true }
 
 # ── Tool configuration ──────────────────────────────────────────────
 
 [tool.ruff]
 target-version = "py314"
 line-length = 100
-src = ["backend", "tools", "cli/agblogger_cli", "tests"]
+src = ["backend", "tools", "cli/agblogger_cli", "packages/agblogger-core/agblogger_core", "tests"]
 
 [tool.ruff.lint]
 select = [
@@ -116,7 +119,7 @@ select = [
 "backend/migrations/env.py" = ["F401"]  # Alembic env imports models for metadata side-effect registration
 
 [tool.ruff.lint.isort]
-known-first-party = ["backend", "tools", "agblogger_cli"]
+known-first-party = ["backend", "tools", "agblogger_cli", "agblogger_core"]
 
 [tool.mypy]
 python_version = "3.14"
@@ -181,7 +184,7 @@ reportUnknownParameterType = false
 reportUnknownVariableType = false
 
 [tool.vulture]
-paths = ["backend", "tools", "cli/agblogger_cli"]
+paths = ["backend", "tools", "cli/agblogger_cli", "packages/agblogger-core/agblogger_core"]
 exclude = ["backend/migrations"]
 min_confidence = 80
 
@@ -213,7 +216,7 @@ asyncio_mode = "auto"
 filterwarnings = ["error"]
 
 [tool.coverage.run]
-source = ["backend", "tools", "cli/agblogger_cli"]
+source = ["backend", "tools", "cli/agblogger_cli", "packages/agblogger-core/agblogger_core"]
 omit = ["*/migrations/*", "*/tests/*"]
 branch = true
 

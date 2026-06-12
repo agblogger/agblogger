@@ -11,21 +11,20 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from svix.webhooks import WebhookVerificationError
 
+from agblogger_core import file_path_to_slug
 from backend.api.deps import (
     get_session,
     get_session_factory,
     get_settings,
     require_admin,
 )
+from backend.api.rate_limit import client_ip_from_request, enforce_rate_limit
 from backend.config import Settings
 from backend.exceptions import InternalServerError
 from backend.models.post import PostCache
-from backend.models.subscription import SubscriptionBroadcast
 from backend.models.user import AdminUser
-from backend.net_utils import is_trusted_proxy
 from backend.schemas.subscription import (
     BroadcastListResponse,
-    BroadcastSummary,
     BroadcastTrigger,
     SendTestEmailRequest,
     SubscribeRequest,
@@ -40,7 +39,6 @@ from backend.services.subscription_service import (
     SubscriptionsDisabledError,
     WebhookProcessingError,
 )
-from backend.utils.slug import file_path_to_slug
 
 logger = logging.getLogger(__name__)
 
@@ -53,27 +51,18 @@ _SUBSCRIBE_BURST = (3, 60)  # 3 / minute
 _SUBSCRIBE_SUSTAINED = (10, 3600)  # 10 / hour
 
 
-def _client_ip(request: Request) -> str:
-    settings: Settings = request.app.state.settings
-    host = request.client.host if request.client and request.client.host else "unknown"
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded and is_trusted_proxy(host, settings.trusted_proxy_ips):
-        return forwarded.split(",")[0].strip()
-    return host
-
-
 def _enforce_subscribe_rate_limit(request: Request) -> None:
     limiter = request.app.state.rate_limiter
-    ip = _client_ip(request)
+    settings: Settings = request.app.state.settings
+    ip = client_ip_from_request(request, settings.trusted_proxy_ips)
     for limit, window in (_SUBSCRIBE_BURST, _SUBSCRIBE_SUSTAINED):
-        key = f"subscribe:{window}:{ip}"
-        limited, retry_after = limiter.is_limited(key, limit, window)
-        if limited:
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="Too many requests. Please try again later.",
-                headers={"Retry-After": str(retry_after)},
-            )
+        enforce_rate_limit(
+            limiter,
+            f"subscribe:{window}:{ip}",
+            limit,
+            window,
+            "Too many requests. Please try again later.",
+        )
     for _limit, window in (_SUBSCRIBE_BURST, _SUBSCRIBE_SUSTAINED):
         limiter.add_failure(f"subscribe:{window}:{ip}", window)
 
@@ -113,6 +102,19 @@ _CONFIRM_RETRY_MESSAGE = (
 )
 
 
+def _confirmation_page(message: str, status_code: int) -> HTMLResponse:
+    # message is always a static constant (never user input), so no escaping needed.
+    html = (
+        "<!doctype html><html><head><meta charset='utf-8'>"
+        "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+        "<title>Subscription</title></head>"
+        "<body style='font-family:system-ui,Arial,sans-serif;max-width:480px;margin:64px auto;"
+        f"text-align:center'><p>{message}</p>"
+        "<p><a href='/'>Back to the blog</a></p></body></html>"
+    )
+    return HTMLResponse(content=html, status_code=status_code)
+
+
 @page_router.get("/subscribe/confirm", response_class=HTMLResponse)
 async def confirm_endpoint(
     token: str,
@@ -134,29 +136,14 @@ async def confirm_endpoint(
         retryable = True
 
     if retryable:
-        html = (
-            "<!doctype html><html><head><meta charset='utf-8'>"
-            "<meta name='viewport' content='width=device-width,initial-scale=1'>"
-            "<title>Subscription</title></head>"
-            "<body style='font-family:system-ui,Arial,sans-serif;max-width:480px;margin:64px auto;"
-            f"text-align:center'><p>{_CONFIRM_RETRY_MESSAGE}</p>"
-            "<p><a href='/'>Back to the blog</a></p></body></html>"
-        )
-        return HTMLResponse(content=html, status_code=503)
+        return _confirmation_page(_CONFIRM_RETRY_MESSAGE, 503)
 
     message = (
         "You're subscribed! Thanks for confirming."
         if ok
         else "This confirmation link is invalid or has expired."
     )
-    html = (
-        "<!doctype html><html><head><meta charset='utf-8'>"
-        "<meta name='viewport' content='width=device-width,initial-scale=1'>"
-        "<title>Subscription</title></head>"
-        "<body style='font-family:system-ui,Arial,sans-serif;max-width:480px;margin:64px auto;"
-        f"text-align:center'><p>{message}</p><p><a href='/'>Back to the blog</a></p></body></html>"
-    )
-    return HTMLResponse(content=html, status_code=200 if ok else 400)
+    return _confirmation_page(message, 200 if ok else 400)
 
 
 @admin_router.get("/settings", response_model=SubscriptionSettingsResponse)
@@ -215,25 +202,7 @@ async def list_broadcasts_endpoint(
     session: Annotated[AsyncSession, Depends(get_session)],
     _user: Annotated[AdminUser, Depends(require_admin)],
 ) -> BroadcastListResponse:
-    result = await session.execute(
-        select(SubscriptionBroadcast).order_by(SubscriptionBroadcast.id.desc()).limit(100)
-    )
-    rows = result.scalars().all()
-    return BroadcastListResponse(
-        broadcasts=[
-            BroadcastSummary(
-                id=r.id,
-                post_path=r.post_path,
-                post_title=r.post_title,
-                resend_broadcast_id=r.resend_broadcast_id,
-                trigger=r.trigger,
-                status=r.status,
-                sent_at=r.sent_at,
-                error=r.error,
-            )
-            for r in rows
-        ]
-    )
+    return BroadcastListResponse(broadcasts=await subscription_service.list_broadcasts(session))
 
 
 @admin_router.post("/broadcasts", status_code=status.HTTP_202_ACCEPTED)

@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, TypeVar, cast
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
+from agblogger_core import file_path_to_slug
 from backend.crosspost.base import CrossPostContent, CrossPostResult
 from backend.crosspost.registry import get_poster, list_platforms
 from backend.exceptions import CrossPostValidationError, InternalServerError, PostNotFoundError
@@ -18,7 +19,6 @@ from backend.models.post import PostCache
 from backend.schemas.crosspost import CrossPostStatus
 from backend.services.crypto_service import decrypt_value, encrypt_value
 from backend.utils.datetime import format_datetime, now_utc
-from backend.utils.slug import file_path_to_slug
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession

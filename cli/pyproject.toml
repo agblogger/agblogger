@@ -9,6 +9,7 @@ authors = [{ name = "Lukasz Czajka" }]
 dependencies = [
     "httpx>=0.28",
     "platformdirs>=4.0",
+    "agblogger-core",
 ]
 
 [project.scripts]
@@ -17,3 +18,6 @@ agblogger = "agblogger_cli.sync_client:main"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.uv.sources]
+agblogger-core = { workspace = true }
