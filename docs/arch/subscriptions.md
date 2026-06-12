@@ -66,5 +66,5 @@ When no user-created `content/pages/privacy.md` exists, the pages API serves a d
 - `backend/services/subscription_email.py` builds confirmation and broadcast email payloads.
 - `backend/services/subscription_tokens.py` handles signed token creation and verification for stateless double opt-in.
 - `backend/models/subscription.py` defines the durable settings and broadcast-ledger models.
-- `frontend/src/pages/SubscribePage.tsx` is the public opt-in form with the layered GDPR notice.
+- `frontend/src/pages/SubscribePage.tsx` is the public opt-in subscription form.
 - `frontend/src/components/admin/SubscriptionsPanel.tsx` is the admin tab for settings, the enable toggle, subscriber count, test email, manual broadcast, and broadcast history.
