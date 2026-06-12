@@ -138,12 +138,10 @@ describe('SubscriptionsPanel', () => {
     })
     renderPanel()
     expect(
-      await screen.findByText(/resend requires a public https url/i),
+      await screen.findByText(/webhook unavailable.*other features work/i),
     ).toBeInTheDocument()
-    expect(
-      screen.getByText(/unsubscribed contacts will not be automatically deleted from resend/i),
-    ).toBeInTheDocument()
-    expect(screen.getByText(/retry.*next time.*settings.*saved/i)).toBeInTheDocument()
+    expect(screen.getByText(/unsubscribed contacts will remain in resend/i)).toBeInTheDocument()
+    expect(screen.getByText(/requires public https.*retries.*settings.*saved/i)).toBeInTheDocument()
   })
 
   it('enable toggle is ENABLED when key and from_email are configured, even without compliance fields', async () => {
@@ -368,6 +366,34 @@ describe('SubscriptionsPanel', () => {
     const matches = await screen.findAllByText('Delivery failed', {}, { timeout: 3000 })
     expect(matches.length).toBeGreaterThanOrEqual(1)
     expect(fetchCount).toBeGreaterThanOrEqual(3)
+  })
+
+  it('shows completed status only after the ledger reports sent', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.mocked(apiMod.triggerBroadcast).mockResolvedValue({ message: 'Broadcast queued' })
+    vi.mocked(apiMod.fetchBroadcasts)
+      .mockResolvedValueOnce({ broadcasts: [] })
+      .mockResolvedValueOnce({
+        broadcasts: [{
+          id: 7,
+          post_path: 'posts/hello',
+          post_title: 'Hello World',
+          resend_broadcast_id: 'br_7',
+          trigger: 'manual',
+          status: 'sent',
+          sent_at: '2024-01-01T12:00:00Z',
+          error: null,
+        }],
+      })
+    mockPostsWithOnePublished()
+    renderPanel()
+    await screen.findByText(/42/)
+    await user.selectOptions(screen.getByRole('combobox', { name: /select post/i }), 'posts/hello')
+    await user.click(screen.getByRole('button', { name: /send broadcast/i }))
+
+    expect(await screen.findByText('Broadcast sent.')).toBeInTheDocument()
+    expect(screen.queryByText(/broadcast queued|broadcast started/i)).not.toBeInTheDocument()
   })
 
   it('does NOT call triggerBroadcast when confirm is cancelled', async () => {

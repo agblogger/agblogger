@@ -236,7 +236,7 @@ async def trigger_broadcast_endpoint(
             status_code=503,
             detail="Broadcast capacity is temporarily unavailable. Please try again.",
         )
-    return {"message": "Broadcast started"}
+    return {"message": "Broadcast queued"}
 
 
 @webhook_router.post("/resend")

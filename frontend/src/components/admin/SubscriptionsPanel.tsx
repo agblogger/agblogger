@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 
 import {
@@ -32,6 +32,7 @@ function isEnableAllowed(s: SubscriptionSettings): boolean {
 
 const BROADCAST_POLL_ATTEMPTS = 10
 const BROADCAST_POLL_INTERVAL_MS = 250
+const BROADCAST_SUCCESS_DURATION_MS = 5000
 
 function wait(milliseconds: number): Promise<void> {
   return new Promise((resolve) => { window.setTimeout(resolve, milliseconds) })
@@ -83,6 +84,7 @@ export default function SubscriptionsPanel({ busy, onBusyChange }: Props) {
   const [broadcastError, setBroadcastError] = useState<string | null>(null)
   const [broadcastSuccess, setBroadcastSuccess] = useState<string | null>(null)
   const [broadcastBusy, setBroadcastBusy] = useState(false)
+  const broadcastSuccessTimer = useRef<number | null>(null)
 
   // Test email section
   const [testEmail, setTestEmail] = useState('')
@@ -121,6 +123,23 @@ export default function SubscriptionsPanel({ busy, onBusyChange }: Props) {
     void load()
     return () => { cancelled = true }
   }, [])
+
+  useEffect(() => () => {
+    if (broadcastSuccessTimer.current !== null) {
+      window.clearTimeout(broadcastSuccessTimer.current)
+    }
+  }, [])
+
+  function showTemporaryBroadcastSuccess(message: string) {
+    if (broadcastSuccessTimer.current !== null) {
+      window.clearTimeout(broadcastSuccessTimer.current)
+    }
+    setBroadcastSuccess(message)
+    broadcastSuccessTimer.current = window.setTimeout(() => {
+      setBroadcastSuccess(null)
+      broadcastSuccessTimer.current = null
+    }, BROADCAST_SUCCESS_DURATION_MS)
+  }
 
   async function handleToggleEnabled(value: boolean) {
     if (settings === null) return
@@ -178,10 +197,14 @@ export default function SubscriptionsPanel({ busy, onBusyChange }: Props) {
     onBusyChange(true)
     setBroadcastError(null)
     setBroadcastSuccess(null)
+    if (broadcastSuccessTimer.current !== null) {
+      window.clearTimeout(broadcastSuccessTimer.current)
+      broadcastSuccessTimer.current = null
+    }
     try {
       const previousMaxId = broadcasts.reduce((maxId, broadcast) => Math.max(maxId, broadcast.id), 0)
-      const result = await triggerBroadcast(selectedPostPath)
-      setBroadcastSuccess(result.message)
+      await triggerBroadcast(selectedPostPath)
+      let completed = false
       for (let attempt = 0; attempt < BROADCAST_POLL_ATTEMPTS; attempt += 1) {
         const response = await fetchBroadcasts()
         setBroadcasts(response.broadcasts)
@@ -189,13 +212,18 @@ export default function SubscriptionsPanel({ busy, onBusyChange }: Props) {
           (broadcast) => broadcast.id > previousMaxId && broadcast.post_path === selectedPostPath,
         )
         if (newRow !== undefined) {
+          completed = true
           if (newRow.status === 'failed') {
-            setBroadcastSuccess(null)
             setBroadcastError(newRow.error ?? 'Broadcast failed to send.')
+          } else {
+            showTemporaryBroadcastSuccess('Broadcast sent.')
           }
           break
         }
         await wait(BROADCAST_POLL_INTERVAL_MS)
+      }
+      if (!completed) {
+        setBroadcastError('Broadcast is still processing. Check broadcast history for the result.')
       }
     } catch (err) {
       setBroadcastError(await extractErrorDetail(err, 'Failed to send broadcast. Please try again.'))
@@ -281,10 +309,9 @@ export default function SubscriptionsPanel({ busy, onBusyChange }: Props) {
       {settingsSuccess !== null && <AlertBanner variant="success">{settingsSuccess}</AlertBanner>}
       {settings?.enabled === true && !settings.webhook_secret_configured && (
         <AlertBanner variant="warning">
-          Webhook registration was skipped or failed. Everything else works, but unsubscribed
-          contacts will not be automatically deleted from Resend until the webhook is registered.
-          Resend requires a public HTTPS URL for webhooks. AgBlogger will retry the next time
-          subscription settings are saved or subscriptions are enabled through HTTPS.
+          Webhook unavailable: other features work, but unsubscribed contacts will remain in
+          Resend. Registration requires public HTTPS and retries when settings are next saved or
+          subscriptions are enabled through HTTPS.
         </AlertBanner>
       )}
 
@@ -439,7 +466,7 @@ export default function SubscriptionsPanel({ busy, onBusyChange }: Props) {
             onClick={() => void handleSendBroadcast()}
             className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            Send broadcast
+            {broadcastBusy ? 'Sending broadcast…' : 'Send broadcast'}
           </button>
         </div>
       </div>
