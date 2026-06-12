@@ -461,7 +461,7 @@ async def send_broadcast(
             if api_key is None or not from_email or not segment_id:
                 record.error = "Subscriptions not configured"
             else:
-                html, text = build_broadcast_email(
+                html, text = await build_broadcast_email(
                     post_url=post_url,
                     post_title=post_title,
                     post_html=post_html,
