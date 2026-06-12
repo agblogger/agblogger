@@ -1,12 +1,14 @@
 """Ranking behaviour for full-text post search.
 
-Covers two ordering guarantees:
+Covers three ordering guarantees:
 
 1. Title matches outrank body-only matches (FTS5 column weighting), so a query
    that appears in a post's title surfaces above a post that merely mentions it
    in the body.
 2. Equally-ranked posts fall back to a deterministic recency tiebreaker
    (newest first) instead of arbitrary rowid order.
+3. Posts tied on relevance and creation time fall back to unique file-path
+   ordering.
 """
 
 from __future__ import annotations
@@ -138,4 +140,38 @@ async def test_equal_rank_breaks_ties_by_newest_first(session: AsyncSession) -> 
     assert [r.file_path for r in results] == [
         "posts/newer/index.md",
         "posts/older/index.md",
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("include_drafts", [False, True])
+async def test_equal_rank_and_creation_time_breaks_ties_by_file_path(
+    session: AsyncSession,
+    *,
+    include_drafts: bool,
+) -> None:
+    """Posts tied on relevance and creation time are ordered by unique file path."""
+    when = datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
+    # Insert in reverse file-path order so incidental rowid ordering cannot
+    # satisfy the deterministic final tiebreaker.
+    await _add_post(
+        session,
+        file_path="posts/z-last/index.md",
+        title="finaltiebreakword",
+        content="shared body content",
+        created_at=when,
+    )
+    await _add_post(
+        session,
+        file_path="posts/a-first/index.md",
+        title="finaltiebreakword",
+        content="shared body content",
+        created_at=when,
+    )
+
+    results = await search_posts(session, "finaltiebreakword", include_drafts=include_drafts)
+
+    assert [r.file_path for r in results] == [
+        "posts/a-first/index.md",
+        "posts/z-last/index.md",
     ]

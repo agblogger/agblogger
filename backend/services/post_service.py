@@ -298,7 +298,8 @@ async def search_posts(
     # appears in a post's title surfaces ahead of one that only mentions it in
     # the body. bm25() returns lower (more negative) scores for better matches,
     # so ORDER BY ascending puts the most relevant result first. Ties fall back
-    # to created_at DESC for deterministic, recency-preferring ordering.
+    # to created_at DESC for recency, then unique file_path for deterministic
+    # ordering when creation timestamps also match.
     if include_drafts:
         stmt = text("""
             SELECT p.id, p.file_path, p.title, p.subtitle, p.rendered_excerpt, p.created_at,
@@ -306,7 +307,7 @@ async def search_posts(
             FROM posts_fts fts
             JOIN posts_cache p ON fts.rowid = p.id
             WHERE posts_fts MATCH :query
-            ORDER BY bm25(posts_fts, 10.0, 5.0, 1.0), p.created_at DESC
+            ORDER BY bm25(posts_fts, 10.0, 5.0, 1.0), p.created_at DESC, p.file_path ASC
             LIMIT :limit
         """)
     else:
@@ -317,7 +318,7 @@ async def search_posts(
             JOIN posts_cache p ON fts.rowid = p.id
             WHERE posts_fts MATCH :query
             AND p.is_draft = 0
-            ORDER BY bm25(posts_fts, 10.0, 5.0, 1.0), p.created_at DESC
+            ORDER BY bm25(posts_fts, 10.0, 5.0, 1.0), p.created_at DESC, p.file_path ASC
             LIMIT :limit
         """)
     result = await session.execute(stmt, {"query": safe_query, "limit": limit})
