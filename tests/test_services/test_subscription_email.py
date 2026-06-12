@@ -416,3 +416,66 @@ def test_build_broadcast_email_no_math_spans_survive(content: str) -> None:
     )
     assert 'class="math inline"' not in html
     assert 'class="math display"' not in html
+
+
+def test_broadcast_email_youtube_embed_iframe_replaced_with_thumbnail() -> None:
+    html = _broadcast(
+        '<p>Before</p><iframe src="https://www.youtube.com/embed/dQw4w9WgXcQ"></iframe><p>After</p>'
+    )
+    assert "<iframe" not in html
+    assert "img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg" in html
+    assert "youtube.com/watch?v=dQw4w9WgXcQ" in html
+    assert "Watch on YouTube" in html
+    assert "Before" in html
+    assert "After" in html
+
+
+def test_broadcast_email_youtube_shorts_iframe_replaced_with_thumbnail() -> None:
+    html = _broadcast('<iframe src="https://www.youtube.com/shorts/dQw4w9WgXcQ"></iframe>')
+    assert "<iframe" not in html
+    assert "img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg" in html
+    assert "youtube.com/watch?v=dQw4w9WgXcQ" in html
+
+
+def test_broadcast_email_youtube_nocookie_iframe_replaced_with_thumbnail() -> None:
+    html = _broadcast('<iframe src="https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ"></iframe>')
+    assert "<iframe" not in html
+    assert "img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg" in html
+    assert "youtube.com/watch?v=dQw4w9WgXcQ" in html
+
+
+def test_broadcast_email_youtube_iframe_with_query_params_uses_correct_video_id() -> None:
+    html = _broadcast('<iframe src="https://www.youtube.com/embed/dQw4w9WgXcQ?start=30"></iframe>')
+    assert "<iframe" not in html
+    assert "img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg" in html
+    assert "youtube.com/watch?v=dQw4w9WgXcQ" in html
+
+
+def test_broadcast_email_multiple_youtube_iframes_each_replaced() -> None:
+    html = _broadcast(
+        '<iframe src="https://www.youtube.com/embed/dQw4w9WgXcQ"></iframe>'
+        '<iframe src="https://www.youtube.com/embed/AAAAAAAAAAA"></iframe>'
+    )
+    assert "<iframe" not in html
+    assert html.count("img.youtube.com/vi/") == 2
+    assert "img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg" in html
+    assert "img.youtube.com/vi/AAAAAAAAAAA/hqdefault.jpg" in html
+
+
+def test_broadcast_email_iframe_without_src_silently_dropped() -> None:
+    html = _broadcast("<p>Before</p><iframe></iframe><p>After</p>")
+    assert "<iframe" not in html
+    assert "youtube" not in html
+    assert "Before" in html
+    assert "After" in html
+
+
+def test_broadcast_email_surrounding_content_unaffected_by_iframe_replacement() -> None:
+    html = _broadcast(
+        "<h2>Section</h2>"
+        '<iframe src="https://www.youtube.com/embed/dQw4w9WgXcQ"></iframe>'
+        "<p>Continue reading.</p>"
+    )
+    assert "Section" in html
+    assert "Continue reading." in html
+    assert "img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg" in html

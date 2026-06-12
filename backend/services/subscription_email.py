@@ -157,6 +157,10 @@ _MATH_DISPLAY_DPI = 120
 _MATH_FETCH_TIMEOUT = httpx.Timeout(10.0, connect=5.0)
 _MATH_FETCH_CONCURRENCY = 6
 _MATH_SPAN_RE = re.compile(r'<span class="math (inline|display)">(.*?)</span>', re.DOTALL)
+_YOUTUBE_VIDEO_ID_RE = re.compile(
+    r"^https://www\.(?:youtube\.com/(?:embed|shorts)/|youtube-nocookie\.com/embed/)"
+    r"([a-zA-Z0-9_-]{11})(?:\?[a-zA-Z0-9_=&%-]*)?$"
+)
 
 _ALLOWED_URL_SCHEMES = ("https://", "http://", "/")
 
@@ -220,6 +224,21 @@ def _render_attrs(attrs: list[tuple[str, str | None]]) -> str:
     return f" {' '.join(rendered)}" if rendered else ""
 
 
+def _youtube_thumbnail_html(video_id: str) -> str:
+    safe_id = _html.escape(video_id, quote=True)
+    watch_url = f"https://www.youtube.com/watch?v={safe_id}"
+    thumb_url = f"https://img.youtube.com/vi/{safe_id}/hqdefault.jpg"
+    return (
+        f'<a href="{watch_url}" style="display:block;text-decoration:none">'
+        f'<img src="{thumb_url}" alt="YouTube video"'
+        f' style="width:100%;max-width:100%;border-radius:8px;display:block">'
+        f"</a>"
+        f'<p style="text-align:center;font-size:13px;color:#8a857e;margin:6px 0 20px">'
+        f'▶ <a href="{watch_url}" style="color:#8a857e;text-decoration:none">Watch on YouTube</a>'
+        f"</p>"
+    )
+
+
 class _EmailBodyParser(HTMLParser):
     """Rewrite post HTML for email: absolutize URLs and inline ``.prose`` styles.
 
@@ -234,6 +253,7 @@ class _EmailBodyParser(HTMLParser):
         self.post_url = post_url
         self.parts: list[str] = []
         self._pre_depth = 0
+        self._in_iframe = False
 
     def _absolutize(self, attrs: list[tuple[str, str | None]]) -> list[tuple[str, str | None]]:
         out: list[tuple[str, str | None]] = []
@@ -259,6 +279,16 @@ class _EmailBodyParser(HTMLParser):
         return f"<{tag}{_render_attrs(attrs)}{slash}>"
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if self._in_iframe:
+            return
+        if tag == "iframe":
+            src = next((v for n, v in attrs if n == "src" and v is not None), None)
+            if src:
+                m = _YOUTUBE_VIDEO_ID_RE.fullmatch(src.strip())
+                if m:
+                    self.parts.append(_youtube_thumbnail_html(m.group(1)))
+            self._in_iframe = True
+            return
         if tag == "pre":
             self._pre_depth += 1
         self.parts.append(self._render_open(tag, attrs, self_closing=False))
@@ -266,23 +296,45 @@ class _EmailBodyParser(HTMLParser):
             self.parts.append(_NOTE_LABEL_HTML)
 
     def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if self._in_iframe:
+            return
+        if tag == "iframe":
+            src = next((v for n, v in attrs if n == "src" and v is not None), None)
+            if src:
+                m = _YOUTUBE_VIDEO_ID_RE.fullmatch(src.strip())
+                if m:
+                    self.parts.append(_youtube_thumbnail_html(m.group(1)))
+            return
         self.parts.append(self._render_open(tag, attrs, self_closing=True))
 
     def handle_endtag(self, tag: str) -> None:
+        if tag == "iframe":
+            self._in_iframe = False
+            return
+        if self._in_iframe:
+            return
         self.parts.append(f"</{tag}>")
         if tag == "pre" and self._pre_depth > 0:
             self._pre_depth -= 1
 
     def handle_data(self, data: str) -> None:
+        if self._in_iframe:
+            return
         self.parts.append(data)
 
     def handle_entityref(self, name: str) -> None:
+        if self._in_iframe:
+            return
         self.parts.append(f"&{name};")
 
     def handle_charref(self, name: str) -> None:
+        if self._in_iframe:
+            return
         self.parts.append(f"&#{name};")
 
     def handle_comment(self, data: str) -> None:
+        if self._in_iframe:
+            return
         self.parts.append(f"<!--{data}-->")
 
 
