@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { Loader2 } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Loader2 } from "lucide-react";
 
 import {
   fetchSubscriptionSettings,
@@ -9,161 +9,184 @@ import {
   triggerBroadcast,
   type SubscriptionSettings,
   type BroadcastSummary,
-} from '@/api/subscriptions'
-import { fetchPosts } from '@/api/posts'
-import type { PostSummary } from '@/api/client'
-import { extractErrorDetail } from '@/api/parseError'
-import { mapWithConcurrency } from '@/utils/concurrency'
-import { refreshSiteConfig } from '@/stores/siteStore'
-import AlertBanner from '@/components/AlertBanner'
-import ToggleSwitch from './ToggleSwitch'
+} from "@/api/subscriptions";
+import { fetchPosts } from "@/api/posts";
+import type { PostSummary } from "@/api/client";
+import { extractErrorDetail } from "@/api/parseError";
+import { mapWithConcurrency } from "@/utils/concurrency";
+import { refreshSiteConfig } from "@/stores/siteStore";
+import AlertBanner from "@/components/AlertBanner";
+import ToggleSwitch from "./ToggleSwitch";
 
 interface Props {
-  busy: boolean
-  onBusyChange: (b: boolean) => void
+  busy: boolean;
+  onBusyChange: (b: boolean) => void;
 }
 
 const INPUT_CLASS =
-  'w-full rounded-lg border border-border bg-paper px-3 py-2 text-sm text-ink placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent/40 disabled:opacity-50 disabled:cursor-not-allowed'
+  "w-full rounded-lg border border-border bg-paper px-3 py-2 text-sm text-ink placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent/40 disabled:opacity-50 disabled:cursor-not-allowed";
 
 function isEnableAllowed(s: SubscriptionSettings): boolean {
-  return s.key_configured && Boolean(s.from_email)
+  return s.key_configured && Boolean(s.from_email);
 }
 
-const BROADCAST_POLL_ATTEMPTS = 10
-const BROADCAST_POLL_INTERVAL_MS = 250
-const BROADCAST_SUCCESS_DURATION_MS = 5000
+const BROADCAST_POLL_ATTEMPTS = 10;
+const BROADCAST_POLL_INTERVAL_MS = 250;
+const BROADCAST_SUCCESS_DURATION_MS = 5000;
 
 function wait(milliseconds: number): Promise<void> {
-  return new Promise((resolve) => { window.setTimeout(resolve, milliseconds) })
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, milliseconds);
+  });
 }
 
-const POSTS_FETCH_CONCURRENCY = 5
+const POSTS_FETCH_CONCURRENCY = 5;
 
 async function fetchAllPublishedPosts(): Promise<PostSummary[]> {
-  const params = { per_page: 100, sort: 'created_at' as const, order: 'desc' as const }
-  const firstPage = await fetchPosts({ ...params, page: 1 })
+  const params = {
+    per_page: 100,
+    sort: "created_at" as const,
+    order: "desc" as const,
+  };
+  const firstPage = await fetchPosts({ ...params, page: 1 });
   const remainingPageNumbers = Array.from(
     { length: Math.max(firstPage.total_pages - 1, 0) },
     (_, index) => index + 2,
-  )
+  );
   // Bound parallelism so a blog with many pages can't fire an unbounded burst
   // of simultaneous requests on panel mount.
   const remainingPages = await mapWithConcurrency(
     remainingPageNumbers,
     POSTS_FETCH_CONCURRENCY,
     (page) => fetchPosts({ ...params, page }),
-  )
-  const pages = [firstPage, ...remainingPages]
-  return pages.flatMap((response) => response.posts).filter((post) => !post.is_draft)
+  );
+  const pages = [firstPage, ...remainingPages];
+  return pages
+    .flatMap((response) => response.posts)
+    .filter((post) => !post.is_draft);
 }
 
 export default function SubscriptionsPanel({ busy, onBusyChange }: Props) {
-  const [settings, setSettings] = useState<SubscriptionSettings | null>(null)
-  const [broadcasts, setBroadcasts] = useState<BroadcastSummary[]>([])
-  const [publishedPosts, setPublishedPosts] = useState<PostSummary[]>([])
-  const [loading, setLoading] = useState(true)
-  const [initError, setInitError] = useState<string | null>(null)
+  const [settings, setSettings] = useState<SubscriptionSettings | null>(null);
+  const [broadcasts, setBroadcasts] = useState<BroadcastSummary[]>([]);
+  const [publishedPosts, setPublishedPosts] = useState<PostSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [initError, setInitError] = useState<string | null>(null);
 
   // Settings form state
-  const [apiKey, setApiKey] = useState('')
-  const [fromEmail, setFromEmail] = useState('')
-  const [fromName, setFromName] = useState('')
-  const [controllerName, setControllerName] = useState('')
-  const [controllerContact, setControllerContact] = useState('')
-  const [privacyPolicyUrl, setPrivacyPolicyUrl] = useState('')
-  const [postalAddress, setPostalAddress] = useState('')
+  const [apiKey, setApiKey] = useState("");
+  const [fromEmail, setFromEmail] = useState("");
+  const [fromName, setFromName] = useState("");
+  const [controllerName, setControllerName] = useState("");
+  const [controllerContact, setControllerContact] = useState("");
+  const [privacyPolicyUrl, setPrivacyPolicyUrl] = useState("");
+  const [postalAddress, setPostalAddress] = useState("");
 
   // UI feedback
-  const [settingsError, setSettingsError] = useState<string | null>(null)
-  const [settingsSuccess, setSettingsSuccess] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
+  const [settingsError, setSettingsError] = useState<string | null>(null);
+  const [settingsSuccess, setSettingsSuccess] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   // Broadcast section
-  const [selectedPostPath, setSelectedPostPath] = useState('')
-  const [broadcastError, setBroadcastError] = useState<string | null>(null)
-  const [broadcastSuccess, setBroadcastSuccess] = useState<string | null>(null)
-  const [broadcastBusy, setBroadcastBusy] = useState(false)
-  const broadcastSuccessTimer = useRef<number | null>(null)
+  const [selectedPostPath, setSelectedPostPath] = useState("");
+  const [broadcastError, setBroadcastError] = useState<string | null>(null);
+  const [broadcastSuccess, setBroadcastSuccess] = useState<string | null>(null);
+  const [broadcastBusy, setBroadcastBusy] = useState(false);
+  const broadcastSuccessTimer = useRef<number | null>(null);
 
   // Test email section
-  const [testEmail, setTestEmail] = useState('')
-  const [testEmailError, setTestEmailError] = useState<string | null>(null)
-  const [testEmailSuccess, setTestEmailSuccess] = useState<string | null>(null)
-  const [testEmailBusy, setTestEmailBusy] = useState(false)
+  const [testEmail, setTestEmail] = useState("");
+  const [testEmailError, setTestEmailError] = useState<string | null>(null);
+  const [testEmailSuccess, setTestEmailSuccess] = useState<string | null>(null);
+  const [testEmailBusy, setTestEmailBusy] = useState(false);
 
   useEffect(() => {
-    let cancelled = false
+    let cancelled = false;
     async function load() {
-      setLoading(true)
-      setInitError(null)
+      setLoading(true);
+      setInitError(null);
       try {
         const [s, b, posts] = await Promise.all([
           fetchSubscriptionSettings(),
           fetchBroadcasts(),
           fetchAllPublishedPosts(),
-        ])
-        if (cancelled) return
-        setSettings(s)
-        setFromEmail(s.from_email ?? '')
-        setFromName(s.from_name ?? '')
-        setControllerName(s.controller_name ?? '')
-        setControllerContact(s.controller_contact ?? '')
-        setPrivacyPolicyUrl(s.privacy_policy_url ?? '')
-        setPostalAddress(s.postal_address ?? '')
-        setBroadcasts(b.broadcasts)
-        setPublishedPosts(posts)
+        ]);
+        if (cancelled) return;
+        setSettings(s);
+        setFromEmail(s.from_email ?? "");
+        setFromName(s.from_name ?? "");
+        setControllerName(s.controller_name ?? "");
+        setControllerContact(s.controller_contact ?? "");
+        setPrivacyPolicyUrl(s.privacy_policy_url ?? "");
+        setPostalAddress(s.postal_address ?? "");
+        setBroadcasts(b.broadcasts);
+        setPublishedPosts(posts);
       } catch (err) {
-        if (cancelled) return
-        setInitError(await extractErrorDetail(err, 'Failed to load subscription settings.'))
+        if (cancelled) return;
+        setInitError(
+          await extractErrorDetail(
+            err,
+            "Failed to load subscription settings.",
+          ),
+        );
       } finally {
-        if (!cancelled) setLoading(false)
+        if (!cancelled) setLoading(false);
       }
     }
-    void load()
-    return () => { cancelled = true }
-  }, [])
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-  useEffect(() => () => {
-    if (broadcastSuccessTimer.current !== null) {
-      window.clearTimeout(broadcastSuccessTimer.current)
-    }
-  }, [])
+  useEffect(
+    () => () => {
+      if (broadcastSuccessTimer.current !== null) {
+        window.clearTimeout(broadcastSuccessTimer.current);
+      }
+    },
+    [],
+  );
 
   function showTemporaryBroadcastSuccess(message: string) {
     if (broadcastSuccessTimer.current !== null) {
-      window.clearTimeout(broadcastSuccessTimer.current)
+      window.clearTimeout(broadcastSuccessTimer.current);
     }
-    setBroadcastSuccess(message)
+    setBroadcastSuccess(message);
     broadcastSuccessTimer.current = window.setTimeout(() => {
-      setBroadcastSuccess(null)
-      broadcastSuccessTimer.current = null
-    }, BROADCAST_SUCCESS_DURATION_MS)
+      setBroadcastSuccess(null);
+      broadcastSuccessTimer.current = null;
+    }, BROADCAST_SUCCESS_DURATION_MS);
   }
 
   async function handleToggleEnabled(value: boolean) {
-    if (settings === null) return
-    setSaving(true)
-    onBusyChange(true)
-    setSettingsError(null)
-    setSettingsSuccess(null)
+    if (settings === null) return;
+    setSaving(true);
+    onBusyChange(true);
+    setSettingsError(null);
+    setSettingsSuccess(null);
     try {
-      const updated = await updateSubscriptionSettings({ enabled: value })
-      setSettings(updated)
-      refreshSiteConfig()
+      const updated = await updateSubscriptionSettings({ enabled: value });
+      setSettings(updated);
+      refreshSiteConfig();
     } catch (err) {
-      setSettingsError(await extractErrorDetail(err, 'Failed to update setting. Please try again.'))
+      setSettingsError(
+        await extractErrorDetail(
+          err,
+          "Failed to update setting. Please try again.",
+        ),
+      );
     } finally {
-      setSaving(false)
-      onBusyChange(false)
+      setSaving(false);
+      onBusyChange(false);
     }
   }
 
   async function handleSaveSettings() {
-    setSaving(true)
-    onBusyChange(true)
-    setSettingsError(null)
-    setSettingsSuccess(null)
+    setSaving(true);
+    onBusyChange(true);
+    setSettingsError(null);
+    setSettingsSuccess(null);
     try {
       const patch: Parameters<typeof updateSubscriptionSettings>[0] = {
         from_email: fromEmail || null,
@@ -172,84 +195,108 @@ export default function SubscriptionsPanel({ busy, onBusyChange }: Props) {
         controller_contact: controllerContact || null,
         privacy_policy_url: privacyPolicyUrl || null,
         postal_address: postalAddress || null,
-      }
+      };
       if (apiKey.length > 0) {
-        patch.api_key = apiKey
+        patch.api_key = apiKey;
       }
-      const updated = await updateSubscriptionSettings(patch)
-      setSettings(updated)
-      setApiKey('')
-      setSettingsSuccess('Settings saved.')
+      const updated = await updateSubscriptionSettings(patch);
+      setSettings(updated);
+      setApiKey("");
+      setSettingsSuccess("Settings saved.");
     } catch (err) {
-      setSettingsError(await extractErrorDetail(err, 'Failed to save settings. Please try again.'))
+      setSettingsError(
+        await extractErrorDetail(
+          err,
+          "Failed to save settings. Please try again.",
+        ),
+      );
     } finally {
-      setSaving(false)
-      onBusyChange(false)
+      setSaving(false);
+      onBusyChange(false);
     }
   }
 
   async function handleSendBroadcast() {
-    const post = publishedPosts.find((p) => p.file_path === selectedPostPath)
-    if (post === undefined) return
-    const confirmed = window.confirm(`Email subscribers about '${post.title}'?`)
-    if (!confirmed) return
-    setBroadcastBusy(true)
-    onBusyChange(true)
-    setBroadcastError(null)
-    setBroadcastSuccess(null)
+    const post = publishedPosts.find((p) => p.file_path === selectedPostPath);
+    if (post === undefined) return;
+    const confirmed = window.confirm(
+      `Email subscribers about '${post.title}'?`,
+    );
+    if (!confirmed) return;
+    setBroadcastBusy(true);
+    onBusyChange(true);
+    setBroadcastError(null);
+    setBroadcastSuccess(null);
     if (broadcastSuccessTimer.current !== null) {
-      window.clearTimeout(broadcastSuccessTimer.current)
-      broadcastSuccessTimer.current = null
+      window.clearTimeout(broadcastSuccessTimer.current);
+      broadcastSuccessTimer.current = null;
     }
     try {
-      const previousMaxId = broadcasts.reduce((maxId, broadcast) => Math.max(maxId, broadcast.id), 0)
-      await triggerBroadcast(selectedPostPath)
-      let completed = false
+      const previousMaxId = broadcasts.reduce(
+        (maxId, broadcast) => Math.max(maxId, broadcast.id),
+        0,
+      );
+      await triggerBroadcast(selectedPostPath);
+      let completed = false;
       for (let attempt = 0; attempt < BROADCAST_POLL_ATTEMPTS; attempt += 1) {
-        const response = await fetchBroadcasts()
-        setBroadcasts(response.broadcasts)
+        const response = await fetchBroadcasts();
+        setBroadcasts(response.broadcasts);
         const newRow = response.broadcasts.find(
-          (broadcast) => broadcast.id > previousMaxId && broadcast.post_path === selectedPostPath,
-        )
+          (broadcast) =>
+            broadcast.id > previousMaxId &&
+            broadcast.post_path === selectedPostPath,
+        );
         if (newRow !== undefined) {
-          completed = true
-          if (newRow.status === 'failed') {
-            setBroadcastError(newRow.error ?? 'Broadcast failed to send.')
+          completed = true;
+          if (newRow.status === "failed") {
+            setBroadcastError(newRow.error ?? "Broadcast failed to send.");
           } else {
-            showTemporaryBroadcastSuccess('Broadcast sent.')
+            showTemporaryBroadcastSuccess("Broadcast sent.");
           }
-          break
+          break;
         }
-        await wait(BROADCAST_POLL_INTERVAL_MS)
+        await wait(BROADCAST_POLL_INTERVAL_MS);
       }
       if (!completed) {
-        setBroadcastError('Broadcast is still processing. Check broadcast history for the result.')
+        setBroadcastError(
+          "Broadcast is still processing. Check broadcast history for the result.",
+        );
       }
     } catch (err) {
-      setBroadcastError(await extractErrorDetail(err, 'Failed to send broadcast. Please try again.'))
+      setBroadcastError(
+        await extractErrorDetail(
+          err,
+          "Failed to send broadcast. Please try again.",
+        ),
+      );
     } finally {
-      setBroadcastBusy(false)
-      onBusyChange(false)
+      setBroadcastBusy(false);
+      onBusyChange(false);
     }
   }
 
   async function handleSendTestEmail() {
-    setTestEmailBusy(true)
-    onBusyChange(true)
-    setTestEmailError(null)
-    setTestEmailSuccess(null)
+    setTestEmailBusy(true);
+    onBusyChange(true);
+    setTestEmailError(null);
+    setTestEmailSuccess(null);
     try {
-      const result = await sendTestEmail(testEmail)
-      setTestEmailSuccess(result.message)
+      const result = await sendTestEmail(testEmail);
+      setTestEmailSuccess(result.message);
     } catch (err) {
-      setTestEmailError(await extractErrorDetail(err, 'Failed to send test email. Please try again.'))
+      setTestEmailError(
+        await extractErrorDetail(
+          err,
+          "Failed to send test email. Please try again.",
+        ),
+      );
     } finally {
-      setTestEmailBusy(false)
-      onBusyChange(false)
+      setTestEmailBusy(false);
+      onBusyChange(false);
     }
   }
 
-  const allBusy = busy || saving || broadcastBusy || testEmailBusy
+  const allBusy = busy || saving || broadcastBusy || testEmailBusy;
 
   // Pre-format timestamps once per data change so the polling re-renders during
   // a broadcast send don't re-parse every row's date on each render.
@@ -260,25 +307,32 @@ export default function SubscriptionsPanel({ busy, onBusyChange }: Props) {
         sentAtLabel: new Date(broadcast.sent_at).toLocaleString(),
       })),
     [broadcasts],
-  )
+  );
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-16" aria-label="Loading" role="status">
-        <Loader2 size={24} className="text-accent animate-spin" aria-hidden="true" />
+      <div
+        className="flex items-center justify-center py-16"
+        aria-label="Loading"
+        role="status"
+      >
+        <Loader2
+          size={24}
+          className="text-accent animate-spin"
+          aria-hidden="true"
+        />
       </div>
-    )
+    );
   }
 
   if (initError !== null && settings === null) {
-    return <AlertBanner variant="error">{initError}</AlertBanner>
+    return <AlertBanner variant="error">{initError}</AlertBanner>;
   }
 
-  const enableAllowed = settings !== null && isEnableAllowed(settings)
+  const enableAllowed = settings !== null && isEnableAllowed(settings);
 
   return (
     <div className="space-y-6">
-
       {/* ── Enable + subscriber count ── */}
       <div className="flex flex-wrap items-center gap-6">
         <ToggleSwitch
@@ -289,7 +343,9 @@ export default function SubscriptionsPanel({ busy, onBusyChange }: Props) {
           onChange={(value) => void handleToggleEnabled(value)}
         />
         {!enableAllowed && (
-          <span className="text-xs text-muted">Requires API key + from email.</span>
+          <span className="text-xs text-muted">
+            Requires API key + from email.
+          </span>
         )}
         <div className="ml-auto flex items-center gap-2 text-sm text-muted">
           <span className="text-xs uppercase tracking-wide">Subscribers</span>
@@ -305,13 +361,18 @@ export default function SubscriptionsPanel({ busy, onBusyChange }: Props) {
         </div>
       </div>
 
-      {settingsError !== null && <AlertBanner variant="error">{settingsError}</AlertBanner>}
-      {settingsSuccess !== null && <AlertBanner variant="success">{settingsSuccess}</AlertBanner>}
+      {settingsError !== null && (
+        <AlertBanner variant="error">{settingsError}</AlertBanner>
+      )}
+      {settingsSuccess !== null && (
+        <AlertBanner variant="success">{settingsSuccess}</AlertBanner>
+      )}
       {settings?.enabled === true && !settings.webhook_secret_configured && (
         <AlertBanner variant="warning">
-          Webhook unavailable: other features work, but unsubscribed contacts will remain in
-          Resend. Registration requires public HTTPS and retries when settings are next saved or
-          subscriptions are enabled through HTTPS.
+          Webhook unavailable: other features work, but unsubscribed contacts
+          will not be permanently deleted from Resend. Webhook registration
+          requires public HTTPS and retries when settings are next saved or
+          subscriptions are re-enabled.
         </AlertBanner>
       )}
 
@@ -319,9 +380,15 @@ export default function SubscriptionsPanel({ busy, onBusyChange }: Props) {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="sm:col-span-2">
           <label className="block text-sm text-muted mb-1" htmlFor="api-key">
-            Resend API key{' '}
-            <span className={settings?.key_configured === true ? 'text-green-600 dark:text-green-400' : 'text-muted'}>
-              {settings?.key_configured === true ? '(configured)' : '(not set)'}
+            Resend API key{" "}
+            <span
+              className={
+                settings?.key_configured === true
+                  ? "text-green-600 dark:text-green-400"
+                  : "text-muted"
+              }
+            >
+              {settings?.key_configured === true ? "(configured)" : "(not set)"}
             </span>
           </label>
           <input
@@ -332,15 +399,17 @@ export default function SubscriptionsPanel({ busy, onBusyChange }: Props) {
             onChange={(e) => setApiKey(e.target.value)}
             placeholder={
               settings?.key_configured === true
-                ? 'configured — enter to replace'
-                : 'not set — paste API key here'
+                ? "configured — enter to replace"
+                : "not set — paste API key here"
             }
             className={INPUT_CLASS}
           />
         </div>
 
         <div>
-          <label className="block text-sm text-muted mb-1" htmlFor="from-email">From email</label>
+          <label className="block text-sm text-muted mb-1" htmlFor="from-email">
+            From email
+          </label>
           <input
             id="from-email"
             type="email"
@@ -353,7 +422,9 @@ export default function SubscriptionsPanel({ busy, onBusyChange }: Props) {
         </div>
 
         <div>
-          <label className="block text-sm text-muted mb-1" htmlFor="from-name">From name</label>
+          <label className="block text-sm text-muted mb-1" htmlFor="from-name">
+            From name
+          </label>
           <input
             id="from-name"
             type="text"
@@ -366,7 +437,10 @@ export default function SubscriptionsPanel({ busy, onBusyChange }: Props) {
         </div>
 
         <div>
-          <label className="block text-sm text-muted mb-1" htmlFor="controller-name">
+          <label
+            className="block text-sm text-muted mb-1"
+            htmlFor="controller-name"
+          >
             Data controller name
           </label>
           <input
@@ -381,7 +455,10 @@ export default function SubscriptionsPanel({ busy, onBusyChange }: Props) {
         </div>
 
         <div>
-          <label className="block text-sm text-muted mb-1" htmlFor="controller-contact">
+          <label
+            className="block text-sm text-muted mb-1"
+            htmlFor="controller-contact"
+          >
             Controller contact
           </label>
           <input
@@ -396,7 +473,10 @@ export default function SubscriptionsPanel({ busy, onBusyChange }: Props) {
         </div>
 
         <div>
-          <label className="block text-sm text-muted mb-1" htmlFor="privacy-policy-url">
+          <label
+            className="block text-sm text-muted mb-1"
+            htmlFor="privacy-policy-url"
+          >
             Privacy policy URL
           </label>
           <input
@@ -411,7 +491,10 @@ export default function SubscriptionsPanel({ busy, onBusyChange }: Props) {
         </div>
 
         <div>
-          <label className="block text-sm text-muted mb-1" htmlFor="postal-address">
+          <label
+            className="block text-sm text-muted mb-1"
+            htmlFor="postal-address"
+          >
             Postal address (email footer)
           </label>
           <input
@@ -437,11 +520,18 @@ export default function SubscriptionsPanel({ busy, onBusyChange }: Props) {
 
       {/* ── Send to subscribers ── */}
       <div className="border-t border-border pt-5 space-y-2">
-        {broadcastError !== null && <AlertBanner variant="error">{broadcastError}</AlertBanner>}
-        {broadcastSuccess !== null && <AlertBanner variant="success">{broadcastSuccess}</AlertBanner>}
+        {broadcastError !== null && (
+          <AlertBanner variant="error">{broadcastError}</AlertBanner>
+        )}
+        {broadcastSuccess !== null && (
+          <AlertBanner variant="success">{broadcastSuccess}</AlertBanner>
+        )}
         <div className="flex flex-wrap items-end gap-3">
           <div className="flex-1 min-w-48">
-            <label className="block text-sm text-muted mb-1" htmlFor="post-select">
+            <label
+              className="block text-sm text-muted mb-1"
+              htmlFor="post-select"
+            >
               Send to subscribers
             </label>
             <select
@@ -462,22 +552,29 @@ export default function SubscriptionsPanel({ busy, onBusyChange }: Props) {
           </div>
           <button
             type="button"
-            disabled={allBusy || selectedPostPath === ''}
+            disabled={allBusy || selectedPostPath === ""}
             onClick={() => void handleSendBroadcast()}
             className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            {broadcastBusy ? 'Sending broadcast…' : 'Send broadcast'}
+            {broadcastBusy ? "Sending broadcast…" : "Send broadcast"}
           </button>
         </div>
       </div>
 
       {/* ── Test email ── */}
       <div className="border-t border-border pt-5 space-y-2">
-        {testEmailError !== null && <AlertBanner variant="error">{testEmailError}</AlertBanner>}
-        {testEmailSuccess !== null && <AlertBanner variant="success">{testEmailSuccess}</AlertBanner>}
+        {testEmailError !== null && (
+          <AlertBanner variant="error">{testEmailError}</AlertBanner>
+        )}
+        {testEmailSuccess !== null && (
+          <AlertBanner variant="success">{testEmailSuccess}</AlertBanner>
+        )}
         <div className="flex flex-wrap items-end gap-3">
           <div className="flex-1 min-w-48">
-            <label className="block text-sm text-muted mb-1" htmlFor="test-email">
+            <label
+              className="block text-sm text-muted mb-1"
+              htmlFor="test-email"
+            >
               Test email address
             </label>
             <input
@@ -486,13 +583,13 @@ export default function SubscriptionsPanel({ busy, onBusyChange }: Props) {
               value={testEmail}
               disabled={allBusy}
               onChange={(e) => setTestEmail(e.target.value)}
-              placeholder={settings?.from_email ?? 'you@example.com'}
+              placeholder={settings?.from_email ?? "you@example.com"}
               className={INPUT_CLASS}
             />
           </div>
           <button
             type="button"
-            disabled={allBusy || testEmail === ''}
+            disabled={allBusy || testEmail === ""}
             onClick={() => void handleSendTestEmail()}
             className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
@@ -510,29 +607,42 @@ export default function SubscriptionsPanel({ busy, onBusyChange }: Props) {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border bg-paper-warm">
-                  <th className="px-4 py-2 text-left text-xs font-medium text-muted uppercase tracking-wide">Post</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-muted uppercase tracking-wide">Sent at</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-muted uppercase tracking-wide">Status</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-muted uppercase tracking-wide">Error</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-muted uppercase tracking-wide">
+                    Post
+                  </th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-muted uppercase tracking-wide">
+                    Sent at
+                  </th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-muted uppercase tracking-wide">
+                    Status
+                  </th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-muted uppercase tracking-wide">
+                    Error
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {broadcastRows.map((b) => (
-                  <tr key={b.id} className="bg-paper hover:bg-paper-warm transition-colors">
+                  <tr
+                    key={b.id}
+                    className="bg-paper hover:bg-paper-warm transition-colors"
+                  >
                     <td className="px-4 py-2 text-ink">{b.post_title}</td>
                     <td className="px-4 py-2 text-muted">{b.sentAtLabel}</td>
                     <td className="px-4 py-2">
                       <span
                         className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
-                          b.status === 'sent'
-                            ? 'bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400'
-                            : 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400'
+                          b.status === "sent"
+                            ? "bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400"
+                            : "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400"
                         }`}
                       >
                         {b.status}
                       </span>
                     </td>
-                    <td className="px-4 py-2 text-muted text-xs">{b.error ?? '—'}</td>
+                    <td className="px-4 py-2 text-muted text-xs">
+                      {b.error ?? "—"}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -541,5 +651,5 @@ export default function SubscriptionsPanel({ busy, onBusyChange }: Props) {
         )}
       </div>
     </div>
-  )
+  );
 }
