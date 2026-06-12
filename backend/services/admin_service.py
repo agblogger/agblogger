@@ -175,7 +175,8 @@ async def create_page(
 
     file_name = f"{page_id}.md"
     md_path = cm.content_dir / file_name
-    initial_content = body if body is not None else f"# {title}\n"
+    # The title lives only in index.toml; the body is not seeded with a heading.
+    initial_content = body if body is not None else ""
     md_path.write_text(initial_content, encoding="utf-8")
 
     new_page = PageConfig(id=page_id, title=title, file=file_name)

@@ -25,7 +25,7 @@ export default function PageViewPage() {
   return (
     <div className="animate-fade-in">
       <h1 className="font-display text-4xl text-ink mb-8">{page.title}</h1>
-      <RenderedContent html={page.rendered_html} stripFirstH1 />
+      <RenderedContent html={page.rendered_html} />
     </div>
   )
 }

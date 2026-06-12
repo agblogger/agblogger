@@ -31,18 +31,6 @@ describe('RenderedContent', () => {
     expect(container.querySelector('p')?.textContent).toBe('Body.')
   })
 
-  it('strips the leading h1 when stripFirstH1 is set', () => {
-    const { container } = render(
-      createElement(RenderedContent, {
-        html: '<h1>Title</h1><p>Body.</p>',
-        stripFirstH1: true,
-      }),
-    )
-
-    expect(container.querySelector('h1')).toBeNull()
-    expect(container.querySelector('p')?.textContent).toBe('Body.')
-  })
-
   it('exposes the content element through an external ref', () => {
     const ref = createRef<HTMLDivElement>()
     render(createElement(RenderedContent, { html: '<p>Body.</p>', contentRef: ref }))

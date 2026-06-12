@@ -437,7 +437,8 @@ async def create_page_endpoint(
     _user: Annotated[AdminUser, Depends(require_admin)],
 ) -> AdminPageConfig:
     """Create a new page."""
-    initial_content = body.body if body.body is not None else f"# {body.title}\n"
+    # The title lives only in index.toml; the body is not seeded with a heading.
+    initial_content = body.body if body.body is not None else ""
     async with content_write_lock:
         cfg = content_manager.site_config
         page_path = content_manager.content_dir / f"{body.id}.md"

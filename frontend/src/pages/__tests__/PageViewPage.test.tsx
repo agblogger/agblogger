@@ -64,20 +64,20 @@ describe('PageViewPage', () => {
     expect(screen.getByText('We are a blog.')).toBeInTheDocument()
   })
 
-  it('strips first h1 from rendered HTML', async () => {
+  it('renders the body verbatim without stripping headings', async () => {
     mockApiGet.mockResolvedValue({
       id: 'about',
       title: 'About Us',
-      rendered_html: '<h1>About Us</h1><p>Content here.</p>',
+      rendered_html: '<h1>Body Heading</h1><p>Content here.</p>',
     })
     renderPage()
 
     await waitFor(() => {
       expect(screen.getByText('Content here.')).toBeInTheDocument()
     })
-    // The h1 "About Us" inside the content should be stripped (only the title header remains)
-    const heading = screen.getByRole('heading', { level: 1 })
-    expect(heading).toHaveTextContent('About Us')
+    // The title comes from config (shown separately); body headings are kept as-is.
+    const headings = screen.getAllByRole('heading', { level: 1 })
+    expect(headings.map((h) => h.textContent)).toEqual(['About Us', 'Body Heading'])
   })
 
   it('enhances code blocks with a language header and copy button', async () => {

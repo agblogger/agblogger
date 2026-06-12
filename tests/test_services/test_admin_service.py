@@ -167,6 +167,18 @@ class TestCreatePage:
         reloaded = parse_site_config(cm.content_dir)
         assert any(p.id == "contact" for p in reloaded.pages)
 
+    async def test_create_page_without_body_writes_empty_file(
+        self, cm: ContentManager, session_factory: async_sessionmaker[AsyncSession]
+    ) -> None:
+        # The title lives only in index.toml; the body is not seeded with an H1.
+        with patch(
+            "backend.services.cache_service.render_markdown",
+            new_callable=AsyncMock,
+            return_value="",
+        ):
+            await create_page(session_factory, cm, page_id="contact", title="Contact")
+        assert (cm.content_dir / "contact.md").read_text(encoding="utf-8") == ""
+
     async def test_duplicate_id_raises(
         self, cm: ContentManager, session_factory: async_sessionmaker[AsyncSession]
     ) -> None:
