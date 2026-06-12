@@ -43,6 +43,8 @@ Post and page authoring share one reusable editing surface, `MarkdownEditor` (`f
 
 The frontend does not own markdown rendering. It receives rendered HTML from the backend and then adds browser-only enhancements such as navigation affordances, math hydration, and interaction helpers.
 
+Posts and pages display backend HTML through one shared `RenderedContent` component (`frontend/src/components/RenderedContent.tsx`), so both get identical presentation: KaTeX hydration plus code-block language headers and copy buttons. The only per-host difference is a `stripFirstH1` flag — pages carry their title as a leading body `# H1` and render it separately, so they strip it to avoid duplication; posts keep their title in front matter and need no strip.
+
 ## Code Entry Points
 
 - `frontend/src/main.tsx` is the application entry point; it installs compatibility shims and mounts the React tree.

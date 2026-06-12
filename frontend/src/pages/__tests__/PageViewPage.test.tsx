@@ -80,6 +80,21 @@ describe('PageViewPage', () => {
     expect(heading).toHaveTextContent('About Us')
   })
 
+  it('enhances code blocks with a language header and copy button', async () => {
+    mockApiGet.mockResolvedValue({
+      id: 'about',
+      title: 'About Us',
+      rendered_html:
+        '<pre class="sourceCode python"><code class="sourceCode python">print("hi")</code></pre>',
+    })
+    renderPage()
+
+    await waitFor(() => {
+      expect(document.querySelector('.code-block-lang')?.textContent).toBe('python')
+    })
+    expect(document.querySelector('.code-block-copy')?.textContent).toBe('Copy')
+  })
+
   it('shows "Page not found" when page is null', async () => {
     mockApiGet.mockRejectedValue(new Error('fail'))
     renderPage('nonexistent')

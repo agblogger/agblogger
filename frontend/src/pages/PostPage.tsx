@@ -13,8 +13,7 @@ import CrossPostSection from '@/components/crosspost/CrossPostSection'
 import ShareButton from '@/components/share/ShareButton'
 import ShareBar from '@/components/share/ShareBar'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
-import { useRenderedHtml } from '@/hooks/useKatex'
-import { useCodeBlockEnhance } from '@/hooks/useCodeBlockEnhance'
+import RenderedContent from '@/components/RenderedContent'
 import TableOfContents from '@/components/posts/TableOfContents'
 import { usePost, useViewCount } from '@/hooks/usePost'
 import { formatLocalDate } from '@/utils/date'
@@ -42,8 +41,6 @@ export default function PostPage() {
   const [publishing, setPublishing] = useState(false)
   const user = useAuthStore((s) => s.user)
   const contentRef = useRef<HTMLDivElement>(null)
-  const renderedHtml = useRenderedHtml(post?.rendered_html)
-  useCodeBlockEnhance(contentRef, renderedHtml)
   useDocumentTitle(post?.title)
 
   async function handleDelete() {
@@ -257,15 +254,7 @@ export default function PostPage() {
         <AlertBanner variant="error" className="mb-6">{deleteError}</AlertBanner>
       )}
 
-      <div
-        ref={contentRef}
-        className="prose max-w-none"
-        // nosemgrep: typescript.react.security.audit.react-dangerouslysetinnerhtml
-        // HTML is rendered and sanitized server-side by the backend rendering pipeline.
-        dangerouslySetInnerHTML={{
-          __html: renderedHtml,
-        }}
-      />
+      <RenderedContent html={post.rendered_html} contentRef={contentRef} />
 
       <ShareBar
         title={post.title}
