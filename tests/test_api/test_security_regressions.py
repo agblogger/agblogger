@@ -437,65 +437,18 @@ class TestRefererOriginEnforcement:
         assert resp.status_code == 403
 
 
-class TestIsTrustedProxy:
-    def test_exact_ip_match(self) -> None:
-        from backend.api.auth import _is_trusted_proxy
-
-        assert _is_trusted_proxy("127.0.0.1", ["127.0.0.1"]) is True
-        assert _is_trusted_proxy("10.0.0.1", ["127.0.0.1"]) is False
-
-    def test_cidr_match(self) -> None:
-        from backend.api.auth import _is_trusted_proxy
-
-        assert _is_trusted_proxy("172.30.0.2", ["172.30.0.0/24"]) is True
-        assert _is_trusted_proxy("172.30.0.99", ["172.30.0.0/24"]) is True
-        assert _is_trusted_proxy("172.31.0.2", ["172.30.0.0/24"]) is False
-
-    def test_invalid_client_ip(self) -> None:
-        from backend.api.auth import _is_trusted_proxy
-
-        assert _is_trusted_proxy("not-an-ip", ["127.0.0.1"]) is False
-
-    def test_invalid_trusted_entry_is_skipped(self) -> None:
-        from backend.api.auth import _is_trusted_proxy
-
-        assert _is_trusted_proxy("127.0.0.1", ["bad-entry", "127.0.0.1"]) is True
-
-    def test_invalid_trusted_entry_logs_warning(self, caplog: pytest.LogCaptureFixture) -> None:
-        import logging
-
-        from backend.api.auth import _is_trusted_proxy
-
-        with caplog.at_level(logging.WARNING, logger="backend.net_utils"):
-            _is_trusted_proxy("127.0.0.1", ["not-valid-cidr/33", "127.0.0.1"])
-        assert any("not-valid-cidr/33" in msg for msg in caplog.messages)
-
-    def test_empty_list(self) -> None:
-        from backend.api.auth import _is_trusted_proxy
-
-        assert _is_trusted_proxy("127.0.0.1", []) is False
-
-
 class TestSharedIsTrustedFunction:
-    """Issue #1 and #6: Shared is_trusted_proxy in backend.net_utils."""
+    """Issue #1 and #6: Shared is_trusted_proxy in backend.net_utils.
+
+    Behavioral coverage for ``is_trusted_proxy`` lives in ``TestRemovedEndpoints``
+    below; client-IP resolution that builds on it is covered by
+    ``test_rate_limit_helpers.py``.
+    """
 
     def test_shared_function_exists_in_net_utils(self) -> None:
         from backend.net_utils import is_trusted_proxy
 
         assert callable(is_trusted_proxy)
-
-    def test_auth_uses_shared_function(self) -> None:
-        """_is_trusted_proxy in auth.py should delegate to the shared function."""
-        from backend.api.auth import _is_trusted_proxy
-        from backend.net_utils import is_trusted_proxy
-
-        # Both should return the same result for identical inputs
-        assert _is_trusted_proxy("127.0.0.1", ["127.0.0.1"]) == is_trusted_proxy(
-            "127.0.0.1", ["127.0.0.1"]
-        )
-        assert _is_trusted_proxy("10.0.0.2", ["127.0.0.1"]) == is_trusted_proxy(
-            "10.0.0.2", ["127.0.0.1"]
-        )
 
 
 class TestRemovedEndpoints:

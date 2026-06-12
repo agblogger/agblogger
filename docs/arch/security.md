@@ -54,7 +54,7 @@ Security checks are part of normal engineering workflow rather than a separate l
 - `backend/config.py` contains runtime security configuration and startup validation.
 - `backend/main.py` wires up security-relevant middleware and global request handling.
 - `backend/api/deps.py` contains shared authorization dependencies.
-- `backend/services/csrf_service.py` and `backend/services/rate_limit_service.py` cover request-boundary protections.
+- `backend/services/csrf_service.py` and `backend/services/rate_limit_service.py` cover request-boundary protections; `backend/api/rate_limit.py` is the shared HTTP-facing layer (trusted-proxy client-IP resolution and 429 enforcement) reused by the auth, admin, and subscription endpoints.
 - `backend/services/storage_quota.py` contains the managed-content quota boundary used by write paths.
 - `backend/crosspost/ssrf.py` and related integration code cover external-request hardening for provider integrations.
 - `backend/services/subscription_tokens.py` covers signed confirm-token creation and verification.

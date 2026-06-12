@@ -21,6 +21,11 @@ from backend.api.deps import (
     get_settings,
     require_admin,
 )
+from backend.api.rate_limit import (
+    client_ip_from_request,
+    enforce_rate_limit,
+    record_failure_and_enforce,
+)
 from backend.config import Settings
 from backend.filesystem.content_manager import ContentManager
 from backend.models.user import AdminUser
@@ -85,24 +90,6 @@ def _clear_auth_cookies(response: Response) -> None:
     response.delete_cookie("csrf_token", path="/")
 
 
-def _is_trusted_proxy(client_ip: str, trusted_proxy_ips: list[str]) -> bool:
-    """Check if a client IP matches any trusted proxy entry (exact IP or CIDR range)."""
-    from backend.net_utils import is_trusted_proxy
-
-    return is_trusted_proxy(client_ip, trusted_proxy_ips)
-
-
-def _get_client_ip(request: Request) -> str:
-    settings: Settings = request.app.state.settings
-    client_host = request.client.host if request.client and request.client.host else "unknown"
-    forwarded_for = request.headers.get("X-Forwarded-For")
-    if forwarded_for and _is_trusted_proxy(client_host, settings.trusted_proxy_ips):
-        return forwarded_for.split(",", maxsplit=1)[0].strip()
-    if client_host:
-        return client_host
-    return "unknown"
-
-
 def _origin_from_referer(referer: str) -> str | None:
     parsed = urlparse(referer)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
@@ -137,35 +124,6 @@ def _reject_browser_originated_token_login(request: Request) -> None:
         )
 
 
-def _check_rate_limit(
-    limiter: InMemoryRateLimiter,
-    key: str,
-    max_failures: int,
-    window_seconds: int,
-    detail: str,
-) -> None:
-    """Raise 429 if the key is rate-limited."""
-    limited, retry_after = limiter.is_limited(key, max_failures, window_seconds)
-    if limited:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=detail,
-            headers={"Retry-After": str(retry_after)},
-        )
-
-
-def _record_failure_and_check(
-    limiter: InMemoryRateLimiter,
-    key: str,
-    max_failures: int,
-    window_seconds: int,
-    detail: str,
-) -> None:
-    """Record a failed attempt and raise 429 if now rate-limited."""
-    limiter.add_failure(key, window_seconds)
-    _check_rate_limit(limiter, key, max_failures, window_seconds, detail)
-
-
 async def _authenticate_login_request(
     body: LoginRequest,
     request: Request,
@@ -174,8 +132,9 @@ async def _authenticate_login_request(
 ) -> AdminUser:
     """Authenticate a login request with shared rate-limiting."""
     limiter: InMemoryRateLimiter = request.app.state.rate_limiter
-    client_key = f"login:{_get_client_ip(request)}:{body.username.lower()}"
-    _check_rate_limit(
+    client_ip = client_ip_from_request(request, settings.trusted_proxy_ips)
+    client_key = f"login:{client_ip}:{body.username.lower()}"
+    enforce_rate_limit(
         limiter,
         client_key,
         settings.auth_login_max_failures,
@@ -185,7 +144,7 @@ async def _authenticate_login_request(
 
     user = await authenticate_admin(session, body.username, body.password)
     if user is None:
-        _record_failure_and_check(
+        record_failure_and_enforce(
             limiter,
             client_key,
             settings.auth_login_max_failures,
@@ -248,8 +207,9 @@ async def refresh(
 ) -> SessionAuthResponse:
     """Refresh access token using refresh token."""
     limiter: InMemoryRateLimiter = request.app.state.rate_limiter
-    client_key = f"refresh:{_get_client_ip(request)}"
-    _check_rate_limit(
+    client_ip = client_ip_from_request(request, settings.trusted_proxy_ips)
+    client_key = f"refresh:{client_ip}"
+    enforce_rate_limit(
         limiter,
         client_key,
         settings.auth_refresh_max_failures,
@@ -268,7 +228,7 @@ async def refresh(
 
     tokens = await refresh_tokens(session, refresh_token, settings)
     if tokens is None:
-        _record_failure_and_check(
+        record_failure_and_enforce(
             limiter,
             client_key,
             settings.auth_refresh_max_failures,

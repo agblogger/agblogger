@@ -25,6 +25,7 @@ from backend.api.deps import (
 from backend.api.deps import (
     get_settings as get_settings_dep,
 )
+from backend.api.rate_limit import enforce_rate_limit
 from backend.config import Settings
 from backend.exceptions import BuiltinPageError
 from backend.filesystem.content_manager import ContentManager
@@ -645,15 +646,13 @@ async def change_password(
         )
     limiter: InMemoryRateLimiter = request.app.state.rate_limiter
     rate_key = f"password_change:{user.id}"
-    limited, retry_after = limiter.is_limited(
-        rate_key, _PASSWORD_CHANGE_MAX_FAILURES, _PASSWORD_CHANGE_WINDOW_SECONDS
+    enforce_rate_limit(
+        limiter,
+        rate_key,
+        _PASSWORD_CHANGE_MAX_FAILURES,
+        _PASSWORD_CHANGE_WINDOW_SECONDS,
+        "Too many failed password change attempts",
     )
-    if limited:
-        raise HTTPException(
-            status_code=429,
-            detail="Too many failed password change attempts",
-            headers={"Retry-After": str(retry_after)},
-        )
 
     if not verify_password(body.current_password, user.password_hash):
         limiter.add_failure(rate_key, _PASSWORD_CHANGE_WINDOW_SECONDS)
