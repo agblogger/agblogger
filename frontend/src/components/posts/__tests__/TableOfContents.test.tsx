@@ -161,6 +161,21 @@ describe('TableOfContents', () => {
     expect(screen.getByText('Section C')).toBeInTheDocument()
   })
 
+  it('shows a pointer cursor over section links in both variants', async () => {
+    const ref = makeContentRef(
+      { tag: 'h2', id: 'a', text: 'Section A' },
+      { tag: 'h2', id: 'b', text: 'Section B' },
+      { tag: 'h2', id: 'c', text: 'Section C' },
+    )
+    const { rerender } = render(<TableOfContents contentRef={ref} />)
+
+    await userEvent.click(screen.getByRole('button', { name: /table of contents/i }))
+    expect(screen.getByText('Section A')).toHaveClass('cursor-pointer')
+
+    rerender(<TableOfContents contentRef={ref} variant="sidebar" />)
+    expect(screen.getByText('Section A')).toHaveClass('cursor-pointer')
+  })
+
   it('indents h3 entries', async () => {
     const ref = makeContentRef(
       { tag: 'h2', id: 'a', text: 'Section A' },

@@ -90,7 +90,7 @@ export default function TableOfContents({ contentRef, variant = 'dropdown' }: Ta
                   onClick={() =>
                     document.getElementById(heading.id)?.scrollIntoView({ behavior: 'smooth' })
                   }
-                  className={`block w-full text-left py-1 text-sm transition-colors ${
+                  className={`block w-full cursor-pointer text-left py-1 text-sm transition-colors ${
                     isActive
                       ? 'text-accent font-medium border-l-2 border-accent -ml-[calc(0.75rem+1px)] pl-[calc(0.75rem-1px)]'
                       : 'text-muted hover:text-ink'
@@ -147,7 +147,7 @@ export default function TableOfContents({ contentRef, variant = 'dropdown' }: Ta
                   <button
                     onClick={() => handleLinkClick(heading.id)}
                     tabIndex={isOpen ? 0 : -1}
-                    className={`block w-full text-left px-2 py-1.5 rounded-lg transition-colors ${
+                    className={`block w-full cursor-pointer text-left px-2 py-1.5 rounded-lg transition-colors ${
                       heading.level === 3 ? 'text-xs' : 'text-sm'
                     } ${
                       isActive
