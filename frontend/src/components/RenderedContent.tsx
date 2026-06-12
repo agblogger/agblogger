@@ -30,8 +30,8 @@ export default function RenderedContent({
     <div
       ref={ref}
       className={className}
-      // nosemgrep: typescript.react.security.audit.react-dangerouslysetinnerhtml
-      // HTML is rendered and sanitized server-side by the backend rendering pipeline.
+      // HTML is backend-sanitized, then defense-in-depth sanitized by useRenderedHtml.
+      // nosemgrep: typescript.react.security.audit.react-dangerouslysetinnerhtml.react-dangerouslysetinnerhtml, typescript.react.react-dangerouslysetinnerhtml-prop.react-dangerouslysetinnerhtml-prop
       dangerouslySetInnerHTML={{ __html: renderedHtml }}
     />
   )
