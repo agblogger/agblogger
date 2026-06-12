@@ -6,7 +6,10 @@ Display word count and estimated reading time in the post page header, giving re
 
 ## Scope
 
-Post pages only (`/post/<slug>`). Timeline cards, search results, and other listing views are out of scope.
+Post pages (`/post/<slug>`) and timeline cards. The post page shows the full
+`"N min read · X words"` string; timeline cards show the compact `"N min read"`
+form (see Frontend below). Search results and other listing views remain out of
+scope.
 
 ## Backend
 
@@ -30,13 +33,15 @@ word_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 ### API schema
 
-`PostDetail` (in `backend/schemas/post.py`) gains:
+`PostSummary` (in `backend/schemas/post.py`) gains:
 
 ```python
 word_count: int = 0
 ```
 
-`post_service.py` passes `post.word_count` through when constructing the `PostDetail` response.
+`PostDetail` inherits it from `PostSummary`, so both the list and detail
+responses carry `word_count`. `post_service.py` passes `post.word_count` through
+when constructing both the `PostSummary` list items and the `PostDetail` response.
 
 ## Frontend
 
@@ -45,12 +50,15 @@ word_count: int = 0
 `frontend/src/utils/readingTime.ts` exports:
 
 ```ts
+export function readingTimeShort(wordCount: number): string
 export function readingTime(wordCount: number): string
 ```
 
 - Reading speed: 200 WPM; minutes = `Math.ceil(wordCount / 200)`, minimum 1.
-- Word count formatted with `wordCount.toLocaleString()` (browser locale, no hardcoded separator).
-- Returns e.g. `"5 min read · 1 234 words"` (separator varies by locale).
+- `readingTimeShort` returns just `"5 min read"` (used on timeline cards).
+- `readingTime` appends the word count: `"5 min read · 1 234 words"`. Word count
+  formatted with `wordCount.toLocaleString()` (browser locale, no hardcoded
+  separator); used in the post page header.
 
 ### PostPage display
 
@@ -66,6 +74,24 @@ A new metadata item is inserted into the existing `flex items-center gap-4 flex-
 ```
 
 Placed after the author item and before the view count, matching the temporal left-to-right reading of the metadata row.
+
+### Timeline card display
+
+`PostCard.tsx` adds a compact reading-time item to its `date · author · labels`
+metadata row, using `readingTimeShort` (no icon, matching the card's text-only
+metadata style):
+
+```tsx
+{post.word_count > 0 && (
+  <>
+    <span className="text-border-dark">·</span>
+    <span className="text-xs text-muted">{readingTimeShort(post.word_count)}</span>
+  </>
+)}
+```
+
+Placed after the author item and before the labels, mirroring the post page
+ordering.
 
 ## Testing
 

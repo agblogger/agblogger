@@ -55,12 +55,12 @@ const postsData: PostListResponse = {
     {
       id: 1, file_path: 'posts/a/index.md', title: 'Post A', subtitle: null, author: 'Admin',
       created_at: '2026-02-01 12:00:00+00:00', modified_at: '2026-02-01 12:00:00+00:00',
-      is_draft: false, rendered_excerpt: '<p>A</p>', labels: ['swe'],
+      is_draft: false, rendered_excerpt: '<p>A</p>', labels: ['swe'], word_count: 0,
     },
     {
       id: 2, file_path: 'posts/b/index.md', title: 'Post B', subtitle: null, author: 'Admin',
       created_at: '2026-02-02 12:00:00+00:00', modified_at: '2026-02-02 12:00:00+00:00',
-      is_draft: false, rendered_excerpt: '<p>B</p>', labels: ['swe'],
+      is_draft: false, rendered_excerpt: '<p>B</p>', labels: ['swe'], word_count: 0,
     },
   ],
   total: 2,

@@ -21,6 +21,7 @@ function makePost(overrides: Partial<PostSummary> = {}): PostSummary {
     is_draft: false,
     rendered_excerpt: '<p>This is the excerpt.</p>',
     labels: [],
+    word_count: 250,
     ...overrides,
   }
 }
@@ -66,8 +67,20 @@ describe('PostCard', () => {
   })
 
   it('hides author when null', () => {
-    renderCard(makePost({ author: null }))
+    // No author, no labels, no reading time → the metadata row is just the
+    // date, so no '·' separators should be rendered.
+    renderCard(makePost({ author: null, word_count: 0 }))
     expect(screen.queryByText('·')).not.toBeInTheDocument()
+  })
+
+  it('renders reading time when word_count is positive', () => {
+    renderCard(makePost({ word_count: 1000 }))
+    expect(screen.getByText('5 min read')).toBeInTheDocument()
+  })
+
+  it('hides reading time when word_count is zero', () => {
+    renderCard(makePost({ word_count: 0 }))
+    expect(screen.queryByText(/min read/)).not.toBeInTheDocument()
   })
 
   it('renders excerpt', () => {

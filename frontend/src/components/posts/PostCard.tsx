@@ -5,6 +5,7 @@ import LabelChip from '@/components/labels/LabelChip'
 import { useRenderedHtml } from '@/hooks/useKatex'
 import { formatRelativeDate } from '@/utils/date'
 import { postUrl } from '@/utils/postUrl'
+import { readingTimeShort } from '@/utils/readingTime'
 
 interface PostCardProps {
   post: PostSummary
@@ -60,6 +61,13 @@ function PostCardInner({ post, index = 0 }: PostCardProps) {
               <>
                 <span className="text-border-dark">·</span>
                 <span className="text-xs text-muted">{post.author}</span>
+              </>
+            )}
+
+            {post.word_count > 0 && (
+              <>
+                <span className="text-border-dark">·</span>
+                <span className="text-xs text-muted">{readingTimeShort(post.word_count)}</span>
               </>
             )}
 

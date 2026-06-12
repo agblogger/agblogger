@@ -20,6 +20,7 @@ class PostSummary(BaseModel):
     is_draft: bool = False
     rendered_excerpt: str | None = None
     labels: list[str] = Field(default_factory=list)
+    word_count: int = 0
 
 
 class PostDetail(PostSummary):
@@ -27,7 +28,6 @@ class PostDetail(PostSummary):
 
     rendered_html: str
     content: str | None = None
-    word_count: int = 0
     warnings: list[str] = Field(default_factory=list)
 
 

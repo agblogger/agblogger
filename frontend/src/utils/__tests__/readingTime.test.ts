@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { readingTime } from '../readingTime'
+import { readingTime, readingTimeShort } from '../readingTime'
 
 describe('readingTime', () => {
   it('returns 1 min read for zero words', () => {
@@ -25,5 +25,19 @@ describe('readingTime', () => {
   it('uses locale-formatted word count', () => {
     const result = readingTime(12345)
     expect(result).toContain((12345).toLocaleString())
+  })
+})
+
+describe('readingTimeShort', () => {
+  it('returns minutes only, without the word count', () => {
+    expect(readingTimeShort(1000)).toBe('5 min read')
+  })
+
+  it('returns 1 min read for zero words', () => {
+    expect(readingTimeShort(0)).toBe('1 min read')
+  })
+
+  it('rounds partial minutes up', () => {
+    expect(readingTimeShort(201)).toBe('2 min read')
   })
 })

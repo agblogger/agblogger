@@ -145,12 +145,12 @@ export interface PostSummary {
   is_draft: boolean
   rendered_excerpt: string | null
   labels: string[]
+  word_count: number
 }
 
 export interface PostDetail extends PostSummary {
   rendered_html: string
   content: string | null
-  word_count: number
 }
 
 export interface PostListResponse {

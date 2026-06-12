@@ -1,4 +1,11 @@
+function readingMinutes(wordCount: number): number {
+  return Math.max(1, Math.ceil(wordCount / 200))
+}
+
+export function readingTimeShort(wordCount: number): string {
+  return `${readingMinutes(wordCount)} min read`
+}
+
 export function readingTime(wordCount: number): string {
-  const minutes = Math.max(1, Math.ceil(wordCount / 200))
-  return `${minutes} min read · ${wordCount.toLocaleString()} words`
+  return `${readingTimeShort(wordCount)} · ${wordCount.toLocaleString()} words`
 }

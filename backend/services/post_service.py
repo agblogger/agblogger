@@ -216,6 +216,7 @@ async def list_posts(
                 is_draft=post.is_draft,
                 rendered_excerpt=post.rendered_excerpt,
                 labels=labels_map.get(post.id, []),
+                word_count=post.word_count,
             )
         )
 
