@@ -20,7 +20,7 @@ The HTTP surface follows the same split: a public rate-limited subscribe endpoin
 
 Subscribing creates no server-side pending row. Instead, the backend signs a short-lived confirmation token carrying the normalized email address and emails a confirm link to the subscriber. The confirm endpoint verifies the token and, if valid, creates a Resend contact in the segment. A valid confirmation link may be reused until it expires; reopening it is treated as renewed consent.
 
-Unsubscribing is delegated to Resend: every broadcast email embeds Resend's unsubscribe link. When the optional signed webhook is configured, Resend also notifies AgBlogger so the backend can permanently delete the unsubscribed contact from Resend.
+Unsubscribing is delegated to Resend: every broadcast email embeds Resend's unsubscribe link. When the optional signed webhook is configured, Resend also notifies AgBlogger so the backend can permanently delete the account-level contact from Resend, rather than only removing it from the blog's audience.
 
 ## Publish → Broadcast Flow
 

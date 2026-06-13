@@ -62,8 +62,8 @@ async def test_handle_contact_updated_webhook_deletes_unsubscribed_contact(
 ) -> None:
     deleted: list[dict[str, str]] = []
 
-    async def fake_delete(*, api_key: str, audience_id: str, contact_id: str) -> None:
-        deleted.append({"audience_id": audience_id, "contact_id": contact_id})
+    async def fake_delete(*, api_key: str, contact_id: str) -> None:
+        deleted.append({"contact_id": contact_id})
 
     monkeypatch.setattr(resend_client, "delete_contact", fake_delete)
     await _configure_webhook_secret(session)
@@ -72,7 +72,6 @@ async def test_handle_contact_updated_webhook_deletes_unsubscribed_contact(
         {
             "type": "contact.updated",
             "data": {
-                "audience_id": "aud_abc",
                 "id": "contact_xyz",
                 "email": "user@example.com",
                 "unsubscribed": True,
@@ -87,7 +86,6 @@ async def test_handle_contact_updated_webhook_deletes_unsubscribed_contact(
         secret_key=SECRET,
     )
     assert len(deleted) == 1
-    assert deleted[0]["audience_id"] == "aud_abc"
     assert deleted[0]["contact_id"] == "contact_xyz"
 
 

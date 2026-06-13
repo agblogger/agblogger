@@ -301,17 +301,16 @@ async def test_check_segment_exists_network_error_raises(
 
 @pytest.mark.asyncio
 async def test_delete_contact_success(monkeypatch: pytest.MonkeyPatch) -> None:
-    seen: dict[str, str] = {}
+    seen_paths: list[str] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
-        seen["method"] = request.method
-        seen["url"] = str(request.url)
+        assert request.method == "DELETE"
+        seen_paths.append(request.url.path)
         return httpx.Response(200, json={"id": "contact_1"})
 
     monkeypatch.setattr(resend_client, "_get_client", lambda: _client(handler))
-    await resend_client.delete_contact(api_key="re_x", audience_id="aud_1", contact_id="contact_1")
-    assert seen["method"] == "DELETE"
-    assert "aud_1/contacts/contact_1" in seen["url"]
+    await resend_client.delete_contact(api_key="re_x", contact_id="contact_1")
+    assert seen_paths == ["/contacts/contact_1"]
 
 
 @pytest.mark.asyncio
@@ -321,7 +320,7 @@ async def test_delete_contact_404_treated_as_success(monkeypatch: pytest.MonkeyP
 
     monkeypatch.setattr(resend_client, "_get_client", lambda: _client(handler))
     # Must not raise
-    await resend_client.delete_contact(api_key="re_x", audience_id="aud_1", contact_id="gone")
+    await resend_client.delete_contact(api_key="re_x", contact_id="gone")
 
 
 @pytest.mark.asyncio
@@ -331,7 +330,7 @@ async def test_delete_contact_other_error_raises(monkeypatch: pytest.MonkeyPatch
 
     monkeypatch.setattr(resend_client, "_get_client", lambda: _client(handler))
     with pytest.raises(ResendError, match="Invalid API key"):
-        await resend_client.delete_contact(api_key="re_bad", audience_id="aud_1", contact_id="c1")
+        await resend_client.delete_contact(api_key="re_bad", contact_id="c1")
 
 
 @pytest.mark.asyncio
@@ -341,7 +340,7 @@ async def test_delete_contact_network_error_raises(monkeypatch: pytest.MonkeyPat
 
     monkeypatch.setattr(resend_client, "_get_client", lambda: _client(handler))
     with pytest.raises(ResendError, match="Could not reach the email provider"):
-        await resend_client.delete_contact(api_key="re_x", audience_id="aud_1", contact_id="c1")
+        await resend_client.delete_contact(api_key="re_x", contact_id="c1")
 
 
 # ── Task 2: Atomic broadcast / BroadcastSendError ────────────────────────────

@@ -449,7 +449,7 @@ async def test_webhook_valid_signature_returns_200(
     monkeypatch: pytest.MonkeyPatch,
     enable_webhook_secret: None,
 ) -> None:
-    async def fake_delete(*, api_key: str, audience_id: str, contact_id: str) -> None:
+    async def fake_delete(*, api_key: str, contact_id: str) -> None:
         pass
 
     monkeypatch.setattr(resend_client, "delete_contact", fake_delete)
@@ -457,7 +457,7 @@ async def test_webhook_valid_signature_returns_200(
     payload = json.dumps(
         {
             "type": "contact.updated",
-            "data": {"audience_id": "aud_1", "id": "c1", "unsubscribed": True},
+            "data": {"id": "c1", "unsubscribed": True},
         }
     ).encode()
     resp = await client.post(
@@ -504,7 +504,7 @@ async def test_webhook_resend_api_failure_returns_retryable_error(
     monkeypatch: pytest.MonkeyPatch,
     enable_webhook_secret: None,
 ) -> None:
-    async def fake_delete(*, api_key: str, audience_id: str, contact_id: str) -> None:
+    async def fake_delete(*, api_key: str, contact_id: str) -> None:
         raise resend_client.ResendError("network down")
 
     monkeypatch.setattr(resend_client, "delete_contact", fake_delete)
@@ -531,7 +531,7 @@ async def test_webhook_unknown_event_type_returns_200(
 ) -> None:
     delete_calls: list[str] = []
 
-    async def fake_delete(*, api_key: str, audience_id: str, contact_id: str) -> None:
+    async def fake_delete(*, api_key: str, contact_id: str) -> None:
         delete_calls.append(contact_id)
 
     monkeypatch.setattr(resend_client, "delete_contact", fake_delete)
@@ -556,7 +556,7 @@ async def test_webhook_missing_contact_id_returns_retryable_error(
 ) -> None:
     delete_calls: list[str] = []
 
-    async def fake_delete(*, api_key: str, audience_id: str, contact_id: str) -> None:
+    async def fake_delete(*, api_key: str, contact_id: str) -> None:
         delete_calls.append(contact_id)
 
     monkeypatch.setattr(resend_client, "delete_contact", fake_delete)

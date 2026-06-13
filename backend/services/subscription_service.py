@@ -604,29 +604,19 @@ async def handle_resend_webhook(
         return
 
     contact_id = data.get("id")
-    audience_id = data.get("audience_id")
 
     if not isinstance(contact_id, str) or not contact_id:
         raise WebhookProcessingError("unsubscribed contact.updated missing contact id")
-    if not isinstance(audience_id, str) or not audience_id:
-        raise WebhookProcessingError("unsubscribed contact.updated missing audience_id")
 
     api_key = decrypt_api_key(row, secret_key)
     if api_key is None:
         raise WebhookProcessingError("Resend API key is not configured")
 
     try:
-        await resend_client.delete_contact(
-            api_key=api_key, audience_id=audience_id, contact_id=contact_id
-        )
-        logger.info("Deleted unsubscribed contact %s from audience %s", contact_id, audience_id)
+        await resend_client.delete_contact(api_key=api_key, contact_id=contact_id)
+        logger.info("Permanently deleted unsubscribed contact %s from Resend", contact_id)
     except resend_client.ResendError as exc:
-        logger.warning(
-            "Resend webhook: failed to delete contact %s from audience %s: %s",
-            contact_id,
-            audience_id,
-            exc,
-        )
+        logger.warning("Resend webhook: failed to delete contact %s: %s", contact_id, exc)
         raise
 
 

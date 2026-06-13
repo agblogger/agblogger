@@ -132,11 +132,11 @@ async def create_contact(*, api_key: str, segment_id: str, email: str) -> None:
         raise
 
 
-async def delete_contact(*, api_key: str, audience_id: str, contact_id: str) -> None:
-    """Permanently delete a contact from the Resend audience. Treats 404 as success."""
+async def delete_contact(*, api_key: str, contact_id: str) -> None:
+    """Permanently delete a contact from Resend. Treats 404 as success."""
     try:
         response = await _get_client().delete(
-            f"{_API_BASE}/audiences/{audience_id}/contacts/{contact_id}",
+            f"{_API_BASE}/contacts/{contact_id}",
             headers=_headers(api_key),
         )
     except httpx.HTTPError as exc:
