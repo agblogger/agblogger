@@ -436,6 +436,8 @@ export default function MarkdownEditor({
           ) : hasContent ? (
             <div
               className="prose max-w-none"
+              // HTML is backend-sanitized, then defense-in-depth sanitized by useMarkdownPreview.
+              // nosemgrep: typescript.react.security.audit.react-dangerouslysetinnerhtml.react-dangerouslysetinnerhtml, typescript.react.react-dangerouslysetinnerhtml-prop.react-dangerouslysetinnerhtml-prop
               dangerouslySetInnerHTML={{ __html: html }}
             />
           ) : (
