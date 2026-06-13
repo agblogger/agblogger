@@ -56,6 +56,15 @@ describe('App', () => {
     })
   })
 
+  it('renders RSS feed link in footer', async () => {
+    render(<App />)
+    await waitFor(() => {
+      expect(screen.getByRole('main')).toBeInTheDocument()
+    })
+    const rssLink = screen.getByRole('link', { name: 'RSS feed' })
+    expect(rssLink).toHaveAttribute('href', '/feed.xml')
+  })
+
   describe('document.title', () => {
     it('sets document.title from site config when title is present', async () => {
       siteState.config = { title: 'My Awesome Blog', description: '', pages: [] }

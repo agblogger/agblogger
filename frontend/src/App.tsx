@@ -6,6 +6,7 @@ import {
   useLocation,
   Outlet,
 } from "react-router-dom";
+import { Rss } from "lucide-react";
 import { SWRConfig } from "swr";
 import api from "@/api/client";
 import Header from "@/components/layout/Header";
@@ -84,6 +85,17 @@ function Layout() {
                 className="underline decoration-border hover:text-accent hover:decoration-accent transition-colors"
               >
                 AgBlogger
+              </a>
+              {" "}
+              <span className="text-muted/40" aria-hidden="true">·</span>
+              {" "}
+              <a
+                href="/feed.xml"
+                aria-label="RSS feed"
+                title="RSS feed"
+                className="inline-flex items-center text-muted hover:text-accent transition-colors"
+              >
+                <Rss size={14} aria-hidden="true" />
               </a>
             </p>
             {subscriptionsEnabled && (

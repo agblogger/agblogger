@@ -23,6 +23,18 @@ export default defineConfig({
         target: `http://localhost:${backendProxyPort}`,
         changeOrigin: true,
       },
+      '/feed.xml': {
+        target: `http://localhost:${backendProxyPort}`,
+        changeOrigin: true,
+      },
+      '/sitemap.xml': {
+        target: `http://localhost:${backendProxyPort}`,
+        changeOrigin: true,
+      },
+      '/robots.txt': {
+        target: `http://localhost:${backendProxyPort}`,
+        changeOrigin: true,
+      },
       '/favicon.ico': {
         target: `http://localhost:${backendProxyPort}`,
         changeOrigin: true,
