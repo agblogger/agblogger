@@ -109,6 +109,36 @@ describe('LabelCreatePage', () => {
     expect(screen.getByRole('button', { name: 'Create Label' })).toBeEnabled()
   })
 
+  it('enables Create button when label ID contains underscores', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await screen.findByText('New Label')
+
+    await user.type(screen.getByPlaceholderText('e.g. machine-learning'), 'my_label')
+
+    expect(screen.getByRole('button', { name: 'Create Label' })).toBeEnabled()
+  })
+
+  it('enables Create button when label ID contains uppercase letters', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await screen.findByText('New Label')
+
+    await user.type(screen.getByPlaceholderText('e.g. machine-learning'), 'MyLabel')
+
+    expect(screen.getByRole('button', { name: 'Create Label' })).toBeEnabled()
+  })
+
+  it('keeps Create button disabled when label ID starts with an underscore', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await screen.findByText('New Label')
+
+    await user.type(screen.getByPlaceholderText('e.g. machine-learning'), '_bad')
+
+    expect(screen.getByRole('button', { name: 'Create Label' })).toBeDisabled()
+  })
+
   it('creates label and navigates on success', async () => {
     const user = userEvent.setup()
     const created: LabelResponse = {
@@ -149,7 +179,7 @@ describe('LabelCreatePage', () => {
     await user.type(screen.getByPlaceholderText('e.g. machine-learning'), 'test-id')
     await user.click(screen.getByRole('button', { name: 'Create Label' }))
 
-    expect(await screen.findByText('Invalid label ID. Use lowercase letters, numbers, and hyphens.')).toBeInTheDocument()
+    expect(await screen.findByText('Invalid label ID. Use letters, numbers, hyphens, and underscores.')).toBeInTheDocument()
   })
 
   it('shows error on 404 parent not found', async () => {

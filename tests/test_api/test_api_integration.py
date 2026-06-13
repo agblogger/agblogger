@@ -1215,10 +1215,10 @@ class TestLabelCRUD:
         )
         token = login_resp.json()["access_token"]
 
-        # Uppercase not allowed
+        # Special characters not allowed
         resp = await client.post(
             "/api/labels",
-            json={"id": "UPPER"},
+            json={"id": "invalid!"},
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 422

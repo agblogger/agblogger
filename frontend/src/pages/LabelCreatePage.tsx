@@ -14,7 +14,7 @@ import { useLabels } from '@/hooks/useLabels'
 import LabelNamesEditor from '@/components/labels/LabelNamesEditor'
 import LabelParentsSelector from '@/components/labels/LabelParentsSelector'
 
-const LABEL_ID_REGEX = /^[a-z0-9][a-z0-9-]*$/
+const LABEL_ID_REGEX = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/
 
 export default function LabelCreatePage() {
   const navigate = useNavigate()
@@ -66,7 +66,7 @@ export default function LabelCreatePage() {
             setError('A label with this ID already exists.')
             break
           case 422:
-            setError('Invalid label ID. Use lowercase letters, numbers, and hyphens.')
+            setError('Invalid label ID. Use letters, numbers, hyphens, and underscores.')
             break
           case 404:
             setError('One or more selected parent labels no longer exist.')
@@ -141,7 +141,7 @@ export default function LabelCreatePage() {
                    disabled:opacity-50"
         />
         <p id="label-id-hint" className="text-xs text-muted mt-2">
-          Lowercase letters, numbers, and hyphens. Cannot be changed after creation.
+          Letters, numbers, hyphens, and underscores. Cannot be changed after creation.
         </p>
       </section>
 

@@ -5,11 +5,20 @@ from __future__ import annotations
 import re
 from typing import Annotated
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import AfterValidator, BaseModel, Field, field_validator
 
-LABEL_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+LABEL_ID_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]*$")
 
-LabelIdRef = Annotated[str, Field(min_length=1, max_length=100, pattern=r"^[a-z0-9][a-z0-9-]*$")]
+_LABEL_ID_ERROR = "Letters, numbers, hyphens, underscores; must start with a letter or number"
+
+
+def _validate_label_id(v: str) -> str:
+    if not LABEL_ID_PATTERN.match(v):
+        raise ValueError(_LABEL_ID_ERROR)
+    return v
+
+
+LabelIdRef = Annotated[str, Field(min_length=1, max_length=100), AfterValidator(_validate_label_id)]
 
 
 def _validate_nonempty_names(v: list[str]) -> list[str]:

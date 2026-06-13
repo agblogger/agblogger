@@ -36,9 +36,13 @@ class TestLabelCreateValidation:
         with pytest.raises(ValidationError, match="empty or whitespace"):
             LabelCreate(id="test", names=["valid", ""])
 
-    def test_uppercase_id_rejected(self) -> None:
-        with pytest.raises(ValidationError):
-            LabelCreate(id="UPPER")
+    def test_uppercase_id_accepted(self) -> None:
+        label = LabelCreate(id="SWE")
+        assert label.id == "SWE"
+
+    def test_mixed_case_id_accepted(self) -> None:
+        label = LabelCreate(id="MyLabel")
+        assert label.id == "MyLabel"
 
     def test_leading_hyphen_rejected(self) -> None:
         with pytest.raises(ValidationError):
@@ -51,6 +55,18 @@ class TestLabelCreateValidation:
     def test_valid_hyphenated_id(self) -> None:
         label = LabelCreate(id="my-label-1")
         assert label.id == "my-label-1"
+
+    def test_valid_underscore_id(self) -> None:
+        label = LabelCreate(id="my_label")
+        assert label.id == "my_label"
+
+    def test_valid_mixed_hyphen_underscore_id(self) -> None:
+        label = LabelCreate(id="my-label_v2")
+        assert label.id == "my-label_v2"
+
+    def test_leading_underscore_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            LabelCreate(id="_bad")
 
 
 class TestLabelUpdateValidation:

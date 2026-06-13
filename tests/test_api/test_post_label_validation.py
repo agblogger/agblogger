@@ -20,6 +20,21 @@ class TestPostSaveLabelValidation:
         post = PostSave(title="Test", body="Content", labels=["swe", "cs", "my-label-1"])
         assert post.labels == ["swe", "cs", "my-label-1"]
 
+    def test_label_with_underscore_accepted(self) -> None:
+        """Labels with underscores should be accepted."""
+        post = PostSave(title="Test", body="Content", labels=["my_label", "swe_cs"])
+        assert post.labels == ["my_label", "swe_cs"]
+
+    def test_label_with_mixed_hyphen_underscore_accepted(self) -> None:
+        """Labels mixing hyphens and underscores should be accepted."""
+        post = PostSave(title="Test", body="Content", labels=["my-label_v2"])
+        assert post.labels == ["my-label_v2"]
+
+    def test_label_starting_with_underscore_rejected(self) -> None:
+        """Labels starting with an underscore should be rejected."""
+        with pytest.raises(ValidationError, match="label"):
+            PostSave(title="Test", body="Content", labels=["_bad"])
+
     def test_empty_labels_list_accepted(self) -> None:
         """An empty labels list should be accepted."""
         post = PostSave(title="Test", body="Content", labels=[])
@@ -45,10 +60,10 @@ class TestPostSaveLabelValidation:
         with pytest.raises(ValidationError, match="label"):
             PostSave(title="Test", body="Content", labels=["swe@foo"])
 
-    def test_label_with_uppercase_rejected(self) -> None:
-        """Labels with uppercase characters should be rejected."""
-        with pytest.raises(ValidationError, match="label"):
-            PostSave(title="Test", body="Content", labels=["SWE"])
+    def test_label_with_uppercase_accepted(self) -> None:
+        """Labels with uppercase characters should be accepted."""
+        post = PostSave(title="Test", body="Content", labels=["SWE", "MyLabel"])
+        assert post.labels == ["SWE", "MyLabel"]
 
     def test_label_starting_with_hyphen_rejected(self) -> None:
         """Labels starting with a hyphen should be rejected."""

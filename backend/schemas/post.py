@@ -88,7 +88,7 @@ class PostSave(BaseModel):
         _ = cls
         for label in v:
             if not LABEL_ID_PATTERN.match(label):
-                msg = f"Invalid label {label!r}: must match pattern '^[a-z0-9][a-z0-9-]*$'"
+                msg = f"Invalid label {label!r}: letters, numbers, hyphens, and underscores only"
                 raise ValueError(msg)
         return v
 
