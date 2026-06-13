@@ -38,8 +38,9 @@ callback so the host can surface them consistently.
   which disables image upload with a reason).
 - Pages: text-only (no `enableAssets`).
 
-Preview HTML is rendered and sanitized server-side; the component mounts it via
-`dangerouslySetInnerHTML`.
+Preview HTML is rendered and sanitized server-side, then passes through the
+provider-aware frontend rendering sanitizer in `useMarkdownPreview`; the
+component mounts that ready-to-render HTML via `dangerouslySetInnerHTML`.
 
 ## Scroll sync
 

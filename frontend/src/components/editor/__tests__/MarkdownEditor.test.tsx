@@ -43,6 +43,26 @@ describe('MarkdownEditor', () => {
     expect(screen.getByText('rendered')).toBeInTheDocument()
   })
 
+  it('displays approved youtube embeds returned by the preview pipeline', () => {
+    mockPreview.mockReturnValue({
+      html:
+        '<iframe src="https://www.youtube.com/embed/oSyEZAm8nb8"' +
+        ' sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"' +
+        ' allowfullscreen="allowfullscreen"' +
+        ' referrerpolicy="origin"' +
+        ' loading="lazy"></iframe>',
+      error: false,
+      hasContent: true,
+    })
+
+    const { container } = render(<MarkdownEditor value="youtube embed" onChange={() => {}} />)
+
+    expect(container.querySelector('iframe')).toHaveAttribute(
+      'src',
+      'https://www.youtube.com/embed/oSyEZAm8nb8',
+    )
+  })
+
   it('shows "Preview unavailable" when the preview errors', () => {
     mockPreview.mockReturnValue({ html: '', error: true, hasContent: true })
     render(<MarkdownEditor value="x" onChange={() => {}} />)
