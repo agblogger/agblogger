@@ -2,6 +2,7 @@ import { useRef } from 'react'
 import type { RefObject } from 'react'
 import { useRenderedHtml } from '@/hooks/useKatex'
 import { useCodeBlockEnhance } from '@/hooks/useCodeBlockEnhance'
+import { useHashScroll } from '@/hooks/useHashScroll'
 
 interface RenderedContentProps {
   /** Backend-rendered, server-sanitized HTML (e.g. `post.rendered_html`). */
@@ -25,6 +26,7 @@ export default function RenderedContent({
   const ref = contentRef ?? localRef
   const renderedHtml = useRenderedHtml(html)
   useCodeBlockEnhance(ref, renderedHtml)
+  useHashScroll(ref, renderedHtml)
 
   return (
     <div
