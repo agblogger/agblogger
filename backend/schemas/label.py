@@ -9,7 +9,7 @@ from pydantic import AfterValidator, BaseModel, Field, field_validator
 
 LABEL_ID_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]*$")
 
-_LABEL_ID_ERROR = "Letters, numbers, hyphens, underscores; must start with a letter or number"
+_LABEL_ID_ERROR = "Letters, numbers, hyphens, underscores only, starting with a letter or number"
 
 
 def _validate_label_id(v: str) -> str:
