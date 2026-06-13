@@ -59,6 +59,10 @@ function Layout() {
   }, [fetchConfig, checkAuth, initTheme]);
 
   useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [location.pathname]);
+
+  useEffect(() => {
     if (siteTitle !== undefined && siteTitle !== "") {
       document.title = siteTitle;
     }

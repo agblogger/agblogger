@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const mockFetchConfig = vi.fn()
@@ -63,6 +63,33 @@ describe('App', () => {
     })
     const rssLink = screen.getByRole('link', { name: 'RSS feed' })
     expect(rssLink).toHaveAttribute('href', '/feed.xml')
+  })
+
+  it('scrolls to top when navigating to a different route', async () => {
+    const scrollSpy = vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+    siteState.config = {
+      title: 'Test Blog',
+      description: '',
+      pages: [
+        { id: 'timeline', title: 'Posts', file: null },
+        { id: 'labels', title: 'Labels', file: null },
+      ],
+    }
+
+    render(<App />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('link', { name: 'Labels' })).toBeInTheDocument()
+    })
+
+    scrollSpy.mockClear()
+    fireEvent.click(screen.getByRole('link', { name: 'Labels' }))
+
+    await waitFor(() => {
+      expect(scrollSpy).toHaveBeenCalledWith(0, 0)
+    })
+
+    scrollSpy.mockRestore()
   })
 
   describe('document.title', () => {
