@@ -251,7 +251,7 @@ async def test_enabling_subscriptions_automatically_registers_webhook(
         {
             "api_key": "re_x",
             "endpoint": "https://test/api/webhooks/resend",
-            "events": ["contact.unsubscribed"],
+            "events": ["contact.updated"],
         }
     ]
 
@@ -456,8 +456,8 @@ async def test_webhook_valid_signature_returns_200(
 
     payload = json.dumps(
         {
-            "type": "contact.unsubscribed",
-            "data": {"audience_id": "aud_1", "contact": {"id": "c1"}},
+            "type": "contact.updated",
+            "data": {"audience_id": "aud_1", "id": "c1", "unsubscribed": True},
         }
     ).encode()
     resp = await client.post(
@@ -473,7 +473,7 @@ async def test_webhook_bad_signature_returns_400(
     client: AsyncClient,
     enable_webhook_secret: None,
 ) -> None:
-    payload = b'{"type": "contact.unsubscribed", "data": {}}'
+    payload = b'{"type": "contact.updated", "data": {}}'
     resp = await client.post(
         "/api/webhooks/resend",
         content=payload,
@@ -489,7 +489,7 @@ async def test_webhook_bad_signature_returns_400(
 
 @pytest.mark.asyncio
 async def test_webhook_no_secret_configured_returns_retryable_error(client: AsyncClient) -> None:
-    payload = b'{"type": "contact.unsubscribed", "data": {}}'
+    payload = b'{"type": "contact.updated", "data": {}}'
     resp = await client.post(
         "/api/webhooks/resend",
         content=payload,
@@ -511,8 +511,8 @@ async def test_webhook_resend_api_failure_returns_retryable_error(
 
     payload = json.dumps(
         {
-            "type": "contact.unsubscribed",
-            "data": {"audience_id": "aud_1", "contact": {"id": "c1"}},
+            "type": "contact.updated",
+            "data": {"audience_id": "aud_1", "id": "c1", "unsubscribed": True},
         }
     ).encode()
     resp = await client.post(
@@ -562,7 +562,7 @@ async def test_webhook_missing_contact_id_returns_retryable_error(
     monkeypatch.setattr(resend_client, "delete_contact", fake_delete)
 
     payload = json.dumps(
-        {"type": "contact.unsubscribed", "data": {"audience_id": "aud_1", "contact": {}}}
+        {"type": "contact.updated", "data": {"audience_id": "aud_1", "unsubscribed": True}}
     ).encode()
     resp = await client.post(
         "/api/webhooks/resend",

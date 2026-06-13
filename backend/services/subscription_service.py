@@ -56,7 +56,7 @@ def _time() -> float:
 # Compliance fields are optional and control which parts of the GDPR notice
 # are shown. The webhook is provisioned automatically while enabling.
 _REQUIRED_TO_ENABLE = ("from_email",)
-_WEBHOOK_EVENTS = ["contact.unsubscribed"]
+_WEBHOOK_EVENTS = ["contact.updated"]
 
 
 class _Unset:
@@ -594,16 +594,22 @@ async def handle_resend_webhook(
     except ValueError, UnicodeDecodeError:
         raise WebhookProcessingError("Resend webhook body is malformed") from None
 
-    if payload.get("type") != "contact.unsubscribed":
+    if payload.get("type") != "contact.updated":
         return
 
-    data = payload.get("data") or {}
-    contact = data.get("contact") or {}
-    contact_id = contact.get("id")
+    data = payload.get("data")
+    if not isinstance(data, dict):
+        raise WebhookProcessingError("contact.updated missing data")
+    if data.get("unsubscribed") is not True:
+        return
+
+    contact_id = data.get("id")
     audience_id = data.get("audience_id")
 
-    if not contact_id or not audience_id:
-        raise WebhookProcessingError("contact.unsubscribed missing contact id or audience_id")
+    if not isinstance(contact_id, str) or not contact_id:
+        raise WebhookProcessingError("unsubscribed contact.updated missing contact id")
+    if not isinstance(audience_id, str) or not audience_id:
+        raise WebhookProcessingError("unsubscribed contact.updated missing audience_id")
 
     api_key = decrypt_api_key(row, secret_key)
     if api_key is None:

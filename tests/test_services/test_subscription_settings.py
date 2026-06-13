@@ -70,7 +70,7 @@ async def test_enable_automatically_provisions_webhook(
         {
             "api_key": "re_x",
             "endpoint": "https://blog.example/api/webhooks/resend",
-            "events": ["contact.unsubscribed"],
+            "events": ["contact.updated"],
         }
     ]
 

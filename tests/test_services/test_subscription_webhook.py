@@ -57,7 +57,7 @@ async def _configure_webhook_secret(session: AsyncSession) -> None:
 
 
 @pytest.mark.asyncio
-async def test_handle_webhook_deletes_contact_on_unsubscribed(
+async def test_handle_contact_updated_webhook_deletes_unsubscribed_contact(
     session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     deleted: list[dict[str, str]] = []
@@ -70,10 +70,12 @@ async def test_handle_webhook_deletes_contact_on_unsubscribed(
 
     payload = json.dumps(
         {
-            "type": "contact.unsubscribed",
+            "type": "contact.updated",
             "data": {
                 "audience_id": "aud_abc",
-                "contact": {"id": "contact_xyz", "email": "user@example.com"},
+                "id": "contact_xyz",
+                "email": "user@example.com",
+                "unsubscribed": True,
             },
         }
     ).encode()
@@ -90,8 +92,9 @@ async def test_handle_webhook_deletes_contact_on_unsubscribed(
 
 
 @pytest.mark.asyncio
-async def test_handle_webhook_ignores_unknown_event_type(
-    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize("unsubscribed", [False, None, "true", 1])
+async def test_handle_contact_updated_webhook_does_not_delete_without_boolean_true(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch, unsubscribed: object
 ) -> None:
     deleted: list[object] = []
 
@@ -101,7 +104,40 @@ async def test_handle_webhook_ignores_unknown_event_type(
     monkeypatch.setattr(resend_client, "delete_contact", fake_delete)
     await _configure_webhook_secret(session)
 
-    payload = json.dumps({"type": "email.delivered", "data": {}}).encode()
+    payload = json.dumps(
+        {
+            "type": "contact.updated",
+            "data": {
+                "audience_id": "aud_abc",
+                "id": "contact_xyz",
+                "unsubscribed": unsubscribed,
+            },
+        }
+    ).encode()
+
+    await subscription_service.handle_resend_webhook(
+        session,
+        raw_body=payload,
+        headers=_svix_headers(payload),
+        secret_key=SECRET,
+    )
+    assert deleted == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("event_type", ["email.delivered", "contact.unsubscribed"])
+async def test_handle_webhook_ignores_unknown_event_type(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch, event_type: str
+) -> None:
+    deleted: list[object] = []
+
+    async def fake_delete(**kwargs: object) -> None:
+        deleted.append(kwargs)
+
+    monkeypatch.setattr(resend_client, "delete_contact", fake_delete)
+    await _configure_webhook_secret(session)
+
+    payload = json.dumps({"type": event_type, "data": {}}).encode()
 
     await subscription_service.handle_resend_webhook(
         session,
@@ -137,10 +173,11 @@ async def test_handle_webhook_resend_error_raises_for_provider_retry(
 
     payload = json.dumps(
         {
-            "type": "contact.unsubscribed",
+            "type": "contact.updated",
             "data": {
                 "audience_id": "aud_abc",
-                "contact": {"id": "contact_xyz"},
+                "id": "contact_xyz",
+                "unsubscribed": True,
             },
         }
     ).encode()
@@ -162,8 +199,8 @@ async def test_handle_webhook_missing_contact_id_requests_retry(
 
     payload = json.dumps(
         {
-            "type": "contact.unsubscribed",
-            "data": {"audience_id": "aud_abc", "contact": {}},
+            "type": "contact.updated",
+            "data": {"audience_id": "aud_abc", "unsubscribed": True},
         }
     ).encode()
 
@@ -184,7 +221,7 @@ async def test_handle_webhook_bad_signature_raises_verification_error(
 
     await _configure_webhook_secret(session)
 
-    payload = b'{"type": "contact.unsubscribed"}'
+    payload = b'{"type": "contact.updated"}'
     bad_headers = {
         "svix-id": "msg_test",
         "svix-timestamp": str(int(time.time())),

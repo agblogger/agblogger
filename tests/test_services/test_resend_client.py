@@ -223,12 +223,12 @@ async def test_create_webhook_returns_signing_secret(monkeypatch: pytest.MonkeyP
     secret = await resend_client.create_webhook(
         api_key="re_x",
         endpoint="https://blog.example/api/webhooks/resend",
-        events=["contact.unsubscribed"],
+        events=["contact.updated"],
     )
 
     assert secret == "whsec_generated"
     assert seen["path"] == "/webhooks"
-    assert '"contact.unsubscribed"' in str(seen["body"])
+    assert '"contact.updated"' in str(seen["body"])
 
 
 @pytest.mark.asyncio
@@ -244,7 +244,7 @@ async def test_create_webhook_raises_when_no_signing_secret(
         await resend_client.create_webhook(
             api_key="re_x",
             endpoint="https://blog.example/api/webhooks/resend",
-            events=["contact.unsubscribed"],
+            events=["contact.updated"],
         )
 
 
